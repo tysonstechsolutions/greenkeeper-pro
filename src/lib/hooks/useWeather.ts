@@ -18,11 +18,11 @@ import type { WeatherLog } from "@/types/database";
  *    NEXT_PUBLIC_WEATHER_API_KEY=your_api_key_here
  */
 
-// Naval Station Great Lakes, IL coordinates
+// Veterans Memorial Golf Course at Naval Station Great Lakes, IL
 const LOCATION = {
-  lat: 42.2936,
-  lng: -87.8675,
-  name: "Naval Station Great Lakes, IL",
+  lat: 42.3095,
+  lng: -87.8475,
+  name: "Veterans Memorial Golf Course, Great Lakes, IL",
 };
 
 const API_BASE_URL = "https://api.weatherapi.com/v1";

@@ -29,8 +29,8 @@ L.Icon.Default.mergeOptions({
 const ESRI_SATELLITE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
-// Naval Station Great Lakes default center
-const DEFAULT_CENTER: [number, number] = [42.2936, -87.8675];
+// Veterans Memorial Golf Course at Naval Station Great Lakes
+const DEFAULT_CENTER: [number, number] = [42.3095, -87.8475];
 const DEFAULT_ZOOM = 16;
 
 // Condition score color mapping
