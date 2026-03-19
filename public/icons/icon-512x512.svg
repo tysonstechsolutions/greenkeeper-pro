@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#1B4332" rx="86"/>
+  <text x="256" y="200" font-family="system-ui, sans-serif" font-size="120" font-weight="bold" fill="#B68D40" text-anchor="middle">GK</text>
+  <text x="256" y="330" font-family="system-ui, sans-serif" font-size="72" fill="#ffffff" text-anchor="middle">PRO</text>
+</svg>
