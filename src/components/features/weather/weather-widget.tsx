@@ -59,7 +59,8 @@ interface WeatherWidgetProps {
 
 export function WeatherWidget({ className, refreshInterval = 30 }: WeatherWidgetProps) {
   const router = useRouter();
-  const { currentWeather, forecast, alerts, loading, error, refetch } = useWeather();
+  const { currentWeather, forecast, getAlerts, loading, error, refetch } = useWeather();
+  const alerts = getAlerts();
 
   // Auto-refresh weather data
   useEffect(() => {
@@ -157,13 +158,13 @@ export function WeatherWidget({ className, refreshInterval = 30 }: WeatherWidget
               <span className="text-lg text-muted-foreground">F</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              {currentWeather.condition}
+              {currentWeather.conditions}
             </p>
           </div>
 
           {/* Weather icon */}
           <div className="text-muted-foreground">
-            {getWeatherIcon(currentWeather.condition, "w-12 h-12")}
+            {getWeatherIcon(currentWeather.conditions, "w-12 h-12")}
           </div>
         </div>
 
@@ -173,10 +174,10 @@ export function WeatherWidget({ className, refreshInterval = 30 }: WeatherWidget
           {todayForecast && (
             <div className="flex items-center gap-1 text-muted-foreground">
               <span className="text-foreground font-medium">
-                H:{Math.round(todayForecast.maxtemp_f)}°
+                H:{Math.round(todayForecast.high_f)}°
               </span>
               <span>/</span>
-              <span>L:{Math.round(todayForecast.mintemp_f)}°</span>
+              <span>L:{Math.round(todayForecast.low_f)}°</span>
             </div>
           )}
 
@@ -190,7 +191,7 @@ export function WeatherWidget({ className, refreshInterval = 30 }: WeatherWidget
           {todayForecast && (
             <div className="flex items-center gap-1 text-muted-foreground">
               <Droplets className="w-4 h-4" />
-              <span>{todayForecast.daily_chance_of_rain}%</span>
+              <span>{todayForecast.precipitation_chance}%</span>
             </div>
           )}
         </div>
@@ -226,11 +227,12 @@ export function WeatherWidget({ className, refreshInterval = 30 }: WeatherWidget
  * Compact inline weather display for headers or small spaces
  */
 export function WeatherInline({ className }: { className?: string }) {
-  const { currentWeather, alerts } = useWeather();
+  const { currentWeather, getAlerts } = useWeather();
   const router = useRouter();
 
   if (!currentWeather) return null;
 
+  const alerts = getAlerts();
   const hasAlerts = alerts && alerts.length > 0;
 
   return (
@@ -239,7 +241,7 @@ export function WeatherInline({ className }: { className?: string }) {
       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors ${className}`}
       aria-label="View weather details"
     >
-      {getWeatherIcon(currentWeather.condition, "w-4 h-4")}
+      {getWeatherIcon(currentWeather.conditions, "w-4 h-4")}
       <span className="font-medium">{Math.round(currentWeather.temp_f)}°F</span>
       {hasAlerts && (
         <span className="w-2 h-2 rounded-full bg-orange-500" />

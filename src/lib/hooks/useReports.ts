@@ -364,6 +364,16 @@ export function useReports() {
 
       try {
         // Fetch tasks for the day
+        type TaskQueryResult = {
+          id: string;
+          title: string;
+          status: string;
+          category: string;
+          actual_minutes: number | null;
+          estimated_minutes: number | null;
+          assigned_user: { id: string; full_name: string } | null;
+          assigned_crew: string | null;
+        };
         const { data: tasks } = await supabase
           .from("tasks")
           .select(`
@@ -371,7 +381,7 @@ export function useReports() {
             assigned_user:profiles!tasks_assigned_to_fkey(id, full_name),
             assigned_crew
           `)
-          .eq("due_date", date);
+          .eq("due_date", date) as { data: TaskQueryResult[] | null };
 
         if (tasks) {
           report.tasks.total = tasks.length;
@@ -438,12 +448,13 @@ export function useReports() {
         }
 
         // Fetch photos for the day
+        type PhotoQueryResult = { id: string; thumbnail_path: string | null; caption: string | null };
         const { data: photos } = await supabase
           .from("photos")
           .select("id, thumbnail_path, caption")
           .gte("created_at", `${date}T00:00:00`)
           .lte("created_at", `${date}T23:59:59`)
-          .limit(10);
+          .limit(10) as { data: PhotoQueryResult[] | null };
 
         if (photos) {
           report.photos.count = photos.length;
@@ -455,6 +466,12 @@ export function useReports() {
         }
 
         // Fetch equipment issues
+        type EquipmentLogQueryResult = {
+          id: string;
+          description: string;
+          log_type: string;
+          equipment: { id: string; name: string; status: string } | null;
+        };
         const { data: equipmentLogs } = await supabase
           .from("equipment_logs")
           .select(`
@@ -463,18 +480,25 @@ export function useReports() {
           `)
           .in("log_type", ["incident", "repair"])
           .gte("created_at", `${date}T00:00:00`)
-          .lte("created_at", `${date}T23:59:59`);
+          .lte("created_at", `${date}T23:59:59`) as { data: EquipmentLogQueryResult[] | null };
 
         if (equipmentLogs) {
           report.equipment_issues = equipmentLogs.map(log => ({
             id: log.id,
-            name: (log.equipment as { name: string })?.name || "Unknown",
+            name: log.equipment?.name || "Unknown",
             issue: log.description,
-            status: (log.equipment as { status: string })?.status || "unknown",
+            status: log.equipment?.status || "unknown",
           }));
         }
 
         // Fetch chemical applications
+        type ChemAppQueryResult = {
+          id: string;
+          total_amount_used: number;
+          zone_ids: string[];
+          product: { product_name: string; unit_of_measure: string } | null;
+          applicator: { full_name: string } | null;
+        };
         const { data: chemApps } = await supabase
           .from("chemical_applications")
           .select(`
@@ -482,47 +506,53 @@ export function useReports() {
             product:chemical_products!product_id(product_name, unit_of_measure),
             applicator:profiles!chemical_applications_applied_by_fkey(full_name)
           `)
-          .eq("application_date", date);
+          .eq("application_date", date) as { data: ChemAppQueryResult[] | null };
 
         if (chemApps) {
           // Get zone names
           const allZoneIds = [...new Set(chemApps.flatMap(a => a.zone_ids || []))];
           let zoneNames: Record<string, string> = {};
           if (allZoneIds.length > 0) {
+            type ZoneQueryResult = { id: string; name: string };
             const { data: zones } = await supabase
               .from("course_zones")
               .select("id, name")
-              .in("id", allZoneIds);
+              .in("id", allZoneIds) as { data: ZoneQueryResult[] | null };
             zones?.forEach(z => { zoneNames[z.id] = z.name; });
           }
 
           report.chemical_applications = chemApps.map(app => ({
             id: app.id,
-            product_name: (app.product as { product_name: string })?.product_name || "Unknown",
+            product_name: app.product?.product_name || "Unknown",
             zones: (app.zone_ids || []).map((id: string) => zoneNames[id] || id),
             amount: app.total_amount_used || 0,
-            unit: (app.product as { unit_of_measure: string })?.unit_of_measure || "units",
-            applicator: (app.applicator as { full_name: string })?.full_name || null,
+            unit: app.product?.unit_of_measure || "units",
+            applicator: app.applicator?.full_name || null,
           }));
         }
 
         // Fetch active diagnostics
+        type DiagnosticsQueryResult = {
+          id: string;
+          full_response: { diagnosis?: { condition: string; severity: number } } | null;
+          status: string;
+          zone: { name: string } | null;
+        };
         const { data: diagnostics } = await supabase
           .from("diagnostics")
           .select(`
             id, full_response, status,
             zone:course_zones!diagnostics_zone_id_fkey(name)
           `)
-          .in("status", ["diagnosed", "treating", "monitoring"]);
+          .in("status", ["diagnosed", "treating", "monitoring"]) as { data: DiagnosticsQueryResult[] | null };
 
         if (diagnostics) {
           report.active_diagnostics = diagnostics.map(d => {
-            const response = d.full_response as { diagnosis?: { condition: string; severity: number } } | null;
             return {
               id: d.id,
-              condition: response?.diagnosis?.condition || "Unknown",
-              zone: (d.zone as { name: string })?.name || null,
-              severity: response?.diagnosis?.severity || 0,
+              condition: d.full_response?.diagnosis?.condition || "Unknown",
+              zone: d.zone?.name || null,
+              severity: d.full_response?.diagnosis?.severity || 0,
               status: d.status,
             };
           });
@@ -584,6 +614,12 @@ export function useReports() {
 
       try {
         // Fetch tasks for the week
+        type WeeklyTaskQueryResult = {
+          id: string;
+          status: string;
+          category: string;
+          assigned_user: { id: string; full_name: string } | null;
+        };
         const { data: tasks } = await supabase
           .from("tasks")
           .select(`
@@ -591,7 +627,7 @@ export function useReports() {
             assigned_user:profiles!tasks_assigned_to_fkey(id, full_name)
           `)
           .gte("due_date", weekStart)
-          .lte("due_date", weekEnd);
+          .lte("due_date", weekEnd) as { data: WeeklyTaskQueryResult[] | null };
 
         if (tasks) {
           report.total_tasks = tasks.length;
@@ -605,7 +641,7 @@ export function useReports() {
           // By staff
           const staffMap = new Map<string, { name: string; assigned: number; completed: number }>();
           tasks.forEach(task => {
-            const user = task.assigned_user as { id: string; full_name: string } | null;
+            const user = task.assigned_user;
             if (user) {
               const current = staffMap.get(user.id) || { name: user.full_name, assigned: 0, completed: 0 };
               current.assigned++;
@@ -644,12 +680,13 @@ export function useReports() {
 
         // Fetch expenses for budget
         const currentYear = new Date(weekStart).getFullYear();
+        type ExpenseQueryResult = { amount: number };
         const { data: weekExpenses } = await supabase
           .from("expenses")
           .select("amount")
           .gte("expense_date", weekStart)
           .lte("expense_date", weekEnd)
-          .in("status", ["approved", "paid"]);
+          .in("status", ["approved", "paid"]) as { data: ExpenseQueryResult[] | null };
 
         report.budget.week_spend = weekExpenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
 
@@ -658,16 +695,17 @@ export function useReports() {
           .select("amount")
           .gte("expense_date", `${currentYear}-01-01`)
           .lte("expense_date", weekEnd)
-          .in("status", ["approved", "paid"]);
+          .in("status", ["approved", "paid"]) as { data: ExpenseQueryResult[] | null };
 
         report.budget.ytd_spend = ytdExpenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
 
         // Equipment stats
+        type EquipLogQueryResult = { log_type: string; downtime_hours: number | null };
         const { data: equipLogs } = await supabase
           .from("equipment_logs")
           .select("log_type, downtime_hours")
           .gte("created_at", `${weekStart}T00:00:00`)
-          .lte("created_at", `${weekEnd}T23:59:59`);
+          .lte("created_at", `${weekEnd}T23:59:59`) as { data: EquipLogQueryResult[] | null };
 
         if (equipLogs) {
           report.equipment.services_performed = equipLogs.filter(l => l.log_type === "service").length;
@@ -678,6 +716,10 @@ export function useReports() {
         }
 
         // Chemical applications
+        type WeeklyChemAppQueryResult = {
+          id: string;
+          product: { product_name: string } | null;
+        };
         const { data: chemApps } = await supabase
           .from("chemical_applications")
           .select(`
@@ -685,13 +727,13 @@ export function useReports() {
             product:chemical_products!product_id(product_name)
           `)
           .gte("application_date", weekStart)
-          .lte("application_date", weekEnd);
+          .lte("application_date", weekEnd) as { data: WeeklyChemAppQueryResult[] | null };
 
         if (chemApps) {
           report.chemicals.applications_count = chemApps.length;
           const productCount = new Map<string, number>();
           chemApps.forEach(app => {
-            const name = (app.product as { product_name: string })?.product_name || "Unknown";
+            const name = app.product?.product_name || "Unknown";
             productCount.set(name, (productCount.get(name) || 0) + 1);
           });
           report.chemicals.products_used = Array.from(productCount.entries()).map(([name, count]) => ({
@@ -701,11 +743,12 @@ export function useReports() {
         }
 
         // Photos
+        type WeeklyPhotoQueryResult = { id: string; storage_path: string; caption: string | null };
         const { data: photos } = await supabase
           .from("photos")
           .select("id, storage_path, caption")
           .gte("created_at", `${weekStart}T00:00:00`)
-          .lte("created_at", `${weekEnd}T23:59:59`);
+          .lte("created_at", `${weekEnd}T23:59:59`) as { data: WeeklyPhotoQueryResult[] | null };
 
         if (photos) {
           report.photos.count = photos.length;
@@ -768,21 +811,27 @@ export function useReports() {
 
       try {
         // Fetch monthly expenses
+        type MonthlyExpenseQueryResult = { amount: number; budget_item_id: string | null };
         const { data: expenses } = await supabase
           .from("expenses")
           .select("amount, budget_item_id")
           .gte("expense_date", startDate)
           .lte("expense_date", endDate)
-          .in("status", ["approved", "paid"]);
+          .in("status", ["approved", "paid"]) as { data: MonthlyExpenseQueryResult[] | null };
 
         report.budget.monthly_spend = expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
 
         // Fetch budget items for the month/year
+        type BudgetItemQueryResult = {
+          id: string;
+          category: string;
+          budgeted_amount: number;
+        };
         const { data: budgetItems } = await supabase
           .from("budget_items")
           .select("*")
           .eq("fiscal_year", year)
-          .or(`month.is.null,month.eq.${month}`);
+          .or(`month.is.null,month.eq.${month}`) as { data: BudgetItemQueryResult[] | null };
 
         if (budgetItems) {
           report.budget.monthly_allocation = budgetItems.reduce((sum, b) => sum + b.budgeted_amount, 0);
@@ -821,6 +870,13 @@ export function useReports() {
         }
 
         // Fetch staff rankings
+        type MonthlyTaskQueryResult = {
+          id: string;
+          status: string;
+          due_date: string;
+          completed_at: string | null;
+          assigned_user: { id: string; full_name: string } | null;
+        };
         const { data: tasks } = await supabase
           .from("tasks")
           .select(`
@@ -828,7 +884,7 @@ export function useReports() {
             assigned_user:profiles!tasks_assigned_to_fkey(id, full_name)
           `)
           .gte("due_date", startDate)
-          .lte("due_date", endDate);
+          .lte("due_date", endDate) as { data: MonthlyTaskQueryResult[] | null };
 
         if (tasks) {
           const staffMap = new Map<string, {
@@ -839,7 +895,7 @@ export function useReports() {
           }>();
 
           tasks.forEach(task => {
-            const user = task.assigned_user as { id: string; full_name: string } | null;
+            const user = task.assigned_user;
             if (user) {
               const current = staffMap.get(user.id) || {
                 name: user.full_name,
@@ -865,12 +921,13 @@ export function useReports() {
           const staffIds = Array.from(staffMap.keys());
           const photoCountMap = new Map<string, number>();
           if (staffIds.length > 0) {
+            type PhotoUploadQueryResult = { uploaded_by: string };
             const { data: photos } = await supabase
               .from("photos")
               .select("uploaded_by")
               .in("uploaded_by", staffIds)
               .gte("created_at", `${startDate}T00:00:00`)
-              .lte("created_at", `${endDate}T23:59:59`);
+              .lte("created_at", `${endDate}T23:59:59`) as { data: PhotoUploadQueryResult[] | null };
 
             photos?.forEach(p => {
               photoCountMap.set(p.uploaded_by, (photoCountMap.get(p.uploaded_by) || 0) + 1);
@@ -888,6 +945,12 @@ export function useReports() {
         }
 
         // Chemical usage
+        type MonthlyChemAppQueryResult = {
+          id: string;
+          total_amount_used: number;
+          zone_ids: string[];
+          product: { product_name: string; product_type: string; unit_of_measure: string } | null;
+        };
         const { data: chemApps } = await supabase
           .from("chemical_applications")
           .select(`
@@ -895,17 +958,18 @@ export function useReports() {
             product:chemical_products!product_id(product_name, product_type, unit_of_measure)
           `)
           .gte("application_date", startDate)
-          .lte("application_date", endDate);
+          .lte("application_date", endDate) as { data: MonthlyChemAppQueryResult[] | null };
 
         if (chemApps) {
           // Get zone names
           const allZoneIds = [...new Set(chemApps.flatMap(a => a.zone_ids || []))];
           let zoneNames: Record<string, string> = {};
           if (allZoneIds.length > 0) {
+            type MonthlyZoneQueryResult = { id: string; name: string };
             const { data: zones } = await supabase
               .from("course_zones")
               .select("id, name")
-              .in("id", allZoneIds);
+              .in("id", allZoneIds) as { data: MonthlyZoneQueryResult[] | null };
             zones?.forEach(z => { zoneNames[z.id] = z.name; });
           }
 
@@ -918,7 +982,7 @@ export function useReports() {
           }>();
 
           chemApps.forEach(app => {
-            const product = app.product as { product_name: string; product_type: string; unit_of_measure: string } | null;
+            const product = app.product;
             if (product) {
               const current = productMap.get(product.product_name) || {
                 product_type: product.product_type,
@@ -947,11 +1011,12 @@ export function useReports() {
         }
 
         // Equipment stats
+        type MonthlyEquipLogQueryResult = { log_type: string; cost: number | null; downtime_hours: number | null };
         const { data: equipLogs } = await supabase
           .from("equipment_logs")
           .select("log_type, cost, downtime_hours")
           .gte("created_at", `${startDate}T00:00:00`)
-          .lte("created_at", `${endDate}T23:59:59`);
+          .lte("created_at", `${endDate}T23:59:59`) as { data: MonthlyEquipLogQueryResult[] | null };
 
         if (equipLogs) {
           report.equipment.maintenance_cost = equipLogs.reduce((sum, l) => sum + (l.cost || 0), 0);
@@ -961,12 +1026,19 @@ export function useReports() {
         }
 
         // Plan goal progress
+        type PlanGoalQueryResult = {
+          id: string;
+          title: string;
+          status: string;
+          progress_percent: number | null;
+          target_date: string | null;
+        };
         const { data: goals } = await supabase
           .from("plan_goals")
           .select("id, title, status, progress_percent, target_date")
           .eq("plan_level", "monthly")
           .eq("year", year)
-          .eq("month", month);
+          .eq("month", month) as { data: PlanGoalQueryResult[] | null };
 
         if (goals) {
           report.plan_goal_progress = goals.map(g => ({
@@ -979,10 +1051,18 @@ export function useReports() {
         }
 
         // Zone conditions with photos
+        type CourseZoneQueryResult = { id: string; name: string; zone_type: string };
         const { data: zones } = await supabase
           .from("course_zones")
-          .select("id, name, zone_type");
+          .select("id, name, zone_type") as { data: CourseZoneQueryResult[] | null };
 
+        type ZonePhotoQueryResult = {
+          id: string;
+          storage_path: string;
+          created_at: string;
+          photo_type: string;
+          caption: string | null;
+        };
         if (zones) {
           for (const zone of zones) {
             const { data: zonePhotos } = await supabase
@@ -992,7 +1072,7 @@ export function useReports() {
               .gte("created_at", `${startDate}T00:00:00`)
               .lte("created_at", `${endDate}T23:59:59`)
               .order("created_at", { ascending: false })
-              .limit(5);
+              .limit(5) as { data: ZonePhotoQueryResult[] | null };
 
             if (zonePhotos && zonePhotos.length > 0) {
               report.photo_condition_report.push({
@@ -1062,11 +1142,15 @@ export function useReports() {
 
       try {
         // Get user profile
+        type ProfileQueryResult = {
+          full_name: string | null;
+          certifications: { name: string; expiry_date?: string }[] | null;
+        };
         const { data: profile } = await supabase
           .from("profiles")
           .select("full_name, certifications")
           .eq("id", userId)
-          .single();
+          .single() as { data: ProfileQueryResult | null };
 
         if (profile) {
           report.user_name = profile.full_name || "Unknown";
@@ -1093,13 +1177,22 @@ export function useReports() {
         }
 
         // Fetch tasks
+        type StaffTaskQueryResult = {
+          id: string;
+          title: string;
+          status: string;
+          due_date: string;
+          completed_at: string | null;
+          actual_minutes: number | null;
+          estimated_minutes: number | null;
+        };
         const { data: tasks } = await supabase
           .from("tasks")
           .select("id, title, status, due_date, completed_at, actual_minutes, estimated_minutes")
           .eq("assigned_to", userId)
           .gte("due_date", dateRange.start)
           .lte("due_date", dateRange.end)
-          .order("due_date", { ascending: false });
+          .order("due_date", { ascending: false }) as { data: StaffTaskQueryResult[] | null };
 
         if (tasks) {
           report.tasks.assigned = tasks.length;
@@ -1211,6 +1304,32 @@ export function useReports() {
 
       try {
         // Fetch all applications
+        type ChemReportAppQueryResult = {
+          id: string;
+          application_date: string;
+          application_time: string | null;
+          total_amount_used: number;
+          zone_ids: string[];
+          area_treated_sqft: number | null;
+          application_rate: string | null;
+          method: string | null;
+          target_pest: string | null;
+          notes: string | null;
+          weather_temp_f: number | null;
+          weather_wind_mph: number | null;
+          weather_humidity: number | null;
+          weather_conditions: string | null;
+          applicator_license: string | null;
+          rei_expires_at: string | null;
+          product: {
+            product_name: string;
+            epa_registration: string | null;
+            active_ingredient: string | null;
+            product_type: string;
+            unit_of_measure: string;
+          } | null;
+          applicator: { full_name: string } | null;
+        };
         const { data: apps } = await supabase
           .from("chemical_applications")
           .select(`
@@ -1225,27 +1344,23 @@ export function useReports() {
           `)
           .gte("application_date", dateRange.start)
           .lte("application_date", dateRange.end)
-          .order("application_date", { ascending: false });
+          .order("application_date", { ascending: false }) as { data: ChemReportAppQueryResult[] | null };
 
         if (apps) {
           // Get zone names
           const allZoneIds = [...new Set(apps.flatMap(a => a.zone_ids || []))];
           let zoneNames: Record<string, string> = {};
           if (allZoneIds.length > 0) {
+            type ChemZoneQueryResult = { id: string; name: string };
             const { data: zones } = await supabase
               .from("course_zones")
               .select("id, name")
-              .in("id", allZoneIds);
+              .in("id", allZoneIds) as { data: ChemZoneQueryResult[] | null };
             zones?.forEach(z => { zoneNames[z.id] = z.name; });
           }
 
           report.applications = apps.map(app => {
-            const product = app.product as {
-              product_name: string;
-              epa_registration: string | null;
-              active_ingredient: string | null;
-              unit_of_measure: string;
-            } | null;
+            const product = app.product;
 
             return {
               id: app.id,
@@ -1253,7 +1368,7 @@ export function useReports() {
               product_name: product?.product_name || "Unknown",
               epa_registration: product?.epa_registration || null,
               active_ingredient: product?.active_ingredient || null,
-              applicator_name: (app.applicator as { full_name: string })?.full_name || null,
+              applicator_name: app.applicator?.full_name || null,
               applicator_license: app.applicator_license,
               zones: (app.zone_ids || []).map((id: string) => zoneNames[id] || id),
               area_sqft: app.area_treated_sqft,
@@ -1279,11 +1394,7 @@ export function useReports() {
           }>();
 
           apps.forEach(app => {
-            const product = app.product as {
-              product_name: string;
-              product_type: string;
-              unit_of_measure: string;
-            } | null;
+            const product = app.product;
             if (product) {
               const current = productMap.get(product.product_name) || {
                 product_type: product.product_type,
@@ -1370,10 +1481,20 @@ export function useReports() {
 
       try {
         // Fleet summary
+        type EquipmentQueryResult = {
+          id: string;
+          name: string;
+          status: string;
+          next_service_due_hours: number | null;
+          next_service_due_date: string | null;
+          current_hours: number | null;
+          purchase_date: string | null;
+          purchase_price: number | null;
+        };
         const { data: equipment } = await supabase
           .from("equipment")
           .select("*")
-          .neq("status", "retired");
+          .neq("status", "retired") as { data: EquipmentQueryResult[] | null };
 
         if (equipment) {
           report.fleet_summary.total = equipment.length;
@@ -1426,6 +1547,17 @@ export function useReports() {
         }
 
         // Maintenance logs
+        type EquipLogQueryResult = {
+          id: string;
+          log_type: string;
+          description: string | null;
+          cost: number | null;
+          hours_at_service: number | null;
+          vendor: string | null;
+          created_at: string;
+          downtime_hours: number | null;
+          equipment: { id: string; name: string } | null;
+        };
         const { data: logs } = await supabase
           .from("equipment_logs")
           .select(`
@@ -1434,7 +1566,7 @@ export function useReports() {
           `)
           .gte("created_at", `${dateRange.start}T00:00:00`)
           .lte("created_at", `${dateRange.end}T23:59:59`)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false }) as { data: EquipLogQueryResult[] | null };
 
         if (logs) {
           report.maintenance_log = logs.map(log => ({
@@ -1442,7 +1574,7 @@ export function useReports() {
             equipment_name: (log.equipment as { name: string })?.name || "Unknown",
             log_type: log.log_type,
             date: log.created_at,
-            description: log.description,
+            description: log.description || "",
             cost: log.cost,
             hours_at_service: log.hours_at_service,
             vendor: log.vendor,

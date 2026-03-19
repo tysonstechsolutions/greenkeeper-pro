@@ -196,19 +196,21 @@ async function processQueueItem(item: QueuedItem): Promise<boolean> {
       case "task_status_update":
       case "task_start":
       case "task_complete": {
-        const { error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from(item.table)
           .update(item.data)
-          .eq("id", item.data.id as string);
+          .eq("id", item.data.id as string) as { error: Error | null };
         if (error) throw error;
         break;
       }
 
       case "checklist_toggle": {
-        const { error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from(item.table)
           .update({ completed: item.data.completed })
-          .eq("id", item.data.id as string);
+          .eq("id", item.data.id as string) as { error: Error | null };
         if (error) throw error;
         break;
       }
@@ -237,12 +239,13 @@ async function processQueueItem(item: QueuedItem): Promise<boolean> {
             .getPublicUrl(path);
 
           // Insert photo record
-          const { error: insertError } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: insertError } = await (supabase as any)
             .from("course_photos")
             .insert({
               ...item.data,
               photo_url: urlData.publicUrl,
-            });
+            }) as { error: Error | null };
 
           if (insertError) throw insertError;
         }
@@ -250,13 +253,15 @@ async function processQueueItem(item: QueuedItem): Promise<boolean> {
       }
 
       case "note_add": {
-        const { error } = await supabase.from(item.table).insert(item.data);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from(item.table).insert(item.data) as { error: Error | null };
         if (error) throw error;
         break;
       }
 
       case "message_send": {
-        const { error } = await supabase.from("messages").insert(item.data);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("messages").insert(item.data) as { error: Error | null };
         if (error) throw error;
         break;
       }
@@ -375,10 +380,11 @@ export const offlineQueue = {
   async updateTaskStatus(taskId: string, status: string, data?: Record<string, unknown>) {
     if (isOnline()) {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("tasks")
         .update({ status, ...data })
-        .eq("id", taskId);
+        .eq("id", taskId) as { error: Error | null };
       if (error) throw error;
       return { queued: false };
     }
@@ -401,7 +407,8 @@ export const offlineQueue = {
 
     if (isOnline()) {
       const supabase = createClient();
-      const { error } = await supabase.from("tasks").update(data).eq("id", taskId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("tasks").update(data).eq("id", taskId) as { error: Error | null };
       if (error) throw error;
       return { queued: false };
     }
@@ -420,7 +427,8 @@ export const offlineQueue = {
 
     if (isOnline()) {
       const supabase = createClient();
-      const { error } = await supabase.from("tasks").update(data).eq("id", taskId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("tasks").update(data).eq("id", taskId) as { error: Error | null };
       if (error) throw error;
       return { queued: false };
     }
@@ -435,10 +443,11 @@ export const offlineQueue = {
 
     if (isOnline()) {
       const supabase = createClient();
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("task_checklist_items")
         .update({ completed })
-        .eq("id", itemId);
+        .eq("id", itemId) as { error: Error | null };
       if (error) throw error;
       return { queued: false };
     }
@@ -471,10 +480,11 @@ export const offlineQueue = {
 
       const { data: urlData } = supabase.storage.from("photos").getPublicUrl(path);
 
-      const { error: insertError } = await supabase.from("course_photos").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: insertError } = await (supabase as any).from("course_photos").insert({
         ...metadata,
         photo_url: urlData.publicUrl,
-      });
+      }) as { error: Error | null };
 
       if (insertError) throw insertError;
       return { queued: false };
@@ -499,7 +509,8 @@ export const offlineQueue = {
 
     if (isOnline()) {
       const supabase = createClient();
-      const { error } = await supabase.from("task_notes").insert(data);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("task_notes").insert(data) as { error: Error | null };
       if (error) throw error;
       return { queued: false };
     }

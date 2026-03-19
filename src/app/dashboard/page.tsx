@@ -72,11 +72,11 @@ function getAlertIcon(type: WeatherAlert["type"]) {
 
 function getAlertStyles(severity: WeatherAlert["severity"]) {
   switch (severity) {
-    case "high":
+    case "warning":
       return "bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400";
-    case "medium":
+    case "caution":
       return "bg-orange-500/10 border-orange-500/20 text-orange-700 dark:text-orange-400";
-    case "low":
+    case "info":
       return "bg-yellow-500/10 border-yellow-500/20 text-yellow-700 dark:text-yellow-400";
     default:
       return "bg-muted border-border text-muted-foreground";
@@ -92,7 +92,8 @@ const quickActions = [
 
 export default function DashboardPage() {
   const { profile } = useAuth();
-  const { alerts } = useWeather();
+  const { getAlerts } = useWeather();
+  const alerts = getAlerts();
   const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
   const { getActiveDiagnosesCount } = useDiagnostics();
   const { tasks, fetchTasks } = useTasks();
@@ -238,7 +239,7 @@ export default function DashboardPage() {
           <p className="text-2xl font-semibold">{alerts?.length ?? 0}</p>
           <p className="text-sm text-muted-foreground">
             {alerts && alerts.length > 0
-              ? `${alerts.filter((a) => a.severity === "high").length} high priority`
+              ? `${alerts.filter((a) => a.severity === "warning").length} warnings`
               : "No active alerts"}
           </p>
         </div>
@@ -408,9 +409,9 @@ export default function DashboardPage() {
                   <Circle className="w-4 h-4 text-red-500 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{task.title}</p>
-                    {task.course_location && (
+                    {task.zone?.name && (
                       <p className="text-xs text-muted-foreground truncate">
-                        {task.course_location}
+                        {task.zone.name}
                       </p>
                     )}
                   </div>

@@ -709,7 +709,7 @@ export default function TaskDetailPage() {
                   <p className="text-sm text-muted-foreground">Assigned to</p>
                   <p className="font-medium">
                     {task.assigned_user
-                      ? getDisplayName(task.assigned_user as { full_name: string; display_name: string | null })
+                      ? task.assigned_user.full_name || "Unknown"
                       : "Unassigned"}
                   </p>
                   {task.assigned_user?.role && (

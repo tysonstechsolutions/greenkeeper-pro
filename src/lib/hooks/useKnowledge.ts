@@ -267,7 +267,7 @@ export function useKnowledge() {
         const sortOrder = filters?.sortOrder || "asc";
         query = query.order(sortBy, { ascending: sortOrder === "asc" });
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: ArticleWithAuthor[] | null; error: Error | null };
 
         if (fetchError) throw fetchError;
 
@@ -277,7 +277,7 @@ export function useKnowledge() {
           const { data: readLog } = await supabase
             .from("knowledge_read_log")
             .select("article_id")
-            .eq("user_id", user.id);
+            .eq("user_id", user.id) as { data: { article_id: string }[] | null };
 
           if (readLog) {
             readArticleIds = new Set(readLog.map((r) => r.article_id));
@@ -326,9 +326,10 @@ export function useKnowledge() {
           `
           )
           .eq("id", id)
-          .single();
+          .single() as { data: ArticleWithAuthor | null; error: Error | null };
 
         if (fetchError) throw fetchError;
+        if (!data) throw new Error("Article not found");
 
         // Check if user has read this article
         let isRead = false;
@@ -338,7 +339,7 @@ export function useKnowledge() {
             .select("read_at")
             .eq("article_id", id)
             .eq("user_id", user.id)
-            .single();
+            .single() as { data: { read_at: string } | null };
 
           isRead = !!readLog;
         }
@@ -347,13 +348,13 @@ export function useKnowledge() {
         const { count: readCount } = await supabase
           .from("knowledge_read_log")
           .select("*", { count: "exact", head: true })
-          .eq("article_id", id);
+          .eq("article_id", id) as { count: number | null };
 
         // Get total staff count
         const { count: totalStaff } = await supabase
           .from("profiles")
           .select("*", { count: "exact", head: true })
-          .eq("active_course_id", data.course_id);
+          .eq("active_course_id", data.course_id) as { count: number | null };
 
         return {
           ...data,
@@ -393,7 +394,8 @@ export function useKnowledge() {
 
         if (!user) throw new Error("Not authenticated");
 
-        const { data: article, error: createError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: article, error: createError } = await (supabase as any)
           .from("knowledge_articles")
           .insert({
             ...data,
@@ -406,7 +408,7 @@ export function useKnowledge() {
             is_published: data.is_published ?? true,
           })
           .select()
-          .single();
+          .single() as { data: KnowledgeArticle | null; error: Error | null };
 
         if (createError) throw createError;
 
@@ -443,9 +445,10 @@ export function useKnowledge() {
           .from("knowledge_articles")
           .select("version")
           .eq("id", id)
-          .single();
+          .single() as { data: { version: number } | null };
 
-        const { data: article, error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: article, error: updateError } = await (supabase as any)
           .from("knowledge_articles")
           .update({
             ...data,
@@ -455,7 +458,7 @@ export function useKnowledge() {
           })
           .eq("id", id)
           .select()
-          .single();
+          .single() as { data: KnowledgeArticle | null; error: Error | null };
 
         if (updateError) throw updateError;
 
@@ -481,10 +484,11 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        const { error: deleteError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deleteError } = await (supabase as any)
           .from("knowledge_articles")
           .update({ is_published: false })
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (deleteError) throw deleteError;
 
@@ -516,7 +520,8 @@ export function useKnowledge() {
 
         if (!user) return false;
 
-        const { error: upsertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: upsertError } = await (supabase as any)
           .from("knowledge_read_log")
           .upsert(
             {
@@ -525,7 +530,7 @@ export function useKnowledge() {
               read_at: new Date().toISOString(),
             },
             { onConflict: "article_id,user_id" }
-          );
+          ) as { error: Error | null };
 
         if (upsertError) throw upsertError;
 
@@ -567,7 +572,7 @@ export function useKnowledge() {
         const { data: readLog } = await supabase
           .from("knowledge_read_log")
           .select("article_id")
-          .eq("user_id", targetUserId);
+          .eq("user_id", targetUserId) as { data: { article_id: string }[] | null };
 
         const readIds = readLog?.map((r) => r.article_id) || [];
 
@@ -588,7 +593,7 @@ export function useKnowledge() {
           query = query.not("id", "in", `(${readIds.join(",")})`);
         }
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: ArticleWithAuthor[] | null; error: Error | null };
 
         if (fetchError) throw fetchError;
 
@@ -628,7 +633,7 @@ export function useKnowledge() {
           )
           .eq("course_id", activeCourse.id)
           .eq("is_published", true)
-          .contains("linked_template_ids", [templateId]);
+          .contains("linked_template_ids", [templateId]) as { data: ArticleWithAuthor[] | null; error: Error | null };
 
         if (fetchError) throw fetchError;
 
@@ -668,7 +673,7 @@ export function useKnowledge() {
           .eq("course_id", activeCourse.id)
           .eq("is_published", true)
           .or(`title.ilike.%${query}%,content.ilike.%${query}%,tags.cs.{${query}}`)
-          .order("title");
+          .order("title") as { data: ArticleWithAuthor[] | null; error: Error | null };
 
         if (searchError) throw searchError;
 
@@ -678,7 +683,7 @@ export function useKnowledge() {
           const { data: readLog } = await supabase
             .from("knowledge_read_log")
             .select("article_id")
-            .eq("user_id", user.id);
+            .eq("user_id", user.id) as { data: { article_id: string }[] | null };
 
           if (readLog) {
             readArticleIds = new Set(readLog.map((r) => r.article_id));
@@ -717,7 +722,7 @@ export function useKnowledge() {
         .from("knowledge_articles")
         .select("category")
         .eq("course_id", activeCourse.id)
-        .eq("is_published", true);
+        .eq("is_published", true) as { data: { category: string }[] | null };
 
       const counts = Object.keys(categoryLabels).reduce(
         (acc, key) => ({ ...acc, [key]: 0 }),
@@ -766,7 +771,7 @@ export function useKnowledge() {
           .eq("is_published", true)
           .contains("tags", ["onboarding"])
           .order("category")
-          .order("title");
+          .order("title") as { data: ArticleWithAuthor[] | null };
 
         // Get read status
         let readArticleIds: Set<string> = new Set();
@@ -774,7 +779,7 @@ export function useKnowledge() {
           const { data: readLog } = await supabase
             .from("knowledge_read_log")
             .select("article_id")
-            .eq("user_id", targetUserId);
+            .eq("user_id", targetUserId) as { data: { article_id: string }[] | null };
 
           if (readLog) {
             readArticleIds = new Set(readLog.map((r) => r.article_id));

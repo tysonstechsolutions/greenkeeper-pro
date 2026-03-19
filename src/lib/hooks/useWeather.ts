@@ -320,11 +320,12 @@ export function useWeather(): UseWeatherReturn {
       };
 
       // Upsert (insert or update) the weather log
-      const { data: upsertedData, error: upsertError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: upsertedData, error: upsertError } = await (supabase as any)
         .from("weather_logs")
         .upsert(logData, { onConflict: "log_date" })
         .select()
-        .single();
+        .single() as { data: WeatherLog | null; error: Error | null };
 
       if (upsertError) {
         console.error("Error logging weather:", upsertError);
@@ -332,8 +333,8 @@ export function useWeather(): UseWeatherReturn {
         return null;
       }
 
-      setTodayLog(upsertedData as WeatherLog);
-      return upsertedData as WeatherLog;
+      setTodayLog(upsertedData);
+      return upsertedData;
     } catch (err) {
       console.error("Error logging daily weather:", err);
       setError(err instanceof Error ? err.message : "Failed to log weather");
@@ -356,12 +357,13 @@ export function useWeather(): UseWeatherReturn {
         const startDate = `${year}-01-01`;
         const endDate = `${year}-12-31`;
 
+        type GDDLogResult = { log_date: string; gdd_base50: number | null };
         const { data, error: fetchError } = await supabase
           .from("weather_logs")
           .select("log_date, gdd_base50")
           .gte("log_date", startDate)
           .lte("log_date", endDate)
-          .order("log_date", { ascending: true });
+          .order("log_date", { ascending: true }) as { data: GDDLogResult[] | null; error: Error | null };
 
         if (fetchError) {
           console.error("Error fetching GDD season:", fetchError);

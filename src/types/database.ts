@@ -651,9 +651,10 @@ export interface Database {
       };
       messages: {
         Row: Message;
-        Insert: Omit<Message, "id" | "created_at"> & {
+        Insert: Omit<Message, "id" | "created_at" | "edited_at"> & {
           id?: string;
           created_at?: string;
+          edited_at?: string | null;
         };
         Update: Partial<Omit<Message, "id">>;
       };

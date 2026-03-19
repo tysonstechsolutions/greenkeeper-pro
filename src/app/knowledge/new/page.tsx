@@ -105,8 +105,9 @@ function NewArticleContent() {
   // Load existing article if editing
   useEffect(() => {
     if (editId) {
+      const id = editId; // Capture non-null value
       async function loadArticle() {
-        const article = await fetchArticle(editId);
+        const article = await fetchArticle(id);
         if (article) {
           setTitle(article.title);
           setContent(article.content);
@@ -251,18 +252,15 @@ function NewArticleContent() {
         title={editId ? "Edit Article" : "New Article"}
         description={editId ? "Update article content and settings" : "Create a new knowledge base article"}
         icon={Book}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => router.push("/knowledge")}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving || loading}>
-              <Save className="w-4 h-4 mr-2" />
-              {saving ? "Saving..." : editId ? "Update" : "Publish"}
-            </Button>
-          </div>
-        }
-      />
+      >
+        <Button variant="outline" onClick={() => router.push("/knowledge")}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={saving || loading}>
+          <Save className="w-4 h-4 mr-2" />
+          {saving ? "Saving..." : editId ? "Update" : "Publish"}
+        </Button>
+      </PageHeader>
 
       {/* Error message */}
       {error && (
@@ -345,12 +343,10 @@ Code block
                   className="hidden"
                   disabled={uploading}
                 />
-                <Button variant="outline" size="sm" disabled={uploading} asChild>
-                  <span>
-                    <Upload className="w-4 h-4 mr-2" />
-                    {uploading ? "Uploading..." : "Upload Files"}
-                  </span>
-                </Button>
+                <span className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-8 px-3 cursor-pointer">
+                  <Upload className="w-4 h-4 mr-2" />
+                  {uploading ? "Uploading..." : "Upload Files"}
+                </span>
               </label>
             </div>
 

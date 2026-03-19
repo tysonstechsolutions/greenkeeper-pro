@@ -387,7 +387,7 @@ export default function BudgetPage() {
                     paddingAngle={2}
                     dataKey="value"
                     label={({ name, percent }) =>
-                      `${name.substring(0, 6)}.. ${(percent * 100).toFixed(0)}%`
+                      `${(name || "").substring(0, 6)}.. ${((percent ?? 0) * 100).toFixed(0)}%`
                     }
                     labelLine={false}
                   >
@@ -395,7 +395,7 @@ export default function BudgetPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Tooltip formatter={(value) => formatCurrency(typeof value === "number" ? value : 0)} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

@@ -261,7 +261,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         query = query.order("sort_order", { ascending: true });
         query = query.order("created_at", { ascending: true });
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
 
         if (fetchError) {
           throw new Error(fetchError.message);
@@ -269,18 +269,18 @@ export function usePlanGoals(): UsePlanGoalsReturn {
 
         // Get child counts and task stats for each goal
         const goalsWithStats: GoalWithStats[] = await Promise.all(
-          (data || []).map(async (goal) => {
+          (data || []).map(async (goal: PlanGoal) => {
             // Count children
             const { count: childCount } = await supabase
               .from("plan_goals")
               .select("*", { count: "exact", head: true })
-              .eq("parent_goal_id", goal.id);
+              .eq("parent_goal_id", goal.id) as { count: number | null };
 
             // Count linked tasks
             const { data: tasks } = await supabase
               .from("tasks")
               .select("id, status")
-              .eq("plan_goal_id", goal.id);
+              .eq("plan_goal_id", goal.id) as { data: Pick<Task, "id" | "status">[] | null };
 
             const taskCount = tasks?.length || 0;
             const tasksCompleted =
@@ -297,7 +297,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
               const { data: children } = await supabase
                 .from("plan_goals")
                 .select("status")
-                .eq("parent_goal_id", goal.id);
+                .eq("parent_goal_id", goal.id) as { data: { status: PlanStatus }[] | null };
 
               const completedChildren =
                 children?.filter((c) => c.status === "completed").length || 0;
@@ -338,9 +338,9 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           .from("plan_goals")
           .select("*")
           .eq("id", id)
-          .single();
+          .single() as { data: PlanGoal | null; error: Error | null };
 
-        if (goalError) {
+        if (goalError || !goal) {
           console.error("Error fetching goal:", goalError);
           return null;
         }
@@ -352,7 +352,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
             .from("plan_goals")
             .select("*")
             .eq("id", goal.parent_goal_id)
-            .single();
+            .single() as { data: PlanGoal | null };
           parent = parentData || undefined;
         }
 
@@ -361,14 +361,14 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           .from("plan_goals")
           .select("*")
           .eq("parent_goal_id", id)
-          .order("sort_order", { ascending: true });
+          .order("sort_order", { ascending: true }) as { data: PlanGoal[] | null };
 
         // Fetch linked tasks
         const { data: linkedTasks } = await supabase
           .from("tasks")
           .select("*")
           .eq("plan_goal_id", id)
-          .order("due_date", { ascending: true });
+          .order("due_date", { ascending: true }) as { data: Task[] | null };
 
         // Calculate stats
         const childCount = children?.length || 0;
@@ -437,7 +437,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
 
         query = query.order("sort_order", { ascending: true });
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
 
         if (fetchError) {
           console.error("Error fetching goal tree:", fetchError);
@@ -453,7 +453,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         const roots: GoalTreeNode[] = [];
 
         // First pass: create all nodes
-        data.forEach((goal) => {
+        data.forEach((goal: PlanGoal) => {
           goalMap.set(goal.id, {
             ...goal,
             children: [],
@@ -465,7 +465,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         });
 
         // Second pass: link children to parents
-        data.forEach((goal) => {
+        data.forEach((goal: PlanGoal) => {
           const node = goalMap.get(goal.id)!;
           if (goal.parent_goal_id && goalMap.has(goal.parent_goal_id)) {
             const parent = goalMap.get(goal.parent_goal_id)!;
@@ -507,11 +507,12 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           created_by: user?.id || null,
         };
 
-        const { data: newGoal, error: createError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newGoal, error: createError } = await (supabase as any)
           .from("plan_goals")
           .insert(goalData)
           .select()
-          .single();
+          .single() as { data: PlanGoal | null; error: Error | null };
 
         if (createError) {
           throw new Error(createError.message);
@@ -538,12 +539,13 @@ export function usePlanGoals(): UsePlanGoalsReturn {
       setError(null);
 
       try {
-        const { data: updatedGoal, error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updatedGoal, error: updateError } = await (supabase as any)
           .from("plan_goals")
           .update(data)
           .eq("id", id)
           .select()
-          .single();
+          .single() as { data: PlanGoal | null; error: Error | null };
 
         if (updateError) {
           throw new Error(updateError.message);
@@ -572,10 +574,11 @@ export function usePlanGoals(): UsePlanGoalsReturn {
   const updateGoalStatus = useCallback(
     async (id: string, status: PlanStatus): Promise<boolean> => {
       try {
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("plan_goals")
           .update({ status })
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (updateError) {
           throw new Error(updateError.message);
@@ -606,16 +609,17 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         const { count } = await supabase
           .from("plan_goals")
           .select("*", { count: "exact", head: true })
-          .eq("parent_goal_id", id);
+          .eq("parent_goal_id", id) as { count: number | null };
 
         if (count && count > 0) {
           return { success: false, hasChildren: true };
         }
 
-        const { error: deleteError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deleteError } = await (supabase as any)
           .from("plan_goals")
           .delete()
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (deleteError) {
           throw new Error(deleteError.message);
@@ -645,7 +649,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           .from("plan_goals")
           .select("*")
           .eq("id", goalId)
-          .single();
+          .single() as { data: PlanGoal | null; error: Error | null };
 
         if (goalError || !goal) {
           console.error("Goal not found");
@@ -713,10 +717,11 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           weather_dependent: false,
         }));
 
-        const { data: createdTasks, error: createError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: createdTasks, error: createError } = await (supabase as any)
           .from("tasks")
           .insert(tasksToCreate)
-          .select();
+          .select() as { data: Task[] | null; error: Error | null };
 
         if (createError) {
           console.error("Error creating tasks:", createError);
@@ -747,7 +752,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         const { data: children } = await supabase
           .from("plan_goals")
           .select("status")
-          .eq("parent_goal_id", goalId);
+          .eq("parent_goal_id", goalId) as { data: { status: PlanStatus }[] | null };
 
         const childGoalsTotal = children?.length || 0;
         const childGoalsCompleted =
@@ -757,7 +762,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         const { data: tasks } = await supabase
           .from("tasks")
           .select("status")
-          .eq("plan_goal_id", goalId);
+          .eq("plan_goal_id", goalId) as { data: Pick<Task, "status">[] | null };
 
         const tasksTotal = tasks?.length || 0;
         const tasksCompleted =
@@ -813,7 +818,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           query = query.eq("year", year);
         }
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
 
         if (fetchError) {
           console.error("Error fetching plan overview:", fetchError);
@@ -840,7 +845,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           cancelled: 0,
         };
 
-        data.forEach((goal) => {
+        data.forEach((goal: PlanGoal) => {
           budgetAllocated += goal.budget_allocated || 0;
           budgetSpent += goal.budget_spent || 0;
           statusCounts[goal.status as PlanStatus]++;

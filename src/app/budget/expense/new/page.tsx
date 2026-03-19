@@ -134,13 +134,17 @@ export default function NewExpensePage() {
       }
 
       // Create photo record
+      const photoRecord = {
+        storage_path: fileName,
+        uploaded_by: user.id,
+        caption: `Receipt for expense: ${description}`,
+        photo_type: "other" as const,
+        tags: ["receipt", "expense"],
+      };
       const { data: photoData, error: photoError } = await supabase
         .from("photos")
-        .insert({
-          storage_path: fileName,
-          taken_by: user.id,
-          description: `Receipt for expense: ${description}`,
-        })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert(photoRecord as any)
         .select()
         .single();
 
@@ -148,7 +152,7 @@ export default function NewExpensePage() {
         throw new Error(photoError.message);
       }
 
-      return photoData.id;
+      return (photoData as { id: string }).id;
     } catch (err) {
       console.error("Error uploading receipt:", err);
       setError("Failed to upload receipt");

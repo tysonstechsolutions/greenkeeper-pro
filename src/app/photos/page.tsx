@@ -184,13 +184,13 @@ export default function PhotosPage() {
         .gte("created_at", startOfToday);
 
       // Most documented zone
-      const { data: zoneStats } = await supabase
-        .from("photos")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: zoneStats } = await (supabase.from("photos") as any)
         .select("zone_id")
         .not("zone_id", "is", null);
 
       const zoneCounts: Record<string, number> = {};
-      zoneStats?.forEach((p) => {
+      zoneStats?.forEach((p: { zone_id: string | null }) => {
         if (p.zone_id) {
           zoneCounts[p.zone_id] = (zoneCounts[p.zone_id] || 0) + 1;
         }
@@ -207,13 +207,13 @@ export default function PhotosPage() {
       });
 
       // Top contributor
-      const { data: uploaderStats } = await supabase
-        .from("photos")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: uploaderStats } = await (supabase.from("photos") as any)
         .select("uploaded_by")
         .gte("created_at", startOfMonth);
 
       const uploaderCounts: Record<string, number> = {};
-      uploaderStats?.forEach((p) => {
+      uploaderStats?.forEach((p: { uploaded_by: string }) => {
         uploaderCounts[p.uploaded_by] = (uploaderCounts[p.uploaded_by] || 0) + 1;
       });
 
@@ -1042,7 +1042,7 @@ export default function PhotosPage() {
                     </div>
                   )}
                   <span className="text-sm">
-                    {getDisplayName(currentPhoto.uploader as { full_name: string; display_name: string | null })}
+                    {currentPhoto.uploader.display_name || currentPhoto.uploader.full_name || "Unknown"}
                   </span>
                 </div>
               </div>

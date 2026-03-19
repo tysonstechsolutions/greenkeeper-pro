@@ -254,16 +254,16 @@ function ProblemMarker({ photo, onClick }: ProblemMarkerProps) {
     >
       <Popup>
         <div className="min-w-[200px]">
-          {photo.thumbnail_url && (
+          {photo.thumbnail_path && (
             <img
-              src={photo.thumbnail_url}
+              src={photo.thumbnail_path}
               alt={photo.caption || "Problem photo"}
               className="w-full h-32 object-cover rounded mb-2"
             />
           )}
           <p className="text-sm font-medium">{photo.caption || "Problem Area"}</p>
           <p className="text-xs text-muted-foreground">
-            {new Date(photo.taken_at || photo.created_at).toLocaleDateString()}
+            {new Date(photo.created_at).toLocaleDateString()}
           </p>
         </div>
       </Popup>

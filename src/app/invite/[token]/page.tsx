@@ -121,8 +121,8 @@ export default function InvitePage() {
     // Wait a moment for the trigger to create the profile
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    const { error: profileError } = await supabase
-      .from("profiles")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: profileError } = await (supabase.from("profiles") as any)
       .update({
         full_name: fullName,
         phone: phone || null,
@@ -136,8 +136,8 @@ export default function InvitePage() {
     }
 
     // 3. Mark the invite as used
-    await supabase
-      .from("invites")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from("invites") as any)
       .update({
         used_by: authData.user.id,
         used_at: new Date().toISOString(),

@@ -74,8 +74,8 @@ export default function StaffPage() {
 
     try {
       // Get all profiles (both active and inactive for full roster)
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profilesData, error: profilesError } = await (supabase.from("profiles") as any)
         .select("*")
         .order("role", { ascending: true })
         .order("full_name", { ascending: true });
@@ -87,21 +87,21 @@ export default function StaffPage() {
       }
 
       // Get task counts per user
-      const { data: tasksData } = await supabase
-        .from("tasks")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: tasksData } = await (supabase.from("tasks") as any)
         .select("assigned_to")
         .in("status", ["pending", "in_progress"]);
 
       // Get pending time-off counts
-      const { data: timeOffData } = await supabase
-        .from("time_off_requests")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: timeOffData } = await (supabase.from("time_off_requests") as any)
         .select("user_id")
         .eq("status", "pending");
 
       // Get today's crew assignments
       const today = new Date().toISOString().split("T")[0];
-      const { data: scheduleData } = await supabase
-        .from("schedules")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: scheduleData } = await (supabase.from("schedules") as any)
         .select("user_id, crew_assignment")
         .eq("schedule_date", today)
         .not("crew_assignment", "is", null);
@@ -130,7 +130,7 @@ export default function StaffPage() {
         }
       }
 
-      const enhanced: StaffProfile[] = (profilesData || []).map((p) => ({
+      const enhanced: StaffProfile[] = (profilesData || []).map((p: Profile) => ({
         ...p,
         task_count: taskCounts.get(p.id) || 0,
         pending_time_off: timeOffCounts.get(p.id) || 0,
@@ -451,13 +451,13 @@ export default function StaffPage() {
 
                     {/* Quick stats */}
                     <div className="hidden sm:flex items-center gap-4 text-sm text-muted-foreground">
-                      {staff.task_count > 0 && (
+                      {(staff.task_count ?? 0) > 0 && (
                         <span className="flex items-center gap-1">
                           <CheckSquare className="w-4 h-4" />
                           {staff.task_count}
                         </span>
                       )}
-                      {staff.pending_time_off > 0 && (
+                      {(staff.pending_time_off ?? 0) > 0 && (
                         <span className="flex items-center gap-1 text-amber-600">
                           <CalendarOff className="w-4 h-4" />
                           {staff.pending_time_off}
@@ -582,7 +582,7 @@ export default function StaffPage() {
                             key={idx}
                             className="px-2 py-1 rounded bg-primary/10 text-primary text-xs"
                           >
-                            {cert}
+                            {cert.name}
                           </span>
                         ))}
                       </div>
@@ -609,9 +609,11 @@ export default function StaffPage() {
                             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                               <span
                                 className={`px-1.5 py-0.5 rounded ${
-                                  task.priority === "high"
+                                  task.priority === "critical"
+                                    ? "bg-purple-500/10 text-purple-600"
+                                    : task.priority === "high"
                                     ? "bg-red-500/10 text-red-600"
-                                    : task.priority === "medium"
+                                    : task.priority === "normal"
                                     ? "bg-amber-500/10 text-amber-600"
                                     : "bg-gray-500/10 text-gray-600"
                                 }`}
@@ -672,7 +674,7 @@ export default function StaffPage() {
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-medium capitalize">
-                                {req.request_type.replace("_", " ")}
+                                {(req.request_type || "time off").replace("_", " ")}
                               </span>
                               <span
                                 className={`px-1.5 py-0.5 rounded text-xs ${

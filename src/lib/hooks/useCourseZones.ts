@@ -154,9 +154,9 @@ export function useCourseZones(): UseCourseZonesReturn {
 }
 
 // Utility function to format zone display name
-export function formatZoneName(zone: CourseZone): string {
+export function formatZoneName(zone: { name: string; zone_type: string; hole_number: number | null }): string {
   if (zone.hole_number) {
-    const typeLabel = zoneTypeLabels[zone.zone_type] || zone.zone_type;
+    const typeLabel = zoneTypeLabels[zone.zone_type as ZoneType] || zone.zone_type;
     return `Hole ${zone.hole_number} ${typeLabel}`;
   }
   return zone.name;

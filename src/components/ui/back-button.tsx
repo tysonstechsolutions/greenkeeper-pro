@@ -17,17 +17,17 @@ export function BackButton({ href, label = "Back", className }: BackButtonProps)
 
   if (href) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        asChild
-        className={cn("gap-2 text-muted-foreground hover:text-foreground", className)}
+      <Link
+        href={href}
+        className={cn(
+          "inline-flex items-center justify-center gap-2 text-sm font-medium h-9 px-3 rounded-md transition-colors",
+          "text-muted-foreground hover:text-foreground hover:bg-accent",
+          className
+        )}
       >
-        <Link href={href}>
-          <ArrowLeft className="w-4 h-4" />
-          {label}
-        </Link>
-      </Button>
+        <ArrowLeft className="w-4 h-4" />
+        {label}
+      </Link>
     );
   }
 
@@ -47,8 +47,8 @@ export function BackButton({ href, label = "Back", className }: BackButtonProps)
 interface DetailPageHeaderProps {
   backHref?: string;
   backLabel?: string;
-  title: string;
-  subtitle?: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }

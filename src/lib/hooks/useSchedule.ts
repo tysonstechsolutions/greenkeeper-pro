@@ -116,12 +116,13 @@ export function useSchedule(): UseScheduleReturn {
         }
 
         // Fetch all active profiles to include users without schedules
+        type ProfileQueryResult = Pick<Profile, "id" | "full_name" | "display_name" | "role" | "avatar_url" | "phone">;
         const { data: profilesData, error: profilesError } = await supabase
           .from("profiles")
           .select("id, full_name, display_name, role, avatar_url, phone")
           .eq("is_active", true)
           .order("role", { ascending: true })
-          .order("full_name", { ascending: true });
+          .order("full_name", { ascending: true }) as { data: ProfileQueryResult[] | null; error: Error | null };
 
         if (profilesError) {
           console.error("Error fetching profiles:", profilesError);
@@ -270,11 +271,12 @@ export function useSchedule(): UseScheduleReturn {
           .select("id")
           .eq("user_id", userId)
           .eq("schedule_date", date)
-          .single();
+          .single() as { data: { id: string } | null };
 
         if (existing) {
           // Update existing
-          const { data: updated, error: updateError } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: updated, error: updateError } = await (supabase as any)
             .from("schedules")
             .update({
               shift_start: shiftData.shift_start ?? null,
@@ -285,7 +287,7 @@ export function useSchedule(): UseScheduleReturn {
             })
             .eq("id", existing.id)
             .select()
-            .single();
+            .single() as { data: Schedule | null; error: Error | null };
 
           if (updateError) {
             console.error("Error updating schedule:", updateError);
@@ -296,7 +298,7 @@ export function useSchedule(): UseScheduleReturn {
           return updated as Schedule;
         } else {
           // Insert new
-          const insertData: Database["public"]["Tables"]["schedules"]["Insert"] = {
+          const insertData = {
             user_id: userId,
             schedule_date: date,
             shift_start: shiftData.shift_start ?? null,
@@ -307,11 +309,12 @@ export function useSchedule(): UseScheduleReturn {
             created_by: profile.id,
           };
 
-          const { data: inserted, error: insertError } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: inserted, error: insertError } = await (supabase as any)
             .from("schedules")
             .insert(insertData)
             .select()
-            .single();
+            .single() as { data: Schedule | null; error: Error | null };
 
           if (insertError) {
             console.error("Error inserting schedule:", insertError);
@@ -349,11 +352,12 @@ export function useSchedule(): UseScheduleReturn {
             .select("id")
             .eq("user_id", entry.user_id)
             .eq("schedule_date", entry.schedule_date)
-            .single();
+            .single() as { data: { id: string } | null };
 
           if (existing) {
             // Update
-            const { error: updateError } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: updateError } = await (supabase as any)
               .from("schedules")
               .update({
                 shift_start: entry.shift_start ?? null,
@@ -362,7 +366,7 @@ export function useSchedule(): UseScheduleReturn {
                 crew_assignment: entry.crew_assignment ?? null,
                 notes: entry.notes ?? null,
               })
-              .eq("id", existing.id);
+              .eq("id", existing.id) as { error: Error | null };
 
             if (updateError) {
               console.error("Error updating schedule in bulk:", updateError);
@@ -371,7 +375,7 @@ export function useSchedule(): UseScheduleReturn {
             }
           } else {
             // Insert
-            const insertData: Database["public"]["Tables"]["schedules"]["Insert"] = {
+            const insertData = {
               user_id: entry.user_id,
               schedule_date: entry.schedule_date,
               shift_start: entry.shift_start ?? null,
@@ -382,9 +386,10 @@ export function useSchedule(): UseScheduleReturn {
               created_by: profile.id,
             };
 
-            const { error: insertError } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: insertError } = await (supabase as any)
               .from("schedules")
-              .insert(insertData);
+              .insert(insertData) as { error: Error | null };
 
             if (insertError) {
               console.error("Error inserting schedule in bulk:", insertError);
@@ -448,11 +453,20 @@ export function useSchedule(): UseScheduleReturn {
         const sourceDates = getWeekDates(sourceWeekStart);
         const targetDates = getWeekDates(targetWeekStart);
 
+        type SourceScheduleResult = {
+          user_id: string;
+          schedule_date: string;
+          shift_start: string | null;
+          shift_end: string | null;
+          shift_type: ShiftType | null;
+          crew_assignment: string | null;
+          notes: string | null;
+        };
         const { data: sourceSchedules, error: fetchError } = await supabase
           .from("schedules")
           .select("*")
           .gte("schedule_date", sourceDates[0])
-          .lte("schedule_date", sourceDates[6]);
+          .lte("schedule_date", sourceDates[6]) as { data: SourceScheduleResult[] | null; error: Error | null };
 
         if (fetchError) {
           console.error("Error fetching source week:", fetchError);

@@ -196,20 +196,18 @@ export default function ReportsPage() {
 
     switch (activeReport) {
       case "daily":
-        if (dailyReport?.tasks) {
-          data = dailyReport.tasks.map(t => ({
+        if (dailyReport?.tasks?.list) {
+          data = dailyReport.tasks.list.map(t => ({
             title: t.title,
             status: t.status,
-            assignee: t.assigned_to_name,
+            assignee: t.assignee || "",
             category: t.category,
-            priority: t.priority,
           }));
           headers = [
             { key: "title", label: "Task" },
             { key: "status", label: "Status" },
             { key: "assignee", label: "Assigned To" },
             { key: "category", label: "Category" },
-            { key: "priority", label: "Priority" },
           ];
         }
         break;
@@ -218,10 +216,10 @@ export default function ReportsPage() {
           data = equipmentReport.maintenance_log.map(m => ({
             date: m.date,
             equipment: m.equipment_name,
-            type: m.type,
+            type: m.log_type,
             description: m.description,
             cost: m.cost,
-            technician: m.technician,
+            vendor: m.vendor || "",
           }));
           headers = [
             { key: "date", label: "Date" },
@@ -229,7 +227,7 @@ export default function ReportsPage() {
             { key: "type", label: "Type" },
             { key: "description", label: "Description" },
             { key: "cost", label: "Cost" },
-            { key: "technician", label: "Technician" },
+            { key: "vendor", label: "Vendor" },
           ];
         }
         break;
@@ -238,17 +236,17 @@ export default function ReportsPage() {
           data = chemicalReport.applications.map(a => ({
             date: a.date,
             product: a.product_name,
-            zone: a.zone_name,
-            rate: `${a.rate} ${a.rate_unit}`,
-            area: a.area_treated,
-            applicator: a.applicator_name,
+            zones: a.zones.join(", "),
+            rate: a.application_rate || "",
+            area_sqft: a.area_sqft || "",
+            applicator: a.applicator_name || "",
           }));
           headers = [
             { key: "date", label: "Date" },
             { key: "product", label: "Product" },
-            { key: "zone", label: "Zone" },
+            { key: "zones", label: "Zones" },
             { key: "rate", label: "Rate" },
-            { key: "area", label: "Area Treated" },
+            { key: "area_sqft", label: "Area (sq ft)" },
             { key: "applicator", label: "Applicator" },
           ];
         }
@@ -547,10 +545,11 @@ export default function ReportsPage() {
 
 // Daily Report Component
 function DailyReportView({ report }: { report: DailyReportData }) {
+  const pendingCount = report.tasks.total - report.tasks.completed - report.tasks.in_progress;
   const tasksByStatus = [
-    { name: "Completed", value: report.tasks.filter(t => t.status === "completed").length, color: "#40916C" },
-    { name: "In Progress", value: report.tasks.filter(t => t.status === "in_progress").length, color: "#74C69D" },
-    { name: "Pending", value: report.tasks.filter(t => t.status === "pending").length, color: "#B7E4C7" },
+    { name: "Completed", value: report.tasks.completed, color: "#40916C" },
+    { name: "In Progress", value: report.tasks.in_progress, color: "#74C69D" },
+    { name: "Pending", value: pendingCount > 0 ? pendingCount : 0, color: "#B7E4C7" },
   ];
 
   return (
@@ -566,25 +565,25 @@ function DailyReportView({ report }: { report: DailyReportData }) {
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">High</p>
-              <p className="text-2xl font-bold">{report.weather.high_temp}°F</p>
+              <p className="text-2xl font-bold">{report.weather.high_f}°F</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">Low</p>
-              <p className="text-2xl font-bold">{report.weather.low_temp}°F</p>
+              <p className="text-2xl font-bold">{report.weather.low_f}°F</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">Precipitation</p>
-              <p className="text-2xl font-bold">{report.weather.precipitation}"</p>
+              <p className="text-2xl font-bold">{report.weather.precip_in}"</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">Conditions</p>
-              <p className="text-lg font-medium">{report.weather.conditions}</p>
+              <p className="text-lg font-medium">{report.weather.condition}</p>
             </CardContent>
           </Card>
         </div>
@@ -627,11 +626,11 @@ function DailyReportView({ report }: { report: DailyReportData }) {
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Total Tasks</span>
-              <span className="font-semibold">{report.tasks.length}</span>
+              <span className="font-semibold">{report.tasks.total}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Photos Uploaded</span>
-              <span className="font-semibold">{report.photos.length}</span>
+              <span className="font-semibold">{report.photos.count}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Equipment Issues</span>
@@ -666,10 +665,10 @@ function DailyReportView({ report }: { report: DailyReportData }) {
                 </tr>
               </thead>
               <tbody>
-                {report.tasks.map((task) => (
+                {report.tasks.list.map((task) => (
                   <tr key={task.id} className="border-b">
                     <td className="py-2 px-3">{task.title}</td>
-                    <td className="py-2 px-3">{task.assigned_to_name || "—"}</td>
+                    <td className="py-2 px-3">{task.assignee || "—"}</td>
                     <td className="py-2 px-3">{task.category}</td>
                     <td className="py-2 px-3">
                       <Badge
@@ -695,7 +694,7 @@ function WeeklyReportView({ report }: { report: WeeklyReportData }) {
   const completionByStaff = report.completion_by_staff.map(s => ({
     name: s.name.split(" ")[0],
     completed: s.completed,
-    total: s.total,
+    total: s.assigned,
   }));
 
   return (
@@ -717,14 +716,14 @@ function WeeklyReportView({ report }: { report: WeeklyReportData }) {
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">Avg Temp</p>
-            <p className="text-2xl font-bold">{report.weather_summary.avg_temp}°F</p>
+            <p className="text-sm text-muted-foreground">Temp Range</p>
+            <p className="text-2xl font-bold">{report.weather_summary.low_min}-{report.weather_summary.high_max}°F</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">Budget Spent</p>
-            <p className="text-2xl font-bold">${report.budget.spent.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground">Week Spend</p>
+            <p className="text-2xl font-bold">${report.budget.week_spend.toLocaleString()}</p>
           </CardContent>
         </Card>
         <Card>
@@ -819,7 +818,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">Total Units</p>
-            <p className="text-2xl font-bold">{report.fleet_summary.total_units}</p>
+            <p className="text-2xl font-bold">{report.fleet_summary.total}</p>
           </CardContent>
         </Card>
         <Card>
@@ -831,7 +830,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">In Maintenance</p>
-            <p className="text-2xl font-bold text-orange-600">{report.fleet_summary.in_maintenance}</p>
+            <p className="text-2xl font-bold text-orange-600">{report.fleet_summary.in_repair}</p>
           </CardContent>
         </Card>
         <Card>
@@ -854,7 +853,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" tickFormatter={(v) => `$${v}`} />
                 <YAxis type="category" dataKey="equipment_name" width={150} />
-                <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, "Cost"]} />
+                <Tooltip formatter={(value) => [`$${(typeof value === "number" ? value : 0).toLocaleString()}`, "Cost"]} />
                 <Bar dataKey="total_cost" fill="#1B4332" />
               </BarChart>
             </ResponsiveContainer>
@@ -885,10 +884,10 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
                     <td className="py-2 px-3">{new Date(log.date).toLocaleDateString()}</td>
                     <td className="py-2 px-3">{log.equipment_name}</td>
                     <td className="py-2 px-3">
-                      <Badge variant="outline" className="capitalize">{log.type}</Badge>
+                      <Badge variant="outline" className="capitalize">{log.log_type}</Badge>
                     </td>
                     <td className="py-2 px-3">{log.description}</td>
-                    <td className="py-2 px-3 text-right">${log.cost.toLocaleString()}</td>
+                    <td className="py-2 px-3 text-right">${(log.cost || 0).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -915,9 +914,9 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
                     <p className="text-sm text-muted-foreground">{item.service_type}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm">Due: {new Date(item.due_date).toLocaleDateString()}</p>
-                    {item.hours_remaining && (
-                      <p className="text-xs text-muted-foreground">{item.hours_remaining} hours remaining</p>
+                    <p className="text-sm">Due: {item.due_date ? new Date(item.due_date).toLocaleDateString() : "N/A"}</p>
+                    {item.due_hours && item.current_hours && item.due_hours > item.current_hours && (
+                      <p className="text-xs text-muted-foreground">{item.due_hours - item.current_hours} hours remaining</p>
                     )}
                   </div>
                 </div>
@@ -942,19 +941,19 @@ function ChemicalReportView({ report }: { report: ChemicalReportData }) {
       </div>
 
       {/* REI Compliance */}
-      <Card className={report.rei_compliance.compliant ? "border-green-200" : "border-red-200"}>
+      <Card className={report.rei_compliance.compliance_rate >= 100 ? "border-green-200" : "border-red-200"}>
         <CardContent className="p-4 flex items-center gap-4">
-          {report.rei_compliance.compliant ? (
+          {report.rei_compliance.compliance_rate >= 100 ? (
             <CheckCircle className="w-8 h-8 text-green-600" />
           ) : (
             <AlertCircle className="w-8 h-8 text-red-600" />
           )}
           <div>
             <p className="font-semibold">
-              REI Compliance: {report.rei_compliance.compliant ? "COMPLIANT" : "VIOLATIONS FOUND"}
+              REI Compliance: {report.rei_compliance.compliance_rate}%
             </p>
             <p className="text-sm text-muted-foreground">
-              {report.rei_compliance.total_applications} applications, {report.rei_compliance.violations} violations
+              {report.rei_compliance.with_rei} of {report.rei_compliance.total_applications} applications with REI
             </p>
           </div>
         </CardContent>
@@ -1003,10 +1002,10 @@ function ChemicalReportView({ report }: { report: ChemicalReportData }) {
                   <tr key={i} className="border-b">
                     <td className="py-2 px-3">{new Date(app.date).toLocaleDateString()}</td>
                     <td className="py-2 px-3">{app.product_name}</td>
-                    <td className="py-2 px-3">{app.zone_name}</td>
-                    <td className="py-2 px-3">{app.rate} {app.rate_unit}</td>
-                    <td className="py-2 px-3">{app.area_treated.toLocaleString()} sq ft</td>
-                    <td className="py-2 px-3">{app.applicator_name}</td>
+                    <td className="py-2 px-3">{app.zones.join(", ")}</td>
+                    <td className="py-2 px-3">{app.application_rate || "N/A"}</td>
+                    <td className="py-2 px-3">{(app.area_sqft || 0).toLocaleString()} sq ft</td>
+                    <td className="py-2 px-3">{app.applicator_name || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1024,14 +1023,14 @@ function ChemicalReportView({ report }: { report: ChemicalReportData }) {
           <div className="grid md:grid-cols-3 gap-4">
             {report.applicator_log.map((applicator, i) => (
               <div key={i} className="p-3 bg-muted/50 rounded-lg">
-                <p className="font-medium">{applicator.name}</p>
+                <p className="font-medium">{applicator.applicator_name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {applicator.applications_count} applications
+                  {applicator.applications} applications
                 </p>
-                {applicator.certification_valid ? (
-                  <Badge className="mt-2 bg-green-100 text-green-800">Certified</Badge>
+                {applicator.license ? (
+                  <Badge className="mt-2 bg-green-100 text-green-800">License: {applicator.license}</Badge>
                 ) : (
-                  <Badge className="mt-2 bg-red-100 text-red-800">Certification Expired</Badge>
+                  <Badge className="mt-2 bg-gray-100 text-gray-800">No License</Badge>
                 )}
               </div>
             ))}

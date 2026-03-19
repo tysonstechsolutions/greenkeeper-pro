@@ -266,7 +266,7 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
       }
 
       try {
-        const insertData: Database["public"]["Tables"]["tasks"]["Insert"] = {
+        const insertData = {
           title: data.title,
           description: data.description ?? null,
           category: data.category,
@@ -294,15 +294,16 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           notes: data.notes ?? null,
         };
 
-        const { data: newTask, error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newTask, error: insertError } = await (supabase as any)
           .from("tasks")
           .insert(insertData)
           .select()
-          .single();
+          .single() as { data: Task | null; error: Error | null };
 
-        if (insertError) {
+        if (insertError || !newTask) {
           console.error("Error creating task:", insertError);
-          setError(insertError.message);
+          setError(insertError?.message || "Failed to create task");
           return null;
         }
 
@@ -319,7 +320,7 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           );
         }
 
-        return newTask as Task;
+        return newTask;
       } catch (err) {
         console.error("Unexpected error creating task:", err);
         setError("Failed to create task");
@@ -333,12 +334,13 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
   const updateTask = useCallback(
     async (id: string, data: UpdateTaskData): Promise<Task | null> => {
       try {
-        const { data: updated, error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updated, error: updateError } = await (supabase as any)
           .from("tasks")
           .update(data)
           .eq("id", id)
           .select()
-          .single();
+          .single() as { data: Task | null; error: Error | null };
 
         if (updateError) {
           console.error("Error updating task:", updateError);
@@ -346,7 +348,7 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           return null;
         }
 
-        return updated as Task;
+        return updated;
       } catch (err) {
         console.error("Unexpected error updating task:", err);
         setError("Failed to update task");
@@ -360,10 +362,11 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
   const updateTaskStatus = useCallback(
     async (id: string, newStatus: TaskStatus): Promise<boolean> => {
       try {
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("tasks")
           .update({ status: newStatus })
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (updateError) {
           console.error("Error updating task status:", updateError);
@@ -395,16 +398,17 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           .from("tasks")
           .select("title, assigned_by")
           .eq("id", id)
-          .single();
+          .single() as { data: { title: string; assigned_by: string } | null };
 
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("tasks")
           .update({
             status: "completed",
             completed_at: new Date().toISOString(),
             completed_by: user.id,
           })
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (updateError) {
           console.error("Error completing task:", updateError);
@@ -449,16 +453,17 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           .from("tasks")
           .select("title, completed_by, assigned_to")
           .eq("id", id)
-          .single();
+          .single() as { data: { title: string; completed_by: string | null; assigned_to: string | null } | null };
 
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("tasks")
           .update({
             status: "verified",
             verified_at: new Date().toISOString(),
             verified_by: user.id,
           })
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (updateError) {
           console.error("Error verifying task:", updateError);

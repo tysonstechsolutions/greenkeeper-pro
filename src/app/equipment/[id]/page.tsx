@@ -292,14 +292,14 @@ export default function EquipmentDetailPage() {
         await updateEquipment(equipment.id, { status: "needs_service" });
 
         // Create notification for super/mechanic
-        await createNotification({
-          user_id: user.id, // Would notify super/mechanic in real app
-          notification_type: "equipment",
-          title: `Pre-Op Issue: ${equipment.name}`,
-          body: `${flaggedItems.length} issue(s) found during pre-operation check.`,
-          reference_type: "equipment",
-          reference_id: equipment.id,
-        });
+        await createNotification(
+          user.id, // Would notify super/mechanic in real app
+          "equipment",
+          `Pre-Op Issue: ${equipment.name}`,
+          `${flaggedItems.length} issue(s) found during pre-operation check.`,
+          "equipment",
+          equipment.id
+        );
       }
 
       await loadEquipment();
@@ -717,7 +717,7 @@ export default function EquipmentDetailPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, ""]}
+                      formatter={(value) => [`$${(typeof value === "number" ? value : 0).toLocaleString()}`, ""]}
                     />
                   </PieChart>
                 </ResponsiveContainer>

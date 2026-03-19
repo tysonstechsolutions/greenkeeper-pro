@@ -570,10 +570,10 @@ export default function DiagnosisDetailPage() {
                               })}
                             </p>
                             <p className="font-medium">
-                              {Math.round(day.day.maxtemp_f)}°
+                              {Math.round(day.high_f)}°
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {day.day.daily_chance_of_rain}%
+                              {day.precipitation_chance}%
                             </p>
                           </div>
                         ))}

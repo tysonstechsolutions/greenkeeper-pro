@@ -106,11 +106,12 @@ function formatShiftTime(start: string | null, end: string | null): string {
 export async function getBriefingSettings(): Promise<BriefingSettings> {
   const supabase = createServiceClient();
 
+  type SettingsResult = { value: Partial<BriefingSettings> | null };
   const { data } = await supabase
     .from("app_settings")
     .select("value")
     .eq("key", "daily_briefing")
-    .single();
+    .single() as { data: SettingsResult | null };
 
   if (data?.value) {
     return { ...DEFAULT_BRIEFING_SETTINGS, ...(data.value as Partial<BriefingSettings>) };
@@ -125,13 +126,14 @@ export async function getBriefingSettings(): Promise<BriefingSettings> {
 export async function saveBriefingSettings(settings: BriefingSettings): Promise<boolean> {
   const supabase = createServiceClient();
 
-  const { error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
     .from("app_settings")
     .upsert({
       key: "daily_briefing",
       value: settings,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "key" });
+    }, { onConflict: "key" }) as { error: Error | null };
 
   return !error;
 }
@@ -154,6 +156,13 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
     .single();
 
   // Get staff scheduled for today
+  type ScheduleResult = {
+    shift_start: string | null;
+    shift_end: string | null;
+    shift_type: string | null;
+    user_id: string;
+    profiles: { full_name: string; role: string } | null;
+  };
   const { data: schedules } = await supabase
     .from("schedules")
     .select(`
@@ -164,15 +173,16 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
       profiles!schedules_user_id_fkey(full_name, role)
     `)
     .eq("schedule_date", dateStr)
-    .neq("shift_type", "off");
+    .neq("shift_type", "off") as { data: ScheduleResult[] | null };
 
   // Get time-off requests that overlap with today
+  type TimeOffResult = { user_id: string };
   const { data: timeOff } = await supabase
     .from("time_off_requests")
     .select("user_id")
     .eq("status", "approved")
     .lte("start_date", dateStr)
-    .gte("end_date", dateStr);
+    .gte("end_date", dateStr) as { data: TimeOffResult[] | null };
 
   const timeOffUserIds = new Set((timeOff || []).map(t => t.user_id));
 
@@ -189,6 +199,12 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
     });
 
   // Get critical and high priority tasks for today
+  type TaskResult = {
+    title: string;
+    priority: string;
+    assigned_to: string | null;
+    profiles: { full_name: string } | null;
+  };
   const { data: tasks } = await supabase
     .from("tasks")
     .select(`
@@ -200,11 +216,11 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
     .eq("due_date", dateStr)
     .in("priority", ["critical", "high"])
     .not("status", "in", '("completed","verified","cancelled")')
-    .order("priority", { ascending: true });
+    .order("priority", { ascending: true }) as { data: TaskResult[] | null };
 
   const priorityTasks: PriorityTask[] = (tasks || []).map(t => ({
     title: t.title,
-    assignee: (t.profiles as { full_name: string } | null)?.full_name || "Unassigned",
+    assignee: t.profiles?.full_name || "Unassigned",
     priority: t.priority,
   }));
 
@@ -212,11 +228,11 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   const alerts: Alert[] = [];
 
   // Check for overdue tasks
-  const { data: overdueTasks, count: overdueCount } = await supabase
+  const { count: overdueCount } = await supabase
     .from("tasks")
     .select("*", { count: "exact", head: true })
     .lt("due_date", dateStr)
-    .not("status", "in", '("completed","verified","cancelled")');
+    .not("status", "in", '("completed","verified","cancelled")') as { count: number | null };
 
   if (overdueCount && overdueCount > 0) {
     alerts.push({
@@ -226,10 +242,11 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   }
 
   // Check for equipment needing service
+  type EquipmentServiceResult = { name: string };
   const { data: equipmentService } = await supabase
     .from("equipment")
     .select("name")
-    .in("status", ["needs_service", "in_repair"]);
+    .in("status", ["needs_service", "in_repair"]) as { data: EquipmentServiceResult[] | null };
 
   if (equipmentService && equipmentService.length > 0) {
     alerts.push({
@@ -239,12 +256,13 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   }
 
   // Check for low chemical stock
+  type LowStockResult = { product_name: string; current_inventory: number | null; reorder_threshold: number | null };
   const { data: lowStock } = await supabase
     .from("chemical_products")
     .select("product_name, current_inventory, reorder_threshold")
     .eq("is_active", true)
     .not("current_inventory", "is", null)
-    .not("reorder_threshold", "is", null);
+    .not("reorder_threshold", "is", null) as { data: LowStockResult[] | null };
 
   const lowStockItems = (lowStock || []).filter(
     c => c.current_inventory !== null &&
@@ -264,10 +282,11 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
   const thirtyDaysStr = thirtyDaysFromNow.toISOString().split("T")[0];
 
+  type ProfileCertsResult = { full_name: string; certifications: Array<{ name: string; expiry_date: string | null }> | null };
   const { data: profilesWithCerts } = await supabase
     .from("profiles")
     .select("full_name, certifications")
-    .eq("is_active", true);
+    .eq("is_active", true) as { data: ProfileCertsResult[] | null };
 
   const expiringCerts: string[] = [];
   (profilesWithCerts || []).forEach(p => {
@@ -287,10 +306,11 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   }
 
   // Yesterday's recap
+  type YesterdayTaskResult = { title: string; status: string };
   const { data: yesterdayTasks, count: yesterdayTotal } = await supabase
     .from("tasks")
     .select("title, status", { count: "exact" })
-    .eq("due_date", yesterdayStr);
+    .eq("due_date", yesterdayStr) as { data: YesterdayTaskResult[] | null; count: number | null };
 
   const yesterdayCompleted = (yesterdayTasks || []).filter(
     t => t.status === "completed" || t.status === "verified"
@@ -305,6 +325,7 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
   const sevenDaysStr = sevenDaysFromNow.toISOString().split("T")[0];
 
+  type UpcomingGoalResult = { title: string; week_start: string };
   const { data: upcomingGoals } = await supabase
     .from("plan_goals")
     .select("title, week_start")
@@ -312,7 +333,7 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
     .gte("week_start", dateStr)
     .lte("week_start", sevenDaysStr)
     .order("week_start", { ascending: true })
-    .limit(5);
+    .limit(5) as { data: UpcomingGoalResult[] | null };
 
   const upcomingEvents = (upcomingGoals || []).map(g => {
     const goalDate = new Date(g.week_start + "T00:00:00");
@@ -462,12 +483,13 @@ export async function generateBriefingPreview(settings: BriefingSettings): Promi
 export async function getAllStaffChannelId(): Promise<string | null> {
   const supabase = createServiceClient();
 
+  type ChannelResult = { id: string };
   const { data } = await supabase
     .from("channels")
     .select("id")
     .eq("name", "All Staff")
     .eq("channel_type", "announcement")
-    .single();
+    .single() as { data: ChannelResult | null };
 
   return data?.id || null;
 }
@@ -485,19 +507,21 @@ export async function postDailyBriefing(briefingContent: string): Promise<boolea
   }
 
   // Get the super user to post as (system message)
+  type ProfileResult = { id: string };
   const { data: superUser } = await supabase
     .from("profiles")
     .select("id")
     .in("role", ["super", "superintendent"])
     .limit(1)
-    .single();
+    .single() as { data: ProfileResult | null };
 
   if (!superUser) {
     console.error("No superintendent found to post briefing");
     return false;
   }
 
-  const { error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
     .from("messages")
     .insert({
       channel_id: channelId,
@@ -506,7 +530,7 @@ export async function postDailyBriefing(briefingContent: string): Promise<boolea
       message_type: "system",
       attachments: [],
       is_pinned: false,
-    });
+    }) as { error: Error | null };
 
   if (error) {
     console.error("Error posting daily briefing:", error);
@@ -529,7 +553,7 @@ export async function ensureWeatherLogExists(date: Date): Promise<boolean> {
     .from("weather_logs")
     .select("id")
     .eq("log_date", dateStr)
-    .single();
+    .single() as { data: { id: string } | null };
 
   if (existing) {
     return true; // Already exists
@@ -537,7 +561,8 @@ export async function ensureWeatherLogExists(date: Date): Promise<boolean> {
 
   // Create a placeholder entry (can be updated with real weather data later)
   // In production, this would call a weather API
-  const { error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
     .from("weather_logs")
     .insert({
       log_date: dateStr,
@@ -549,7 +574,7 @@ export async function ensureWeatherLogExists(date: Date): Promise<boolean> {
       precipitation_inches: null,
       frost_observed: false,
       notes: "Auto-generated placeholder",
-    });
+    }) as { error: Error | null };
 
   return !error;
 }

@@ -178,7 +178,8 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-        let query = supabase.from("chemical_products").select("*");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query = (supabase.from("chemical_products") as any).select("*");
 
         // Apply filters
         if (filters?.type) {
@@ -198,14 +199,14 @@ export function useChemicals(): UseChemicalsReturn {
 
         query = query.order("product_name", { ascending: true });
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: ChemicalProduct[] | null; error: { message: string } | null };
 
         if (fetchError) {
           throw new Error(fetchError.message);
         }
 
         // Compute low stock flag
-        const productsWithStats: ChemicalProductWithStats[] = (data || []).map((product) => ({
+        const productsWithStats: ChemicalProductWithStats[] = (data || []).map((product: ChemicalProduct) => ({
           ...product,
           is_low_stock:
             product.current_inventory !== null &&
@@ -235,27 +236,29 @@ export function useChemicals(): UseChemicalsReturn {
   const getProduct = useCallback(
     async (id: string): Promise<ChemicalProductWithStats | null> => {
       try {
-        const { data: product, error: productError } = await supabase
-          .from("chemical_products")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: product, error: productError } = await (supabase.from("chemical_products") as any)
           .select("*")
           .eq("id", id)
-          .single();
+          .single() as { data: ChemicalProduct | null; error: { message: string } | null };
 
         if (productError) {
           console.error("Error fetching product:", productError);
           return null;
         }
 
+        if (!product) return null;
+
         // Get application count and last application
-        const { data: appData } = await supabase
-          .from("chemical_applications")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: appData } = await (supabase.from("chemical_applications") as any)
           .select("id, application_date")
           .eq("product_id", id)
           .order("application_date", { ascending: false })
           .limit(1);
 
-        const { count } = await supabase
-          .from("chemical_applications")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase.from("chemical_applications") as any)
           .select("*", { count: "exact", head: true })
           .eq("product_id", id);
 
@@ -285,8 +288,8 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-        const { data: newProduct, error: createError } = await supabase
-          .from("chemical_products")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newProduct, error: createError } = await (supabase.from("chemical_products") as any)
           .insert(data)
           .select()
           .single();
@@ -316,8 +319,8 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-        const { data: updatedProduct, error: updateError } = await supabase
-          .from("chemical_products")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updatedProduct, error: updateError } = await (supabase.from("chemical_products") as any)
           .update(data)
           .eq("id", id)
           .select()
@@ -355,8 +358,8 @@ export function useChemicals(): UseChemicalsReturn {
     ): Promise<boolean> => {
       try {
         // Get current inventory
-        const { data: product, error: fetchError } = await supabase
-          .from("chemical_products")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: product, error: fetchError } = await (supabase.from("chemical_products") as any)
           .select("current_inventory")
           .eq("id", id)
           .single();
@@ -380,8 +383,8 @@ export function useChemicals(): UseChemicalsReturn {
             break;
         }
 
-        const { error: updateError } = await supabase
-          .from("chemical_products")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase.from("chemical_products") as any)
           .update({ current_inventory: newInventory })
           .eq("id", id);
 
@@ -422,8 +425,8 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-        let query = supabase
-          .from("chemical_applications")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query = (supabase.from("chemical_applications") as any)
           .select(
             `
             *,
@@ -474,8 +477,8 @@ export function useChemicals(): UseChemicalsReturn {
   const getApplication = useCallback(
     async (id: string): Promise<ChemicalApplicationWithProduct | null> => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from("chemical_applications")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: fetchError } = await (supabase.from("chemical_applications") as any)
           .select(
             `
             *,
@@ -510,8 +513,8 @@ export function useChemicals(): UseChemicalsReturn {
 
       try {
         // Get product info for REI calculation
-        const { data: product, error: productError } = await supabase
-          .from("chemical_products")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: product, error: productError } = await (supabase.from("chemical_products") as any)
           .select("rei_hours, current_inventory")
           .eq("id", data.product_id)
           .single();
@@ -551,8 +554,8 @@ export function useChemicals(): UseChemicalsReturn {
           rei_expires_at,
         };
 
-        const { data: newApplication, error: createError } = await supabase
-          .from("chemical_applications")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newApplication, error: createError } = await (supabase.from("chemical_applications") as any)
           .insert(applicationData)
           .select()
           .single();
@@ -584,8 +587,8 @@ export function useChemicals(): UseChemicalsReturn {
   const getProductApplicationHistory = useCallback(
     async (productId: string, limit: number = 20): Promise<ChemicalApplicationWithProduct[]> => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from("chemical_applications")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: fetchError } = await (supabase.from("chemical_applications") as any)
           .select("*")
           .eq("product_id", productId)
           .order("application_date", { ascending: false })
@@ -617,8 +620,8 @@ export function useChemicals(): UseChemicalsReturn {
     };
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from("chemical_products")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: fetchError } = await (supabase.from("chemical_products") as any)
         .select("*")
         .eq("is_active", true);
 
@@ -639,7 +642,7 @@ export function useChemicals(): UseChemicalsReturn {
         { count: number; value: number }
       >();
 
-      data.forEach((product) => {
+      (data as ChemicalProduct[]).forEach((product: ChemicalProduct) => {
         // Check low stock
         if (
           product.current_inventory !== null &&
@@ -692,8 +695,8 @@ export function useChemicals(): UseChemicalsReturn {
     ChemicalProductWithStats[]
   > => {
     try {
-      const { data, error: fetchError } = await supabase
-        .from("chemical_products")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: fetchError } = await (supabase.from("chemical_products") as any)
         .select("*")
         .eq("is_active", true);
 
@@ -703,14 +706,14 @@ export function useChemicals(): UseChemicalsReturn {
       }
 
       // Filter to low stock only
-      return (data || [])
+      return ((data || []) as ChemicalProduct[])
         .filter(
-          (product) =>
+          (product: ChemicalProduct) =>
             product.current_inventory !== null &&
             product.reorder_threshold !== null &&
             product.current_inventory <= product.reorder_threshold
         )
-        .map((product) => ({
+        .map((product: ChemicalProduct) => ({
           ...product,
           is_low_stock: true,
         }));
@@ -727,8 +730,8 @@ export function useChemicals(): UseChemicalsReturn {
     try {
       const now = new Date().toISOString();
 
-      const { data, error: fetchError } = await supabase
-        .from("chemical_applications")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: fetchError } = await (supabase.from("chemical_applications") as any)
         .select(
           `
           id,
@@ -749,23 +752,33 @@ export function useChemicals(): UseChemicalsReturn {
         return [];
       }
 
+      // Type for the application data from query
+      interface REIApplicationData {
+        id: string;
+        rei_expires_at: string | null;
+        zone_ids: string[] | null;
+        product: { product_name: string } | null;
+      }
+
+      const typedData = data as REIApplicationData[];
+
       // Get zone names for the applications
-      const allZoneIds = [...new Set(data.flatMap((app) => app.zone_ids || []))];
+      const allZoneIds = [...new Set(typedData.flatMap((app: REIApplicationData) => app.zone_ids || []))];
 
       let zoneNames: Record<string, string> = {};
       if (allZoneIds.length > 0) {
-        const { data: zones } = await supabase
-          .from("course_zones")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: zones } = await (supabase.from("course_zones") as any)
           .select("id, name")
           .in("id", allZoneIds);
 
         zoneNames = (zones || []).reduce(
-          (acc, zone) => ({ ...acc, [zone.id]: zone.name }),
+          (acc: Record<string, string>, zone: { id: string; name: string }) => ({ ...acc, [zone.id]: zone.name }),
           {} as Record<string, string>
         );
       }
 
-      return data.map((app) => {
+      return typedData.map((app: REIApplicationData) => {
         const expiresAt = new Date(app.rei_expires_at as string);
         const hoursRemaining = Math.max(
           0,
@@ -774,7 +787,7 @@ export function useChemicals(): UseChemicalsReturn {
 
         return {
           application_id: app.id,
-          product_name: (app.product as { product_name: string })?.product_name || "Unknown",
+          product_name: app.product?.product_name || "Unknown",
           zone_names: (app.zone_ids || []).map(
             (id: string) => zoneNames[id] || id
           ),

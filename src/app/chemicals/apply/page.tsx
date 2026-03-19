@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Droplets,
@@ -55,6 +55,18 @@ const MOCK_ZONES = [
 ];
 
 export default function ChemicalApplicationPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <ChemicalApplicationPageContent />
+    </Suspense>
+  );
+}
+
+function ChemicalApplicationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProductId = searchParams.get("product");

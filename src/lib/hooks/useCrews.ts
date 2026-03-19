@@ -43,8 +43,8 @@ export function useCrews(): UseCrewsReturn {
 
     try {
       // Get all profiles with crew assignments
-      const { data: profiles, error: fetchError } = await supabase
-        .from("profiles")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profiles, error: fetchError } = await (supabase.from("profiles") as any)
         .select("id, full_name, display_name, role, avatar_url, is_active")
         .eq("is_active", true)
         .order("full_name");
@@ -60,14 +60,14 @@ export function useCrews(): UseCrewsReturn {
       // For now, derive crews from schedules.crew_assignment which has crew info
 
       // Actually, let's check for unique crew_assignment values in schedules
-      const { data: scheduleData, error: scheduleError } = await supabase
-        .from("schedules")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: scheduleData } = await (supabase.from("schedules") as any)
         .select("crew_assignment")
         .not("crew_assignment", "is", null);
 
       // Build crew list from unique crew assignments and any task crew assignments
-      const { data: taskData, error: taskError } = await supabase
-        .from("tasks")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: taskData } = await (supabase.from("tasks") as any)
         .select("assigned_crew")
         .not("assigned_crew", "is", null);
 
@@ -75,13 +75,13 @@ export function useCrews(): UseCrewsReturn {
       const crewNamesSet = new Set<string>();
 
       if (scheduleData) {
-        scheduleData.forEach((s) => {
+        (scheduleData as { crew_assignment: string | null }[]).forEach((s: { crew_assignment: string | null }) => {
           if (s.crew_assignment) crewNamesSet.add(s.crew_assignment);
         });
       }
 
       if (taskData) {
-        taskData.forEach((t) => {
+        (taskData as { assigned_crew: string | null }[]).forEach((t: { assigned_crew: string | null }) => {
           if (t.assigned_crew) crewNamesSet.add(t.assigned_crew);
         });
       }
@@ -120,8 +120,8 @@ export function useCrews(): UseCrewsReturn {
 
       // Get latest schedule entries to see current crew memberships
       const today = new Date().toISOString().split("T")[0];
-      const { data: currentSchedules } = await supabase
-        .from("schedules")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: currentSchedules } = await (supabase.from("schedules") as any)
         .select("user_id, crew_assignment")
         .eq("schedule_date", today)
         .not("crew_assignment", "is", null);
@@ -129,22 +129,24 @@ export function useCrews(): UseCrewsReturn {
       // Map current crew members
       const userCrewMap = new Map<string, string>();
       if (currentSchedules) {
-        for (const schedule of currentSchedules) {
+        for (const schedule of currentSchedules as { user_id: string; crew_assignment: string }[]) {
           userCrewMap.set(schedule.user_id, schedule.crew_assignment);
         }
       }
 
       // Assign profiles to crews based on today's schedule
+      type ProfileType = { id: string; full_name: string | null; display_name: string | null; role: string; avatar_url: string | null };
       if (profiles) {
-        for (const profile of profiles) {
+        for (const profile of profiles as ProfileType[]) {
           const crewName = userCrewMap.get(profile.id);
           if (crewName && crewMap.has(crewName)) {
             const crew = crewMap.get(crewName)!;
+            // Cast to match Pick<Profile, ...> shape - the Profile type uses string not string | null
             crew.members.push({
               id: profile.id,
-              full_name: profile.full_name,
+              full_name: profile.full_name ?? "",
               display_name: profile.display_name,
-              role: profile.role,
+              role: profile.role as UserRole,
               avatar_url: profile.avatar_url,
             });
             crew.member_count = crew.members.length;
@@ -154,7 +156,7 @@ export function useCrews(): UseCrewsReturn {
               crew.foreman_id = profile.id;
               crew.foreman = {
                 id: profile.id,
-                full_name: profile.full_name,
+                full_name: profile.full_name ?? "",
                 display_name: profile.display_name,
                 avatar_url: profile.avatar_url,
               };
@@ -195,8 +197,8 @@ export function useCrews(): UseCrewsReturn {
       // To persist the crew, we'll assign the foreman to it via a schedule entry
       if (foremanId) {
         const today = new Date().toISOString().split("T")[0];
-        const { error: insertError } = await supabase
-          .from("schedules")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insertError } = await (supabase.from("schedules") as any)
           .upsert({
             user_id: foremanId,
             schedule_date: today,
@@ -238,8 +240,8 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         // Clear crew assignments from schedules
-        const { error: updateError } = await supabase
-          .from("schedules")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase.from("schedules") as any)
           .update({ crew_assignment: null })
           .eq("crew_assignment", name);
 
@@ -250,8 +252,8 @@ export function useCrews(): UseCrewsReturn {
         }
 
         // Clear from tasks too
-        await supabase
-          .from("tasks")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from("tasks") as any)
           .update({ assigned_crew: null })
           .eq("assigned_crew", name);
 
@@ -282,8 +284,8 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         // Update schedules
-        const { error: scheduleError } = await supabase
-          .from("schedules")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: scheduleError } = await (supabase.from("schedules") as any)
           .update({ crew_assignment: newName })
           .eq("crew_assignment", oldName);
 
@@ -294,8 +296,8 @@ export function useCrews(): UseCrewsReturn {
         }
 
         // Update tasks
-        await supabase
-          .from("tasks")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from("tasks") as any)
           .update({ assigned_crew: newName })
           .eq("assigned_crew", oldName);
 
@@ -327,8 +329,8 @@ export function useCrews(): UseCrewsReturn {
       // If setting a foreman, add them to the crew
       if (foremanId) {
         const today = new Date().toISOString().split("T")[0];
-        const { error: updateError } = await supabase
-          .from("schedules")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase.from("schedules") as any)
           .upsert({
             user_id: foremanId,
             schedule_date: today,
@@ -362,8 +364,8 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         const today = new Date().toISOString().split("T")[0];
-        const { error: upsertError } = await supabase
-          .from("schedules")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: upsertError } = await (supabase.from("schedules") as any)
           .upsert({
             user_id: userId,
             schedule_date: today,
@@ -400,8 +402,8 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         const today = new Date().toISOString().split("T")[0];
-        const { error: updateError } = await supabase
-          .from("schedules")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase.from("schedules") as any)
           .update({ crew_assignment: null })
           .eq("user_id", userId)
           .eq("schedule_date", today);

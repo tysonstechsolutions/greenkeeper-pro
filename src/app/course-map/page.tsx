@@ -59,7 +59,7 @@ export default function CourseMapPage() {
   const { isSuper } = useAuth();
   const { zones, loading: zonesLoading, fetchZones } = useCourseZones();
   const { tasks, fetchTasks } = useTasks();
-  const { photos, fetchPhotos } = usePhotos();
+  const { photos, fetchPhotos, getPhotoUrl, getThumbnailUrl } = usePhotos();
   const supabase = createClient();
 
   // Layer visibility state
@@ -146,7 +146,8 @@ export default function CourseMapPage() {
     if (!newZoneGeojson) return;
 
     try {
-      const { error } = await supabase.from("course_zones").insert({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("course_zones") as any).insert({
         name: newZoneData.name,
         zone_type: newZoneData.zone_type,
         hole_number: newZoneData.hole_number ? parseInt(newZoneData.hole_number) : null,
@@ -179,8 +180,8 @@ export default function CourseMapPage() {
 
     setUpdatingCondition(true);
     try {
-      const { error } = await supabase
-        .from("course_zones")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("course_zones") as any)
         .update({
           condition_score: conditionScore,
           last_condition_update: new Date().toISOString(),
@@ -609,12 +610,12 @@ export default function CourseMapPage() {
                       return (
                         <div className="mb-2">
                           <img
-                            src={lastPhoto.thumbnail_url || lastPhoto.url}
+                            src={getThumbnailUrl(lastPhoto) || getPhotoUrl(lastPhoto)}
                             alt={lastPhoto.caption || "Zone photo"}
                             className="w-full h-32 object-cover rounded-lg"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(lastPhoto.taken_at || lastPhoto.created_at).toLocaleDateString()}
+                            {new Date(lastPhoto.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       );

@@ -189,7 +189,7 @@ export function useTimeOff(): UseTimeOffReturn {
       }
 
       try {
-        const insertData: Database["public"]["Tables"]["time_off_requests"]["Insert"] = {
+        const insertData = {
           user_id: user.id,
           start_date: data.start_date,
           end_date: data.end_date,
@@ -198,15 +198,16 @@ export function useTimeOff(): UseTimeOffReturn {
           status: "pending",
         };
 
-        const { data: newRequest, error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newRequest, error: insertError } = await (supabase as any)
           .from("time_off_requests")
           .insert(insertData)
           .select()
-          .single();
+          .single() as { data: TimeOffRequest | null; error: Error | null };
 
-        if (insertError) {
+        if (insertError || !newRequest) {
           console.error("Error submitting time-off request:", insertError);
-          setError(insertError.message);
+          setError(insertError?.message || "Failed to submit request");
           return null;
         }
 
@@ -215,7 +216,7 @@ export function useTimeOff(): UseTimeOffReturn {
           .from("profiles")
           .select("id")
           .in("role", ["super", "superintendent", "asst_super", "foreman"])
-          .neq("id", user.id);
+          .neq("id", user.id) as { data: { id: string }[] | null };
 
         if (managers && managers.length > 0) {
           const requesterName = profile.full_name || "Someone";
@@ -234,7 +235,7 @@ export function useTimeOff(): UseTimeOffReturn {
           );
         }
 
-        return newRequest as TimeOffRequest;
+        return newRequest;
       } catch (err) {
         console.error("Unexpected error submitting time-off request:", err);
         setError("Failed to submit time-off request");
@@ -254,13 +255,15 @@ export function useTimeOff(): UseTimeOffReturn {
 
       try {
         // Get request details for notification
+        type RequestDataResult = { user_id: string; start_date: string; end_date: string; request_type: string };
         const { data: requestData } = await supabase
           .from("time_off_requests")
           .select("user_id, start_date, end_date, request_type")
           .eq("id", id)
-          .single();
+          .single() as { data: RequestDataResult | null };
 
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("time_off_requests")
           .update({
             status: "approved",
@@ -268,7 +271,7 @@ export function useTimeOff(): UseTimeOffReturn {
             reviewed_at: new Date().toISOString(),
           })
           .eq("id", id)
-          .eq("status", "pending"); // Can only approve pending requests
+          .eq("status", "pending") as { error: Error | null }; // Can only approve pending requests
 
         if (updateError) {
           console.error("Error approving time-off request:", updateError);
@@ -328,11 +331,12 @@ export function useTimeOff(): UseTimeOffReturn {
 
       try {
         // Get request details for notification
+        type DenyRequestDataResult = { user_id: string; start_date: string; end_date: string; request_type: string };
         const { data: requestData } = await supabase
           .from("time_off_requests")
           .select("user_id, start_date, end_date, request_type")
           .eq("id", id)
-          .single();
+          .single() as { data: DenyRequestDataResult | null };
 
         const updateData: Record<string, unknown> = {
           status: "denied",
@@ -344,11 +348,12 @@ export function useTimeOff(): UseTimeOffReturn {
           updateData.notes = reason;
         }
 
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("time_off_requests")
           .update(updateData)
           .eq("id", id)
-          .eq("status", "pending"); // Can only deny pending requests
+          .eq("status", "pending") as { error: Error | null }; // Can only deny pending requests
 
         if (updateError) {
           console.error("Error denying time-off request:", updateError);
@@ -409,11 +414,12 @@ export function useTimeOff(): UseTimeOffReturn {
 
       try {
         // First verify the request belongs to the user and is pending
+        type CancelRequestResult = { id: string; user_id: string; status: string };
         const { data: request, error: fetchError } = await supabase
           .from("time_off_requests")
           .select("id, user_id, status")
           .eq("id", id)
-          .single();
+          .single() as { data: CancelRequestResult | null; error: Error | null };
 
         if (fetchError || !request) {
           setError("Request not found");
@@ -434,7 +440,7 @@ export function useTimeOff(): UseTimeOffReturn {
         const { error: deleteError } = await supabase
           .from("time_off_requests")
           .delete()
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (deleteError) {
           console.error("Error canceling time-off request:", deleteError);
@@ -460,6 +466,13 @@ export function useTimeOff(): UseTimeOffReturn {
     async (startDate: string, endDate: string): Promise<DateRangeConflict[]> => {
       try {
         // Fetch all approved time-off requests that overlap with the date range
+        type ConflictResult = {
+          id: string;
+          user_id: string;
+          start_date: string;
+          end_date: string;
+          profile: Pick<Profile, "id" | "full_name" | "display_name"> | null;
+        };
         const { data, error: fetchError } = await supabase
           .from("time_off_requests")
           .select(`
@@ -471,7 +484,7 @@ export function useTimeOff(): UseTimeOffReturn {
           `)
           .eq("status", "approved")
           .lte("start_date", endDate) // Starts before or on end date
-          .gte("end_date", startDate); // Ends on or after start date
+          .gte("end_date", startDate) as { data: ConflictResult[] | null; error: Error | null }; // Ends on or after start date
 
         if (fetchError) {
           console.error("Error fetching conflicts:", fetchError);

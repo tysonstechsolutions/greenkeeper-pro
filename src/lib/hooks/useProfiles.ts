@@ -186,7 +186,7 @@ export const roleColors: Record<UserRole, { bg: string; text: string }> = {
 };
 
 // Get display name (prefer display_name, fallback to full_name)
-export function getDisplayName(profile: ProfileSummary | Profile): string {
+export function getDisplayName(profile: { display_name?: string | null; full_name?: string | null }): string {
   return profile.display_name || profile.full_name || "Unknown";
 }
 

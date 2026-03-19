@@ -141,18 +141,25 @@ async function fetchInventory(): Promise<string> {
     const supabase = await createClient();
     const { data: products, error } = await supabase
       .from("chemical_products")
-      .select("name, category, current_stock, unit, active_ingredient")
-      .gt("current_stock", 0)
-      .order("category")
-      .order("name");
+      .select("product_name, product_type, current_inventory, unit_of_measure, active_ingredient")
+      .not("current_inventory", "is", null)
+      .gt("current_inventory", 0)
+      .order("product_type")
+      .order("product_name");
 
     if (error || !products || products.length === 0) {
       return "No inventory data available";
     }
 
     let inventoryStr = "Available products: ";
-    products.forEach((p) => {
-      inventoryStr += `${p.name} (${p.active_ingredient || p.category}) - ${p.current_stock} ${p.unit} in stock; `;
+    (products as Array<{
+      product_name: string;
+      product_type: string | null;
+      current_inventory: number | null;
+      unit_of_measure: string | null;
+      active_ingredient: string | null;
+    }>).forEach((p) => {
+      inventoryStr += `${p.product_name} (${p.active_ingredient || p.product_type || "unknown"}) - ${p.current_inventory} ${p.unit_of_measure || "units"} in stock; `;
     });
 
     return inventoryStr;
@@ -166,19 +173,27 @@ async function fetchInventory(): Promise<string> {
 async function fetchZoneInfo(zoneId: string): Promise<string> {
   try {
     const supabase = await createClient();
-    const { data: zone, error } = await supabase
+    const { data, error } = await supabase
       .from("course_zones")
-      .select("*")
+      .select("name, zone_type, hole_number, turf_type, acreage")
       .eq("id", zoneId)
       .single();
 
-    if (error || !zone) {
+    if (error || !data) {
       return "";
     }
 
+    const zone = data as {
+      name: string;
+      zone_type: string;
+      hole_number: number | null;
+      turf_type: string | null;
+      acreage: number | null;
+    };
+
     return `Zone: ${zone.name} (${zone.zone_type}), Hole ${zone.hole_number || "N/A"}, ` +
-      `Grass type: ${zone.grass_type || "Not specified"}, ` +
-      `Area: ${zone.area_sqft ? `${zone.area_sqft} sq ft` : "Unknown"}`;
+      `Grass type: ${zone.turf_type || "Not specified"}, ` +
+      `Area: ${zone.acreage ? `${zone.acreage} acres` : "Unknown"}`;
   } catch (error) {
     console.error("Error fetching zone:", error);
     return "";

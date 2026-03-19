@@ -328,7 +328,8 @@ export function usePhotos(): UsePhotosReturn {
       }
 
       // Insert database record
-      const { data, error: insertError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: insertError } = await (supabase as any)
         .from("photos")
         .insert({
           storage_path: uploadResult.storagePath,
@@ -344,9 +345,9 @@ export function usePhotos(): UsePhotosReturn {
           metadata: Object.keys(exifMetadata).length > 0 ? exifMetadata : null,
         })
         .select()
-        .single();
+        .single() as { data: Photo | null; error: Error | null };
 
-      if (insertError) {
+      if (insertError || !data) {
         // Try to clean up uploaded files on failure
         try {
           await deletePhotoFromStorage(uploadResult.storagePath);
@@ -356,10 +357,10 @@ export function usePhotos(): UsePhotosReturn {
         } catch {
           // Ignore cleanup errors
         }
-        throw new Error(`Failed to create photo record: ${insertError.message}`);
+        throw new Error(`Failed to create photo record: ${insertError?.message || "No data returned"}`);
       }
 
-      return data as Photo;
+      return data;
     },
     [supabase]
   );
@@ -378,12 +379,13 @@ export function usePhotos(): UsePhotosReturn {
       }
     ): Promise<Photo | null> => {
       try {
-        const { data: updated, error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updated, error: updateError } = await (supabase as any)
           .from("photos")
           .update(data)
           .eq("id", id)
           .select()
-          .single();
+          .single() as { data: Photo | null; error: Error | null };
 
         if (updateError) {
           console.error("Error updating photo:", updateError);
@@ -392,11 +394,13 @@ export function usePhotos(): UsePhotosReturn {
         }
 
         // Update local state
-        setPhotos((prev) =>
-          prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
-        );
+        if (updated) {
+          setPhotos((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
+          );
+        }
 
-        return updated as Photo;
+        return updated;
       } catch (err) {
         console.error("Unexpected error updating photo:", err);
         setError("An unexpected error occurred");
@@ -417,11 +421,11 @@ export function usePhotos(): UsePhotosReturn {
           .from("photos")
           .select("storage_path, thumbnail_path")
           .eq("id", id)
-          .single();
+          .single() as { data: { storage_path: string; thumbnail_path: string | null } | null; error: Error | null };
 
-        if (fetchError) {
+        if (fetchError || !photo) {
           console.error("Error fetching photo for deletion:", fetchError);
-          setError(fetchError.message);
+          setError(fetchError?.message || "Photo not found");
           return false;
         }
 

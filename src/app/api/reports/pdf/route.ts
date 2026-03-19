@@ -29,15 +29,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's profile to check permissions
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from("profiles")
-      .select("role, active_course_id")
+      .select("role")
       .eq("id", user.id)
       .single();
 
-    if (!profile?.active_course_id) {
+    const profile = profileData as { role: string } | null;
+
+    if (!profile) {
       return NextResponse.json(
-        { error: "No active course selected" },
+        { error: "Profile not found" },
         { status: 400 }
       );
     }
@@ -73,9 +75,7 @@ export async function POST(request: NextRequest) {
     const restrictedReports = ["staff", "chemical"];
     if (
       restrictedReports.includes(reportType) &&
-      !["super_admin", "superintendent", "assistant_superintendent"].includes(
-        profile.role
-      )
+      !["super", "asst_super"].includes(profile.role)
     ) {
       return NextResponse.json(
         { error: "Insufficient permissions for this report type" },
@@ -91,7 +91,6 @@ export async function POST(request: NextRequest) {
       reportType,
       metadata: reportMetadata,
       generatedAt: new Date().toISOString(),
-      courseId: profile.active_course_id,
     });
   } catch (error) {
     console.error("Error in PDF report endpoint:", error);
@@ -122,13 +121,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's role
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
 
-    const isSupervisor = ["super_admin", "superintendent", "assistant_superintendent"].includes(
+    const profile = profileData as { role: string } | null;
+    const isSupervisor = ["super", "asst_super"].includes(
       profile?.role || ""
     );
 

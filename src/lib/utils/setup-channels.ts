@@ -21,13 +21,13 @@ const DEFAULT_CHANNELS: DefaultChannel[] = [
     name: "Foremen",
     description: "Discussion channel for foremen and supervisors",
     type: "role",
-    roleFilter: ["foreman", "superintendent", "super"],
+    roleFilter: ["foreman", "asst_super", "super"],
   },
   {
     name: "Mechanics",
     description: "Equipment maintenance and repair coordination",
     type: "role",
-    roleFilter: ["mechanic", "superintendent", "super"],
+    roleFilter: ["mechanic", "asst_super", "super"],
   },
 ];
 
@@ -60,10 +60,11 @@ export async function createDefaultChannels(
 
   try {
     // Get all users for this course
+    type CourseUserResult = { id: string; role: string };
     const { data: courseUsers, error: usersError } = await supabase
       .from("profiles")
       .select("id, role")
-      .eq("course_id", courseId);
+      .eq("course_id", courseId) as { data: CourseUserResult[] | null; error: Error | null };
 
     if (usersError) {
       result.success = false;
@@ -82,7 +83,7 @@ export async function createDefaultChannels(
           .select("id, name")
           .eq("course_id", courseId)
           .eq("name", channelDef.name)
-          .single();
+          .single() as { data: { id: string; name: string } | null };
 
         if (existingChannel) {
           result.channelsExisted.push(channelDef.name);
@@ -90,7 +91,8 @@ export async function createDefaultChannels(
         }
 
         // Create the channel
-        const { data: newChannel, error: createError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newChannel, error: createError } = await (supabase as any)
           .from("channels")
           .insert({
             course_id: courseId,
@@ -101,7 +103,7 @@ export async function createDefaultChannels(
             is_archived: false,
           })
           .select()
-          .single();
+          .single() as { data: Channel | null; error: Error | null };
 
         if (createError || !newChannel) {
           result.errors.push(
@@ -124,9 +126,10 @@ export async function createDefaultChannels(
             is_muted: false,
           }));
 
-          const { error: membersError } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: membersError } = await (supabase as any)
             .from("channel_members")
-            .insert(memberInserts);
+            .insert(memberInserts) as { error: Error | null };
 
           if (membersError) {
             result.errors.push(
@@ -177,7 +180,7 @@ export async function checkDefaultChannelsExist(
       .in(
         "name",
         DEFAULT_CHANNELS.map((c) => c.name)
-      );
+      ) as { data: { name: string }[] | null };
 
     const existingNames = new Set((existingChannels || []).map((c) => c.name));
     const missing = DEFAULT_CHANNELS.filter((c) => !existingNames.has(c.name)).map(
@@ -218,7 +221,8 @@ export async function createCrewChannel(
 
   try {
     // Create the crew channel
-    const { data: channel, error: createError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: channel, error: createError } = await (supabase as any)
       .from("channels")
       .insert({
         course_id: courseId,
@@ -229,7 +233,7 @@ export async function createCrewChannel(
         is_archived: false,
       })
       .select()
-      .single();
+      .single() as { data: Channel | null; error: Error | null };
 
     if (createError || !channel) {
       console.error("Error creating crew channel:", createError);
@@ -245,9 +249,10 @@ export async function createCrewChannel(
         is_muted: false,
       }));
 
-      const { error: membersError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: membersError } = await (supabase as any)
         .from("channel_members")
-        .insert(memberInserts);
+        .insert(memberInserts) as { error: Error | null };
 
       if (membersError) {
         console.error("Error adding crew channel members:", membersError);
@@ -255,7 +260,7 @@ export async function createCrewChannel(
       }
     }
 
-    return channel as Channel;
+    return channel;
   } catch (err) {
     console.error("Unexpected error creating crew channel:", err);
     return null;
@@ -278,10 +283,11 @@ export async function syncCrewChannelMembers(
 
   try {
     // Get current channel members
+    type ChannelMemberResult = { user_id: string; role: string };
     const { data: existingMembers } = await supabase
       .from("channel_members")
       .select("user_id, role")
-      .eq("channel_id", channelId);
+      .eq("channel_id", channelId) as { data: ChannelMemberResult[] | null };
 
     const existingIds = new Set((existingMembers || []).map((m) => m.user_id));
     const targetIds = new Set(currentMemberIds);
@@ -306,9 +312,10 @@ export async function syncCrewChannelMembers(
         is_muted: false,
       }));
 
-      const { error: addError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: addError } = await (supabase as any)
         .from("channel_members")
-        .insert(inserts);
+        .insert(inserts) as { error: Error | null };
 
       if (addError) {
         console.error("Error adding channel members:", addError);
@@ -318,11 +325,12 @@ export async function syncCrewChannelMembers(
 
     // Remove old members
     if (toRemove.length > 0) {
-      const { error: removeError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: removeError } = await (supabase as any)
         .from("channel_members")
         .delete()
         .eq("channel_id", channelId)
-        .in("user_id", toRemove);
+        .in("user_id", toRemove) as { error: Error | null };
 
       if (removeError) {
         console.error("Error removing channel members:", removeError);

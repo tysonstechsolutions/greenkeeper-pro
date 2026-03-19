@@ -183,8 +183,8 @@ export function useBudget(): UseBudgetReturn {
 
       try {
         // Fetch budget items
-        const { data: items, error: itemsError } = await supabase
-          .from("budget_items")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: items, error: itemsError } = await (supabase.from("budget_items") as any)
           .select("*")
           .eq("fiscal_year", fiscalYear)
           .order("category", { ascending: true })
@@ -196,14 +196,14 @@ export function useBudget(): UseBudgetReturn {
 
         // For each item, calculate spent amount from expenses
         const itemsWithSpent: BudgetItemWithSpent[] = await Promise.all(
-          (items || []).map(async (item) => {
-            const { data: expenseData } = await supabase
-              .from("expenses")
+          (items || []).map(async (item: BudgetItem) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: expenseData } = await (supabase.from("expenses") as any)
               .select("amount")
               .eq("budget_item_id", item.id)
               .in("status", ["approved", "paid"]);
 
-            const spent = expenseData?.reduce((sum, e) => sum + e.amount, 0) || 0;
+            const spent = expenseData?.reduce((sum: number, e: { amount: number }) => sum + e.amount, 0) || 0;
             const remaining = item.budgeted_amount - spent;
             const percent_used = item.budgeted_amount > 0
               ? Math.round((spent / item.budgeted_amount) * 100)
@@ -244,8 +244,8 @@ export function useBudget(): UseBudgetReturn {
 
       try {
         // Fetch all budget items for the year
-        const { data: items, error: itemsError } = await supabase
-          .from("budget_items")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: items, error: itemsError } = await (supabase.from("budget_items") as any)
           .select("*")
           .eq("fiscal_year", fiscalYear);
 
@@ -255,12 +255,12 @@ export function useBudget(): UseBudgetReturn {
         }
 
         // Fetch all approved/paid expenses for these items
-        const itemIds = (items || []).map((i) => i.id);
+        const itemIds = (items || []).map((i: BudgetItem) => i.id);
         let expenses: { budget_item_id: string; amount: number }[] = [];
 
         if (itemIds.length > 0) {
-          const { data: expenseData } = await supabase
-            .from("expenses")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: expenseData } = await (supabase.from("expenses") as any)
             .select("budget_item_id, amount")
             .in("budget_item_id", itemIds)
             .in("status", ["approved", "paid"]);
@@ -271,15 +271,15 @@ export function useBudget(): UseBudgetReturn {
         // Also fetch expenses without budget items (for the fiscal year date range)
         const fiscalYearStart = `${fiscalYear}-01-01`;
         const fiscalYearEnd = `${fiscalYear}-12-31`;
-        const { data: unbucketedExpenses } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: unbucketedExpenses } = await (supabase.from("expenses") as any)
           .select("amount")
           .is("budget_item_id", null)
           .gte("expense_date", fiscalYearStart)
           .lte("expense_date", fiscalYearEnd)
           .in("status", ["approved", "paid"]);
 
-        const unbucketedTotal = unbucketedExpenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
+        const unbucketedTotal = unbucketedExpenses?.reduce((sum: number, e: { amount: number }) => sum + e.amount, 0) || 0;
 
         // Group by category
         const categoryMap = new Map<BudgetCategory, { budgeted: number; spent: number }>();
@@ -290,14 +290,14 @@ export function useBudget(): UseBudgetReturn {
         });
 
         // Sum budgeted amounts by category
-        (items || []).forEach((item) => {
+        (items || []).forEach((item: BudgetItem) => {
           const current = categoryMap.get(item.category)!;
           current.budgeted += item.budgeted_amount;
         });
 
         // Sum spent amounts by category
         expenses.forEach((expense) => {
-          const item = items?.find((i) => i.id === expense.budget_item_id);
+          const item = items?.find((i: BudgetItem) => i.id === expense.budget_item_id);
           if (item) {
             const current = categoryMap.get(item.category)!;
             current.spent += expense.amount;
@@ -363,8 +363,8 @@ export function useBudget(): UseBudgetReturn {
         const fiscalYearEnd = `${fiscalYear}-12-31`;
 
         // Fetch all approved/paid expenses for the year
-        const { data: expenses, error: expenseError } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: expenses, error: expenseError } = await (supabase.from("expenses") as any)
           .select("expense_date, amount")
           .gte("expense_date", fiscalYearStart)
           .lte("expense_date", fiscalYearEnd)
@@ -376,8 +376,8 @@ export function useBudget(): UseBudgetReturn {
         }
 
         // Fetch monthly budget allocations if any
-        const { data: monthlyBudgets } = await supabase
-          .from("budget_items")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: monthlyBudgets } = await (supabase.from("budget_items") as any)
           .select("month, budgeted_amount")
           .eq("fiscal_year", fiscalYear)
           .not("month", "is", null);
@@ -393,14 +393,14 @@ export function useBudget(): UseBudgetReturn {
         }
 
         // Sum expenses by month
-        (expenses || []).forEach((expense) => {
+        (expenses || []).forEach((expense: { expense_date: string; amount: number }) => {
           const month = new Date(expense.expense_date).getMonth() + 1;
           const current = monthlyTotals.get(month) || 0;
           monthlyTotals.set(month, current + expense.amount);
         });
 
         // Sum budgets by month
-        (monthlyBudgets || []).forEach((item) => {
+        (monthlyBudgets || []).forEach((item: { month: number | null; budgeted_amount: number }) => {
           if (item.month) {
             const current = monthlyBudgetTotals.get(item.month) || 0;
             monthlyBudgetTotals.set(item.month, current + item.budgeted_amount);
@@ -437,8 +437,8 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-        const { data: newItem, error: createError } = await supabase
-          .from("budget_items")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newItem, error: createError } = await (supabase.from("budget_items") as any)
           .insert(data)
           .select()
           .single();
@@ -468,8 +468,8 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-        const { data: updatedItem, error: updateError } = await supabase
-          .from("budget_items")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updatedItem, error: updateError } = await (supabase.from("budget_items") as any)
           .update(data)
           .eq("id", id)
           .select()
@@ -507,8 +507,8 @@ export function useBudget(): UseBudgetReturn {
     async (id: string): Promise<boolean> => {
       try {
         // Check if there are linked expenses
-        const { count } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase.from("expenses") as any)
           .select("*", { count: "exact", head: true })
           .eq("budget_item_id", id);
 
@@ -517,8 +517,8 @@ export function useBudget(): UseBudgetReturn {
           return false;
         }
 
-        const { error: deleteError } = await supabase
-          .from("budget_items")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deleteError } = await (supabase.from("budget_items") as any)
           .delete()
           .eq("id", id);
 
@@ -548,7 +548,8 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-        let query = supabase.from("expenses").select("*");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query = (supabase.from("expenses") as any).select("*");
 
         // Apply filters
         if (filters?.budgetItemId) {
@@ -572,7 +573,7 @@ export function useBudget(): UseBudgetReturn {
 
         query = query.order("expense_date", { ascending: false });
 
-        const { data, error: fetchError } = await query;
+        const { data, error: fetchError } = await query as { data: Expense[] | null; error: { message: string } | null };
 
         if (fetchError) {
           throw new Error(fetchError.message);
@@ -585,12 +586,12 @@ export function useBudget(): UseBudgetReturn {
 
         let budgetItemsMap = new Map<string, BudgetItem>();
         if (budgetItemIds.length > 0) {
-          const { data: items } = await supabase
-            .from("budget_items")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: items } = await (supabase.from("budget_items") as any)
             .select("*")
             .in("id", budgetItemIds);
 
-          (items || []).forEach((item) => {
+          (items || []).forEach((item: BudgetItem) => {
             budgetItemsMap.set(item.id, item);
           });
         }
@@ -612,12 +613,12 @@ export function useBudget(): UseBudgetReturn {
 
         let profilesMap = new Map<string, Profile>();
         if (submitterIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from("profiles")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: profiles } = await (supabase.from("profiles") as any)
             .select("*")
             .in("id", submitterIds);
 
-          (profiles || []).forEach((profile) => {
+          (profiles || []).forEach((profile: Profile) => {
             profilesMap.set(profile.id, profile);
           });
         }
@@ -668,8 +669,8 @@ export function useBudget(): UseBudgetReturn {
           approved_by: status === "approved" ? user?.id : null,
         };
 
-        const { data: newExpense, error: createError } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newExpense, error: createError } = await (supabase.from("expenses") as any)
           .insert(expenseData)
           .select()
           .single();
@@ -699,8 +700,8 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-        const { data: updatedExpense, error: updateError } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updatedExpense, error: updateError } = await (supabase.from("expenses") as any)
           .update(data)
           .eq("id", id)
           .select()
@@ -741,8 +742,8 @@ export function useBudget(): UseBudgetReturn {
           data: { user },
         } = await supabase.auth.getUser();
 
-        const { error: updateError } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase.from("expenses") as any)
           .update({
             status: "approved",
             approved_by: user?.id,
@@ -757,7 +758,7 @@ export function useBudget(): UseBudgetReturn {
         setExpenses((prev) =>
           prev.map((expense) =>
             expense.id === id
-              ? { ...expense, status: "approved" as ExpenseStatus, approved_by: user?.id }
+              ? { ...expense, status: "approved" as ExpenseStatus, approved_by: user?.id ?? null }
               : expense
           )
         );
@@ -782,8 +783,8 @@ export function useBudget(): UseBudgetReturn {
           data: { user },
         } = await supabase.auth.getUser();
 
-        const { error: updateError } = await supabase
-          .from("expenses")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase.from("expenses") as any)
           .update({
             status: "denied",
             approved_by: user?.id,
@@ -798,7 +799,7 @@ export function useBudget(): UseBudgetReturn {
         setExpenses((prev) =>
           prev.map((expense) =>
             expense.id === id
-              ? { ...expense, status: "denied" as ExpenseStatus, approved_by: user?.id }
+              ? { ...expense, status: "denied" as ExpenseStatus, approved_by: user?.id ?? null }
               : expense
           )
         );

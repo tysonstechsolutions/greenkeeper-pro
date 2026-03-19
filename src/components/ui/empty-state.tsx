@@ -67,12 +67,16 @@ export function EmptyState({
       </p>
       {action && (
         action.href ? (
-          <Button asChild size={isCompact ? "sm" : "default"}>
-            <Link href={action.href}>
-              <Plus className="w-4 h-4 mr-2" />
-              {action.label}
-            </Link>
-          </Button>
+          <Link
+            href={action.href}
+            className={cn(
+              "inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground font-medium transition-colors hover:bg-primary/90",
+              isCompact ? "text-sm h-9 px-3" : "h-10 px-4"
+            )}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {action.label}
+          </Link>
         ) : action.onClick ? (
           <Button onClick={action.onClick} size={isCompact ? "sm" : "default"}>
             <Plus className="w-4 h-4 mr-2" />

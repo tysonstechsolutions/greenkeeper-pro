@@ -136,7 +136,7 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
       }
 
       try {
-        const insertData: Database["public"]["Tables"]["task_templates"]["Insert"] = {
+        const insertData = {
           name: data.name,
           description: data.description ?? null,
           category: data.category,
@@ -154,22 +154,23 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
           is_active: true,
         };
 
-        const { data: newTemplate, error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newTemplate, error: insertError } = await (supabase as any)
           .from("task_templates")
           .insert(insertData)
           .select()
-          .single();
+          .single() as { data: TaskTemplate | null; error: Error | null };
 
-        if (insertError) {
+        if (insertError || !newTemplate) {
           console.error("Error creating template:", insertError);
-          setError(insertError.message);
+          setError(insertError?.message || "Failed to create template");
           return null;
         }
 
         // Add to local state
-        setTemplates((prev) => [...prev, newTemplate as TaskTemplate]);
+        setTemplates((prev) => [...prev, newTemplate]);
 
-        return newTemplate as TaskTemplate;
+        return newTemplate;
       } catch (err) {
         console.error("Unexpected error creating template:", err);
         setError("Failed to create template");
@@ -183,12 +184,13 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
   const updateTemplate = useCallback(
     async (id: string, data: UpdateTemplateData): Promise<TaskTemplate | null> => {
       try {
-        const { data: updated, error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: updated, error: updateError } = await (supabase as any)
           .from("task_templates")
           .update(data)
           .eq("id", id)
           .select()
-          .single();
+          .single() as { data: TaskTemplate | null; error: Error | null };
 
         if (updateError) {
           console.error("Error updating template:", updateError);
@@ -197,11 +199,13 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
         }
 
         // Update local state
-        setTemplates((prev) =>
-          prev.map((t) => (t.id === id ? (updated as TaskTemplate) : t))
-        );
+        if (updated) {
+          setTemplates((prev) =>
+            prev.map((t) => (t.id === id ? updated : t))
+          );
+        }
 
-        return updated as TaskTemplate;
+        return updated;
       } catch (err) {
         console.error("Unexpected error updating template:", err);
         setError("Failed to update template");
@@ -215,10 +219,11 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
   const deleteTemplate = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const { error: updateError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
           .from("task_templates")
           .update({ is_active: false })
-          .eq("id", id);
+          .eq("id", id) as { error: Error | null };
 
         if (updateError) {
           console.error("Error deleting template:", updateError);
@@ -258,7 +263,7 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
         }
 
         // Create the task with template data + overrides
-        const taskData: Database["public"]["Tables"]["tasks"]["Insert"] = {
+        const taskData = {
           title: overrides.title || template.name,
           description: overrides.description ?? template.description,
           category: template.category,
@@ -289,15 +294,16 @@ export function useTaskTemplates(): UseTaskTemplatesReturn {
           notes: overrides.notes ?? null,
         };
 
-        const { data: newTask, error: insertError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newTask, error: insertError } = await (supabase as any)
           .from("tasks")
           .insert(taskData)
           .select("id")
-          .single();
+          .single() as { data: { id: string } | null; error: Error | null };
 
-        if (insertError) {
+        if (insertError || !newTask) {
           console.error("Error creating task from template:", insertError);
-          setError(insertError.message);
+          setError(insertError?.message || "Failed to create task");
           return null;
         }
 

@@ -145,15 +145,14 @@ export default function KnowledgePage() {
         title="Knowledge Base"
         description="SOPs, guides, and training materials"
         icon={Book}
-        actions={
-          canCreateArticle ? (
-            <Button onClick={() => router.push("/knowledge/new")}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Article
-            </Button>
-          ) : undefined
-        }
-      />
+      >
+        {canCreateArticle && (
+          <Button onClick={() => router.push("/knowledge/new")}>
+            <Plus className="w-4 h-4 mr-2" />
+            New Article
+          </Button>
+        )}
+      </PageHeader>
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Sidebar - Desktop */}
