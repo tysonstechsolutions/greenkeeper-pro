@@ -602,8 +602,12 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
     // Initial fetch - use default filters to load only relevant tasks
     // This prevents loading entire task history on page load
+    const today = new Date().toISOString().split("T")[0];
+    const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
     const defaultFilters: TaskFilters = initialFilters || {
-      // By default, exclude completed tasks older than 7 days
+      // By default, only load tasks for the next 7 days and exclude completed
+      dateRange: { start: today, end: weekFromNow },
       includeCompleted: false,
     };
     fetchTasks(defaultFilters);

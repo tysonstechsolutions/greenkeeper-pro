@@ -48,7 +48,8 @@ export function useProfiles(): UseProfilesReturn {
           .select("id, full_name, display_name, role, avatar_url, phone")
           .eq("is_active", true)
           .order("role", { ascending: true })
-          .order("full_name", { ascending: true });
+          .order("full_name", { ascending: true })
+          .limit(50); // Reasonable limit for golf course staff
 
         if (role) {
           if (Array.isArray(role)) {
