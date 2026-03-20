@@ -184,7 +184,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
         let query = buildTaskQuery();
         query = applyFilters(query, filters);
         query = query.order("due_date", { ascending: true })
-          .order("priority", { ascending: true }); // critical=0, high=1, etc.
+          .order("priority", { ascending: true }) // critical=0, high=1, etc.
+          .limit(100); // Limit to prevent loading too many tasks
 
         const { data, error: fetchError } = await query;
 
@@ -599,8 +600,13 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
     channelRef.current = channel;
 
-    // Initial fetch
-    fetchTasks(initialFilters);
+    // Initial fetch - use default filters to load only relevant tasks
+    // This prevents loading entire task history on page load
+    const defaultFilters: TaskFilters = initialFilters || {
+      // By default, exclude completed tasks older than 7 days
+      includeCompleted: false,
+    };
+    fetchTasks(defaultFilters);
 
     return () => {
       if (channelRef.current) {
