@@ -70,7 +70,9 @@ interface RoleHiddenProps {
 export function RoleHidden({ children, hiddenFromRoles }: RoleHiddenProps) {
   const { profile, loading } = useAuth();
 
-  if (loading) return null;
+  // Show content while loading to prevent flash of disappearing content
+  // Content will be hidden once role is determined if needed
+  if (loading) return <>{children}</>;
 
   const userRole = profile?.role as UserRole | undefined;
   if (userRole && hiddenFromRoles.includes(userRole)) {
@@ -88,7 +90,9 @@ interface RoleVisibleProps {
 export function RoleVisible({ children, visibleToRoles }: RoleVisibleProps) {
   const { profile, loading } = useAuth();
 
-  if (loading) return null;
+  // Show content while loading to prevent flash of disappearing content
+  // Content will be hidden once role is determined if user doesn't have access
+  if (loading) return <>{children}</>;
 
   const userRole = profile?.role as UserRole | undefined;
   if (!userRole || !visibleToRoles.includes(userRole)) {
