@@ -209,16 +209,13 @@ export default function BudgetPage() {
     router.push(`/budget/expenses?category=${category}`);
   };
 
-  if (loadingData) {
-    return (
-      <div className="p-4 md:p-6 flex items-center justify-center min-h-[50vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+      {loadingData ? (
+        <div className="p-4 md:p-6 flex items-center justify-center min-h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
     <div className="p-4 md:p-6 pb-24">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -590,6 +587,7 @@ export default function BudgetPage() {
         </CardContent>
       </Card>
     </div>
+      )}
     </RoleGuard>
   );
 }

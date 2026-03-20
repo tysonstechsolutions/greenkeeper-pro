@@ -60,13 +60,6 @@ export default function StaffPage() {
 
   const supabase = createClient();
 
-  // Check authorization
-  useEffect(() => {
-    if (!authLoading && currentUser && !isSuper && !isAsstSuper) {
-      router.push("/dashboard");
-    }
-  }, [authLoading, currentUser, isSuper, isAsstSuper, router]);
-
   // Fetch all staff profiles
   const fetchStaff = useCallback(async () => {
     setLoading(true);
@@ -147,10 +140,10 @@ export default function StaffPage() {
   }, [supabase]);
 
   useEffect(() => {
-    if (currentUser && (isSuper || isAsstSuper)) {
+    if (currentUser) {
       fetchStaff();
     }
-  }, [currentUser, isSuper, isAsstSuper, fetchStaff]);
+  }, [currentUser, fetchStaff]);
 
   // Filtered profiles
   const filteredProfiles = useMemo(() => {
@@ -246,21 +239,14 @@ export default function StaffPage() {
     });
   };
 
-  // Auth check - show nothing while loading
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!currentUser || (!isSuper && !isAsstSuper)) {
-    return null;
-  }
-
   return (
     <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+      {/* Show loading spinner while data is loading */}
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -720,6 +706,7 @@ export default function StaffPage() {
         )}
       </div>
     </div>
+      )}
     </RoleGuard>
   );
 }
