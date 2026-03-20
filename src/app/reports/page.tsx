@@ -100,7 +100,7 @@ const REPORT_TYPES = [
 type ReportTypeId = "daily" | "weekly" | "monthly" | "staff" | "chemical" | "equipment";
 
 export default function ReportsPage() {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const reportRef = useRef<HTMLDivElement>(null);
   const [activeReport, setActiveReport] = useState<ReportTypeId | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -139,8 +139,8 @@ export default function ReportsPage() {
   // Check if user can access report type
   const canAccessReport = useCallback((reportType: typeof REPORT_TYPES[number]) => {
     if (!reportType.requiresRole) return true;
-    return reportType.requiresRole.includes(user?.role || "");
-  }, [user?.role]);
+    return reportType.requiresRole.includes(profile?.role || "");
+  }, [profile?.role]);
 
   // Generate report
   const handleGenerateReport = useCallback(async (reportType: ReportTypeId) => {
