@@ -260,6 +260,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
 
         query = query.order("sort_order", { ascending: true });
         query = query.order("created_at", { ascending: true });
+        query = query.limit(50); // Limit goals to prevent loading too many
 
         const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
 

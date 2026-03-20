@@ -217,7 +217,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           .eq("due_date", date)
           .not("status", "in", '("cancelled")')
           .order("priority", { ascending: true })
-          .order("due_time", { ascending: true, nullsFirst: false });
+          .order("due_time", { ascending: true, nullsFirst: false })
+          .limit(50); // Limit to prevent loading too many tasks
 
         if (fetchError) {
           console.error("Error fetching my tasks:", fetchError);
@@ -242,7 +243,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           .not("status", "in", '("cancelled")')
           .order("priority", { ascending: true })
           .order("assigned_to", { ascending: true, nullsFirst: false })
-          .order("due_time", { ascending: true, nullsFirst: false });
+          .order("due_time", { ascending: true, nullsFirst: false })
+          .limit(100); // Limit to prevent loading too many tasks
 
         if (fetchError) {
           console.error("Error fetching team tasks:", fetchError);

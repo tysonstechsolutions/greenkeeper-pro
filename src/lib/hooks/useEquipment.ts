@@ -219,7 +219,8 @@ export function useEquipment(): UseEquipmentReturn {
         let query = (supabase.from("equipment") as any)
           .select("*")
           .neq("status", "retired")
-          .order("name", { ascending: true });
+          .order("name", { ascending: true })
+          .limit(100); // Limit equipment list
 
         if (filters?.type) {
           query = query.eq("equipment_type", filters.type);
@@ -496,7 +497,8 @@ export function useEquipment(): UseEquipmentReturn {
         const { data, error: fetchError } = await (supabase.from("equipment_logs") as any)
           .select("*")
           .eq("equipment_id", equipmentId)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(50); // Limit logs per equipment
 
         if (fetchError) {
           throw new Error(fetchError.message);

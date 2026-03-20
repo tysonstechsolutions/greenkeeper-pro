@@ -188,7 +188,8 @@ export function useBudget(): UseBudgetReturn {
           .select("*")
           .eq("fiscal_year", fiscalYear)
           .order("category", { ascending: true })
-          .order("month", { ascending: true, nullsFirst: true });
+          .order("month", { ascending: true, nullsFirst: true })
+          .limit(100); // Limit budget items
 
         if (itemsError) {
           throw new Error(itemsError.message);
@@ -572,6 +573,7 @@ export function useBudget(): UseBudgetReturn {
         }
 
         query = query.order("expense_date", { ascending: false });
+        query = query.limit(200); // Limit expenses list
 
         const { data, error: fetchError } = await query as { data: Expense[] | null; error: { message: string } | null };
 

@@ -176,7 +176,8 @@ export function usePhotos(): UsePhotosReturn {
           `
           )
           .eq("task_id", taskId)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: true })
+          .limit(50); // Limit photos per task
 
         if (fetchError) {
           console.error("Error fetching task photos:", fetchError);
@@ -254,7 +255,8 @@ export function usePhotos(): UsePhotosReturn {
           `
           )
           .eq("zone_id", zoneId)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: true })
+          .limit(100); // Limit timeline photos
 
         if (fetchError) {
           console.error("Error fetching zone timeline:", fetchError);

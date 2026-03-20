@@ -198,6 +198,7 @@ export function useChemicals(): UseChemicalsReturn {
         }
 
         query = query.order("product_name", { ascending: true });
+        query = query.limit(100); // Limit products list
 
         const { data, error: fetchError } = await query as { data: ChemicalProduct[] | null; error: { message: string } | null };
 
@@ -445,6 +446,7 @@ export function useChemicals(): UseChemicalsReturn {
         }
 
         query = query.order("application_date", { ascending: false });
+        query = query.limit(100); // Limit applications list
 
         const { data, error: fetchError } = await query;
 

@@ -54,7 +54,7 @@ export function useMessages(): UseMessagesReturn {
   const fetchMessages = useCallback(
     async (
       channelId: string,
-      limit = 50,
+      limit = 30, // Reduced default limit for better performance
       before?: string
     ): Promise<MessageWithSender[]> => {
       if (!user) {

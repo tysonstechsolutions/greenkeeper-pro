@@ -90,11 +90,11 @@ export function useChannels(): UseChannelsReturn {
         memberData.map((m: { channel_id: string; last_read_at: string | null }) => [m.channel_id, m.last_read_at])
       );
 
-      // Get channel details
+      // Get channel details - limit to 20 most recent to prevent loading too many
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: channelsData, error: channelsError } = await (supabase.from("channels") as any)
         .select("*")
-        .in("id", channelIds)
+        .in("id", channelIds.slice(0, 20)) // Limit to 20 channels
         .eq("is_active", true);
 
       if (channelsError) {

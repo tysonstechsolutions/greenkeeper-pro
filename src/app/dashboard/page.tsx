@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -38,7 +38,7 @@ import {
 } from "@/lib/hooks/usePlanGoals";
 import { Badge } from "@/components/ui/badge";
 import { useDiagnostics } from "@/lib/hooks/useDiagnostics";
-import { useTasks } from "@/lib/hooks/useTasks";
+import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -96,12 +96,15 @@ export default function DashboardPage() {
   const alerts = getAlerts();
   const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
   const { getActiveDiagnosesCount } = useDiagnostics();
-  const { tasks, fetchTasks } = useTasks();
+  const { fetchMyTasks } = useTasks();
+  const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
   const [focusGoals, setFocusGoals] = useState<GoalWithStats[]>([]);
   const [activeDiagnosesCount, setActiveDiagnosesCount] = useState(0);
+  const [secondaryLoaded, setSecondaryLoaded] = useState(false);
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
+  const hasFetchedRef = useRef(false);
 
   // Get greeting based on time of day
   const greeting = useMemo(() => {
@@ -114,46 +117,52 @@ export default function DashboardPage() {
   // Get first name
   const firstName = profile?.full_name?.split(" ")[0] || "Superintendent";
 
-  // Today's tasks stats
+  // Today's tasks stats - computed from fetched tasks
   const todaysTasks = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const todaysOnly = tasks.filter((t) => t.due_date === today);
-    const completed = todaysOnly.filter((t) => t.status === "completed").length;
-    const total = todaysOnly.length;
-    const highPriority = todaysOnly.filter(
-      (t) => t.priority === "high" && t.status !== "completed"
+    const completed = todayTasks.filter((t) => t.status === "completed").length;
+    const total = todayTasks.length;
+    const highPriority = todayTasks.filter(
+      (t) => (t.priority === "high" || t.priority === "critical") && t.status !== "completed"
     );
     return { completed, total, highPriority };
-  }, [tasks]);
+  }, [todayTasks]);
 
-  // Fetch tasks
+  // Progressive loading: Load critical data first, then secondary data after a delay
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
 
-  // Fetch plan data
-  useEffect(() => {
-    async function loadPlanData() {
-      const overview = await fetchPlanOverview(currentYear);
+    const today = new Date().toISOString().split("T")[0];
+
+    // Phase 1: Load critical data immediately (tasks for today only - limited to 10 for dashboard)
+    async function loadCriticalData() {
+      const tasks = await fetchMyTasks(today);
+      // Only show first 10 for dashboard performance
+      setTodayTasks(tasks.slice(0, 10));
+    }
+    loadCriticalData();
+
+    // Phase 2: Load secondary data after a short delay (plan progress, diagnostics)
+    const secondaryTimer = setTimeout(async () => {
+      const [overview, diagnosesCount] = await Promise.all([
+        fetchPlanOverview(currentYear),
+        getActiveDiagnosesCount(),
+      ]);
       setPlanOverview(overview);
+      setActiveDiagnosesCount(diagnosesCount);
 
+      // Fetch goals with limit
       await fetchGoals({
         planLevel: "monthly",
         year: currentYear,
         month: currentMonth,
       });
-    }
-    loadPlanData();
-  }, [fetchGoals, fetchPlanOverview, currentYear, currentMonth]);
 
-  // Fetch active diagnoses count
-  useEffect(() => {
-    async function loadDiagnosesCount() {
-      const count = await getActiveDiagnosesCount();
-      setActiveDiagnosesCount(count);
-    }
-    loadDiagnosesCount();
-  }, [getActiveDiagnosesCount]);
+      setSecondaryLoaded(true);
+    }, 300);
+
+    return () => clearTimeout(secondaryTimer);
+  }, [fetchMyTasks, fetchGoals, fetchPlanOverview, getActiveDiagnosesCount, currentYear, currentMonth]);
 
   // Update focus goals when goals change
   useEffect(() => {

@@ -192,13 +192,14 @@ export function useDiagnostics() {
         if (filters?.endDate) {
           query = query.lte("created_at", filters.endDate);
         }
-        if (filters?.limit) {
-          query = query.limit(filters.limit);
-        }
+        // Always apply a limit to prevent loading too many records
+        const limit = filters?.limit || 50;
+        query = query.limit(limit);
+
         if (filters?.offset) {
           query = query.range(
             filters.offset,
-            filters.offset + (filters.limit || 20) - 1
+            filters.offset + limit - 1
           );
         }
 

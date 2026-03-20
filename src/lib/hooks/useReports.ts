@@ -381,7 +381,8 @@ export function useReports() {
             assigned_user:profiles!tasks_assigned_to_fkey(id, full_name),
             assigned_crew
           `)
-          .eq("due_date", date) as { data: TaskQueryResult[] | null };
+          .eq("due_date", date)
+          .limit(200) as { data: TaskQueryResult[] | null }; // Limit to prevent overload
 
         if (tasks) {
           report.tasks.total = tasks.length;
@@ -627,7 +628,8 @@ export function useReports() {
             assigned_user:profiles!tasks_assigned_to_fkey(id, full_name)
           `)
           .gte("due_date", weekStart)
-          .lte("due_date", weekEnd) as { data: WeeklyTaskQueryResult[] | null };
+          .lte("due_date", weekEnd)
+          .limit(500) as { data: WeeklyTaskQueryResult[] | null }; // Limit weekly tasks
 
         if (tasks) {
           report.total_tasks = tasks.length;
@@ -884,7 +886,8 @@ export function useReports() {
             assigned_user:profiles!tasks_assigned_to_fkey(id, full_name)
           `)
           .gte("due_date", startDate)
-          .lte("due_date", endDate) as { data: MonthlyTaskQueryResult[] | null };
+          .lte("due_date", endDate)
+          .limit(1000) as { data: MonthlyTaskQueryResult[] | null }; // Limit monthly tasks
 
         if (tasks) {
           const staffMap = new Map<string, {
@@ -1192,7 +1195,8 @@ export function useReports() {
           .eq("assigned_to", userId)
           .gte("due_date", dateRange.start)
           .lte("due_date", dateRange.end)
-          .order("due_date", { ascending: false }) as { data: StaffTaskQueryResult[] | null };
+          .order("due_date", { ascending: false })
+          .limit(200) as { data: StaffTaskQueryResult[] | null }; // Limit staff task history
 
         if (tasks) {
           report.tasks.assigned = tasks.length;
@@ -1344,7 +1348,8 @@ export function useReports() {
           `)
           .gte("application_date", dateRange.start)
           .lte("application_date", dateRange.end)
-          .order("application_date", { ascending: false }) as { data: ChemReportAppQueryResult[] | null };
+          .order("application_date", { ascending: false })
+          .limit(500) as { data: ChemReportAppQueryResult[] | null }; // Limit chemical applications
 
         if (apps) {
           // Get zone names
@@ -1566,7 +1571,8 @@ export function useReports() {
           `)
           .gte("created_at", `${dateRange.start}T00:00:00`)
           .lte("created_at", `${dateRange.end}T23:59:59`)
-          .order("created_at", { ascending: false }) as { data: EquipLogQueryResult[] | null };
+          .order("created_at", { ascending: false })
+          .limit(300) as { data: EquipLogQueryResult[] | null }; // Limit equipment logs
 
         if (logs) {
           report.maintenance_log = logs.map(log => ({
