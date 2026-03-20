@@ -78,7 +78,7 @@ const REPORT_TYPES = [
     description: "Individual productivity and task completion metrics",
     icon: Users,
     color: "#52B788",
-    requiresRole: ["super_admin", "superintendent", "assistant_superintendent"],
+    requiresRole: ["super", "asst_super"],
   },
   {
     id: "chemical",
@@ -86,7 +86,7 @@ const REPORT_TYPES = [
     description: "Application records and regulatory compliance",
     icon: Beaker,
     color: "#74C69D",
-    requiresRole: ["super_admin", "superintendent", "assistant_superintendent"],
+    requiresRole: ["super", "asst_super"],
   },
   {
     id: "equipment",
