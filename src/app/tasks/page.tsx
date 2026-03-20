@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -27,8 +27,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useTasks, type TaskWithRelations, type TaskFilters } from "@/lib/hooks/useTasks";
-import { useProfiles, getInitials, roleLabels } from "@/lib/hooks/useProfiles";
-import { useCourseZones, formatZoneName } from "@/lib/hooks/useCourseZones";
+import { useProfiles, getInitials } from "@/lib/hooks/useProfiles";
+import { formatZoneName } from "@/lib/hooks/useCourseZones";
 import type { TaskCategory, TaskPriority, TaskStatus } from "@/types/database";
 
 // Tab type
@@ -183,8 +183,8 @@ function groupTasksByDate(tasks: TaskWithRelations[]): Map<string, TaskWithRelat
 export default function TasksPage() {
   const router = useRouter();
   const { user, profile, isManager, isForeman, loading: authLoading } = useAuth();
-  const { profiles, loading: profilesLoading } = useProfiles();
-  const { zones } = useCourseZones();
+  // Only load profiles for managers/foremen who need the assignee filter
+  const { profiles } = useProfiles();
 
   // Determine default tab based on role
   const defaultTab: TabType = isManager || isForeman ? "all" : "my";
@@ -200,6 +200,23 @@ export default function TasksPage() {
   const [selectedAssignee, setSelectedAssignee] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(getTodayString());
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounce search query - only trigger fetch after 300ms of no typing
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
 
   // Build filters based on current state
   const buildFilters = useCallback((): TaskFilters => {
@@ -223,12 +240,12 @@ export default function TasksPage() {
       filters.assignedTo = selectedAssignee;
     }
 
-    if (searchQuery) {
-      filters.search = searchQuery;
+    if (debouncedSearch) {
+      filters.search = debouncedSearch;
     }
 
     return filters;
-  }, [selectedStatuses, selectedCategory, selectedPriorities, selectedAssignee, searchQuery]);
+  }, [selectedStatuses, selectedCategory, selectedPriorities, selectedAssignee, debouncedSearch]);
 
   const { tasks, loading: tasksLoading, fetchTasks, fetchMyTasks, fetchTeamTasks } = useTasks();
 

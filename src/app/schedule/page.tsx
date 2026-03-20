@@ -30,7 +30,7 @@ import {
   formatWeekRange,
 } from "@/lib/hooks/useSchedule";
 import { useTimeOff, type DateRangeConflict } from "@/lib/hooks/useTimeOff";
-import { useProfiles, getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
+import { getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
 import type { ShiftType, UserRole } from "@/types/database";
 
 // Tab type
@@ -120,7 +120,6 @@ export default function SchedulePage() {
     loading: scheduleLoading,
   } = useSchedule();
   const { getConflicts } = useTimeOff();
-  const { allStaff, loading: profilesLoading } = useProfiles();
 
   // Current week state
   const [currentWeekStart, setCurrentWeekStart] = useState(getWeekStart(new Date()));
@@ -254,6 +253,36 @@ export default function SchedulePage() {
     return count;
   };
 
+  // Update local state optimistically after a schedule change
+  const updateLocalSchedule = useCallback((
+    userId: string,
+    date: string,
+    scheduleData: { shift_type: ShiftType | null; shift_start: string | null; shift_end: string | null; crew_assignment: string | null } | null
+  ) => {
+    setWeekData(prev => prev.map(userData => {
+      if (userData.user_id !== userId) return userData;
+      const newSchedules = { ...userData.schedules };
+      if (scheduleData === null) {
+        delete newSchedules[date];
+      } else {
+        newSchedules[date] = {
+          ...newSchedules[date],
+          id: newSchedules[date]?.id || `temp-${Date.now()}`,
+          user_id: userId,
+          schedule_date: date,
+          shift_type: scheduleData.shift_type,
+          shift_start: scheduleData.shift_start,
+          shift_end: scheduleData.shift_end,
+          crew_assignment: scheduleData.crew_assignment,
+          notes: newSchedules[date]?.notes || null,
+          created_by: newSchedules[date]?.created_by || userId,
+          created_at: newSchedules[date]?.created_at || new Date().toISOString(),
+        };
+      }
+      return { ...userData, schedules: newSchedules };
+    }));
+  }, []);
+
   // Handle cell click
   const handleCellClick = (userId: string, date: string) => {
     // Check if user has PTO
@@ -290,9 +319,17 @@ export default function SchedulePage() {
         shift_start: quickFillTemplate.start,
         shift_end: quickFillTemplate.end,
       });
-      await loadWeekData();
+      // Optimistic update - no need to refetch entire week
+      updateLocalSchedule(userId, date, {
+        shift_type: quickFillTemplate.shiftType,
+        shift_start: quickFillTemplate.start,
+        shift_end: quickFillTemplate.end,
+        crew_assignment: null,
+      });
     } catch (err) {
       console.error("Error applying quick fill:", err);
+      // On error, refetch to ensure consistency
+      await loadWeekData();
     } finally {
       setSaving(false);
     }
@@ -306,6 +343,8 @@ export default function SchedulePage() {
     try {
       if (editForm.shiftType === "off") {
         await deleteSchedule(editingCell.userId, editingCell.date);
+        // Optimistic update - remove schedule
+        updateLocalSchedule(editingCell.userId, editingCell.date, null);
       } else {
         await setSchedule(editingCell.userId, editingCell.date, {
           shift_type: editForm.shiftType,
@@ -313,11 +352,19 @@ export default function SchedulePage() {
           shift_end: editForm.endTime,
           crew_assignment: editForm.crewAssignment || null,
         });
+        // Optimistic update - no need to refetch entire week
+        updateLocalSchedule(editingCell.userId, editingCell.date, {
+          shift_type: editForm.shiftType,
+          shift_start: editForm.startTime,
+          shift_end: editForm.endTime,
+          crew_assignment: editForm.crewAssignment || null,
+        });
       }
-      await loadWeekData();
       setEditingCell(null);
     } catch (err) {
       console.error("Error saving schedule:", err);
+      // On error, refetch to ensure consistency
+      await loadWeekData();
     } finally {
       setSaving(false);
     }
@@ -330,10 +377,13 @@ export default function SchedulePage() {
     setSaving(true);
     try {
       await deleteSchedule(editingCell.userId, editingCell.date);
-      await loadWeekData();
+      // Optimistic update - remove schedule
+      updateLocalSchedule(editingCell.userId, editingCell.date, null);
       setEditingCell(null);
     } catch (err) {
       console.error("Error clearing shift:", err);
+      // On error, refetch to ensure consistency
+      await loadWeekData();
     } finally {
       setSaving(false);
     }
