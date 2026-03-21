@@ -61,7 +61,7 @@ export default function ArticlePage({ params }: ArticlePageProps) {
   const [deleting, setDeleting] = useState(false);
 
   // Check if user can edit/delete
-  const canEdit = ["super_admin", "superintendent", "assistant_superintendent"].includes(
+  const canEdit = ["super", "asst_super"].includes(
     profile?.role || ""
   );
 

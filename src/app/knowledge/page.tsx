@@ -78,7 +78,7 @@ export default function KnowledgePage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Check if user can create articles
-  const canCreateArticle = ["super_admin", "superintendent", "assistant_superintendent"].includes(
+  const canCreateArticle = ["super", "asst_super"].includes(
     profile?.role || ""
   );
 

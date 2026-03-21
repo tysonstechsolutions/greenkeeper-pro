@@ -214,8 +214,6 @@ export function useKnowledge() {
    */
   const fetchArticles = useCallback(
     async (filters?: ArticleFilters): Promise<ArticleWithAuthor[]> => {
-      if (!activeCourse?.id) return [];
-
       setLoading(true);
       setError(null);
 
@@ -225,7 +223,8 @@ export function useKnowledge() {
           data: { user },
         } = await supabase.auth.getUser();
 
-        let query = supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query = (supabase as any)
           .from("knowledge_articles")
           .select(
             `
@@ -233,8 +232,11 @@ export function useKnowledge() {
             author:profiles!knowledge_articles_created_by_fkey(id, full_name, avatar_url),
             updater:profiles!knowledge_articles_updated_by_fkey(id, full_name, avatar_url)
           `
-          )
-          .eq("course_id", activeCourse.id);
+          );
+
+        // In single-tenant mode, don't filter by course_id
+        // Articles may not have course_id set or may have different values
+        // When multi-tenant support is added, this should filter by activeCourse.id
 
         // Apply filters
         if (filters?.category) {
@@ -555,8 +557,6 @@ export function useKnowledge() {
    */
   const fetchUnreadForUser = useCallback(
     async (userId?: string): Promise<ArticleWithAuthor[]> => {
-      if (!activeCourse?.id) return [];
-
       setLoading(true);
       setError(null);
 
@@ -577,7 +577,8 @@ export function useKnowledge() {
         const readIds = readLog?.map((r) => r.article_id) || [];
 
         // Get all published articles not in read list
-        let query = supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let query = (supabase as any)
           .from("knowledge_articles")
           .select(
             `
@@ -585,7 +586,6 @@ export function useKnowledge() {
             author:profiles!knowledge_articles_created_by_fkey(id, full_name, avatar_url)
           `
           )
-          .eq("course_id", activeCourse.id)
           .eq("is_published", true)
           .order("created_at", { ascending: false });
 
@@ -620,10 +620,9 @@ export function useKnowledge() {
    */
   const fetchArticlesByTemplate = useCallback(
     async (templateId: string): Promise<ArticleWithAuthor[]> => {
-      if (!activeCourse?.id) return [];
-
       try {
-        const { data, error: fetchError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: fetchError } = await (supabase as any)
           .from("knowledge_articles")
           .select(
             `
@@ -631,7 +630,6 @@ export function useKnowledge() {
             author:profiles!knowledge_articles_created_by_fkey(id, full_name, avatar_url)
           `
           )
-          .eq("course_id", activeCourse.id)
           .eq("is_published", true)
           .contains("linked_template_ids", [templateId]) as { data: ArticleWithAuthor[] | null; error: Error | null };
 
@@ -650,8 +648,8 @@ export function useKnowledge() {
    * Full-text search on articles
    */
   const searchArticles = useCallback(
-    async (query: string): Promise<ArticleWithAuthor[]> => {
-      if (!activeCourse?.id || !query.trim()) return [];
+    async (searchQuery: string): Promise<ArticleWithAuthor[]> => {
+      if (!searchQuery.trim()) return [];
 
       setLoading(true);
       setError(null);
@@ -662,7 +660,8 @@ export function useKnowledge() {
         } = await supabase.auth.getUser();
 
         // Search in title and content
-        const { data, error: searchError } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: searchError } = await (supabase as any)
           .from("knowledge_articles")
           .select(
             `
@@ -670,9 +669,8 @@ export function useKnowledge() {
             author:profiles!knowledge_articles_created_by_fkey(id, full_name, avatar_url)
           `
           )
-          .eq("course_id", activeCourse.id)
           .eq("is_published", true)
-          .or(`title.ilike.%${query}%,content.ilike.%${query}%,tags.cs.{${query}}`)
+          .or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%,tags.cs.{${searchQuery}}`)
           .order("title") as { data: ArticleWithAuthor[] | null; error: Error | null };
 
         if (searchError) throw searchError;
@@ -710,18 +708,11 @@ export function useKnowledge() {
    * Get category counts for sidebar
    */
   const getCategoryCounts = useCallback(async (): Promise<Record<KnowledgeCategory, number>> => {
-    if (!activeCourse?.id) {
-      return Object.keys(categoryLabels).reduce(
-        (acc, key) => ({ ...acc, [key]: 0 }),
-        {} as Record<KnowledgeCategory, number>
-      );
-    }
-
     try {
-      const { data } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
         .from("knowledge_articles")
         .select("category")
-        .eq("course_id", activeCourse.id)
         .eq("is_published", true) as { data: { category: string }[] | null };
 
       const counts = Object.keys(categoryLabels).reduce(
@@ -750,8 +741,6 @@ export function useKnowledge() {
    */
   const fetchOnboardingArticles = useCallback(
     async (userId?: string): Promise<{ articles: ArticleWithAuthor[]; readCount: number }> => {
-      if (!activeCourse?.id) return { articles: [], readCount: 0 };
-
       try {
         const {
           data: { user },
@@ -759,7 +748,8 @@ export function useKnowledge() {
         const targetUserId = userId || user?.id;
 
         // Get articles tagged with "onboarding"
-        const { data } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
           .from("knowledge_articles")
           .select(
             `
@@ -767,7 +757,6 @@ export function useKnowledge() {
             author:profiles!knowledge_articles_created_by_fkey(id, full_name, avatar_url)
           `
           )
-          .eq("course_id", activeCourse.id)
           .eq("is_published", true)
           .contains("tags", ["onboarding"])
           .order("category")
@@ -807,12 +796,11 @@ export function useKnowledge() {
    */
   const uploadAttachment = useCallback(
     async (file: File): Promise<ArticleAttachment | null> => {
-      if (!activeCourse?.id) return null;
-
       try {
         const fileExt = file.name.split(".").pop();
         const fileName = `${crypto.randomUUID()}.${fileExt}`;
-        const filePath = `knowledge/${activeCourse.id}/${fileName}`;
+        const courseId = activeCourse?.id || "default";
+        const filePath = `knowledge/${courseId}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("attachments")
