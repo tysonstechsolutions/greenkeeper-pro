@@ -8,16 +8,42 @@ import {
   Calendar,
   MessageSquare,
   MoreHorizontal,
+  Store,
+  Flag,
+  Map,
+  Home,
+  Users,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChannels } from "@/lib/hooks/useChannels";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { useEffect } from "react";
 
-const navItems = [
+// Default nav items for maintenance staff
+const maintenanceNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/more", label: "More", icon: MoreHorizontal },
+];
+
+// Nav items for pro role - simplified, focused on their needs
+const proNavItems = [
+  { href: "/pro-dashboard", label: "Dashboard", icon: Store },
+  { href: "/report-issue", label: "Report", icon: Flag },
+  { href: "/course-map", label: "Map", icon: Map },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/more", label: "More", icon: MoreHorizontal },
+];
+
+// Nav items for member role - golfer-focused
+const memberNavItems = [
+  { href: "/member/home", label: "Home", icon: Home },
+  { href: "/member/tee-times", label: "Book", icon: Calendar },
+  { href: "/member/community", label: "Community", icon: Users },
+  { href: "/member/feedback", label: "Rate", icon: Star },
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
@@ -38,11 +64,21 @@ const moreRoutes = [
   "/knowledge",
   "/settings",
   "/notifications",
+  "/feedback",
+  "/pro-dashboard",
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const { totalUnread, fetchChannels } = useChannels();
+  const { isPro, isMember } = useAuth();
+
+  // Select nav items based on user role
+  const navItems = isMember
+    ? memberNavItems
+    : isPro
+    ? proNavItems
+    : maintenanceNavItems;
 
   // Fetch unread count on mount
   useEffect(() => {

@@ -2,7 +2,7 @@
 // Auto-generated types for Supabase integration
 // Based on the complete schema from greenkeeper-pro-spec.md
 
-export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal";
+export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "member";
 
 export type ZoneType =
   | "green"
@@ -43,7 +43,10 @@ export type TaskCategory =
   | "greens"
   | "admin"
   | "safety"
-  | "other";
+  | "other"
+  | "pro_shop"
+  | "events"
+  | "customer_service";
 
 export type TaskPriority = "critical" | "high" | "normal" | "low";
 

@@ -38,7 +38,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Define public routes that don't require authentication
-  const publicRoutes = ["/login", "/invite", "/auth/callback", "/auth/confirm"];
+  const publicRoutes = ["/login", "/invite", "/auth/callback", "/auth/confirm", "/join"];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
@@ -52,12 +52,38 @@ export async function updateSession(request: NextRequest) {
   }
 
   // If user is logged in and trying to access login page,
-  // redirect to dashboard
+  // redirect to appropriate dashboard based on role
   if (user && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone();
+    // For now, redirect to dashboard - the client-side will handle role-based routing
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
+
+  // Member-only routes - if member tries to access staff routes, redirect to member home
+  const staffOnlyRoutes = [
+    "/dashboard",
+    "/tasks",
+    "/schedule",
+    "/messages",
+    "/equipment",
+    "/chemicals",
+    "/irrigation",
+    "/staff",
+    "/budget",
+    "/reports",
+    "/knowledge",
+    "/diagnostics",
+    "/plan",
+    "/pro-dashboard",
+    "/report-issue",
+  ];
+
+  // Member routes - staff cannot access these
+  const memberOnlyRoutes = ["/member"];
+
+  // We can't check role in middleware without a database call, so we'll handle
+  // role-based redirects on the client side in a layout component
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:

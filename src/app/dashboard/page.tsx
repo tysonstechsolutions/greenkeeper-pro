@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
+import { CourseStatusBanner } from "@/components/features/course-status";
 import { useWeather } from "@/lib/hooks/useWeather";
 import type { WeatherAlert } from "@/lib/hooks/useWeather";
 import {
@@ -91,12 +93,20 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const router = useRouter();
+  const { profile, isMember, loading: authLoading } = useAuth();
   const { getAlerts } = useWeather();
   const alerts = getAlerts();
   const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
   const { getActiveDiagnosesCount } = useDiagnostics();
   const { fetchMyTasks } = useTasks();
+
+  // Redirect members to member home
+  useEffect(() => {
+    if (!authLoading && isMember) {
+      router.replace("/member/home");
+    }
+  }, [authLoading, isMember, router]);
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
   const [focusGoals, setFocusGoals] = useState<GoalWithStats[]>([]);
@@ -187,6 +197,9 @@ export default function DashboardPage() {
           })}
         </p>
       </div>
+
+      {/* Course Status Banner */}
+      <CourseStatusBanner className="mb-6" showUpdateButton />
 
       {/* Weather Alerts Banner */}
       {alerts && alerts.length > 0 && (

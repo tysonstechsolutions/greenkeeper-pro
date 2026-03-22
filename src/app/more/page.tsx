@@ -17,8 +17,11 @@ import {
   Target,
   Cloud,
   Bell,
+  Flag,
+  Lightbulb,
 } from "lucide-react";
-import { RoleHidden } from "@/components/auth/role-guard";
+import { RoleHidden, RoleVisible } from "@/components/auth/role-guard";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const courseItems = [
   { href: "/diagnostics", label: "Course Doctor", description: "AI-powered turf diagnostics", icon: Stethoscope },
@@ -43,11 +46,34 @@ const managementItems = [
   { href: "/budget", label: "Budget", description: "Expenses & tracking", icon: DollarSign },
   { href: "/reports", label: "Reports", description: "Analytics & exports", icon: BarChart3 },
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen },
+  { href: "/member-insights", label: "Member Insights", description: "Golfer engagement & feedback", icon: Users },
 ];
 
 const systemItems = [
   { href: "/notifications", label: "Notifications", description: "View all notifications", icon: Bell },
   { href: "/settings", label: "Settings", description: "App configuration", icon: Settings },
+];
+
+// Pro-specific items
+const proItems = [
+  { href: "/report-issue", label: "Report Issue", description: "Alert maintenance about problems", icon: Flag },
+  { href: "/feedback", label: "Golfer Feedback", description: "Log customer feedback", icon: Lightbulb },
+  { href: "/course-map", label: "Course Map", description: "Interactive map view", icon: Map },
+  { href: "/weather", label: "Weather", description: "Forecasts & alerts", icon: Cloud },
+  { href: "/diagnostics", label: "Course Doctor", description: "Active diagnoses", icon: Stethoscope },
+  { href: "/photos", label: "Photos", description: "Course documentation", icon: Camera },
+  { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen },
+];
+
+// Member-specific items
+const memberItems = [
+  { href: "/weather", label: "Weather", description: "Forecasts & conditions", icon: Cloud },
+  { href: "/course-map", label: "Course Map", description: "View the course layout", icon: Map },
+];
+
+const memberSystemItems = [
+  { href: "/settings/profile", label: "My Profile", description: "Update your information", icon: Settings },
+  { href: "/notifications", label: "Notifications", description: "View all notifications", icon: Bell },
 ];
 
 interface MenuItem {
@@ -93,6 +119,31 @@ function MenuSection({ title, items }: MenuSectionProps) {
 }
 
 export default function MorePage() {
+  const { isPro, isMember } = useAuth();
+
+  // Member sees a minimal menu
+  if (isMember) {
+    return (
+      <div className="p-4 md:p-6 pb-24">
+        <h1 className="text-2xl font-semibold mb-6">More</h1>
+        <MenuSection title="Course" items={memberItems} />
+        <MenuSection title="Account" items={memberSystemItems} />
+      </div>
+    );
+  }
+
+  // Pro sees a simplified menu
+  if (isPro) {
+    return (
+      <div className="p-4 md:p-6 pb-24">
+        <h1 className="text-2xl font-semibold mb-6">More</h1>
+        <MenuSection title="Pro Shop Tools" items={proItems} />
+        <MenuSection title="System" items={systemItems} />
+      </div>
+    );
+  }
+
+  // Regular maintenance staff menu
   return (
     <div className="p-4 md:p-6 pb-24">
       <h1 className="text-2xl font-semibold mb-6">More</h1>
@@ -123,7 +174,7 @@ export default function MorePage() {
               <ChevronRight className="w-5 h-5 text-muted-foreground" />
             </Link>
           ))}
-          <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
+          <RoleHidden hiddenFromRoles={["crew", "seasonal", "pro"]}>
             {managementOperationsItems.map((item) => (
               <Link
                 key={item.href}
@@ -146,8 +197,8 @@ export default function MorePage() {
         </div>
       </div>
 
-      {/* Management - hidden from crew/seasonal */}
-      <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
+      {/* Management - hidden from crew/seasonal/pro */}
+      <RoleHidden hiddenFromRoles={["crew", "seasonal", "pro"]}>
         <MenuSection title="Management" items={managementItems} />
       </RoleHidden>
 

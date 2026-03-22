@@ -64,10 +64,12 @@ const quickFillTemplates = [
 const roleSortOrder: Record<UserRole, number> = {
   super: 0,
   asst_super: 1,
-  foreman: 2,
-  mechanic: 3,
-  crew: 4,
-  seasonal: 5,
+  pro: 2,
+  foreman: 3,
+  mechanic: 4,
+  crew: 5,
+  seasonal: 6,
+  member: 7,
 };
 
 // Get week dates starting from Monday

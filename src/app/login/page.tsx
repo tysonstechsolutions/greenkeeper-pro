@@ -5,6 +5,19 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mail, Lock, AlertCircle } from "lucide-react";
+import type { UserRole } from "@/types/database";
+
+// Route users based on their role
+function getRedirectPath(role: UserRole | undefined): string {
+  switch (role) {
+    case "member":
+      return "/member/home";
+    case "pro":
+      return "/pro-dashboard";
+    default:
+      return "/dashboard";
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,7 +33,7 @@ export default function LoginPage() {
 
     const supabase = createClient();
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -31,7 +44,21 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Fetch user profile to determine redirect
+    if (authData.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", authData.user.id)
+        .single();
+
+      const profileData = profile as { role: UserRole } | null;
+      const redirectPath = getRedirectPath(profileData?.role);
+      router.push(redirectPath);
+    } else {
+      router.push("/dashboard");
+    }
+
     router.refresh();
   };
 
@@ -107,10 +134,16 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Invite Link Note */}
-          <div className="mt-6 pt-6 border-t border-border">
+          {/* Links */}
+          <div className="mt-6 pt-6 border-t border-border space-y-3">
             <p className="text-sm text-muted-foreground text-center">
-              First time here?{" "}
+              Golfer?{" "}
+              <a href="/join" className="text-primary font-medium hover:underline">
+                Join our community
+              </a>
+            </p>
+            <p className="text-sm text-muted-foreground text-center">
+              Staff member?{" "}
               <span className="text-foreground font-medium">
                 Use the invite link from your superintendent.
               </span>

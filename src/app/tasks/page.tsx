@@ -90,6 +90,9 @@ const categoryLabels: Record<TaskCategory, string> = {
   admin: "Admin",
   safety: "Safety",
   other: "Other",
+  pro_shop: "Pro Shop",
+  events: "Events",
+  customer_service: "Customer Service",
 };
 
 const categoryColors: Record<TaskCategory, string> = {
@@ -104,6 +107,9 @@ const categoryColors: Record<TaskCategory, string> = {
   admin: "bg-slate-500/10 text-slate-700",
   safety: "bg-red-500/10 text-red-700",
   other: "bg-gray-500/10 text-gray-700",
+  pro_shop: "bg-teal-500/10 text-teal-700",
+  events: "bg-pink-500/10 text-pink-700",
+  customer_service: "bg-cyan-500/10 text-cyan-700",
 };
 
 // Helper to format date for display

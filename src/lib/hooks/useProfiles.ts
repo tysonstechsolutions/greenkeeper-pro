@@ -170,20 +170,24 @@ export function useProfiles(): UseProfilesReturn {
 export const roleLabels: Record<UserRole, string> = {
   super: "Superintendent",
   asst_super: "Asst. Superintendent",
+  pro: "Golf Professional",
   foreman: "Foreman",
   mechanic: "Mechanic",
   crew: "Crew Member",
   seasonal: "Seasonal",
+  member: "Member",
 };
 
 // Role badge colors for UI
 export const roleColors: Record<UserRole, { bg: string; text: string }> = {
   super: { bg: "bg-primary/10", text: "text-primary" },
   asst_super: { bg: "bg-blue-500/10", text: "text-blue-600" },
+  pro: { bg: "bg-teal-500/10", text: "text-teal-600" },
   foreman: { bg: "bg-amber-500/10", text: "text-amber-600" },
   mechanic: { bg: "bg-purple-500/10", text: "text-purple-600" },
   crew: { bg: "bg-green-500/10", text: "text-green-600" },
   seasonal: { bg: "bg-gray-500/10", text: "text-gray-600" },
+  member: { bg: "bg-sky-500/10", text: "text-sky-600" },
 };
 
 // Get display name (prefer display_name, fallback to full_name)

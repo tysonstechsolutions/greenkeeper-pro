@@ -21,8 +21,11 @@ interface UseAuthReturn {
   isMechanic: boolean;
   isCrew: boolean;
   isSeasonal: boolean;
+  isPro: boolean;
+  isMember: boolean;
+  isStaff: boolean; // Any internal staff (not member)
   // Permission helpers
-  isManager: boolean; // super or asst_super
+  isManager: boolean; // super or asst_super or pro
   canCreateInvites: boolean;
   canManageEquipment: boolean;
   canManageChemicals: boolean;
@@ -139,13 +142,16 @@ export function useAuth(): UseAuthReturn {
   const isMechanic = role === "mechanic";
   const isCrew = role === "crew";
   const isSeasonal = role === "seasonal";
+  const isPro = role === "pro";
+  const isMember = role === "member";
+  const isStaff = role !== "member" && role !== undefined;
 
   // Permission helpers
-  const isManager = isSuper || isAsstSuper;
-  const canCreateInvites = isManager;
-  const canManageEquipment = isManager || isMechanic;
-  const canManageChemicals = isManager;
-  const canApproveTimesheets = isManager || isForeman;
+  const isManager = isSuper || isAsstSuper || isPro;
+  const canCreateInvites = isSuper || isAsstSuper; // Pro cannot create invites
+  const canManageEquipment = isSuper || isAsstSuper || isMechanic;
+  const canManageChemicals = isSuper || isAsstSuper;
+  const canApproveTimesheets = isSuper || isAsstSuper || isForeman;
 
   return {
     user,
@@ -162,6 +168,9 @@ export function useAuth(): UseAuthReturn {
     isMechanic,
     isCrew,
     isSeasonal,
+    isPro,
+    isMember,
+    isStaff,
     isManager,
     canCreateInvites,
     canManageEquipment,

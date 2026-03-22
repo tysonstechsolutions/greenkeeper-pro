@@ -102,6 +102,9 @@ const categoryLabels: Record<TaskCategory, string> = {
   admin: "Admin",
   safety: "Safety",
   other: "Other",
+  pro_shop: "Pro Shop",
+  events: "Events",
+  customer_service: "Customer Service",
 };
 
 // Activity types
