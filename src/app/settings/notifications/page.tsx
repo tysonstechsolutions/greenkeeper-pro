@@ -1,18 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bell, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Bell, Save, Loader2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUserPreferences } from "@/lib/hooks/useUserPreferences";
-import { useToast } from "@/components/ui/use-toast";
 
 export default function NotificationSettingsPage() {
   const router = useRouter();
-  const { toast } = useToast();
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const {
     preferences,
     loading,
@@ -29,16 +28,11 @@ export default function NotificationSettingsPage() {
     const success = await updateNotificationPreferences({ [key]: value });
 
     if (success) {
-      toast({
-        title: "Settings saved",
-        description: "Your notification preferences have been updated.",
-      });
+      setSaveMessage({ type: 'success', text: 'Settings saved' });
+      setTimeout(() => setSaveMessage(null), 3000);
     } else {
-      toast({
-        title: "Error",
-        description: "Failed to save settings. Please try again.",
-        variant: "destructive",
-      });
+      setSaveMessage({ type: 'error', text: 'Failed to save settings' });
+      setTimeout(() => setSaveMessage(null), 3000);
     }
   };
 
@@ -62,6 +56,22 @@ export default function NotificationSettingsPage() {
           <p className="text-sm text-muted-foreground">Push and email preferences</p>
         </div>
       </div>
+
+      {/* Save Message */}
+      {saveMessage && (
+        <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
+          saveMessage.type === 'success'
+            ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+            : 'bg-red-500/10 text-red-600 dark:text-red-400'
+        }`}>
+          {saveMessage.type === 'success' ? (
+            <Check className="w-4 h-4" />
+          ) : (
+            <X className="w-4 h-4" />
+          )}
+          <span className="text-sm font-medium">{saveMessage.text}</span>
+        </div>
+      )}
 
       <div className="max-w-md space-y-6">
         {/* Push Notifications Master Toggle */}
