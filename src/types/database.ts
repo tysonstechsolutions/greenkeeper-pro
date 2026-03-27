@@ -825,6 +825,14 @@ export interface Database {
         };
         Update: Partial<AppSetting>;
       };
+      activity_log: {
+        Row: ActivityLog;
+        Insert: Omit<ActivityLog, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<ActivityLog, "id">>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
