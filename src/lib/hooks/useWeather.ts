@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { WeatherLog } from "@/types/database";
 
@@ -161,6 +161,15 @@ export function useWeather(): UseWeatherReturn {
       setLoading(false);
     }
   }, []);
+
+  // Auto-fetch current weather on mount (so header widget gets data immediately)
+  const hasFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchCurrentWeather();
+    }
+  }, [fetchCurrentWeather]);
 
   /**
    * Fetch 7-day forecast

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import type { Profile, UserRole } from "@/types/database";
@@ -38,6 +38,7 @@ export function useAuth(): UseAuthReturn {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initializedRef = useRef(false);
 
   const supabase = createClient();
 
@@ -66,47 +67,48 @@ export function useAuth(): UseAuthReturn {
   }, [user, fetchProfile]);
 
   useEffect(() => {
-    // Get initial session
-    const initAuth = async () => {
-      try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
-
-        if (initialSession?.user) {
-          const profileData = await fetchProfile(initialSession.user.id);
-          setProfile(profileData);
-        }
-      } catch (err) {
-        console.error("Auth initialization error:", err);
-        setError("Failed to initialize authentication");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initAuth();
-
-    // Listen for auth changes
+    // Use onAuthStateChange as the SOLE session source.
+    // Supabase v2 fires INITIAL_SESSION immediately, so we don't need
+    // a separate getSession() call. Calling both causes a navigator.locks
+    // deadlock where getSession() waits for a lock held by onAuthStateChange.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
-        if (event === "SIGNED_IN" && newSession?.user) {
-          // Small delay to allow trigger to create profile
-          await new Promise(resolve => setTimeout(resolve, 100));
-          const profileData = await fetchProfile(newSession.user.id);
-          setProfile(profileData);
+        if (newSession?.user) {
+          // On initial session or sign in, fetch the profile
+          if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+            if (event === "SIGNED_IN" && !initializedRef.current) {
+              // Small delay on sign-in to allow the DB trigger to create the profile
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            const profileData = await fetchProfile(newSession.user.id);
+            setProfile(profileData);
+          }
         } else if (event === "SIGNED_OUT") {
           setProfile(null);
+        }
+
+        // Mark loading complete after the first event (INITIAL_SESSION)
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+          setLoading(false);
         }
       }
     );
 
+    // Safety timeout: if onAuthStateChange hasn't fired within 5s, stop loading
+    const timeout = setTimeout(() => {
+      if (!initializedRef.current) {
+        initializedRef.current = true;
+        setLoading(false);
+      }
+    }, 5000);
+
     return () => {
       subscription.unsubscribe();
+      clearTimeout(timeout);
     };
   }, [supabase, fetchProfile]);
 

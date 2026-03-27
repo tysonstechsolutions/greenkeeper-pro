@@ -45,6 +45,7 @@ import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useRecentActivity } from "@/lib/hooks/useRecentActivity";
+import { createClient } from "@/lib/supabase/client";
 
 // Dynamically import MiniMapWidget to avoid SSR issues with Leaflet
 const MiniMapWidget = dynamic(
@@ -138,6 +139,7 @@ export default function DashboardPage() {
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
   const [activeDiagnosesCount, setActiveDiagnosesCount] = useState(0);
+  const [staffCount, setStaffCount] = useState<number | null>(null);
   const [, setSecondaryLoaded] = useState(false);
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -179,12 +181,15 @@ export default function DashboardPage() {
     void loadCriticalData();
 
     const secondaryTimer = setTimeout(async () => {
-      const [overview, diagnosesCount] = await Promise.all([
+      const supabase = createClient();
+      const [overview, diagnosesCount, staffResult] = await Promise.all([
         fetchPlanOverview(currentYear),
         getActiveDiagnosesCount(),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).neq("role", "member"),
       ]);
       setPlanOverview(overview);
       setActiveDiagnosesCount(diagnosesCount);
+      if (staffResult.count !== null) setStaffCount(staffResult.count);
 
       await fetchGoals({
         planLevel: "monthly",
@@ -321,8 +326,8 @@ export default function DashboardPage() {
             </div>
             <span className="gk-live-dot" title="Live" />
           </div>
-          <p className="text-3xl font-bold tracking-tight text-foreground gk-count">8</p>
-          <p className="text-xs text-muted-foreground mt-0.5">On duty now</p>
+          <p className="text-3xl font-bold tracking-tight text-foreground gk-count">{staffCount ?? "—"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Team members</p>
         </Link>
 
         {/* Active Alerts */}
