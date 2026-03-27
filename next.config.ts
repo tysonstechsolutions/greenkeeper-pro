@@ -27,29 +27,10 @@ const nextConfig: NextConfig = {
   turbopack: {},
 };
 
-// Apply Sentry
-const sentryWebpackPluginOptions = {
+// Apply Sentry with minimal configuration for TypeScript compatibility
+export default withSentryConfig(withSerwist(nextConfig), {
   // Suppresses source map uploading logs during build
   silent: true,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
-  // Upload source maps only in production
-  dryRun: process.env.NODE_ENV !== "production",
-};
-
-const sentryOptions = {
-  // Hides source maps from generated client bundles
-  hideSourceMaps: true,
-  // Transpiles SDK to be compatible with IE11
-  transpileClientSDK: false,
-  // Disable tunneling in development
-  tunnelRoute: process.env.NODE_ENV === "production" ? "/monitoring" : undefined,
-  // Disable Sentry in development
-  disableLogger: process.env.NODE_ENV !== "production",
-};
-
-export default withSentryConfig(
-  withSerwist(nextConfig),
-  sentryWebpackPluginOptions,
-  sentryOptions
-);
+});
