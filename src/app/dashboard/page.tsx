@@ -43,6 +43,7 @@ import { useDiagnostics } from "@/lib/hooks/useDiagnostics";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { useRecentActivity, type ActivityWithUser } from "@/lib/hooks/useRecentActivity";
 
 // Dynamically import MiniMapWidget to avoid SSR issues with Leaflet
 const MiniMapWidget = dynamic(
@@ -85,6 +86,41 @@ function getAlertStyles(severity: WeatherAlert["severity"]) {
   }
 }
 
+function getActivityIcon(actionType: string) {
+  switch (actionType) {
+    case "task_created":
+    case "task_assigned":
+      return Plus;
+    case "task_completed":
+      return CheckCircle2;
+    case "equipment_updated":
+      return Wrench;
+    case "chemical_applied":
+      return FlaskConical;
+    case "photo_uploaded":
+      return Camera;
+    case "schedule_changed":
+      return Calendar;
+    default:
+      return Clock;
+  }
+}
+
+function formatActivityTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
 const quickActions = [
   { href: "/tasks/new", label: "New Task", icon: Plus, color: "bg-blue-500" },
   { href: "/photos", label: "Take Photo", icon: Camera, color: "bg-green-500" },
@@ -100,6 +136,7 @@ export default function DashboardPage() {
   const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
   const { getActiveDiagnosesCount } = useDiagnostics();
   const { fetchMyTasks } = useTasks();
+  const { activities, loading: activitiesLoading } = useRecentActivity();
 
   // Redirect members to member home
   useEffect(() => {
@@ -455,27 +492,40 @@ export default function DashboardPage() {
             <h2 className="font-semibold">Recent Activity</h2>
             <Clock className="w-4 h-4 text-muted-foreground" />
           </div>
-          <div className="space-y-3">
-            {[
-              { icon: Camera, text: "Green #7 photos uploaded", time: "10m ago" },
-              { icon: CheckCircle2, text: "Fairway mowing completed", time: "45m ago" },
-              { icon: FlaskConical, text: "Chemical application logged", time: "2h ago" },
-              { icon: Wrench, text: "Equipment maintenance done", time: "3h ago" },
-            ].map((activity, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 p-2 rounded-md"
-              >
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                  <activity.icon className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{activity.text}</p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {activitiesLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : activities.length > 0 ? (
+            <div className="space-y-3">
+              {activities.slice(0, 4).map((activity) => {
+                const IconComponent = getActivityIcon(activity.action_type);
+                return (
+                  <div
+                    key={activity.id}
+                    className="flex items-center gap-3 p-2 rounded-md"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                      <IconComponent className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{activity.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {activity.user?.full_name || "System"} • {formatActivityTime(activity.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground">
+              <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No recent activity</p>
+            </div>
+          )}
         </div>
 
         {/* Course Map Widget */}
