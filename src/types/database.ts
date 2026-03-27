@@ -211,6 +211,55 @@ export interface GeoJsonPolygon {
   coordinates: number[][][];
 }
 
+// User preferences structure
+export interface NotificationPreferences {
+  push_enabled: boolean;
+  task_assigned: boolean;
+  task_completed: boolean;
+  schedule_changes: boolean;
+  weather_alerts: boolean;
+  equipment_issues: boolean;
+  messages: boolean;
+}
+
+export interface CoursePreferences {
+  default_view?: 'list' | 'calendar' | 'map';
+  theme?: 'light' | 'dark' | 'system';
+}
+
+export interface UserPreferences {
+  notifications: NotificationPreferences;
+  course: CoursePreferences;
+}
+
+// Activity log entry
+export type ActivityActionType =
+  | 'task_created'
+  | 'task_completed'
+  | 'task_assigned'
+  | 'equipment_updated'
+  | 'chemical_applied'
+  | 'photo_uploaded'
+  | 'schedule_changed';
+
+export type ActivityEntityType =
+  | 'task'
+  | 'equipment'
+  | 'chemical_application'
+  | 'photo'
+  | 'schedule';
+
+export interface ActivityLog {
+  id: string;
+  user_id: string | null;
+  action_type: ActivityActionType;
+  entity_type: ActivityEntityType;
+  entity_id: string | null;
+  description: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 // Table row types
 export interface Profile {
   id: string;
@@ -223,6 +272,7 @@ export interface Profile {
   hire_date: string | null;
   certifications: Certification[];
   emergency_contact: EmergencyContact | null;
+  user_preferences: UserPreferences | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
