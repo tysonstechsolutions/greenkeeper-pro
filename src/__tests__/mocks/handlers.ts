@@ -55,7 +55,7 @@ export const handlers = [
   }),
 
   http.post(`${SUPABASE_URL}/rest/v1/tasks`, async ({ request }) => {
-    const body = await request.json()
+    const body = await request.json() as Record<string, unknown>
     return HttpResponse.json({
       id: 'new-task-id',
       ...body,
