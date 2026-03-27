@@ -1,7 +1,7 @@
 // src/lib/hooks/useRealtimeSubscription.ts
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -29,6 +29,7 @@ export function useRealtimeSubscription<T extends { id: string }>({
   enabled = true,
 }: UseRealtimeSubscriptionOptions<T>) {
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
   const supabase = createClient();
 
   const handleChange = useCallback(
@@ -79,8 +80,10 @@ export function useRealtimeSubscription<T extends { id: string }>({
       .on<T>("postgres_changes", subscriptionConfig, handleChange)
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
+          setIsSubscribed(true);
           console.log(`Realtime subscription active: ${table}`);
         } else if (status === "CHANNEL_ERROR") {
+          setIsSubscribed(false);
           console.error(`Realtime subscription error: ${table}`);
         }
       });
@@ -91,11 +94,12 @@ export function useRealtimeSubscription<T extends { id: string }>({
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
+        setIsSubscribed(false);
       }
     };
   }, [supabase, table, schema, event, filter, enabled, handleChange]);
 
   return {
-    isSubscribed: !!channelRef.current,
+    isSubscribed,
   };
 }
