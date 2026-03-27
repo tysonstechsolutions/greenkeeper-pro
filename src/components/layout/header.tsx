@@ -44,6 +44,9 @@ const roleLabels: Record<string, string> = {
   mechanic: "Mechanic",
   crew: "Crew Member",
   seasonal: "Seasonal",
+  pro: "Golf Pro",
+  member: "Member",
+  director: "Director",
 };
 
 const notificationIcons: Record<NotificationType, React.ReactNode> = {

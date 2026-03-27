@@ -39,79 +39,133 @@ export function useAuth(): UseAuthReturn {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const initializedRef = useRef(false);
+  const profileFetchedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const supabase = createClient();
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error: fetchError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
+  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
 
-    if (fetchError) {
-      console.error("Error fetching profile:", fetchError);
-      setError("Failed to load profile");
+      if (fetchError) {
+        console.error("Error fetching profile:", fetchError);
+        setError("Failed to load profile");
+        return null;
+      }
+
+      return data as Profile;
+    } catch (err) {
+      console.error("Exception fetching profile:", err);
       return null;
     }
-
-    return data as Profile;
   }, [supabase]);
 
   const refreshProfile = useCallback(async () => {
     if (!user) return;
     const profileData = await fetchProfile(user.id);
-    if (profileData) {
+    if (profileData && mountedRef.current) {
       setProfile(profileData);
     }
   }, [user, fetchProfile]);
 
+  // Primary initialization: use getSession() for the initial load,
+  // then onAuthStateChange for subsequent events only.
+  // This avoids the navigator.locks race condition where INITIAL_SESSION
+  // can throw AbortError due to lock stealing.
   useEffect(() => {
-    // Use onAuthStateChange as the SOLE session source.
-    // Supabase v2 fires INITIAL_SESSION immediately, so we don't need
-    // a separate getSession() call. Calling both causes a navigator.locks
-    // deadlock where getSession() waits for a lock held by onAuthStateChange.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
+    mountedRef.current = true;
+    profileFetchedRef.current = false;
 
-        if (newSession?.user) {
-          // On initial session or sign in, fetch the profile
-          if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
-            if (event === "SIGNED_IN" && !initializedRef.current) {
-              // Small delay on sign-in to allow the DB trigger to create the profile
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            const profileData = await fetchProfile(newSession.user.id);
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    const initialize = async () => {
+      try {
+        // Step 1: Get current session directly (no lock contention)
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+        if (!mountedRef.current) return;
+
+        if (currentSession?.user) {
+          setSession(currentSession);
+          setUser(currentSession.user);
+
+          // Fetch profile immediately
+          const profileData = await fetchProfile(currentSession.user.id);
+          if (mountedRef.current && profileData) {
             setProfile(profileData);
+            profileFetchedRef.current = true;
           }
-        } else if (event === "SIGNED_OUT") {
-          setProfile(null);
         }
-
-        // Mark loading complete after the first event (INITIAL_SESSION)
-        if (!initializedRef.current) {
-          initializedRef.current = true;
+      } catch (err) {
+        console.error("Auth init error:", err);
+      } finally {
+        if (mountedRef.current) {
           setLoading(false);
         }
       }
-    );
 
-    // Safety timeout: if onAuthStateChange hasn't fired within 5s, stop loading
-    const timeout = setTimeout(() => {
-      if (!initializedRef.current) {
-        initializedRef.current = true;
-        setLoading(false);
-      }
-    }, 5000);
+      // Step 2: Listen for future auth changes (sign in, sign out, token refresh)
+      const { data } = supabase.auth.onAuthStateChange(
+        async (event, newSession) => {
+          if (!mountedRef.current) return;
+
+          // Skip INITIAL_SESSION since we already handled it above
+          if (event === "INITIAL_SESSION") return;
+
+          setSession(newSession);
+          setUser(newSession?.user ?? null);
+
+          if (event === "SIGNED_IN" && newSession?.user) {
+            // Small delay to let DB trigger create profile for new users
+            await new Promise(resolve => setTimeout(resolve, 100));
+            if (!mountedRef.current) return;
+            const profileData = await fetchProfile(newSession.user.id);
+            if (mountedRef.current && profileData) {
+              setProfile(profileData);
+              profileFetchedRef.current = true;
+            }
+          } else if (event === "SIGNED_OUT") {
+            setProfile(null);
+            profileFetchedRef.current = false;
+          } else if (event === "TOKEN_REFRESHED" && newSession?.user && !profileFetchedRef.current) {
+            // If we missed the profile on initial load, try again on token refresh
+            const profileData = await fetchProfile(newSession.user.id);
+            if (mountedRef.current && profileData) {
+              setProfile(profileData);
+              profileFetchedRef.current = true;
+            }
+          }
+        }
+      );
+      subscription = data.subscription;
+    };
+
+    initialize();
 
     return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
+      mountedRef.current = false;
+      subscription?.unsubscribe();
     };
   }, [supabase, fetchProfile]);
+
+  // Safety net: if we have a user but no profile after loading, retry once
+  useEffect(() => {
+    if (!loading && user && !profile && !profileFetchedRef.current) {
+      const retryTimeout = setTimeout(async () => {
+        const profileData = await fetchProfile(user.id);
+        if (mountedRef.current && profileData) {
+          setProfile(profileData);
+          profileFetchedRef.current = true;
+        }
+      }, 500);
+      return () => clearTimeout(retryTimeout);
+    }
+  }, [loading, user, profile, fetchProfile]);
 
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
     setError(null);
@@ -135,6 +189,7 @@ export function useAuth(): UseAuthReturn {
     setUser(null);
     setSession(null);
     setProfile(null);
+    profileFetchedRef.current = false;
   };
 
   // Role checks
