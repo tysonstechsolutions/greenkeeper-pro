@@ -25,9 +25,27 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
 });
 
-// ESRI Satellite tile layer
-const ESRI_SATELLITE_URL =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+// Tile layer options with fallback
+const TILE_LAYERS = {
+  osm: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    label: "Street Map",
+  },
+  satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
+    label: "Satellite",
+  },
+  googleSatellite: {
+    url: "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    attribution: '&copy; Google',
+    label: "Google Satellite",
+  },
+} as const;
+
+// Default to Google satellite (more reliable than ESRI)
+const DEFAULT_TILE_LAYER = TILE_LAYERS.googleSatellite;
 
 // Veterans Memorial Golf Course at Naval Station Great Lakes
 const DEFAULT_CENTER: [number, number] = [42.3095, -87.8475];
@@ -403,7 +421,7 @@ export function CourseMapComponent({
           className="w-full h-full"
           style={{ width: "100%", height: "100%" }}
         >
-          <TileLayer url={ESRI_SATELLITE_URL} />
+          <TileLayer url={DEFAULT_TILE_LAYER.url} attribution={DEFAULT_TILE_LAYER.attribution} />
           {showZones &&
             zonesWithGeojson.map((zone) => (
               <ZoneOverlay
@@ -428,8 +446,8 @@ export function CourseMapComponent({
         ref={mapRef}
       >
         <TileLayer
-          url={ESRI_SATELLITE_URL}
-          attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+          url={DEFAULT_TILE_LAYER.url}
+          attribution={DEFAULT_TILE_LAYER.attribution}
         />
 
         <MapEventHandler onMapClick={handleMapClick} editMode={editMode} />

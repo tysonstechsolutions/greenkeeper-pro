@@ -106,14 +106,14 @@ export function useChannels(): UseChannelsReturn {
       // Get last message for each channel and count members
       const channelsWithDetails: ChannelWithDetails[] = await Promise.all(
         (channelsData || []).map(async (channel: Channel) => {
-          // Get last message
+          // Get last message (use maybeSingle to avoid 406 when no messages exist)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: lastMessage } = await (supabase.from("messages") as any)
             .select("content, created_at")
             .eq("channel_id", channel.id)
             .order("created_at", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           // Count unread messages
           const lastReadAt = lastReadMap.get(channel.id);

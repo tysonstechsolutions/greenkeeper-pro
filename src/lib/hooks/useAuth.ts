@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import type { Profile, UserRole } from "@/types/database";
 
-interface UseAuthReturn {
+export interface UseAuthReturn {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
@@ -33,7 +33,48 @@ interface UseAuthReturn {
   canApproveTimesheets: boolean;
 }
 
+const defaultAuthState: UseAuthReturn = {
+  user: null,
+  session: null,
+  profile: null,
+  loading: true,
+  error: null,
+  signIn: async () => ({ error: "Auth not initialized" }),
+  signOut: async () => {},
+  refreshProfile: async () => {},
+  isSuper: false,
+  isAsstSuper: false,
+  isForeman: false,
+  isMechanic: false,
+  isCrew: false,
+  isSeasonal: false,
+  isPro: false,
+  isMember: false,
+  isDirector: false,
+  isStaff: false,
+  isManager: false,
+  canCreateInvites: false,
+  canManageEquipment: false,
+  canManageChemicals: false,
+  canApproveTimesheets: false,
+};
+
+// Shared context — all components using useAuth() get the same state
+export const AuthContext = createContext<UseAuthReturn>(defaultAuthState);
+
+/**
+ * Hook that provides auth state from the AuthProvider context.
+ * All 60+ components that call useAuth() now share a single auth instance.
+ */
 export function useAuth(): UseAuthReturn {
+  return useContext(AuthContext);
+}
+
+/**
+ * Internal hook with all the auth logic. Only used by AuthProvider (once).
+ * This ensures a single getSession() and fetchProfile() call for the entire app.
+ */
+export function useAuthInternal(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
