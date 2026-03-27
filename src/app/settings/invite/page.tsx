@@ -45,6 +45,11 @@ const roleOptions: { value: InviteRole; label: string; description: string }[] =
     label: "Seasonal / Part-Time",
     description: "Limited access for temporary staff",
   },
+  {
+    value: "director",
+    label: "Director / MWR Leadership",
+    description: "Full read access to all data, oversight role",
+  },
 ];
 
 export default function InvitePage() {

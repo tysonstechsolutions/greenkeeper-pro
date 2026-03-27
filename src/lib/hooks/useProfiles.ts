@@ -176,11 +176,13 @@ export const roleLabels: Record<UserRole, string> = {
   crew: "Crew Member",
   seasonal: "Seasonal",
   member: "Member",
+  director: "Director",
 };
 
 // Role badge colors for UI
 export const roleColors: Record<UserRole, { bg: string; text: string }> = {
   super: { bg: "bg-primary/10", text: "text-primary" },
+  director: { bg: "bg-indigo-500/10", text: "text-indigo-600" },
   asst_super: { bg: "bg-blue-500/10", text: "text-blue-600" },
   pro: { bg: "bg-teal-500/10", text: "text-teal-600" },
   foreman: { bg: "bg-amber-500/10", text: "text-amber-600" },

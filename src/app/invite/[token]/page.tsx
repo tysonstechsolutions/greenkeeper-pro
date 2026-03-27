@@ -13,6 +13,7 @@ const roleLabels: Record<InviteRole, string> = {
   mechanic: "Mechanic / Equipment Tech",
   crew: "Crew Member",
   seasonal: "Seasonal / Part-Time",
+  director: "Director / MWR Leadership",
 };
 
 export default function InvitePage() {

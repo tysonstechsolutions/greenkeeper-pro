@@ -23,9 +23,10 @@ interface UseAuthReturn {
   isSeasonal: boolean;
   isPro: boolean;
   isMember: boolean;
+  isDirector: boolean;
   isStaff: boolean; // Any internal staff (not member)
   // Permission helpers
-  isManager: boolean; // super or asst_super or pro
+  isManager: boolean; // super or asst_super or pro or director
   canCreateInvites: boolean;
   canManageEquipment: boolean;
   canManageChemicals: boolean;
@@ -146,14 +147,15 @@ export function useAuth(): UseAuthReturn {
   const isSeasonal = role === "seasonal";
   const isPro = role === "pro";
   const isMember = role === "member";
+  const isDirector = role === "director";
   const isStaff = role !== "member" && role !== undefined;
 
-  // Permission helpers
-  const isManager = isSuper || isAsstSuper || isPro;
-  const canCreateInvites = isSuper || isAsstSuper; // Pro cannot create invites
-  const canManageEquipment = isSuper || isAsstSuper || isMechanic;
-  const canManageChemicals = isSuper || isAsstSuper;
-  const canApproveTimesheets = isSuper || isAsstSuper || isForeman;
+  // Permission helpers — director can see everything (read-all oversight)
+  const isManager = isSuper || isAsstSuper || isPro || isDirector;
+  const canCreateInvites = isSuper || isAsstSuper || isDirector;
+  const canManageEquipment = isSuper || isAsstSuper || isMechanic || isDirector;
+  const canManageChemicals = isSuper || isAsstSuper || isDirector;
+  const canApproveTimesheets = isSuper || isAsstSuper || isForeman || isDirector;
 
   return {
     user,
@@ -172,6 +174,7 @@ export function useAuth(): UseAuthReturn {
     isSeasonal,
     isPro,
     isMember,
+    isDirector,
     isStaff,
     isManager,
     canCreateInvites,
