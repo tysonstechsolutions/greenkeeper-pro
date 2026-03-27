@@ -19,19 +19,20 @@ const DISMISS_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => {
+    if (typeof window !== "undefined") {
+      return (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+      );
+    }
+    return false;
+  });
 
   useEffect(() => {
-    // Check if already installed (standalone mode)
-    if (typeof window !== "undefined") {
-      const isStandalone =
-        window.matchMedia("(display-mode: standalone)").matches ||
-        (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-
-      if (isStandalone) {
-        setIsInstalled(true);
-        return;
-      }
+    // If already installed (standalone mode), do nothing
+    if (isInstalled) {
+      return;
     }
 
     // Check if dismissed recently

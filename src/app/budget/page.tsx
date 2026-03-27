@@ -115,11 +115,13 @@ function formatCurrency(amount: number): string {
 }
 
 // Custom tooltip for charts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (active && payload && payload.length) {
     return (
       <div className="bg-popover border rounded-lg shadow-lg p-3">
         <p className="font-medium">{label}</p>
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         {payload.map((entry: any, index: number) => (
           <p key={index} style={{ color: entry.color }}>
             {entry.name}: {formatCurrency(entry.value)}

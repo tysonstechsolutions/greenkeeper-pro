@@ -69,7 +69,7 @@ export default function NewEquipmentPage() {
         <Wrench className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
         <h1 className="text-xl font-semibold mb-2">Access Denied</h1>
         <p className="text-muted-foreground">
-          You don't have permission to add equipment.
+          You don&apos;t have permission to add equipment.
         </p>
         <Button variant="outline" className="mt-4" onClick={() => router.back()}>
           <ArrowLeft className="w-4 h-4 mr-2" />

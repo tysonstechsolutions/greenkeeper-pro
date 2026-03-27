@@ -659,7 +659,7 @@ export default function WeatherPage() {
             <Cloud className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">No weather logs recorded yet.</p>
             <p className="text-sm text-muted-foreground">
-              Click "Refresh" to log today's weather.
+              Click &quot;Refresh&quot; to log today&apos;s weather.
             </p>
           </div>
         ) : (

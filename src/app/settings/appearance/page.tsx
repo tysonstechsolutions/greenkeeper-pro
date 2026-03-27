@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Palette, Sun, Moon, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,13 @@ type Theme = "light" | "dark" | "system";
 
 export default function AppearanceSettingsPage() {
   const router = useRouter();
-  const [theme, setTheme] = useState<Theme>("system");
-
-  useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored) {
-      setTheme(stored);
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("theme") as Theme | null;
+      if (stored) return stored;
     }
-  }, []);
+    return "system";
+  });
 
   const handleThemeChange = (newTheme: Theme) => {
     setTheme(newTheme);

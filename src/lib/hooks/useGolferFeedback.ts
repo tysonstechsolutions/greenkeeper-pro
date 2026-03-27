@@ -142,6 +142,7 @@ export function useGolferFeedback() {
     ): Promise<boolean> => {
       if (!profile) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("golfer_feedback").insert({
         submitted_by: profile.id,
         feedback_date: new Date().toISOString().split("T")[0],
@@ -174,6 +175,7 @@ export function useGolferFeedback() {
         return false;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("golfer_feedback")
         .update({

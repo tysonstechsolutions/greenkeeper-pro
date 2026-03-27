@@ -268,7 +268,7 @@ function MessagesPageContent() {
         .eq("channel_id", activeChannelId);
 
       if (data) {
-        const members = data.map((m: any) => ({
+        const members = data.map((m: { user_id: string; profiles: { full_name: string | null; display_name: string | null; avatar_url: string | null; role: string | null } | null }) => ({
           user_id: m.user_id,
           full_name: m.profiles?.full_name || "Unknown",
           display_name: m.profiles?.display_name || null,
@@ -424,7 +424,7 @@ function MessagesPageContent() {
       .eq("channel_id", activeChannelId);
 
     if (data) {
-      const members = data.map((m: any) => ({
+      const members = data.map((m: { user_id: string; profiles: { full_name: string | null; display_name: string | null; avatar_url: string | null; role: string | null } | null }) => ({
         user_id: m.user_id,
         full_name: m.profiles?.full_name || "Unknown",
         display_name: m.profiles?.display_name || null,

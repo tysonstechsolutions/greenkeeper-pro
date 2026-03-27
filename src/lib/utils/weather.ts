@@ -79,7 +79,7 @@ export async function fetchWeather(
   try {
     const response = await fetch(
       `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lng}&days=${days}&alerts=yes&aqi=no`,
-      { next: { revalidate: 900 } } as any // Cache for 15 minutes (Next.js specific)
+      { next: { revalidate: 900 } } as RequestInit & { next?: { revalidate?: number } } // Cache for 15 minutes (Next.js specific)
     );
 
     if (!response.ok) {
@@ -104,7 +104,7 @@ export async function fetchWeather(
         cloud: data.current.cloud,
         is_day: data.current.is_day === 1,
       },
-      forecast: data.forecast.forecastday.map((day: any) => ({
+      forecast: data.forecast.forecastday.map((day: { date: string; day: { maxtemp_f: number; mintemp_f: number; condition: { text: string; icon: string }; daily_chance_of_rain: number; daily_chance_of_snow: number; maxwind_mph: number; avghumidity: number; uv: number }; astro: { sunrise: string; sunset: string } }) => ({
         date: day.date,
         max_temp_f: day.day.maxtemp_f,
         min_temp_f: day.day.mintemp_f,
@@ -118,7 +118,7 @@ export async function fetchWeather(
         sunrise: day.astro.sunrise,
         sunset: day.astro.sunset,
       })),
-      alerts: (data.alerts?.alert || []).map((alert: any) => ({
+      alerts: (data.alerts?.alert || []).map((alert: { headline: string; severity: string; event: string; effective: string; expires: string; desc: string }) => ({
         headline: alert.headline,
         severity: alert.severity,
         event: alert.event,

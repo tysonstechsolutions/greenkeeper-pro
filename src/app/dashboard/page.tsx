@@ -146,7 +146,6 @@ export default function DashboardPage() {
   }, [authLoading, isMember, router]);
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
-  const [focusGoals, setFocusGoals] = useState<GoalWithStats[]>([]);
   const [activeDiagnosesCount, setActiveDiagnosesCount] = useState(0);
   const [secondaryLoaded, setSecondaryLoaded] = useState(false);
   const currentYear = new Date().getFullYear();
@@ -187,7 +186,7 @@ export default function DashboardPage() {
       // Only show first 10 for dashboard performance
       setTodayTasks(tasks.slice(0, 10));
     }
-    loadCriticalData();
+    void loadCriticalData();
 
     // Phase 2: Load secondary data after a short delay (plan progress, diagnostics)
     const secondaryTimer = setTimeout(async () => {
@@ -211,13 +210,14 @@ export default function DashboardPage() {
     return () => clearTimeout(secondaryTimer);
   }, [fetchMyTasks, fetchGoals, fetchPlanOverview, getActiveDiagnosesCount, currentYear, currentMonth]);
 
-  // Update focus goals when goals change
-  useEffect(() => {
-    const inProgress = goals
-      .filter((g) => g.status === "in_progress" || g.status === "planned")
-      .slice(0, 3);
-    setFocusGoals(inProgress);
-  }, [goals]);
+  // Derive focus goals from goals during render
+  const focusGoals = useMemo(
+    () =>
+      goals
+        .filter((g) => g.status === "in_progress" || g.status === "planned")
+        .slice(0, 3),
+    [goals]
+  );
 
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">

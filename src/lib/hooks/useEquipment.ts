@@ -401,7 +401,7 @@ export function useEquipment(): UseEquipmentReturn {
         const current = currentEquipment as Equipment;
 
         // Calculate next service due based on service interval
-        let nextServiceDueHours = current.next_service_due_hours;
+        const nextServiceDueHours = current.next_service_due_hours;
         if (current.service_interval_hours && current.next_service_due_hours) {
           // If we've passed the service due point, calculate new one from current hours
           if (newHours >= current.next_service_due_hours) {

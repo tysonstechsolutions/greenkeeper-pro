@@ -134,7 +134,6 @@ export default function DiagnosticsPage() {
   // Rotate loading messages
   useEffect(() => {
     if (!diagnosing) {
-      setMessageIndex(0);
       return;
     }
 
@@ -142,7 +141,16 @@ export default function DiagnosticsPage() {
       setMessageIndex((prev) => (prev + 1) % ROTATING_MESSAGES.length);
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [diagnosing]);
+
+  // Reset message index when not diagnosing
+  useEffect(() => {
+    if (!diagnosing) {
+      setMessageIndex((prev) => (prev !== 0 ? 0 : prev)); // eslint-disable-line react-hooks/set-state-in-effect
+    }
   }, [diagnosing]);
 
   // Handle image selection

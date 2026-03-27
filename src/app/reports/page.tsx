@@ -577,7 +577,7 @@ function DailyReportView({ report }: { report: DailyReportData }) {
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">Precipitation</p>
-              <p className="text-2xl font-bold">{report.weather.precip_in}"</p>
+              <p className="text-2xl font-bold">{report.weather.precip_in}&quot;</p>
             </CardContent>
           </Card>
           <Card>

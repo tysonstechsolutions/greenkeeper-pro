@@ -45,6 +45,7 @@ export function useRoundRatings(): UseRoundRatingsReturn {
 
     setLoading(true);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from("round_ratings")
       .select("*")
@@ -71,6 +72,7 @@ export function useRoundRatings(): UseRoundRatingsReturn {
     ): Promise<boolean> => {
       if (!profile) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("round_ratings").insert({
         user_id: profile.id,
         ...rating,
@@ -82,6 +84,7 @@ export function useRoundRatings(): UseRoundRatingsReturn {
       }
 
       // Also add to golfer_feedback for superintendent view
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("golfer_feedback").insert({
         submitted_by: profile.id,
         feedback_date: rating.round_date,
@@ -102,6 +105,7 @@ export function useRoundRatings(): UseRoundRatingsReturn {
     async (limit = 50): Promise<RoundRating[]> => {
       setLoading(true);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("round_ratings")
         .select(
@@ -131,6 +135,7 @@ export function useRoundRatings(): UseRoundRatingsReturn {
       startDate?: string,
       endDate?: string
     ): Promise<RatingStats | null> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query = (supabase as any)
         .from("round_ratings")
         .select(

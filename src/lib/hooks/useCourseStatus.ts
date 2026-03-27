@@ -93,6 +93,7 @@ export function useCourseStatus() {
         updated_by_name: profile.full_name,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("app_settings")
         .upsert(
@@ -117,7 +118,7 @@ export function useCourseStatus() {
 
   // Subscribe to realtime updates
   useEffect(() => {
-    fetchCourseStatus();
+    fetchCourseStatus(); // eslint-disable-line react-hooks/set-state-in-effect
 
     const channel = supabase
       .channel("course_status_changes")

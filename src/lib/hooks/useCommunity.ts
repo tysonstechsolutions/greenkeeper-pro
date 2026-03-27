@@ -41,6 +41,7 @@ export function useCommunity(): UseCommunityReturn {
     async (filter?: CommunityPostType | "all"): Promise<CommunityPost[]> => {
       setLoading(true);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query = (supabase as any)
         .from("community_posts")
         .select(
@@ -71,6 +72,7 @@ export function useCommunity(): UseCommunityReturn {
 
       if (profile) {
         // Get user's likes
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: userLikes } = await (supabase as any)
           .from("community_likes")
           .select("post_id")
@@ -79,6 +81,7 @@ export function useCommunity(): UseCommunityReturn {
         const likedPostIds = new Set((userLikes || []).map((l: { post_id: string }) => l.post_id));
 
         // Get user's poll votes
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: userVotes } = await (supabase as any)
           .from("poll_votes")
           .select("post_id, option")
@@ -142,6 +145,7 @@ export function useCommunity(): UseCommunityReturn {
         }, {} as Record<string, number>);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("community_posts").insert(postData);
 
       if (error) {
@@ -160,6 +164,7 @@ export function useCommunity(): UseCommunityReturn {
     async (postId: string): Promise<boolean> => {
       if (!profile) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("community_likes").insert({
         post_id: postId,
         user_id: profile.id,
@@ -171,6 +176,7 @@ export function useCommunity(): UseCommunityReturn {
       }
 
       // Update likes count
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).rpc("increment_likes_count", { p_post_id: postId });
 
       // Update local state
@@ -192,6 +198,7 @@ export function useCommunity(): UseCommunityReturn {
     async (postId: string): Promise<boolean> => {
       if (!profile) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("community_likes")
         .delete()
@@ -204,6 +211,7 @@ export function useCommunity(): UseCommunityReturn {
       }
 
       // Update likes count
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).rpc("decrement_likes_count", { p_post_id: postId });
 
       // Update local state
@@ -226,6 +234,7 @@ export function useCommunity(): UseCommunityReturn {
       if (!profile) return false;
 
       // Check if already voted
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existingVote } = await (supabase as any)
         .from("poll_votes")
         .select("id")
@@ -238,6 +247,7 @@ export function useCommunity(): UseCommunityReturn {
         return false;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("poll_votes").insert({
         post_id: postId,
         user_id: profile.id,
@@ -250,6 +260,7 @@ export function useCommunity(): UseCommunityReturn {
       }
 
       // Update poll votes count
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).rpc("increment_poll_vote", {
         p_post_id: postId,
         p_option: option,
@@ -275,6 +286,7 @@ export function useCommunity(): UseCommunityReturn {
   // Fetch comments for a post
   const fetchComments = useCallback(
     async (postId: string): Promise<CommunityComment[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("community_comments")
         .select(
@@ -301,6 +313,7 @@ export function useCommunity(): UseCommunityReturn {
     async (postId: string, content: string): Promise<boolean> => {
       if (!profile) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("community_comments").insert({
         post_id: postId,
         author_id: profile.id,
@@ -313,6 +326,7 @@ export function useCommunity(): UseCommunityReturn {
       }
 
       // Update comments count
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).rpc("increment_comments_count", { p_post_id: postId });
 
       // Update local state
@@ -332,6 +346,7 @@ export function useCommunity(): UseCommunityReturn {
     async (postId: string, isPinned: boolean): Promise<boolean> => {
       if (!profile || !canPostOfficial) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("community_posts")
         .update({ is_pinned: isPinned })

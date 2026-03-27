@@ -13,7 +13,11 @@ interface SyncProgress {
 }
 
 export function OnlineStatus() {
-  const [status, setStatus] = useState<ConnectionStatus>("online");
+  const [status, setStatus] = useState<ConnectionStatus>(() =>
+    typeof navigator !== "undefined"
+      ? navigator.onLine ? "online" : "offline"
+      : "online"
+  );
   const [queueCount, setQueueCount] = useState(0);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const [showSyncedMessage, setShowSyncedMessage] = useState(false);
@@ -25,9 +29,7 @@ export function OnlineStatus() {
   }, []);
 
   useEffect(() => {
-    // Initial status check
-    setStatus(navigator.onLine ? "online" : "offline");
-    updateQueueCount();
+    updateQueueCount(); // eslint-disable-line react-hooks/set-state-in-effect
 
     // Setup offline listeners
     const cleanupOfflineListeners = setupOfflineListeners();
@@ -164,11 +166,11 @@ export function OnlineStatus() {
  */
 export function OfflineBadge() {
   const [queueCount, setQueueCount] = useState(0);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== "undefined" ? !navigator.onLine : false
+  );
 
   useEffect(() => {
-    setIsOffline(!navigator.onLine);
-
     const updateCount = async () => {
       const count = await getQueueCount();
       setQueueCount(count);

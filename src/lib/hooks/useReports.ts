@@ -512,7 +512,7 @@ export function useReports() {
         if (chemApps) {
           // Get zone names
           const allZoneIds = [...new Set(chemApps.flatMap(a => a.zone_ids || []))];
-          let zoneNames: Record<string, string> = {};
+          const zoneNames: Record<string, string> = {};
           if (allZoneIds.length > 0) {
             type ZoneQueryResult = { id: string; name: string };
             const { data: zones } = await supabase
@@ -966,7 +966,7 @@ export function useReports() {
         if (chemApps) {
           // Get zone names
           const allZoneIds = [...new Set(chemApps.flatMap(a => a.zone_ids || []))];
-          let zoneNames: Record<string, string> = {};
+          const zoneNames: Record<string, string> = {};
           if (allZoneIds.length > 0) {
             type MonthlyZoneQueryResult = { id: string; name: string };
             const { data: zones } = await supabase
@@ -1354,7 +1354,7 @@ export function useReports() {
         if (apps) {
           // Get zone names
           const allZoneIds = [...new Set(apps.flatMap(a => a.zone_ids || []))];
-          let zoneNames: Record<string, string> = {};
+          const zoneNames: Record<string, string> = {};
           if (allZoneIds.length > 0) {
             type ChemZoneQueryResult = { id: string; name: string };
             const { data: zones } = await supabase

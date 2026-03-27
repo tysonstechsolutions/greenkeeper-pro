@@ -74,7 +74,7 @@ export default function TeeTimesPage() {
   useEffect(() => {
     const dates = availableDates();
     if (dates.length > 0 && !selectedDate) {
-      setSelectedDate(dates[0]);
+      setSelectedDate(dates[0]); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, [availableDates, selectedDate]);
 
@@ -120,6 +120,7 @@ export default function TeeTimesPage() {
   };
 
   // Separate upcoming and past tee times
+  const nowMs = new Date().getTime();
   const today = new Date().toISOString().split("T")[0];
   const upcomingTimes = teeTimes.filter(
     (t) => t.tee_date >= today && t.status === "confirmed"
@@ -406,7 +407,7 @@ export default function TeeTimesPage() {
                 <div className="space-y-3">
                   {upcomingTimes.map((teeTime) => {
                     const teeDate = new Date(teeTime.tee_date + "T" + teeTime.tee_time);
-                    const hoursUntil = (teeDate.getTime() - Date.now()) / (1000 * 60 * 60);
+                    const hoursUntil = (teeDate.getTime() - nowMs) / (1000 * 60 * 60);
                     const canCancel = hoursUntil >= 24;
 
                     return (

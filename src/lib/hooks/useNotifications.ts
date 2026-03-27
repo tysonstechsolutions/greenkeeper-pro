@@ -6,9 +6,7 @@ import { useAuth } from "./useAuth";
 import type { Notification, NotificationType, Database } from "@/types/database";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
-export interface NotificationWithDetails extends Notification {
-  // Could be extended with sender profile if needed
-}
+export type NotificationWithDetails = Notification;
 
 interface UseNotificationsReturn {
   notifications: NotificationWithDetails[];

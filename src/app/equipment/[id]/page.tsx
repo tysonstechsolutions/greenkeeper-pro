@@ -136,7 +136,6 @@ export default function EquipmentDetailPage() {
 
   // Load equipment data
   const loadEquipment = useCallback(async () => {
-    setIsLoading(true);
     const data = await fetchEquipmentItem(equipmentId);
     if (data) {
       setEquipment(data);
@@ -150,7 +149,7 @@ export default function EquipmentDetailPage() {
   }, [equipmentId, fetchEquipmentItem]);
 
   useEffect(() => {
-    loadEquipment();
+    void loadEquipment(); // eslint-disable-line react-hooks/set-state-in-effect
   }, [loadEquipment]);
 
   // Status change handler

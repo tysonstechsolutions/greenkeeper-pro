@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCourseStatus, courseStatusLabels, courseStatusColors } from "@/lib/hooks/useCourseStatus";
@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { TeeTime } from "@/types/member";
 
 export default function MemberHomePage() {
   const { profile, loading: authLoading } = useAuth();
@@ -35,21 +34,18 @@ export default function MemberHomePage() {
   const { posts, fetchPosts, loading: postsLoading } = useCommunity();
   const { photos, fetchPhotos, loading: photosLoading } = usePhotos();
 
-  const [upcomingTeeTimes, setUpcomingTeeTimes] = useState<TeeTime[]>([]);
-
   useEffect(() => {
-    fetchMyTeeTimes();
-    fetchPosts();
-    fetchPhotos({}, 0);
+    void fetchMyTeeTimes();
+    void fetchPosts();
+    void fetchPhotos({}, 0);
   }, [fetchMyTeeTimes, fetchPosts, fetchPhotos]);
 
   // Filter to upcoming tee times
-  useEffect(() => {
+  const upcomingTeeTimes = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
-    const upcoming = teeTimes.filter(
-      (t) => t.tee_date >= today && t.status === "confirmed"
-    );
-    setUpcomingTeeTimes(upcoming.slice(0, 3));
+    return teeTimes
+      .filter((t) => t.tee_date >= today && t.status === "confirmed")
+      .slice(0, 3);
   }, [teeTimes]);
 
   const recentPosts = posts.slice(0, 3);

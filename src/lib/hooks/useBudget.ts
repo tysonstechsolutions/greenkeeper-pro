@@ -113,7 +113,7 @@ export interface CreateBudgetItemData {
   plan_goal_id?: string;
 }
 
-export interface UpdateBudgetItemData extends Partial<CreateBudgetItemData> {}
+export type UpdateBudgetItemData = Partial<CreateBudgetItemData>;
 
 export interface CreateExpenseData {
   budget_item_id?: string;
@@ -586,7 +586,7 @@ export function useBudget(): UseBudgetReturn {
           .map((e) => e.budget_item_id)
           .filter(Boolean))] as string[];
 
-        let budgetItemsMap = new Map<string, BudgetItem>();
+        const budgetItemsMap = new Map<string, BudgetItem>();
         if (budgetItemIds.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: items } = await (supabase.from("budget_items") as any)
@@ -613,7 +613,7 @@ export function useBudget(): UseBudgetReturn {
           .map((e) => e.submitted_by)
           .filter(Boolean))] as string[];
 
-        let profilesMap = new Map<string, Profile>();
+        const profilesMap = new Map<string, Profile>();
         if (submitterIds.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: profiles } = await (supabase.from("profiles") as any)

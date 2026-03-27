@@ -30,6 +30,18 @@ export function BeforeAfterSlider({
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState({ before: false, after: false });
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+
+  // Track container width for before-image sizing
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setContainerWidth(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   /**
    * Calculate slider position from mouse/touch event
@@ -161,9 +173,7 @@ export function BeforeAfterSlider({
           alt={beforeLabel}
           className="h-full object-cover"
           style={{
-            width: containerRef.current
-              ? `${containerRef.current.offsetWidth}px`
-              : "100vw",
+            width: containerWidth != null ? `${containerWidth}px` : "100vw",
             maxWidth: "none",
           }}
           onLoad={() => setImagesLoaded((prev) => ({ ...prev, before: true }))}

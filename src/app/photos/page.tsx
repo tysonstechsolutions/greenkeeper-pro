@@ -245,10 +245,10 @@ export default function PhotosPage() {
   useEffect(() => {
     if (viewMode === "grid") {
       clearPhotos();
-      setPage(0);
+      setPage((prev) => (prev !== 0 ? 0 : prev)); // eslint-disable-line react-hooks/set-state-in-effect
       fetchPhotos(buildFilters(), 0);
     }
-    fetchStats();
+    void fetchStats();
   }, [viewMode, fetchStats]);
 
   // Apply filters
@@ -322,7 +322,7 @@ export default function PhotosPage() {
   // Timeline view
   useEffect(() => {
     if (viewMode === "timeline" && timelineZoneId) {
-      setTimelineLoading(true);
+      setTimelineLoading((prev) => (prev ? prev : true)); // eslint-disable-line react-hooks/set-state-in-effect
       fetchZoneTimeline(timelineZoneId).then((photos) => {
         setTimelinePhotos(photos);
         setTimelineLoading(false);

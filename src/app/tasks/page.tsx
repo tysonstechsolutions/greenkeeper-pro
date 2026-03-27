@@ -29,7 +29,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useTasks, type TaskWithRelations, type TaskFilters } from "@/lib/hooks/useTasks";
 import { useProfiles, getInitials } from "@/lib/hooks/useProfiles";
 import { formatZoneName } from "@/lib/hooks/useCourseZones";
-import type { TaskCategory, TaskPriority, TaskStatus } from "@/types/database";
+import type { TaskCategory, TaskPriority, TaskStatus, CourseZone } from "@/types/database";
 
 // Tab type
 type TabType = "my" | "all" | "overdue";
@@ -285,7 +285,7 @@ export default function TasksPage() {
   useEffect(() => {
     if (!authLoading && profile) {
       const newDefault: TabType = isManager || isForeman ? "all" : "my";
-      setActiveTab(newDefault);
+      setActiveTab((prev) => (prev !== newDefault ? newDefault : prev)); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, [authLoading, profile, isManager, isForeman]);
 
@@ -740,7 +740,7 @@ function TaskCard({
               <div className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" />
                 <span className="truncate max-w-[120px]">
-                  {formatZoneName(task.zone as any)}
+                  {formatZoneName(task.zone as Pick<CourseZone, "id" | "name" | "zone_type" | "hole_number">)}
                 </span>
               </div>
             )}

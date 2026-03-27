@@ -321,7 +321,7 @@ export function usePhotos(): UsePhotosReturn {
       }
 
       // Try to extract datetime from EXIF
-      let exifMetadata: Record<string, unknown> = {};
+      const exifMetadata: Record<string, unknown> = {};
       if (file instanceof File) {
         const dateTime = await extractDateTime(file);
         if (dateTime) {

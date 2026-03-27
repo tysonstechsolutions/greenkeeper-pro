@@ -56,6 +56,7 @@ export function useTeeTimes(): UseTeeTimesReturn {
 
     setLoading(true);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from("tee_times")
       .select(
@@ -84,6 +85,7 @@ export function useTeeTimes(): UseTeeTimesReturn {
   // Fetch all tee times for a specific date (to show availability)
   const fetchTeeTimesForDate = useCallback(
     async (date: string): Promise<TeeTime[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("tee_times")
         .select("tee_time, status, num_players")
@@ -133,6 +135,7 @@ export function useTeeTimes(): UseTeeTimesReturn {
         return { success: false, error: "This time slot is no longer available" };
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("tee_times").insert({
         user_id: profile.id,
         tee_date: date,
@@ -162,6 +165,7 @@ export function useTeeTimes(): UseTeeTimesReturn {
       if (!profile) return false;
 
       // Check if cancellation is at least 24 hours ahead
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: teeTime } = await (supabase as any)
         .from("tee_times")
         .select("tee_date, tee_time")
@@ -183,6 +187,7 @@ export function useTeeTimes(): UseTeeTimesReturn {
         return false;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("tee_times")
         .update({

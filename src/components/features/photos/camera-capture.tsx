@@ -80,10 +80,11 @@ export function CameraCapture({
   const { zones, loading: zonesLoading } = useCourseZones();
 
   // Detect if on mobile
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
-  }, []);
+  const [isMobile] = useState(() =>
+    typeof navigator !== "undefined"
+      ? /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+      : false
+  );
 
   // Cleanup preview URL on unmount
   useEffect(() => {

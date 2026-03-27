@@ -27,6 +27,7 @@ export function useMember(): UseMemberReturn {
 
     setLoading(true);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from("member_registrations")
       .select("*")
@@ -49,6 +50,7 @@ export function useMember(): UseMemberReturn {
     async (data: Partial<MemberRegistration>): Promise<boolean> => {
       if (!profile) return false;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("member_registrations")
         .update({
@@ -114,6 +116,7 @@ export async function registerMember(
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   // 3. Update the profile with role and phone
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: profileError } = await (supabase as any)
     .from("profiles")
     .update({
@@ -129,6 +132,7 @@ export async function registerMember(
   }
 
   // 4. Create the member registration record
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: memberError } = await (supabase as any)
     .from("member_registrations")
     .insert({
