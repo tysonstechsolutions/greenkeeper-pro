@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { fetchWeather, type WeatherResponse } from "./weather";
 
 // Service role client for server-side operations
 function createServiceClient() {
@@ -580,25 +581,48 @@ export async function ensureWeatherLogExists(date: Date): Promise<boolean> {
 }
 
 /**
- * Fetches weather from an external API and updates the weather_log
- * This is a placeholder - implement with actual weather API (OpenWeatherMap, etc.)
+ * Fetches weather from WeatherAPI.com and updates the weather_log
  */
 export async function fetchAndStoreWeather(date: Date, lat: number, lng: number): Promise<boolean> {
   const supabase = createServiceClient();
   const dateStr = date.toISOString().split("T")[0];
 
   try {
-    // TODO: Implement actual weather API call
-    // Example with OpenWeatherMap:
-    // const response = await fetch(
-    //   `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&appid=${process.env.OPENWEATHER_API_KEY}&units=imperial`
-    // );
-    // const weatherData = await response.json();
+    const weather = await fetchWeather(lat, lng, 1);
 
-    // For now, just ensure the placeholder exists
-    return ensureWeatherLogExists(date);
+    if (!weather) {
+      console.error("Failed to fetch weather data");
+      return ensureWeatherLogExists(date);
+    }
+
+    const todayForecast = weather.forecast[0];
+
+    // Upsert weather log
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
+      .from("weather_logs")
+      .upsert({
+        log_date: dateStr,
+        high_temp_f: Math.round(todayForecast?.max_temp_f || weather.current.temp_f),
+        low_temp_f: Math.round(todayForecast?.min_temp_f || weather.current.temp_f),
+        precipitation_inches: weather.current.precip_in,
+        wind_max_mph: Math.round(todayForecast?.max_wind_mph || weather.current.wind_mph),
+        humidity_avg: Math.round(todayForecast?.avg_humidity || weather.current.humidity),
+        conditions: weather.current.condition,
+        frost_observed: weather.current.temp_f < 32,
+        raw_data: weather as unknown as Record<string, unknown>,
+      }, {
+        onConflict: "log_date",
+      }) as { error: Error | null };
+
+    if (error) {
+      console.error("Error storing weather:", error);
+      return false;
+    }
+
+    return true;
   } catch (error) {
-    console.error("Error fetching weather:", error);
-    return false;
+    console.error("Error fetching and storing weather:", error);
+    return ensureWeatherLogExists(date);
   }
 }
