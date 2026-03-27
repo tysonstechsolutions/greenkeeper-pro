@@ -2,12 +2,34 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
 export async function createClient() {
   const cookieStore = await cookies();
 
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // During build/prerender, env vars may not be available.
+    // Return a stub client so static generation doesn't crash.
+    return createServerClient<Database>(
+      "https://placeholder.supabase.co",
+      "placeholder-key",
+      {
+        cookies: {
+          getAll() {
+            return [];
+          },
+          setAll() {
+            // no-op during build
+          },
+        },
+      }
+    );
+  }
+
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
