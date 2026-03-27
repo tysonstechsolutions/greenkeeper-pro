@@ -1,33 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Bell, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useUserPreferences } from "@/lib/hooks/useUserPreferences";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function NotificationSettingsPage() {
   const router = useRouter();
-  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const {
+    preferences,
+    loading,
+    error,
+    updateNotificationPreferences,
+  } = useUserPreferences();
 
-  // Notification preferences state
-  const [pushEnabled, setPushEnabled] = useState(true);
-  const [taskAssigned, setTaskAssigned] = useState(true);
-  const [taskCompleted, setTaskCompleted] = useState(true);
-  const [scheduleChanges, setScheduleChanges] = useState(true);
-  const [weatherAlerts, setWeatherAlerts] = useState(true);
-  const [equipmentIssues, setEquipmentIssues] = useState(true);
-  const [messages, setMessages] = useState(true);
+  const notificationPrefs = preferences.notifications;
 
-  const handleSave = async () => {
-    setSaving(true);
-    // TODO: Save notification preferences to database
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setSaving(false);
-    router.back();
+  const handleToggle = async (
+    key: keyof typeof notificationPrefs,
+    value: boolean
+  ) => {
+    const success = await updateNotificationPreferences({ [key]: value });
+
+    if (success) {
+      toast({
+        title: "Settings saved",
+        description: "Your notification preferences have been updated.",
+      });
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to save settings. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 pb-24 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 pb-24">
@@ -51,7 +72,10 @@ export default function NotificationSettingsPage() {
                 <CardTitle className="text-base">Push Notifications</CardTitle>
                 <CardDescription>Receive notifications on your device</CardDescription>
               </div>
-              <Switch checked={pushEnabled} onCheckedChange={setPushEnabled} />
+              <Switch
+                checked={notificationPrefs.push_enabled}
+                onCheckedChange={(checked) => handleToggle("push_enabled", checked)}
+              />
             </div>
           </CardHeader>
         </Card>
@@ -70,9 +94,9 @@ export default function NotificationSettingsPage() {
               </Label>
               <Switch
                 id="taskAssigned"
-                checked={taskAssigned}
-                onCheckedChange={setTaskAssigned}
-                disabled={!pushEnabled}
+                checked={notificationPrefs.task_assigned}
+                onCheckedChange={(checked) => handleToggle("task_assigned", checked)}
+                disabled={!notificationPrefs.push_enabled}
               />
             </div>
 
@@ -83,9 +107,9 @@ export default function NotificationSettingsPage() {
               </Label>
               <Switch
                 id="taskCompleted"
-                checked={taskCompleted}
-                onCheckedChange={setTaskCompleted}
-                disabled={!pushEnabled}
+                checked={notificationPrefs.task_completed}
+                onCheckedChange={(checked) => handleToggle("task_completed", checked)}
+                disabled={!notificationPrefs.push_enabled}
               />
             </div>
 
@@ -96,9 +120,9 @@ export default function NotificationSettingsPage() {
               </Label>
               <Switch
                 id="scheduleChanges"
-                checked={scheduleChanges}
-                onCheckedChange={setScheduleChanges}
-                disabled={!pushEnabled}
+                checked={notificationPrefs.schedule_changes}
+                onCheckedChange={(checked) => handleToggle("schedule_changes", checked)}
+                disabled={!notificationPrefs.push_enabled}
               />
             </div>
 
@@ -109,9 +133,9 @@ export default function NotificationSettingsPage() {
               </Label>
               <Switch
                 id="weatherAlerts"
-                checked={weatherAlerts}
-                onCheckedChange={setWeatherAlerts}
-                disabled={!pushEnabled}
+                checked={notificationPrefs.weather_alerts}
+                onCheckedChange={(checked) => handleToggle("weather_alerts", checked)}
+                disabled={!notificationPrefs.push_enabled}
               />
             </div>
 
@@ -122,9 +146,9 @@ export default function NotificationSettingsPage() {
               </Label>
               <Switch
                 id="equipmentIssues"
-                checked={equipmentIssues}
-                onCheckedChange={setEquipmentIssues}
-                disabled={!pushEnabled}
+                checked={notificationPrefs.equipment_issues}
+                onCheckedChange={(checked) => handleToggle("equipment_issues", checked)}
+                disabled={!notificationPrefs.push_enabled}
               />
             </div>
 
@@ -135,23 +159,13 @@ export default function NotificationSettingsPage() {
               </Label>
               <Switch
                 id="messages"
-                checked={messages}
-                onCheckedChange={setMessages}
-                disabled={!pushEnabled}
+                checked={notificationPrefs.messages}
+                onCheckedChange={(checked) => handleToggle("messages", checked)}
+                disabled={!notificationPrefs.push_enabled}
               />
             </div>
           </CardContent>
         </Card>
-
-        {/* Save Button */}
-        <Button onClick={handleSave} disabled={saving} className="w-full">
-          {saving ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
-          Save Preferences
-        </Button>
       </div>
     </div>
   );
