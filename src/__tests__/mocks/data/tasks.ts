@@ -1,0 +1,48 @@
+import type { Task } from '@/types/database'
+
+export const mockTask: Task = {
+  id: 'test-task-id',
+  title: 'Morning Mow - Greens',
+  description: 'Daily morning mowing of all greens',
+  category: 'mowing',
+  priority: 'high',
+  status: 'pending',
+  assigned_to: 'test-crew-id',
+  assigned_crew: null,
+  assigned_by: 'test-super-id',
+  due_date: new Date().toISOString().split('T')[0],
+  due_time: '06:00:00',
+  estimated_minutes: 120,
+  actual_minutes: null,
+  zone_id: null,
+  hole_numbers: [],
+  equipment_needed: ['Greens Mower #1'],
+  materials_needed: [],
+  checklist: [
+    { id: '1', text: 'Check mower height', checked: false },
+  ],
+  requires_photo_before: false,
+  requires_photo_after: false,
+  weather_dependent: true,
+  weather_conditions: null,
+  recurring_rule: null,
+  template_id: null,
+  plan_goal_id: null,
+  parent_task_id: null,
+  notes: null,
+  completed_at: null,
+  completed_by: null,
+  verified_at: null,
+  verified_by: null,
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+}
+
+export const mockCompletedTask: Task = {
+  ...mockTask,
+  id: 'completed-task-id',
+  title: 'Completed Task',
+  status: 'completed',
+  completed_at: '2024-01-01T10:00:00Z',
+  completed_by: 'test-crew-id',
+}
