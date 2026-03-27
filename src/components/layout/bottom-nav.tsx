@@ -20,7 +20,6 @@ import { useChannels } from "@/lib/hooks/useChannels";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useEffect } from "react";
 
-// Default nav items for maintenance staff
 const maintenanceNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
@@ -29,7 +28,6 @@ const maintenanceNavItems = [
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
-// Nav items for pro role - simplified, focused on their needs
 const proNavItems = [
   { href: "/pro-dashboard", label: "Dashboard", icon: Store },
   { href: "/report-issue", label: "Report", icon: Flag },
@@ -38,7 +36,6 @@ const proNavItems = [
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
-// Nav items for member role - golfer-focused
 const memberNavItems = [
   { href: "/member/home", label: "Home", icon: Home },
   { href: "/member/tee-times", label: "Book", icon: Calendar },
@@ -47,25 +44,10 @@ const memberNavItems = [
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
-// All routes that fall under "More" section
 const moreRoutes = [
-  "/more",
-  "/diagnostics",
-  "/plan",
-  "/course-map",
-  "/weather",
-  "/photos",
-  "/equipment",
-  "/chemicals",
-  "/irrigation",
-  "/staff",
-  "/budget",
-  "/reports",
-  "/knowledge",
-  "/settings",
-  "/notifications",
-  "/feedback",
-  "/pro-dashboard",
+  "/more", "/diagnostics", "/plan", "/course-map", "/weather", "/photos",
+  "/equipment", "/chemicals", "/irrigation", "/staff", "/budget", "/reports",
+  "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
 ];
 
 export function BottomNav() {
@@ -73,57 +55,62 @@ export function BottomNav() {
   const { totalUnread, fetchChannels } = useChannels();
   const { isPro, isMember } = useAuth();
 
-  // Select nav items based on user role
-  const navItems = isMember
-    ? memberNavItems
-    : isPro
-    ? proNavItems
-    : maintenanceNavItems;
+  const navItems = isMember ? memberNavItems : isPro ? proNavItems : maintenanceNavItems;
 
-  // Fetch unread count on mount
   useEffect(() => {
     fetchChannels();
   }, [fetchChannels]);
 
-  // Check if current path is in "more" section
   const isMoreActive = moreRoutes.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden safe-area-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
-        {navItems.map((item) => {
-          const isActive =
-            item.href === "/more"
-              ? isMoreActive
-              : pathname === item.href || pathname.startsWith(item.href + "/");
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden safe-area-bottom">
+      {/* Frosted glass background */}
+      <div className="bg-background/80 backdrop-blur-xl border-t border-border/50">
+        <div className="flex items-center justify-around h-16 px-2 max-w-lg mx-auto">
+          {navItems.map((item) => {
+            const isActive =
+              item.href === "/more"
+                ? isMoreActive
+                : pathname === item.href || pathname.startsWith(item.href + "/");
 
-          const badgeCount = item.href === "/messages" ? totalUnread : 0;
+            const badgeCount = item.href === "/messages" ? totalUnread : 0;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-1 transition-colors relative",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <div className="relative">
-                <item.icon className="w-5 h-5" />
-                {badgeCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-destructive text-destructive-foreground text-[10px] font-medium rounded-full flex items-center justify-center">
-                    {badgeCount > 9 ? "9+" : badgeCount}
-                  </span>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors relative",
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground/70 hover:text-foreground"
                 )}
-              </div>
-              <span className="text-xs font-medium">{item.label}</span>
-            </Link>
-          );
-        })}
+              >
+                {/* Active indicator dot */}
+                {isActive && (
+                  <span className="absolute top-1.5 w-1 h-1 rounded-full bg-[#B68D40]" />
+                )}
+                <div className="relative mt-1">
+                  <item.icon className={cn("w-5 h-5", isActive && "text-primary")} />
+                  {badgeCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-background">
+                      {badgeCount > 9 ? "9+" : badgeCount}
+                    </span>
+                  )}
+                </div>
+                <span className={cn(
+                  "text-[10px] font-medium",
+                  isActive ? "text-primary" : "text-muted-foreground/60"
+                )}>
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );

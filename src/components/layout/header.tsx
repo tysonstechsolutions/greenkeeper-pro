@@ -11,18 +11,25 @@ import {
   UserPlus,
   ChevronDown,
   Check,
-  X,
   Loader2,
   Calendar,
   CheckSquare,
   MessageSquare,
   AlertTriangle,
   Cloud,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  CloudFog,
+  CloudLightning,
   Wrench,
   Clock,
+  Wind,
+  Leaf,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useWeather } from "@/lib/hooks/useWeather";
 import {
   useNotifications,
   formatTimeAgo,
@@ -39,7 +46,6 @@ const roleLabels: Record<string, string> = {
   seasonal: "Seasonal",
 };
 
-// Notification type icons
 const notificationIcons: Record<NotificationType, React.ReactNode> = {
   task_assigned: <CheckSquare className="w-4 h-4 text-blue-500" />,
   task_completed: <Check className="w-4 h-4 text-green-500" />,
@@ -52,9 +58,25 @@ const notificationIcons: Record<NotificationType, React.ReactNode> = {
   reminder: <Bell className="w-4 h-4 text-indigo-500" />,
 };
 
+function getWeatherIcon(condition: string, className: string = "w-4 h-4") {
+  const c = condition.toLowerCase();
+  if (c.includes("thunder") || c.includes("lightning")) return <CloudLightning className={className} />;
+  if (c.includes("snow") || c.includes("sleet") || c.includes("ice")) return <CloudSnow className={className} />;
+  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) return <CloudRain className={className} />;
+  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return <CloudFog className={className} />;
+  if (c.includes("cloud") || c.includes("overcast")) {
+    if (c.includes("partly") || c.includes("partial")) return <CloudSun className={className} />;
+    return <Cloud className={className} />;
+  }
+  if (c.includes("sunny") || c.includes("clear")) return <Sun className={className} />;
+  return <CloudSun className={className} />;
+}
+
 export function Header() {
   const router = useRouter();
   const { profile, signOut, canCreateInvites, loading } = useAuth();
+  const { currentWeather, getAlerts } = useWeather();
+  const weatherAlerts = getAlerts();
   const {
     notifications,
     unreadCount,
@@ -72,34 +94,25 @@ export function Header() {
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
-  // Load notifications
   const loadNotifications = useCallback(async () => {
     await Promise.all([fetchNotifications(20), fetchUnreadCount()]);
   }, [fetchNotifications, fetchUnreadCount]);
 
-  // Load on mount and periodically
   useEffect(() => {
     loadNotifications();
-
-    // Refresh every 60 seconds
     const interval = setInterval(loadNotifications, 60000);
     return () => clearInterval(interval);
   }, [loadNotifications]);
 
-  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
       }
-      if (
-        notificationsRef.current &&
-        !notificationsRef.current.contains(event.target as Node)
-      ) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false);
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -117,12 +130,9 @@ export function Header() {
   };
 
   const handleNotificationClick = async (notification: NotificationWithDetails) => {
-    // Mark as read
     if (!notification.is_read) {
       await markAsRead(notification.id);
     }
-
-    // Navigate based on reference
     if (notification.reference_type === "time_off_request") {
       router.push("/schedule/time-off");
       setNotificationsOpen(false);
@@ -135,49 +145,70 @@ export function Header() {
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "U";
     const parts = name.split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.substring(0, 2).toUpperCase();
   };
 
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between h-16 px-4 bg-background border-b border-border">
-      {/* Left: Page title / breadcrumb area */}
-      <div className="flex items-center gap-4">
-        {/* Mobile logo - shown only on mobile where sidebar is hidden */}
+    <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 bg-background/80 backdrop-blur-md border-b border-border/60">
+      {/* Left: Mobile logo */}
+      <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 md:hidden">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">GK</span>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm">
+            <Leaf className="w-4 h-4 text-[#1B4332]" />
           </div>
-          <span className="font-semibold text-foreground">GreenKeeper</span>
+          <span className="font-bold text-foreground text-sm tracking-tight">GreenKeeper</span>
         </div>
       </div>
 
-      {/* Right: Weather, notifications, profile */}
-      <div className="flex items-center gap-2">
-        {/* Weather widget placeholder */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-sm">
-          <Sun className="w-4 h-4 text-accent" />
-          <span className="font-medium">72°F</span>
-          <span className="text-muted-foreground">Sunny</span>
-        </div>
+      {/* Right: Weather + Notifications + Profile */}
+      <div className="flex items-center gap-1.5">
+        {/* Live Weather — uses real data from useWeather hook */}
+        {currentWeather ? (
+          <Link
+            href="/weather"
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm group"
+          >
+            <span className="text-[#B68D40]">
+              {getWeatherIcon(currentWeather.conditions, "w-4 h-4")}
+            </span>
+            <span className="font-semibold text-foreground">
+              {Math.round(currentWeather.temp_f)}°F
+            </span>
+            <span className="text-muted-foreground text-xs hidden lg:inline">
+              {currentWeather.conditions}
+            </span>
+            {currentWeather.wind_mph > 0 && (
+              <span className="text-muted-foreground text-xs hidden xl:flex items-center gap-0.5">
+                <Wind className="w-3 h-3" />
+                {Math.round(currentWeather.wind_mph)}
+              </span>
+            )}
+            {weatherAlerts && weatherAlerts.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+            )}
+          </Link>
+        ) : (
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 text-sm">
+            <Cloud className="w-4 h-4 text-muted-foreground animate-pulse" />
+            <span className="text-muted-foreground text-xs">Loading...</span>
+          </div>
+        )}
 
         {/* Notifications */}
         <div className="relative" ref={notificationsRef}>
           <Button
             variant="ghost"
             size="icon"
-            className="relative"
+            className="relative h-9 w-9 rounded-full"
             onClick={() => {
               setNotificationsOpen(!notificationsOpen);
               setMenuOpen(false);
             }}
           >
-            <Bell className="w-5 h-5" />
-            {/* Notification badge */}
+            <Bell className="w-[18px] h-[18px]" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-xs font-medium rounded-full flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-background">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
@@ -186,10 +217,9 @@ export function Header() {
 
           {/* Notifications Dropdown */}
           {notificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-card rounded-lg border border-border shadow-lg z-50 overflow-hidden">
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h3 className="font-semibold">Notifications</h3>
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-card rounded-xl border border-border shadow-xl shadow-black/8 z-50 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+                <h3 className="font-semibold text-sm">Notifications</h3>
                 {unreadCount > 0 && (
                   <button
                     onClick={handleMarkAllAsRead}
@@ -206,43 +236,33 @@ export function Header() {
                 )}
               </div>
 
-              {/* Notifications list */}
               <div className="max-h-96 overflow-y-auto">
                 {notificationsLoading && notifications.length === 0 ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : notifications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Bell className="w-10 h-10 mb-2 opacity-50" />
+                  <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                    <Bell className="w-10 h-10 mb-2 opacity-30" />
                     <p className="text-sm">No notifications</p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border/50">
                     {notifications.map((notification) => (
                       <button
                         key={notification.id}
                         onClick={() => handleNotificationClick(notification)}
                         className={`w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors ${
-                          !notification.is_read ? "bg-primary/5" : ""
+                          !notification.is_read ? "bg-primary/[0.03]" : ""
                         }`}
                       >
                         <div className="flex gap-3">
-                          {/* Icon */}
                           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
                             {notificationIcons[notification.notification_type]}
                           </div>
-
-                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
-                              <p
-                                className={`text-sm ${
-                                  !notification.is_read
-                                    ? "font-semibold"
-                                    : "font-medium"
-                                }`}
-                              >
+                              <p className={`text-sm ${!notification.is_read ? "font-semibold" : "font-medium"}`}>
                                 {notification.title}
                               </p>
                               {!notification.is_read && (
@@ -265,13 +285,12 @@ export function Header() {
                 )}
               </div>
 
-              {/* Footer */}
               {notifications.length > 0 && (
-                <div className="border-t border-border px-4 py-2">
+                <div className="border-t border-border px-4 py-2.5 bg-muted/20">
                   <Link
                     href="/notifications"
                     onClick={() => setNotificationsOpen(false)}
-                    className="block text-center text-sm text-primary hover:underline"
+                    className="block text-center text-xs font-medium text-primary hover:underline"
                   >
                     View all notifications
                   </Link>
@@ -288,9 +307,9 @@ export function Header() {
               setMenuOpen(!menuOpen);
               setNotificationsOpen(false);
             }}
-            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors"
+            className="flex items-center gap-2 p-1 rounded-full hover:bg-muted/60 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center ring-2 ring-[#B68D40]/20">
               {profile?.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -299,26 +318,25 @@ export function Header() {
                   className="w-8 h-8 rounded-full object-cover"
                 />
               ) : (
-                <span className="text-primary-foreground font-medium text-sm">
-                  {loading ? "..." : getInitials(profile?.full_name)}
+                <span className="text-white font-semibold text-xs">
+                  {loading ? ".." : getInitials(profile?.full_name)}
                 </span>
               )}
             </div>
-            <div className="hidden sm:block text-left">
-              <div className="text-sm font-medium leading-tight">
+            <div className="hidden sm:block text-left max-w-[120px]">
+              <div className="text-sm font-medium leading-tight truncate">
                 {loading ? "Loading..." : profile?.full_name || "User"}
               </div>
-              <div className="text-xs text-muted-foreground leading-tight">
+              <div className="text-[11px] text-muted-foreground leading-tight truncate">
                 {profile?.role ? roleLabels[profile.role] || profile.role : ""}
               </div>
             </div>
-            <ChevronDown className="w-4 h-4 text-muted-foreground hidden sm:block" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground hidden sm:block" />
           </button>
 
           {/* Dropdown Menu */}
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-card rounded-lg border border-border shadow-lg py-1 z-50">
-              {/* User info in dropdown */}
+            <div className="absolute right-0 mt-2 w-56 bg-card rounded-xl border border-border shadow-xl shadow-black/8 py-1 z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-border sm:hidden">
                 <div className="font-medium">{profile?.full_name || "User"}</div>
                 <div className="text-sm text-muted-foreground">
@@ -329,9 +347,9 @@ export function Header() {
               <Link
                 href="/settings"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors"
               >
-                <Settings className="w-4 h-4" />
+                <Settings className="w-4 h-4 text-muted-foreground" />
                 Settings
               </Link>
 
@@ -339,9 +357,9 @@ export function Header() {
                 <Link
                   href="/settings/invite"
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors"
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="w-4 h-4 text-muted-foreground" />
                   Invite Team Members
                 </Link>
               )}

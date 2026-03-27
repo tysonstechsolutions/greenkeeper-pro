@@ -22,6 +22,7 @@ import {
   Stethoscope,
   Target,
   Cloud,
+  Leaf,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -50,7 +51,6 @@ const operationsNavItems = [
   { href: "/irrigation", label: "Irrigation", icon: Droplets },
 ];
 
-// Management-only operations items
 const managementOperationsItems = [
   { href: "/staff", label: "Staff", icon: Users },
 ];
@@ -62,213 +62,213 @@ const managementNavItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+function NavItem({
+  item,
+  isActive,
+  isCollapsed,
+  badgeCount = 0,
+}: {
+  item: { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
+  isActive: boolean;
+  isCollapsed: boolean;
+  badgeCount?: number;
+}) {
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative",
+        isActive
+          ? "bg-white/10 text-white shadow-sm shadow-black/10"
+          : "text-white/60 hover:text-white/90 hover:bg-white/5"
+      )}
+    >
+      {/* Active indicator bar */}
+      {isActive && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#B68D40]" />
+      )}
+      <div className="relative flex-shrink-0">
+        <item.icon
+          className={cn(
+            "w-[18px] h-[18px] transition-colors",
+            isActive ? "text-[#D4A853]" : "text-white/50 group-hover:text-white/80"
+          )}
+        />
+        {isCollapsed && badgeCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-[#1B4332]">
+            {badgeCount > 9 ? "9+" : badgeCount}
+          </span>
+        )}
+      </div>
+      {!isCollapsed && (
+        <div className="flex items-center justify-between flex-1 min-w-0">
+          <span className="truncate">{item.label}</span>
+          {badgeCount > 0 && (
+            <span className="min-w-[20px] h-[20px] px-1.5 bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center">
+              {badgeCount > 99 ? "99+" : badgeCount}
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
+  );
+}
+
+function NavSection({
+  label,
+  isCollapsed,
+}: {
+  label: string;
+  isCollapsed: boolean;
+}) {
+  return (
+    <>
+      <div className="my-3 mx-3 border-t border-white/[0.06]" />
+      {!isCollapsed && (
+        <p className="px-3 mb-1.5 text-[10px] font-semibold text-white/30 uppercase tracking-[0.1em]">
+          {label}
+        </p>
+      )}
+    </>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Get unread counts for badges
   const { totalUnread: messagesUnread, fetchChannels } = useChannels();
   const { unreadCount: notificationsUnread, fetchUnreadCount } = useNotifications();
 
-  // Fetch counts on mount
   useEffect(() => {
     fetchChannels();
     fetchUnreadCount();
   }, [fetchChannels, fetchUnreadCount]);
 
-  // Badge counts for nav items
   const badgeCounts: Record<string, number> = {
     "/messages": messagesUnread,
     "/notifications": notificationsUnread,
   };
 
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
+
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300",
-        isCollapsed ? "w-16" : "w-64"
+        "hidden md:flex flex-col h-screen transition-all duration-300 relative overflow-hidden",
+        isCollapsed ? "w-[68px]" : "w-[260px]"
       )}
+      style={{
+        background: "linear-gradient(180deg, #1B4332 0%, #15352A 40%, #112B22 100%)",
+      }}
     >
+      {/* Subtle texture overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2l2 3.5-2 3zM0 20h2v2H0v-2z'/%3E%3C/g%3E%3C/svg%3E")`,
+        }}
+      />
+
       {/* Logo / Brand */}
-      <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
+      <div className="relative flex items-center h-16 px-4 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">GK</span>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-lg shadow-black/20">
+            <Leaf className="w-5 h-5 text-[#1B4332]" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
-              <span className="font-semibold text-sidebar-foreground text-sm">
-                GreenKeeper Pro
+              <span className="font-bold text-white text-sm tracking-tight leading-tight">
+                GreenKeeper
               </span>
-              <span className="text-xs text-muted-foreground">
-                Course Management
+              <span className="text-[10px] font-medium text-[#B68D40] uppercase tracking-[0.08em]">
+                Pro
               </span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Navigation */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        {/* Primary Navigation */}
-        <div className="space-y-1">
-          {mainNavItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            const badgeCount = badgeCounts[item.href] || 0;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <div className="relative">
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  {isCollapsed && badgeCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-destructive text-destructive-foreground text-[10px] font-medium rounded-full flex items-center justify-center">
-                      {badgeCount > 9 ? "9+" : badgeCount}
-                    </span>
-                  )}
-                </div>
-                {!isCollapsed && (
-                  <div className="flex items-center justify-between flex-1">
-                    <span>{item.label}</span>
-                    {badgeCount > 0 && (
-                      <span className="min-w-[20px] h-[20px] px-1.5 bg-destructive text-destructive-foreground text-xs font-medium rounded-full flex items-center justify-center">
-                        {badgeCount > 99 ? "99+" : badgeCount}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </Link>
-            );
-          })}
+      {/* Navigation */}
+      <nav className="relative flex-1 px-2 py-3 space-y-0.5 overflow-y-auto gk-scrollbar">
+        {/* Primary */}
+        <div className="space-y-0.5">
+          {mainNavItems.map((item) => (
+            <NavItem
+              key={item.href}
+              item={item}
+              isActive={isActive(item.href)}
+              isCollapsed={isCollapsed}
+              badgeCount={badgeCounts[item.href] || 0}
+            />
+          ))}
         </div>
 
-        {/* Course Section */}
-        <div className="my-4 border-t border-sidebar-border" />
-        {!isCollapsed && (
-          <p className="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            Course
-          </p>
-        )}
-        <div className="space-y-1">
-          {courseNavItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span>{item.label}</span>}
-              </Link>
-            );
-          })}
+        {/* Course */}
+        <NavSection label="Course" isCollapsed={isCollapsed} />
+        <div className="space-y-0.5">
+          {courseNavItems.map((item) => (
+            <NavItem
+              key={item.href}
+              item={item}
+              isActive={isActive(item.href)}
+              isCollapsed={isCollapsed}
+            />
+          ))}
         </div>
 
-        {/* Operations Section */}
-        <div className="my-4 border-t border-sidebar-border" />
-        {!isCollapsed && (
-          <p className="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            Operations
-          </p>
-        )}
-        <div className="space-y-1">
-          {operationsNavItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span>{item.label}</span>}
-              </Link>
-            );
-          })}
-          {/* Management-only operations items */}
+        {/* Operations */}
+        <NavSection label="Operations" isCollapsed={isCollapsed} />
+        <div className="space-y-0.5">
+          {operationsNavItems.map((item) => (
+            <NavItem
+              key={item.href}
+              item={item}
+              isActive={isActive(item.href)}
+              isCollapsed={isCollapsed}
+            />
+          ))}
           <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
-            {managementOperationsItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && <span>{item.label}</span>}
-                </Link>
-              );
-            })}
+            {managementOperationsItems.map((item) => (
+              <NavItem
+                key={item.href}
+                item={item}
+                isActive={isActive(item.href)}
+                isCollapsed={isCollapsed}
+              />
+            ))}
           </RoleHidden>
         </div>
 
-        {/* Management Section - Hidden from crew/seasonal */}
+        {/* Management */}
         <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
-          <div className="my-4 border-t border-sidebar-border" />
-          {!isCollapsed && (
-            <p className="px-3 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Management
-            </p>
-          )}
-          <div className="space-y-1">
-            {managementNavItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && <span>{item.label}</span>}
-                </Link>
-              );
-            })}
+          <NavSection label="Management" isCollapsed={isCollapsed} />
+          <div className="space-y-0.5">
+            {managementNavItems.map((item) => (
+              <NavItem
+                key={item.href}
+                item={item}
+                isActive={isActive(item.href)}
+                isCollapsed={isCollapsed}
+              />
+            ))}
           </div>
         </RoleHidden>
       </nav>
 
       {/* Collapse Toggle */}
-      <div className="p-2 border-t border-sidebar-border">
+      <div className="relative p-2 border-t border-white/[0.06]">
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="flex items-center justify-center w-full p-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          className="flex items-center justify-center w-full p-2 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition-all"
         >
           {isCollapsed ? (
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           ) : (
             <>
-              <ChevronLeft className="w-5 h-5 mr-2" />
-              <span className="text-sm">Collapse</span>
+              <ChevronLeft className="w-4 h-4 mr-2" />
+              <span className="text-xs">Collapse</span>
             </>
           )}
         </button>
