@@ -19,6 +19,8 @@ import {
   Award,
   CalendarOff,
   Shield,
+  WifiOff,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -27,6 +29,7 @@ import { RoleGuard, MANAGEMENT_ROLES } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
 import { useCrews } from "@/lib/hooks/useCrews";
 import { roleLabels, roleColors, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
+import { withTimeout, isOnline } from "@/lib/utils/resilient-fetch";
 import type { Profile, UserRole, Task, TimeOffRequest, Schedule } from "@/types/database";
 
 // Extended profile with additional details for staff page
@@ -44,6 +47,7 @@ export default function StaffPage() {
   const [profiles, setProfiles] = useState<StaffProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,44 +64,79 @@ export default function StaffPage() {
 
   const supabase = createClient();
 
-  // Fetch all staff profiles
+  // Fetch all staff profiles — ALL QUERIES RUN IN PARALLEL
   const fetchStaff = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    try {
-      // Get all profiles (both active and inactive for full roster)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: profilesData, error: profilesError } = await (supabase.from("profiles") as any)
-        .select("*")
-        .order("role", { ascending: true })
-        .order("full_name", { ascending: true });
+    // If offline, show a friendly message instead of hanging
+    if (!isOnline()) {
+      setError("You appear to be offline. Staff data will load when connectivity returns.");
+      setLoading(false);
+      return;
+    }
 
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-        setError(profilesError.message);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+
+      // Run ALL four queries in parallel with timeouts
+      const [profilesResult, tasksResult, timeOffResult, scheduleResult] = await Promise.all([
+        // 1. Get all profiles
+        withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from("profiles") as any)
+            .select("*")
+            .order("role", { ascending: true })
+            .order("full_name", { ascending: true }),
+          8000,
+          { data: null, error: { message: "Profiles query timed out" } }
+        ),
+        // 2. Get task counts per user
+        withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from("tasks") as any)
+            .select("assigned_to")
+            .in("status", ["pending", "in_progress"]),
+          8000,
+          { data: null, error: null }
+        ),
+        // 3. Get pending time-off counts
+        withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from("time_off_requests") as any)
+            .select("user_id")
+            .eq("status", "pending"),
+          8000,
+          { data: null, error: null }
+        ),
+        // 4. Get today's crew assignments
+        withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from("schedules") as any)
+            .select("user_id, crew_assignment")
+            .eq("schedule_date", today)
+            .not("crew_assignment", "is", null),
+          8000,
+          { data: null, error: null }
+        ),
+      ]);
+
+      // Profiles are essential — if they fail, show error
+      if (profilesResult.error) {
+        console.error("Error fetching profiles:", profilesResult.error);
+        setError(
+          typeof profilesResult.error === "object" && "message" in profilesResult.error
+            ? (profilesResult.error as { message: string }).message
+            : "Failed to load staff profiles. Please try again."
+        );
+        setLoading(false);
         return;
       }
 
-      // Get task counts per user
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: tasksData } = await (supabase.from("tasks") as any)
-        .select("assigned_to")
-        .in("status", ["pending", "in_progress"]);
-
-      // Get pending time-off counts
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: timeOffData } = await (supabase.from("time_off_requests") as any)
-        .select("user_id")
-        .eq("status", "pending");
-
-      // Get today's crew assignments
-      const today = new Date().toISOString().split("T")[0];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: scheduleData } = await (supabase.from("schedules") as any)
-        .select("user_id, crew_assignment")
-        .eq("schedule_date", today)
-        .not("crew_assignment", "is", null);
+      // Tasks, time-off, and schedules are non-essential — degrade gracefully
+      const tasksData = tasksResult.data;
+      const timeOffData = timeOffResult.data;
+      const scheduleData = scheduleResult.data;
 
       // Build enhanced profiles
       const taskCounts = new Map<string, number>();
@@ -123,7 +162,7 @@ export default function StaffPage() {
         }
       }
 
-      const enhanced: StaffProfile[] = (profilesData || []).map((p: Profile) => ({
+      const enhanced: StaffProfile[] = (profilesResult.data || []).map((p: Profile) => ({
         ...p,
         task_count: taskCounts.get(p.id) || 0,
         pending_time_off: timeOffCounts.get(p.id) || 0,
@@ -133,7 +172,7 @@ export default function StaffPage() {
       setProfiles(enhanced);
     } catch (err) {
       console.error("Unexpected error fetching staff:", err);
-      setError("An unexpected error occurred");
+      setError("Something went wrong loading staff data. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -144,6 +183,13 @@ export default function StaffPage() {
       fetchStaff();
     }
   }, [currentUser, fetchStaff]);
+
+  // Retry handler
+  const handleRetry = useCallback(async () => {
+    setIsRetrying(true);
+    await fetchStaff();
+    setIsRetrying(false);
+  }, [fetchStaff]);
 
   // Filtered profiles
   const filteredProfiles = useMemo(() => {
@@ -170,47 +216,63 @@ export default function StaffPage() {
     });
   }, [profiles, searchQuery, roleFilter, statusFilter]);
 
-  // Load staff details when selected
+  // Load staff details — ALL QUERIES RUN IN PARALLEL
   const loadStaffDetails = useCallback(
     async (staff: StaffProfile) => {
       setSelectedStaff(staff);
       setLoadingDetails(true);
 
       try {
-        // Fetch tasks assigned to this user
-        const { data: tasks } = await supabase
-          .from("tasks")
-          .select("*")
-          .eq("assigned_to", staff.id)
-          .in("status", ["pending", "in_progress"])
-          .order("due_date", { ascending: true })
-          .limit(10);
-
-        setSelectedStaffTasks(tasks || []);
-
-        // Fetch time-off requests
-        const { data: timeOff } = await supabase
-          .from("time_off_requests")
-          .select("*")
-          .eq("user_id", staff.id)
-          .order("start_date", { ascending: false })
-          .limit(5);
-
-        setSelectedStaffTimeOff(timeOff || []);
-
-        // Fetch recent schedule entries
         const today = new Date().toISOString().split("T")[0];
-        const { data: schedules } = await supabase
-          .from("schedules")
-          .select("*")
-          .eq("user_id", staff.id)
-          .gte("schedule_date", today)
-          .order("schedule_date", { ascending: true })
-          .limit(7);
 
-        setSelectedStaffSchedule(schedules || []);
+        // Run all three detail queries in parallel with timeouts
+        const [tasksResult, timeOffResult, scheduleResult] = await Promise.all([
+          // Tasks assigned to this user
+          withTimeout(
+            supabase
+              .from("tasks")
+              .select("*")
+              .eq("assigned_to", staff.id)
+              .in("status", ["pending", "in_progress"])
+              .order("due_date", { ascending: true })
+              .limit(10),
+            6000,
+            { data: null, error: null }
+          ),
+          // Time-off requests
+          withTimeout(
+            supabase
+              .from("time_off_requests")
+              .select("*")
+              .eq("user_id", staff.id)
+              .order("start_date", { ascending: false })
+              .limit(5),
+            6000,
+            { data: null, error: null }
+          ),
+          // Recent schedule entries
+          withTimeout(
+            supabase
+              .from("schedules")
+              .select("*")
+              .eq("user_id", staff.id)
+              .gte("schedule_date", today)
+              .order("schedule_date", { ascending: true })
+              .limit(7),
+            6000,
+            { data: null, error: null }
+          ),
+        ]);
+
+        setSelectedStaffTasks(tasksResult.data || []);
+        setSelectedStaffTimeOff(timeOffResult.data || []);
+        setSelectedStaffSchedule(scheduleResult.data || []);
       } catch (err) {
         console.error("Error loading staff details:", err);
+        // Don't blow up the panel — just show empty sections
+        setSelectedStaffTasks([]);
+        setSelectedStaffTimeOff([]);
+        setSelectedStaffSchedule([]);
       } finally {
         setLoadingDetails(false);
       }
@@ -241,10 +303,25 @@ export default function StaffPage() {
 
   return (
     <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
-      {/* Show loading spinner while data is loading */}
+      {/* Show loading skeleton while data is loading */}
       {loading ? (
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-32 bg-muted rounded animate-pulse mt-2" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+              <div className="h-10 w-28 bg-muted rounded animate-pulse" />
+            </div>
+          </div>
+          <div className="h-10 w-full bg-muted rounded animate-pulse mb-6" />
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-20 bg-muted/60 rounded-lg animate-pulse" />
+            ))}
+          </div>
         </div>
       ) : (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -351,10 +428,27 @@ export default function StaffPage() {
         </div>
       </div>
 
-      {/* Error state */}
+      {/* Error state with retry */}
       {error && (
-        <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
-          {error}
+        <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-destructive">
+            <WifiOff className="w-5 h-5 shrink-0" />
+            <span className="text-sm">{error}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRetry}
+            disabled={isRetrying}
+            className="shrink-0 gap-1.5"
+          >
+            {isRetrying ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            Retry
+          </Button>
         </div>
       )}
 
@@ -511,8 +605,18 @@ export default function StaffPage() {
               </div>
 
               {loadingDetails ? (
-                <div className="p-8 flex justify-center">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <div className="p-4 space-y-4">
+                  {/* Skeleton loaders for detail sections */}
+                  <div className="space-y-2">
+                    <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                    <div className="h-3 w-48 bg-muted/60 rounded animate-pulse" />
+                    <div className="h-3 w-40 bg-muted/60 rounded animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-28 bg-muted rounded animate-pulse" />
+                    <div className="h-12 w-full bg-muted/60 rounded animate-pulse" />
+                    <div className="h-12 w-full bg-muted/60 rounded animate-pulse" />
+                  </div>
                 </div>
               ) : (
                 <div className="p-4 space-y-4 max-h-[calc(100vh-400px)] overflow-y-auto">

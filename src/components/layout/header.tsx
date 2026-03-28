@@ -75,10 +75,13 @@ function getWeatherIcon(condition: string, className: string = "w-4 h-4") {
   return <CloudSun className={className} />;
 }
 
+// Notification polling interval: 2 minutes (was 60s — too aggressive)
+const NOTIFICATION_POLL_INTERVAL = 120_000;
+
 export function Header() {
   const router = useRouter();
   const { profile, signOut, canCreateInvites, loading } = useAuth();
-  const { currentWeather, getAlerts } = useWeather();
+  const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
   const {
     notifications,
@@ -97,13 +100,19 @@ export function Header() {
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
+  // Load notifications with error swallowing — never let this crash the header
   const loadNotifications = useCallback(async () => {
-    await Promise.all([fetchNotifications(20), fetchUnreadCount()]);
+    try {
+      await Promise.all([fetchNotifications(20), fetchUnreadCount()]);
+    } catch {
+      // Silently fail — notifications are non-critical
+      console.warn("[Header] Failed to fetch notifications, will retry next interval");
+    }
   }, [fetchNotifications, fetchUnreadCount]);
 
   useEffect(() => {
     loadNotifications();
-    const interval = setInterval(loadNotifications, 60000);
+    const interval = setInterval(loadNotifications, NOTIFICATION_POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [loadNotifications]);
 
@@ -128,13 +137,18 @@ export function Header() {
 
   const handleMarkAllAsRead = async () => {
     setMarkingAll(true);
-    await markAllAsRead();
+    try {
+      await markAllAsRead();
+    } catch {
+      // Fail silently
+    }
     setMarkingAll(false);
   };
 
   const handleNotificationClick = async (notification: NotificationWithDetails) => {
     if (!notification.is_read) {
-      await markAsRead(notification.id);
+      // Fire and forget — don't block navigation on this
+      markAsRead(notification.id).catch(() => {});
     }
     if (notification.reference_type === "time_off_request") {
       router.push("/schedule/time-off");
@@ -152,6 +166,10 @@ export function Header() {
     return name.substring(0, 2).toUpperCase();
   };
 
+  // Determine weather widget state
+  const weatherAvailable = currentWeather !== null;
+  const weatherFailed = !weatherAvailable && weatherError !== null;
+
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 bg-background/80 backdrop-blur-md border-b border-border/60">
       {/* Left: Mobile logo */}
@@ -166,8 +184,8 @@ export function Header() {
 
       {/* Right: Weather + Notifications + Profile */}
       <div className="flex items-center gap-1.5">
-        {/* Live Weather — uses real data from useWeather hook */}
-        {currentWeather ? (
+        {/* Live Weather — graceful fallback states */}
+        {weatherAvailable ? (
           <Link
             href="/weather"
             className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm group"
@@ -191,7 +209,17 @@ export function Header() {
               <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
             )}
           </Link>
+        ) : weatherFailed ? (
+          /* Weather API failed — show a subtle link instead of "Loading..." forever */
+          <Link
+            href="/weather"
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm"
+          >
+            <Cloud className="w-4 h-4 text-muted-foreground" />
+            <span className="text-muted-foreground text-xs">Weather</span>
+          </Link>
         ) : (
+          /* Still loading — show briefly, will resolve or fail */
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 text-sm">
             <Cloud className="w-4 h-4 text-muted-foreground animate-pulse" />
             <span className="text-muted-foreground text-xs">Loading...</span>
