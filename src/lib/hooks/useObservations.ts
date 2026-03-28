@@ -54,8 +54,8 @@ export function useObservations(): UseObservationsReturn {
 
     try {
       const result = await withTimeout(
-        supabase
-          .from("course_observations")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase.from("course_observations") as any)
           .select("*")
           .order("created_at", { ascending: false }),
         8000,
@@ -65,7 +65,7 @@ export function useObservations(): UseObservationsReturn {
       if (result.error) {
         setError(typeof result.error === "object" && "message" in result.error ? (result.error as { message: string }).message : "Failed to load observations");
       } else {
-        setObservations((result.data as CourseObservation[]) || []);
+        setObservations((result.data as unknown as CourseObservation[]) || []);
       }
     } catch (err) {
       console.error("Error fetching observations:", err);
@@ -83,8 +83,8 @@ export function useObservations(): UseObservationsReturn {
       // Get current plan and its items in parallel
       const [planResult, itemsResult] = await Promise.all([
         withTimeout(
-          supabase
-            .from("improvement_plans")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from("improvement_plans") as any)
             .select("*")
             .eq("is_current", true)
             .order("created_at", { ascending: false })
@@ -94,8 +94,8 @@ export function useObservations(): UseObservationsReturn {
           { data: null, error: null }
         ),
         withTimeout(
-          supabase
-            .from("improvement_plan_items")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.from("improvement_plan_items") as any)
             .select("*")
             .order("sort_order", { ascending: true }),
           8000,
@@ -104,9 +104,9 @@ export function useObservations(): UseObservationsReturn {
       ]);
 
       if (planResult.data) {
-        setCurrentPlan(planResult.data as ImprovementPlan);
+        setCurrentPlan(planResult.data as unknown as ImprovementPlan);
       }
-      setPlanItems((itemsResult.data as ImprovementPlanItem[]) || []);
+      setPlanItems((itemsResult.data as unknown as ImprovementPlanItem[]) || []);
     } catch (err) {
       console.error("Error fetching plan:", err);
     } finally {

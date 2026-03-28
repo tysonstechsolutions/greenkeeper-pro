@@ -132,7 +132,7 @@ export default function PollResultsPage() {
                 head: true,
               }),
               8000,
-              { data: null, error: null }
+              { data: null, error: null, count: 0 }
             ),
           ]);
 

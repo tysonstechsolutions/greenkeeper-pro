@@ -190,9 +190,9 @@ export default function ManagePollsPage() {
         created_by: profile?.id,
       };
 
-      const insertPoll = supabase.from("polls").insert([pollData]).select().single();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pollResult = await withTimeout(insertPoll as any, 8000, { data: null, error: null });
+      const insertPoll = (supabase.from("polls") as any).insert([pollData]).select().single();
+      const pollResult = await withTimeout(insertPoll, 8000, { data: null, error: null });
 
       if (pollResult.error || !pollResult.data) {
         setError("Failed to create poll");
@@ -200,7 +200,7 @@ export default function ManagePollsPage() {
         return;
       }
 
-      const poll = pollResult.data;
+      const poll = pollResult.data as any;
 
       // Insert options
       const optionsToInsert = cleanedOptions.map((opt, idx) => ({
@@ -210,9 +210,9 @@ export default function ManagePollsPage() {
         sort_order: idx,
       }));
 
-      const insertOptions = supabase.from("poll_options").insert(optionsToInsert);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await withTimeout(insertOptions as any, 8000, { data: null, error: null });
+      const insertOptions = (supabase.from("poll_options") as any).insert(optionsToInsert);
+      await withTimeout(insertOptions, 8000, { data: null, error: null });
 
       setSuccess(
         publishImmediately
@@ -249,9 +249,9 @@ export default function ManagePollsPage() {
     setActionLoading(pollId);
     setError(null);
 
-    const updateQuery = supabase.from("polls").update({ status: newStatus }).eq("id", pollId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await withTimeout(updateQuery as any, 8000, { data: null, error: null });
+    const updateQuery = (supabase.from("polls") as any).update({ status: newStatus }).eq("id", pollId);
+    const result = await withTimeout(updateQuery, 8000, { data: null, error: null });
 
     if (result.error) {
       setError(`Failed to update poll status`);

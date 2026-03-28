@@ -134,9 +134,9 @@ export default function StaffPage() {
       }
 
       // Tasks, time-off, and schedules are non-essential — degrade gracefully
-      const tasksData = tasksResult.data;
-      const timeOffData = timeOffResult.data;
-      const scheduleData = scheduleResult.data;
+      const tasksData = (tasksResult.data as unknown as { assigned_to: string }[] | null) || null;
+      const timeOffData = (timeOffResult.data as unknown as { user_id: string }[] | null) || null;
+      const scheduleData = (scheduleResult.data as unknown as { user_id: string; crew_assignment: string }[] | null) || null;
 
       // Build enhanced profiles
       const taskCounts = new Map<string, number>();
@@ -229,8 +229,8 @@ export default function StaffPage() {
         const [tasksResult, timeOffResult, scheduleResult] = await Promise.all([
           // Tasks assigned to this user
           withTimeout(
-            supabase
-              .from("tasks")
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (supabase.from("tasks") as any)
               .select("*")
               .eq("assigned_to", staff.id)
               .in("status", ["pending", "in_progress"])
@@ -241,8 +241,8 @@ export default function StaffPage() {
           ),
           // Time-off requests
           withTimeout(
-            supabase
-              .from("time_off_requests")
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (supabase.from("time_off_requests") as any)
               .select("*")
               .eq("user_id", staff.id)
               .order("start_date", { ascending: false })
@@ -252,8 +252,8 @@ export default function StaffPage() {
           ),
           // Recent schedule entries
           withTimeout(
-            supabase
-              .from("schedules")
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (supabase.from("schedules") as any)
               .select("*")
               .eq("user_id", staff.id)
               .gte("schedule_date", today)

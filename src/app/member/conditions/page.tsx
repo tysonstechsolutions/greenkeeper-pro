@@ -74,6 +74,7 @@ export default function CourseConditionsPage() {
       setError(null);
       const queries = await Promise.all([
         // Fetch course conditions
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("app_settings") as any)
             .select("*")
@@ -82,8 +83,8 @@ export default function CourseConditionsPage() {
           8000,
           { data: null, error: null }
         ),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // Fetch latest weather
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("weather_logs") as any)
             .select("*")
@@ -92,8 +93,8 @@ export default function CourseConditionsPage() {
           8000,
           { data: null, error: null }
         ),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // Fetch active chemical applications
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("chemical_applications") as any)
             .select("*")
@@ -101,32 +102,32 @@ export default function CourseConditionsPage() {
           8000,
           { data: null, error: null }
         ),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // Fetch course zones
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("course_zones") as any).select("*"),
           8000,
           { data: null, error: null }
-        ), // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ),
       ]);
 
       const [conditionsResult, weatherResult, chemicalsResult, zonesResult] =
         queries;
 
-      if (conditionsResult.data?.value) {
-        setConditions(conditionsResult.data.value.value || {});
+      if ((conditionsResult as any).data?.value) {
+        setConditions((conditionsResult as any).data.value.value || {});
       }
 
-      if (weatherResult.data?.data && weatherResult.data.data.length > 0) {
-        setWeather(weatherResult.data.data[0]);
+      if ((weatherResult as any).data?.data && (weatherResult as any).data.data.length > 0) {
+        setWeather((weatherResult as any).data.data[0]);
       }
 
-      if (chemicalsResult.data?.data) {
-        setChemicals(chemicalsResult.data.data);
+      if ((chemicalsResult as any).data?.data) {
+        setChemicals((chemicalsResult as any).data.data);
       }
 
-      if (zonesResult.data?.data) {
-        setZones(zonesResult.data.data);
+      if ((zonesResult as any).data?.data) {
+        setZones((zonesResult as any).data.data);
       }
 
       setLastUpdated(new Date());
@@ -295,7 +296,7 @@ export default function CourseConditionsPage() {
                     ).toLocaleTimeString("en-US", {
                       hour: "numeric",
                       minute: "2-digit",
-                      meridiem: "short",
+                      hour12: true,
                     })}
                   </p>
                 </div>
@@ -487,7 +488,7 @@ export default function CourseConditionsPage() {
                       {
                         hour: "numeric",
                         minute: "2-digit",
-                        meridiem: "short",
+                        hour12: true,
                       }
                     )}
                   </p>

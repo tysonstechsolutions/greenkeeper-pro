@@ -334,8 +334,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile for context
-    const { data: profile } = await supabase
-      .from("profiles")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profile } = await (supabase.from("profiles") as any)
       .select("id, full_name, role, email")
       .eq("id", user.id)
       .single();

@@ -138,9 +138,9 @@ export default function ShiftSwapPage() {
 
       if (result.error) {
         console.error("Error fetching shift swaps:", result.error);
-        setPosts([]);
+        setPosts(null as unknown as ShiftSwapPost[]);
       } else {
-        setPosts((result.data as ShiftSwapPost[]) || []);
+        setPosts((result.data as unknown as ShiftSwapPost[]) || []);
       }
     } catch (err) {
       console.error("Unexpected error fetching shift swaps:", err);
@@ -191,7 +191,8 @@ export default function ShiftSwapPage() {
       );
 
       if (result.error) {
-        setFormError(result.error.message || "Failed to post shift");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setFormError((result.error as any).message || "Failed to post shift");
       } else {
         setFormState(defaultFormState);
         setShowPostForm(false);

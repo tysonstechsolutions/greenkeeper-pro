@@ -530,6 +530,7 @@ export default function EquipmentCheckoutPage() {
 
     try {
       const [activeResult, historyResult, allEquipmentResult] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("equipment_checkouts") as any)
             .select(
@@ -540,6 +541,7 @@ export default function EquipmentCheckoutPage() {
           8000,
           { data: null, error: null }
         ),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("equipment_checkouts") as any)
             .select(
@@ -551,6 +553,7 @@ export default function EquipmentCheckoutPage() {
           8000,
           { data: null, error: null }
         ),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
           (supabase.from("equipment") as any)
             .select("id, name, equipment_type, make, model, status, current_hours, location, photo_url")
@@ -609,7 +612,8 @@ export default function EquipmentCheckoutPage() {
 
       setSubmitting(true);
       try {
-        const { error: insertError } = await supabase.from("equipment_checkouts").insert({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insertError } = await (supabase.from("equipment_checkouts") as any).insert({
           equipment_id: selectedEquipment.id,
           checked_out_by: currentUser.id,
           expected_return: data.expectedReturn,
@@ -641,8 +645,9 @@ export default function EquipmentCheckoutPage() {
 
       setSubmitting(true);
       try {
-        const { error: updateError } = await supabase
-          .from("equipment_checkouts")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase
+          .from("equipment_checkouts") as any)
           .update({
             returned_at: new Date().toISOString(),
             condition_in: data.conditionIn,
