@@ -24,6 +24,7 @@ import {
   Cloud,
   Leaf,
   Eye,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -33,6 +34,7 @@ import { RoleHidden } from "@/components/auth/role-guard";
 
 const mainNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/assistant", label: "AI Assistant", icon: Bot },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },

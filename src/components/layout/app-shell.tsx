@@ -8,6 +8,7 @@ import { Header } from "./header";
 import { CameraFAB, CameraCaptureModal } from "@/components/features/photos/camera-capture";
 import { OnlineStatus } from "@/components/ui/online-status";
 import { InstallPrompt } from "@/components/ui/install-prompt";
+import { ChatBubble } from "@/components/features/ai/chat-bubble";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type { Photo } from "@/types/database";
 
@@ -113,6 +114,9 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </div>
       )}
+
+      {/* AI Chat Bubble */}
+      {user && <ChatBubble />}
 
       {/* PWA Install Prompt */}
       <InstallPrompt />
