@@ -48,6 +48,8 @@ const moreRoutes = [
   "/more", "/diagnostics", "/plan", "/course-map", "/weather", "/photos",
   "/equipment", "/chemicals", "/irrigation", "/staff", "/budget", "/reports",
   "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
+  "/briefing", "/assistant", "/scoreboard", "/checklists", "/shift-swap",
+  "/equipment-checkout", "/observations", "/member/conditions",
 ];
 
 export function BottomNav() {

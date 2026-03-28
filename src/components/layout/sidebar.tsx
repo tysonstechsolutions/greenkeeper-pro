@@ -27,6 +27,10 @@ import {
   Bot,
   Coffee,
   Trophy,
+  ClipboardCheck,
+  ArrowLeftRight,
+  Package,
+  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -42,6 +46,9 @@ const mainNavItems = [
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/scoreboard", label: "Scoreboard", icon: Trophy },
+  { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
+  { href: "/shift-swap", label: "Shift Swap", icon: ArrowLeftRight },
+  { href: "/equipment-checkout", label: "Equip Checkout", icon: Package },
 ];
 
 const courseNavItems = [
@@ -51,6 +58,7 @@ const courseNavItems = [
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/weather", label: "Weather", icon: Cloud },
   { href: "/photos", label: "Photos", icon: Camera },
+  { href: "/member/conditions", label: "Course Conditions", icon: Flag },
 ];
 
 const operationsNavItems = [
