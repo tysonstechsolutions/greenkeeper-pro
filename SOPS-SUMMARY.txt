@@ -1,0 +1,334 @@
+================================================================================
+GOLF COURSE MAINTENANCE STANDARD OPERATING PROCEDURES (SOPs)
+Veterans Memorial GC - Great Lakes Naval Base
+Military Installation Standards
+================================================================================
+
+COMPLETION STATUS: ALL 35 SOPs CREATED ✓
+
+File Location: /sessions/sleepy-ecstatic-pasteur/mnt/greenkeeper-pro/sops-insert.sql
+File Size: 7,251 lines
+INSERT Statements: 35 (one per SOP)
+
+================================================================================
+SOP CATEGORIES AND CONTENTS
+================================================================================
+
+MOWING (4 SOPs)
+1. Daily Greens Mowing Procedure
+   - Pre-mowing inspection, blade height (2.75"), daily operations
+   - Post-mowing quality verification, safety, documentation
+
+2. Fairway Mowing Schedule & Heights
+   - Seasonal cutting heights (0.75"-1.10"), weekly schedule
+   - Spring/summer/fall/winter adjustment procedures
+
+3. Rough Mowing Standards
+   - Primary/secondary rough height specifications
+   - Weekly/bi-weekly mowing schedule, quality standards
+
+4. Tee Box Mowing & Maintenance
+   - Daily tee box mowing (1.0" height), divot repair
+   - Tee marker management, pre-course safety checks
+
+IRRIGATION (3 SOPs)
+5. Irrigation System Startup (Spring)
+   - Pre-startup inspection, main line pressure testing
+   - Zone-by-zone testing, controller activation
+   - Monitoring equipment check procedures
+
+6. Daily Irrigation Monitoring & Adjustment
+   - Morning/midday monitoring protocol, seasonal adjustments
+   - Drought stress response, overwatering correction
+   - Soil moisture sensor monitoring and adjustments
+
+7. Irrigation System Winterization
+   - System shutdown procedures, water drainage
+   - Compressed air purge (100 psi), sprinkhead winterization
+   - Valve box protection, main water supply shutdown
+
+CHEMICAL (4 SOPs)
+8. Pesticide Application Procedure
+   - EPA compliance, certified applicator requirements
+   - Pre-application planning, PPE preparation
+   - Sprayer setup, application procedures, site notification
+   - 24-hour re-entry interval enforcement
+
+9. Fertilizer Application Schedule
+   - Soil testing program, seasonal nitrogen applications
+   - Spring/summer/fall/winter program with specific rates
+   - Calibration procedures, quality control verification
+
+10. Pre-Emergent Herbicide Program
+    - Spring crabgrass control (March-May), fall winterweed program
+    - Dithiopyr/pendimethalin alternation for resistance management
+    - Watering in, resistance management through rotation
+
+11. Chemical Storage & Handling
+    - Dedicated storage facility requirements (200 ft from water)
+    - Product-specific storage (pesticides, fertilizers, herbicides)
+    - Inventory management, MSDS access, spill response
+    - Disposal procedures and security access control
+
+EQUIPMENT (3 SOPs)
+12. Daily Equipment Inspection & Pre-Start Checklist
+    - Pre-start inspection timing (0530 hours)
+    - Visual checks, fluid level verification
+    - Engine start, control system function, safety system checks
+    - Equipment log documentation
+
+13. Equipment Maintenance Schedule
+    - Routine maintenance (daily), scheduled maintenance (50-500 hours)
+    - Equipment-specific schedules (greens mowers, fairway mowers, tractors)
+    - Spring/summer/fall/winter seasonal adjustments
+    - Maintenance documentation and cost tracking
+
+14. Fuel Storage & Handling
+    - Fuel storage facility specifications (100 ft from water)
+    - Secondary containment requirements
+    - Fuel types (gasoline, diesel, propane) with specifications
+    - Monthly inventory, spill response, tank maintenance
+    - Static grounding during fuel transfer
+
+GREENS (3 SOPs)
+15. Greens Aerification Procedure
+    - Spring and fall aerification schedule
+    - 2.5" hole depth, 2-3 inch spacing
+    - Core drying, topdressing application and incorporation
+    - Recovery timeline (3-4 weeks) and traffic management
+
+16. Greens Topdressing Program
+    - Annual requirement (40-50 cubic yards)
+    - 100% washed sand specifications
+    - Spring (30%), summer (30%), fall (40%) applications
+    - Spreader calibration and incorporation procedures
+
+17. Green Speed Management (Stimpmeter)
+    - Target speeds: Tournament 11-12 ft, Regular 9.5-10.5 ft
+    - Daily monitoring (0900 and 1500 hours)
+    - Speed adjustment methods (mowing height, rolling, irrigation, fertilizer)
+    - Seasonal targets and tournament preparation
+
+BUNKERS (2 SOPs)
+18. Daily Bunker Maintenance
+    - Daily raking and surface preparation by 0700 hours
+    - Divot repair and sand replacement procedures
+    - Weekly deep cleaning and edge trimming
+    - Equipment maintenance (rake care and sand stockpile)
+
+19. Bunker Renovation Procedure
+    - Pre-renovation assessment and material procurement
+    - Subgrade preparation, drainage layer (2-3"), sand installation (4-5")
+    - Edge restoration and final finishing
+    - Post-renovation management and quality standards
+
+LANDSCAPING (2 SOPs)
+20. Tree & Shrub Care Program
+    - Spring inspection and sanitation pruning
+    - Pruning standards (remove dead, prune low branches)
+    - Seasonal pest/disease management
+    - Summer watering, fall winterization, winter dormancy care
+    - Large tree work with certified arborist only
+
+21. Flower Bed & Annual Planting
+    - Spring/summer/fall planting programs with plant selection
+    - Container planting and maintenance
+    - Watering and fertilization schedules
+    - Deadheading for continuous blooms
+    - Budget tracking ($5,300-7,700 annually)
+
+SAFETY (4 SOPs)
+22. Heat Illness Prevention Program
+    - Heat illness recognition (heat exhaustion vs. stroke)
+    - Temperature thresholds and work schedule adjustments
+    - Hydration program (1 cup water every 20-30 minutes)
+    - Heat index monitoring and emergency response
+    - Personnel monitoring and acclimatization procedures
+
+23. Lightning Safety Protocol
+    - Lightning distance estimation, hazard recognition
+    - Risk levels and evacuation procedures
+    - Safe shelter identification (buildings, vehicles)
+    - 30-minute shelter requirement after last lightning
+    - Annual lightning safety drill and training
+
+24. Personal Protective Equipment (PPE) Requirements
+    - Task-based PPE selection and standards
+    - PPE specifications (steel-toed boots, safety glasses, hard hat)
+    - PPE issue and maintenance program
+    - Compliance enforcement and non-compliance consequences
+    - Respiratory protection program with fit-testing
+
+25. Hazard Communication (HazCom) Program
+    - SDS management and organization (3-ring binder)
+    - Chemical labeling requirements and inspection
+    - Personnel training (initial, task-specific, annual refresh)
+    - Health/environmental hazard identification
+    - Emergency response information and record keeping
+
+ADMIN (2 SOPs)
+26. Daily Shift Briefing Procedure
+    - Morning briefing at 0530 hours (15-20 minutes)
+    - Content: Weather, priorities, equipment status, safety items
+    - Course conditions report and staffing assignments
+    - Documentation and effectiveness monitoring
+
+27. Work Order Management
+    - Work order submission and recording procedures
+    - Priority level system (1=Emergency, 2=High, 3=Standard, 4=Deferred)
+    - Assignment and execution tracking
+    - Completion documentation and customer communication
+    - Metrics and trend analysis quarterly
+
+ONBOARDING (2 SOPs)
+28. New Employee Orientation Checklist
+    - Day 1: Welcome, facility tour, administrative tasks
+    - Day 1: Safety orientation, PPE fitting, HazCom training
+    - Day 2: Equipment introduction and demonstration
+    - Days 3-5: Task training and shadowing program
+    - Month 1-3: Probationary period with evaluations
+
+29. Equipment Operation Certification
+    - Tier 1-4 equipment with corresponding training
+    - Tier 2: 1-week training, written exam, hands-on exam
+    - Tier 3: Advanced training (2-3 weeks), annual recertification
+    - Certification maintenance and annual skill checks
+    - Decertification consequences and re-certification path
+
+EMERGENCY (3 SOPs)
+30. Severe Weather Response Plan
+    - Weather types: Thunderstorm, tornado, winter, extreme heat/cold
+    - Weather monitoring and alert levels
+    - Preparation and response phases
+    - Post-storm assessment and cleanup procedures
+    - Annual weather safety drill and training
+
+31. Chemical Spill Response
+    - Spill size categories (<1 gal, 1-5 gal, >5 gal)
+    - Immediate response and personal safety
+    - Containment with absorbent material
+    - Safety officer assessment and professional hazmat response
+    - Cleanup, disposal, and regulatory reporting
+
+32. Medical Emergency Response
+    - Medical emergency recognition (chest pain, unconsciousness, bleeding)
+    - Immediate response: Assess, call 911, check responsiveness
+    - First aid for heat stroke, choking, cardiac arrest
+    - AED operation and CPR procedures
+    - Training certifications (CPR/AED, First Aid)
+
+SEASONAL (3 SOPs)
+33. Spring Course Opening Procedure
+    - Pre-opening assessment (February-March)
+    - 4-6 weeks preparation (drainage, disease, turf recovery)
+    - 2 weeks before (final prep) and opening week (soft opening)
+    - Opening day procedures and first-week monitoring
+    - Opening documentation and records
+
+34. Fall Course Winterization
+    - Timeline: August-November with first frost planning
+    - Turf program: Nitrogen reduction, potassium increase
+    - Mowing adjustments and cleanup activities
+    - Equipment winterization per schedule
+    - Irrigation shutdown per detailed SOP
+
+35. Winter Equipment Storage & Maintenance
+    - Pre-storage preparation and equipment assessment
+    - Storage location and environmental control
+    - Fuel system management with stabilizer
+    - Battery management (tender vs. removal)
+    - Engine winterization, tire management, corrosion protection
+    - Monthly inspection during storage, spring startup prep
+
+================================================================================
+KEY FEATURES OF ALL SOPs
+================================================================================
+
+COMPREHENSIVE CONTENT
+- 300-800 words per SOP with detailed procedures
+- Specific measurements, heights, temperatures, rates
+- Real-world timing and scheduling information
+- Military installation compliance
+
+PROFESSIONAL STRUCTURE
+- Purpose, Scope, Responsibilities sections
+- Detailed step-by-step procedures
+- Safety requirements
+- Quality standards
+- Documentation requirements
+
+MARKDOWN FORMATTING
+- Headers and sub-headers for clarity
+- Numbered procedures
+- Tables and lists
+- Emphasis on critical information
+
+DATABASE-READY SQL
+- Dollar-quoted strings ($$content$$) to avoid escaping
+- gen_random_uuid() for ID generation
+- ARRAY syntax for tags
+- JSONB format for attachments
+- Consistent timestamps with now()
+
+================================================================================
+USAGE INSTRUCTIONS
+================================================================================
+
+1. Connect to Supabase PostgreSQL database
+2. Run the SQL file: psql -f sops-insert.sql
+3. All 35 SOPs will be inserted into knowledge_articles table
+4. Verify insertion: SELECT COUNT(*) FROM knowledge_articles WHERE article_type='sop'
+5. Query by category: SELECT * FROM knowledge_articles WHERE category='mowing'
+
+SEARCH EXAMPLES
+- Find all mowing SOPs: WHERE category='mowing'
+- Find all seasonal SOPs: WHERE category='seasonal'
+- Find by tags: WHERE tags @> ARRAY['heat-illness']
+- Find by title: WHERE title ILIKE '%aerification%'
+
+================================================================================
+DATABASE SPECIFICATIONS
+================================================================================
+
+Table: knowledge_articles
+ID: UUID (auto-generated with gen_random_uuid())
+Course ID: NULL (not course-specific)
+Title: TEXT (SOP name)
+Content: TEXT in markdown format (dollar-quoted)
+Category: TEXT (one of 13 categories)
+Article Type: 'sop' (all entries)
+Tags: TEXT ARRAY (searchable keywords)
+Version: 1 (initial version)
+Is Published: true (all available)
+Linked Template IDs: {} (empty array)
+Attachments: [] (empty JSON array)
+Created By: 3dfa2538-7008-4c23-8734-24c0ff7c94e4
+Updated By: 3dfa2538-7008-4c23-8734-24c0ff7c94e4
+Created At: now()
+Updated At: now()
+
+================================================================================
+MILITARY INSTALLATION STANDARDS
+================================================================================
+
+All SOPs follow military installation best practices:
+- Professional tone and structure
+- Compliance with OSHA and EPA regulations
+- Safety as primary concern
+- Chain of command and supervisor authority
+- Environmental protection requirements
+- Record keeping and documentation
+- Training and certification standards
+- Emergency response procedures
+
+================================================================================
+NOTES
+================================================================================
+
+- File uses dollar-quoted strings for content to avoid SQL escaping issues
+- All content is in markdown format for easy display/conversion
+- Designed for Supabase/PostgreSQL compatibility
+- Ready for immediate database import
+- No modifications needed before import (self-contained)
+
+================================================================================
