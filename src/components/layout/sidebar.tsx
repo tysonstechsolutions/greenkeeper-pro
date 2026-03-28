@@ -31,6 +31,7 @@ import {
   ArrowLeftRight,
   Package,
   Flag,
+  Vote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -59,6 +60,7 @@ const courseNavItems = [
   { href: "/weather", label: "Weather", icon: Cloud },
   { href: "/photos", label: "Photos", icon: Camera },
   { href: "/member/conditions", label: "Course Conditions", icon: Flag },
+  { href: "/polls", label: "Community Polls", icon: Vote },
 ];
 
 const operationsNavItems = [
