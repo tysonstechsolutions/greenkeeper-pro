@@ -866,6 +866,84 @@ export interface Database {
   };
 }
 
+// ==========================================
+// Course Observations & AI Improvement Plan
+// ==========================================
+
+export type ObservationCategory =
+  | "turf"
+  | "irrigation"
+  | "equipment"
+  | "staffing"
+  | "processes"
+  | "aesthetics"
+  | "safety"
+  | "infrastructure"
+  | "drainage"
+  | "pest_disease"
+  | "member_experience"
+  | "other";
+
+export type ObservationSentiment = "positive" | "negative" | "neutral" | "idea";
+
+export type PlanItemStatus = "not_started" | "in_progress" | "completed" | "deferred" | "cancelled";
+export type PlanItemPriority = "critical" | "high" | "medium" | "low";
+export type PlanPhase = "immediate" | "week_1_2" | "month_1" | "month_2_3" | "ongoing";
+
+export interface CourseObservation {
+  id: string;
+  created_by: string;
+  category: ObservationCategory;
+  sentiment: ObservationSentiment;
+  title: string;
+  description: string;
+  location: string | null;
+  hole_number: number | null;
+  zone_id: string | null;
+  photo_ids: string[] | null;
+  tags: string[] | null;
+  is_addressed: boolean;
+  linked_plan_item_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImprovementPlanItem {
+  id: string;
+  title: string;
+  description: string;
+  phase: PlanPhase;
+  priority: PlanItemPriority;
+  status: PlanItemStatus;
+  category: ObservationCategory;
+  effort_level: "low" | "medium" | "high";
+  impact_level: "low" | "medium" | "high";
+  estimated_cost: number | null;
+  linked_observation_ids: string[] | null;
+  assigned_to: string | null;
+  target_date: string | null;
+  completed_date: string | null;
+  ai_reasoning: string | null;
+  notes: string | null;
+  sort_order: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImprovementPlan {
+  id: string;
+  title: string;
+  description: string | null;
+  version: number;
+  is_current: boolean;
+  generated_at: string;
+  ai_summary: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // Helper types for common operations
 export type Tables<T extends keyof Database["public"]["Tables"]> =
   Database["public"]["Tables"][T]["Row"];

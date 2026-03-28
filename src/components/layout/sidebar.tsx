@@ -23,6 +23,7 @@ import {
   Target,
   Cloud,
   Leaf,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -39,6 +40,7 @@ const mainNavItems = [
 
 const courseNavItems = [
   { href: "/diagnostics", label: "Course Doctor", icon: Stethoscope },
+  { href: "/observations", label: "Observations", icon: Eye },
   { href: "/plan", label: "Annual Plan", icon: Target },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/weather", label: "Weather", icon: Cloud },
