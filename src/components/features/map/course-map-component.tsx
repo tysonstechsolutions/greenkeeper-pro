@@ -44,8 +44,7 @@ const TILE_LAYERS = {
   },
 } as const;
 
-// Default to Google satellite (more reliable than ESRI)
-const DEFAULT_TILE_LAYER = TILE_LAYERS.googleSatellite;
+const DEFAULT_TILE_LAYER = TILE_LAYERS.osm;
 
 // Veterans Memorial Golf Course at Naval Station Great Lakes
 const DEFAULT_CENTER: [number, number] = [42.3095, -87.8475];
