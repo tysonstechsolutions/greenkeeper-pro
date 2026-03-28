@@ -28,8 +28,8 @@ L.Icon.Default.mergeOptions({
 // Tile layer options with fallback
 const TILE_LAYERS = {
   osm: {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     label: "Street Map",
   },
   satellite: {
@@ -44,8 +44,7 @@ const TILE_LAYERS = {
   },
 } as const;
 
-// Default to Google satellite (more reliable than ESRI)
-const DEFAULT_TILE_LAYER = TILE_LAYERS.googleSatellite;
+const DEFAULT_TILE_LAYER = TILE_LAYERS.osm;
 
 // Veterans Memorial Golf Course at Naval Station Great Lakes
 const DEFAULT_CENTER: [number, number] = [42.3095, -87.8475];
