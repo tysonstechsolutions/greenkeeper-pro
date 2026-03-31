@@ -224,6 +224,10 @@ export default function DiagnosisDetailPage() {
     if (taskId) {
       setDiagnostic({ ...diagnostic, status: "treating" });
       router.push(`/tasks/${taskId}`);
+    } else {
+      // Show error from the hook (already set via setError in useDiagnostics)
+      // The error state is displayed via the hook's error variable
+      alert("Failed to create task. Please try again.");
     }
   };
 

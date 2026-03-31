@@ -266,6 +266,10 @@ function LocationDetail({
 
   const handleSubmit = async () => {
     if (!description.trim() && selectedPhotos.length === 0) return;
+    if (!userId) {
+      setError("You must be logged in to add observations.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
