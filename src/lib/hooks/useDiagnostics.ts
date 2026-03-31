@@ -268,17 +268,25 @@ export function useDiagnostics() {
       setError(null);
 
       try {
-        // 1. Upload image to Supabase storage
-        const fileName = `${activeCourse.id}/${Date.now()}-${imageFile.name}`;
+        // 1. Upload image to Supabase storage (uses "photos" bucket)
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        const userId = user?.id || "anonymous";
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const fileName = `${userId}/${year}/${month}/diag-${Date.now()}-${imageFile.name}`;
         const { error: uploadError } = await supabase.storage
-          .from("diagnostics")
-          .upload(fileName, imageFile);
+          .from("photos")
+          .upload(fileName, imageFile, { cacheControl: "3600", upsert: false });
 
         if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
 
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from("diagnostics")
+          .from("photos")
           .getPublicUrl(fileName);
 
         const photoUrl = urlData.publicUrl;
@@ -310,12 +318,7 @@ export function useDiagnostics() {
 
         const { data: diagnosisResult } = await response.json();
 
-        // 4. Get current user
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        // 5. Save to diagnostics table
+        // 4. Save to diagnostics table
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: record, error: insertError } = await (supabase.from("diagnostics") as any)
           .insert({
