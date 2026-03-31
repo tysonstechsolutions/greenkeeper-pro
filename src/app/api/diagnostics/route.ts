@@ -256,23 +256,16 @@ function buildMessages(
   return messages;
 }
 
-// Parse JSON from Claude response, handling markdown fences
+// Parse JSON from Claude response, handling markdown fences and edge cases
 function parseJSONResponse(text: string): unknown {
   // Remove markdown code fences if present
   let cleaned = text.trim();
 
   // Handle ```json ... ``` format
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
   }
-
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
-  }
-
-  cleaned = cleaned.trim();
 
   // Try to find JSON object boundaries
   const jsonStart = cleaned.indexOf("{");
@@ -285,9 +278,17 @@ function parseJSONResponse(text: string): unknown {
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    console.error("Failed to parse JSON:", e);
-    console.error("Raw text:", text);
-    throw new Error("Failed to parse AI response as JSON");
+    // Try fixing common JSON issues: trailing commas, single quotes
+    try {
+      const fixed = cleaned
+        .replace(/,\s*([}\]])/g, "$1") // Remove trailing commas
+        .replace(/[\u201C\u201D]/g, '"'); // Replace smart quotes
+      return JSON.parse(fixed);
+    } catch {
+      console.error("Failed to parse JSON:", e);
+      console.error("Raw text:", text.substring(0, 500));
+      throw new Error("Failed to parse AI response. Please try again.");
+    }
   }
 }
 
@@ -304,7 +305,7 @@ async function callClaudeAPI(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -316,7 +317,7 @@ async function callClaudeAPI(
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 4000,
+        max_tokens: 4096,
         system: systemPrompt,
         messages,
       }),
@@ -329,10 +330,11 @@ async function callClaudeAPI(
       const errorText = await response.text();
       console.error("Claude API error:", response.status, errorText);
 
-      // Retry once on 5xx errors
-      if (response.status >= 500 && retryCount < 1) {
-        console.log("Retrying Claude API call...");
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Retry on 5xx or 429 errors with backoff
+      if ((response.status >= 500 || response.status === 429) && retryCount < 2) {
+        const delay = Math.pow(2, retryCount) * 1000;
+        console.log(`Retrying Claude API call in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
         return callClaudeAPI(systemPrompt, messages, retryCount + 1);
       }
 
@@ -350,13 +352,14 @@ async function callClaudeAPI(
     clearTimeout(timeoutId);
 
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("Request timed out after 30 seconds");
+      throw new Error("Request timed out. Please try again — image analysis can take up to 60 seconds.");
     }
 
-    // Retry once on network errors
-    if (retryCount < 1 && error instanceof Error && error.message.includes("fetch")) {
-      console.log("Retrying Claude API call after network error...");
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Retry on network errors with backoff
+    if (retryCount < 2 && error instanceof Error && (error.message.includes("fetch") || error.message.includes("network"))) {
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(`Retrying Claude API call after network error in ${delay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
       return callClaudeAPI(systemPrompt, messages, retryCount + 1);
     }
 

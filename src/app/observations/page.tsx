@@ -553,11 +553,11 @@ export default function ObservationsPage() {
         </div>
       )}
 
-      {/* Floating action button for mobile */}
+      {/* Floating action button for mobile - above bottom nav */}
       {!showForm && (
         <button
           onClick={() => setShowForm(true)}
-          className="fixed bottom-6 right-6 sm:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors z-30"
+          className="fixed bottom-20 right-6 sm:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors z-30"
         >
           <Plus className="w-6 h-6" />
         </button>

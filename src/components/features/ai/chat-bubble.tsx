@@ -109,14 +109,14 @@ export function ChatBubble() {
 
   return (
     <>
-      {/* Floating bubble button */}
+      {/* Floating bubble button - pushed above bottom nav on mobile */}
       {!isOpen && (
         <button
           onClick={() => {
             setIsOpen(true);
             setTimeout(() => inputRef.current?.focus(), 200);
           }}
-          className="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-green-600 text-white shadow-lg shadow-primary/25 flex items-center justify-center hover:scale-105 transition-transform"
+          className="fixed bottom-36 md:bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-green-600 text-white shadow-lg shadow-primary/25 flex items-center justify-center hover:scale-105 transition-transform"
         >
           <Sparkles className="w-6 h-6" />
         </button>
@@ -124,7 +124,7 @@ export function ChatBubble() {
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-5 right-5 z-50 w-[360px] sm:w-[400px] h-[500px] bg-card rounded-2xl border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden">
+        <div className="fixed bottom-36 md:bottom-5 right-5 z-40 w-[360px] sm:w-[400px] h-[500px] max-h-[calc(100vh-12rem)] md:max-h-[500px] bg-card rounded-2xl border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-primary/5 to-green-500/5">
             <div className="flex items-center gap-2">

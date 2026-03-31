@@ -19,11 +19,13 @@ import {
   Bell,
   Flag,
   Lightbulb,
+  Eye,
 } from "lucide-react";
 import { RoleHidden, RoleVisible } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 const courseItems = [
+  { href: "/observations", label: "Course Observations", description: "Walk-through notes & issues", icon: Eye },
   { href: "/diagnostics", label: "Course Doctor", description: "AI-powered turf diagnostics", icon: Stethoscope },
   { href: "/plan", label: "Annual Plan", description: "Goals & progress tracking", icon: Target },
   { href: "/course-map", label: "Course Map", description: "Interactive map view", icon: Map },
