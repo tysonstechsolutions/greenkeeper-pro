@@ -14,7 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/select";h
 import { useDiagnostics } from "@/lib/hooks/useDiagnostics";
 import { useCourseZones, formatZoneName } from "@/lib/hooks/useCourseZones";
 
@@ -172,7 +172,7 @@ export default function DiagnosticsPage() {
       selectedImage,
       description || undefined,
       category,
-      zoneId || undefined
+      (zoneId && zoneId !== "none") ? zoneId : undefined
     );
 
     if (result) {
@@ -333,7 +333,7 @@ export default function DiagnosticsPage() {
                           <SelectValue placeholder="Select zone" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No specific zone</SelectItem>
+                          <SelectItem value="none">No specific zone</SelectItem>
                           {zones.map((zone) => (
                             <SelectItem key={zone.id} value={zone.id}>
                               {formatZoneName(zone)}
