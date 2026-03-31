@@ -131,7 +131,7 @@ export default function DiagnosticsPage() {
     });
   }, [fetchDiagnostics, statusFilter, categoryFilter]);
 
-  // Rotate loading messages
+  // Rotate loading messages while diagnosing
   useEffect(() => {
     if (!diagnosing) {
       return;
@@ -143,14 +143,8 @@ export default function DiagnosticsPage() {
 
     return () => {
       clearInterval(interval);
-    };
-  }, [diagnosing]);
-
-  // Reset message index when diagnosing stops
-  useEffect(() => {
-    if (!diagnosing) {
       setMessageIndex(0);
-    }
+    };
   }, [diagnosing]);
 
   // Handle image selection
