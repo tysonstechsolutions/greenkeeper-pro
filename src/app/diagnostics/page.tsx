@@ -225,6 +225,12 @@ export default function DiagnosticsPage() {
               <p className="text-sm text-muted-foreground">
                 This may take 15-30 seconds
               </p>
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 w-full max-w-md">
+                  <p className="font-medium">Analysis Failed</p>
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-6">

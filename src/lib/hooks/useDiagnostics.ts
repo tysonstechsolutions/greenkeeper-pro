@@ -170,8 +170,7 @@ export function useDiagnostics() {
           .select(
             `
             *,
-            zone:course_zones(id, name, zone_type, hole_number),
-            created_by_profile:profiles!diagnostics_created_by_fkey(full_name)
+            zone:course_zones(id, name, zone_type, hole_number)
           `
           )
           .eq("course_id", activeCourse.id)
@@ -231,8 +230,7 @@ export function useDiagnostics() {
           .select(
             `
             *,
-            zone:course_zones(id, name, zone_type, hole_number),
-            created_by_profile:profiles!diagnostics_created_by_fkey(full_name)
+            zone:course_zones(id, name, zone_type, hole_number)
           `
           )
           .eq("id", id)
@@ -322,10 +320,10 @@ export function useDiagnostics() {
         const { data: record, error: insertError } = await (supabase.from("diagnostics") as any)
           .insert({
             course_id: activeCourse.id,
-            created_by: user?.id,
+            created_by: user?.id || null,
             zone_id: zoneId || null,
             photo_url: photoUrl,
-            description,
+            description: description || null,
             category: category || "auto",
             status: "diagnosed",
             full_response: diagnosisResult,
@@ -334,8 +332,7 @@ export function useDiagnostics() {
           .select(
             `
             *,
-            zone:course_zones(id, name, zone_type, hole_number),
-            created_by_profile:profiles!diagnostics_created_by_fkey(full_name)
+            zone:course_zones(id, name, zone_type, hole_number)
           `
           )
           .single();
