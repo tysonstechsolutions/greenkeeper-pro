@@ -74,8 +74,8 @@ export default function CourseConditionsPage() {
       setError(null);
       const queries = await Promise.all([
         // Fetch course conditions
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("app_settings") as any)
             .select("*")
             .eq("key", "course_conditions")
@@ -84,8 +84,8 @@ export default function CourseConditionsPage() {
           { data: null, error: null }
         ),
         // Fetch latest weather
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("weather_logs") as any)
             .select("*")
             .order("created_at", { ascending: false })
@@ -94,8 +94,8 @@ export default function CourseConditionsPage() {
           { data: null, error: null }
         ),
         // Fetch active chemical applications
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("chemical_applications") as any)
             .select("*")
             .gt("rei_expires_at", new Date().toISOString()),
@@ -103,8 +103,8 @@ export default function CourseConditionsPage() {
           { data: null, error: null }
         ),
         // Fetch course zones
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("course_zones") as any).select("*"),
           8000,
           { data: null, error: null }
@@ -114,19 +114,27 @@ export default function CourseConditionsPage() {
       const [conditionsResult, weatherResult, chemicalsResult, zonesResult] =
         queries;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((conditionsResult as any).data?.value) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setConditions((conditionsResult as any).data.value.value || {});
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((weatherResult as any).data?.data && (weatherResult as any).data.data.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setWeather((weatherResult as any).data.data[0]);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((chemicalsResult as any).data?.data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setChemicals((chemicalsResult as any).data.data);
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((zonesResult as any).data?.data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setZones((zonesResult as any).data.data);
       }
 
@@ -347,7 +355,7 @@ export default function CourseConditionsPage() {
               <div className="bg-gradient-to-r from-green-500 to-green-600 px-4 sm:px-6 py-3">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                   <TreePine className="w-5 h-5" />
-                  Today's Conditions
+                  Today&apos;s Conditions
                 </h3>
               </div>
 
@@ -432,7 +440,7 @@ export default function CourseConditionsPage() {
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 sm:px-6 py-3">
                   <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                     <Sun className="w-5 h-5" />
-                    Today's Weather
+                    Today&apos;s Weather
                   </h3>
                 </div>
 

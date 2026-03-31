@@ -736,7 +736,7 @@ export default function ShiftSwapPage() {
                 <User className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                 <h3 className="font-semibold mb-1">No Posted Shifts</h3>
                 <p className="text-sm text-muted-foreground">
-                  You haven't posted any shifts yet. Use the form above to get started.
+                  You haven&apos;t posted any shifts yet. Use the form above to get started.
                 </p>
               </div>
             ) : (
@@ -757,7 +757,7 @@ export default function ShiftSwapPage() {
                 <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                 <h3 className="font-semibold mb-1">No Pending Claims</h3>
                 <p className="text-sm text-muted-foreground">
-                  You don't have any shifts pending manager approval. Check the available shifts to claim one.
+                  You don&apos;t have any shifts pending manager approval. Check the available shifts to claim one.
                 </p>
               </div>
             ) : (

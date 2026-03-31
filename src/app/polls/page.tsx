@@ -79,6 +79,7 @@ export default function PollsPage() {
     setLoading(true);
     setError(null);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const query = (supabase.from("polls") as any)
       .select(
         `
@@ -100,7 +101,6 @@ export default function PollsPage() {
       .in("status", ["active", "closed"])
       .order("created_at", { ascending: false });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await withTimeout(query, 8000, { data: null, error: null });
 
     if (result.error) {
@@ -164,6 +164,7 @@ export default function PollsPage() {
       // Delete existing votes for this poll
       const existingVotes = userVotes[pollId] || [];
       if (existingVotes.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase.from("poll_votes") as any)
           .delete()
           .in("option_id", existingVotes)
@@ -177,6 +178,7 @@ export default function PollsPage() {
         user_id: user.id,
       }));
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const insertResult = await (supabase.from("poll_votes") as any).insert(newVotes);
 
       if (!insertResult.error) {
@@ -198,6 +200,7 @@ export default function PollsPage() {
     setAddingComment((prev) => ({ ...prev, [pollId]: true }));
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (supabase.from("poll_comments") as any).insert({
         poll_id: pollId,
         user_id: user.id,

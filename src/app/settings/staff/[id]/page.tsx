@@ -66,7 +66,6 @@ export default function EditStaffPage() {
   useEffect(() => {
     async function fetchStaff() {
       setLoading(true);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: fetchError } = await withTimeout(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase.from("profiles") as any)

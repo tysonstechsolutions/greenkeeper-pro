@@ -340,7 +340,7 @@ export default function ChecklistsPage() {
       {viewMode === "mine" && myStats.itemsTotal > 0 && (
         <div className="mb-6 p-4 rounded-xl bg-primary/5 border border-primary/10">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Today's Progress</span>
+            <span className="text-sm font-medium">Today&apos;s Progress</span>
             <span className="text-sm font-bold text-primary">
               {myStats.itemsTotal > 0 ? Math.round((myStats.itemsDone / myStats.itemsTotal) * 100) : 0}%
             </span>
@@ -370,7 +370,7 @@ export default function ChecklistsPage() {
           <div className="text-center py-16">
             <ClipboardCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
             <h2 className="font-semibold text-lg">No tasks for today</h2>
-            <p className="text-sm text-muted-foreground mt-1">You're all clear. Check the task board for upcoming work.</p>
+            <p className="text-sm text-muted-foreground mt-1">You&apos;re all clear. Check the task board for upcoming work.</p>
           </div>
         ) : (
           <div className="space-y-3">

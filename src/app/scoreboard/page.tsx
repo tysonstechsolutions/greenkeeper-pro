@@ -206,7 +206,7 @@ export default function ScoreboardPage() {
             Crew Scoreboard
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Who's crushing it this {timeRange === "week" ? "week" : timeRange === "month" ? "month" : "season"}
+            Who&apos;s crushing it this {timeRange === "week" ? "week" : timeRange === "month" ? "month" : "season"}
           </p>
         </div>
       </div>

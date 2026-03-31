@@ -220,6 +220,7 @@ function CheckOutModal({
             <label className="text-sm font-semibold block mb-2">Condition (on checkout)</label>
             <select
               value={conditionOut}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onChange={(e) => setConditionOut(e.target.value as any)}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
@@ -331,6 +332,7 @@ function ReturnModal({
             <label className="text-sm font-semibold block mb-2">Condition (on return)</label>
             <select
               value={conditionIn}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onChange={(e) => setConditionIn(e.target.value as any)}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
@@ -530,8 +532,8 @@ export default function EquipmentCheckoutPage() {
 
     try {
       const [activeResult, historyResult, allEquipmentResult] = await Promise.all([
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("equipment_checkouts") as any)
             .select(
               "*, equipment:equipment_id(id, name, equipment_type, make, model, status, current_hours, location, photo_url), profile:checked_out_by(full_name, display_name, avatar_url)"
@@ -541,8 +543,8 @@ export default function EquipmentCheckoutPage() {
           8000,
           { data: null, error: null }
         ),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("equipment_checkouts") as any)
             .select(
               "*, equipment:equipment_id(id, name, equipment_type, make, model), profile:checked_out_by(full_name, display_name, avatar_url)"
@@ -553,8 +555,8 @@ export default function EquipmentCheckoutPage() {
           8000,
           { data: null, error: null }
         ),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         withTimeout(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase.from("equipment") as any)
             .select("id, name, equipment_type, make, model, status, current_hours, location, photo_url")
             .eq("status", "operational"),
@@ -645,8 +647,8 @@ export default function EquipmentCheckoutPage() {
 
       setSubmitting(true);
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: updateError } = await (supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .from("equipment_checkouts") as any)
           .update({
             returned_at: new Date().toISOString(),

@@ -336,7 +336,7 @@ export default function BriefingPage() {
             <Coffee className="w-8 h-8 text-primary animate-pulse" />
           </div>
           <h2 className="text-lg font-semibold">Preparing your briefing...</h2>
-          <p className="text-sm text-muted-foreground mt-1">Gathering today's data</p>
+          <p className="text-sm text-muted-foreground mt-1">Gathering today&apos;s data</p>
         </div>
       </div>
     );
@@ -455,7 +455,7 @@ export default function BriefingPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-primary" />
-              Today's Tasks
+              Today&apos;s Tasks
             </h2>
             <Link href="/tasks" className="text-xs text-primary hover:underline">
               View all

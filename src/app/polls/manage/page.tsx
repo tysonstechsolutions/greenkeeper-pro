@@ -200,6 +200,7 @@ export default function ManagePollsPage() {
         return;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const poll = pollResult.data as any;
 
       // Insert options
