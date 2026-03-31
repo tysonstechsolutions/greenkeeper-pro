@@ -22,6 +22,7 @@ import {
   BarChart3,
   Trash2,
   ArrowRight,
+  Footprints,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -190,6 +191,12 @@ export default function ObservationsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/observations/walk">
+            <Button variant="outline" className="gap-2">
+              <Footprints className="w-4 h-4" />
+              Course Walk
+            </Button>
+          </Link>
           <Link href="/observations/plan">
             <Button variant="outline" className="gap-2">
               <BarChart3 className="w-4 h-4" />
