@@ -148,8 +148,8 @@ export async function POST() {
         .select()
         .single();
 
-      if (error) {
-        errors.push({ title: obs.title, error: error.message });
+      if (error || !data) {
+        errors.push({ title: obs.title, error: error?.message || "No data returned" });
       } else {
         results.push({ id: data.id, title: data.title });
       }

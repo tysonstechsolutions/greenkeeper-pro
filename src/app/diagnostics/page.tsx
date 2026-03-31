@@ -146,10 +146,10 @@ export default function DiagnosticsPage() {
     };
   }, [diagnosing]);
 
-  // Reset message index when not diagnosing
+  // Reset message index when diagnosing stops
   useEffect(() => {
     if (!diagnosing) {
-      setMessageIndex((prev) => (prev !== 0 ? 0 : prev)); // eslint-disable-line react-hooks/set-state-in-effect
+      setMessageIndex(0);
     }
   }, [diagnosing]);
 

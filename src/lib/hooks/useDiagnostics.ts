@@ -544,15 +544,15 @@ export function useDiagnostics() {
         const condition = result.diagnosis.condition;
         const severity = result.diagnosis.severity;
 
-        // Map severity to priority
+        // Map severity to priority (must match tasks table constraint)
         const priorityMap: Record<number, string> = {
           1: "low",
           2: "low",
-          3: "medium",
+          3: "normal",
           4: "high",
-          5: "urgent",
+          5: "critical",
         };
-        const priority = priorityMap[severity] || "medium";
+        const priority = priorityMap[severity] || "normal";
 
         // Build description from treatment
         let description = `**Condition:** ${condition}\n`;
@@ -576,15 +576,14 @@ export function useDiagnostics() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: task, error: taskError } = await (supabase.from("tasks") as any)
           .insert({
-            course_id: activeCourse.id,
             title: `Treat ${condition} - ${zoneName}`,
             description,
             priority,
             status: "pending",
-            category: "treatment",
+            category: "chemical",
             zone_id: diagnostic.zone_id,
-            created_by: user?.id,
-            due_date: result.treatment.application_window.best_date || null,
+            assigned_by: user?.id,
+            due_date: result.treatment.application_window.best_date || new Date().toISOString().split("T")[0],
           })
           .select()
           .single();

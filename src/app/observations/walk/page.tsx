@@ -27,7 +27,7 @@ import {
   sentimentConfig,
 } from "@/lib/hooks/useObservations";
 import { usePhotos } from "@/lib/hooks/usePhotos";
-import type { CourseObservation, Photo } from "@/types/database";
+import type { CourseObservation, Photo, PhotoType } from "@/types/database";
 
 // ── Location definitions ────────────────────────────────────────────
 interface CourseLocation {
@@ -111,8 +111,7 @@ export default function CourseWalkPage() {
           onBack={() => setSelectedLocation(null)}
           onAddObservation={addObservation}
           onDeleteObservation={deleteObservation}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          uploadAndCreatePhoto={uploadAndCreatePhoto as any}
+          uploadAndCreatePhoto={uploadAndCreatePhoto}
         />
       ) : (
         <>
@@ -193,7 +192,7 @@ interface LocationDetailProps {
   onDeleteObservation: (id: string) => Promise<boolean>;
   uploadAndCreatePhoto: (
     file: File | Blob,
-    metadata: { photoType: string; caption?: string },
+    metadata: { photoType: PhotoType; caption?: string; tags?: string[] },
     userId: string
   ) => Promise<Photo>;
 }
@@ -273,12 +272,13 @@ function LocationDetail({
     try {
       // Upload photos first if any
       const uploadedPhotoIds: string[] = [];
+      const failedUploads: number[] = [];
       if (selectedPhotos.length > 0 && userId) {
         setUploadingPhotos(true);
-        for (const { file } of selectedPhotos) {
+        for (let i = 0; i < selectedPhotos.length; i++) {
           try {
             const photo = await uploadAndCreatePhoto(
-              file,
+              selectedPhotos[i].file,
               {
                 photoType: "condition",
                 caption: `${location.label} observation`,
@@ -288,7 +288,7 @@ function LocationDetail({
             uploadedPhotoIds.push(photo.id);
           } catch (photoErr) {
             console.error("Photo upload failed:", photoErr);
-            // Continue saving the observation even if photo upload fails
+            failedUploads.push(i + 1);
           }
         }
         setUploadingPhotos(false);
@@ -322,6 +322,11 @@ function LocationDetail({
       selectedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
       setSelectedPhotos([]);
       setShowForm(false);
+
+      // Warn if some photos failed
+      if (failedUploads.length > 0) {
+        setError(`Observation saved, but ${failedUploads.length} photo(s) failed to upload.`);
+      }
     } catch (err) {
       console.error("Error saving observation:", err);
       setError(
@@ -386,6 +391,17 @@ function LocationDetail({
           Add
         </Button>
       </div>
+
+      {/* Error/warning banner (outside form so it persists) */}
+      {error && !showForm && (
+        <div className="mb-4 p-3 bg-amber-500/10 border border-amber-300 rounded-lg text-amber-800 text-sm flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-2 underline text-xs">Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {/* Add observation form */}
       {showForm && (
