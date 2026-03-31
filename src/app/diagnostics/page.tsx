@@ -479,9 +479,6 @@ export default function DiagnosticsPage() {
                         )}
                       </div>
                     </div>
-
-                    {/* Arrow */}
-                    <div className="text-muted-foreground">→</div>
                   </div>
                 );
               })}
