@@ -17,16 +17,17 @@ import {
   Target,
   Car,
   MapPin,
-  CheckCircle2,
   Eye,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useObservations, sentimentConfig } from "@/lib/hooks/useObservations";
+import {
+  useObservations,
+  sentimentConfig,
+} from "@/lib/hooks/useObservations";
 import { usePhotos } from "@/lib/hooks/usePhotos";
-import { getPublicUrl } from "@/lib/supabase/storage";
-import type { CourseObservation } from "@/types/database";
-import type { Photo } from "@/types/database";
+import type { CourseObservation, Photo } from "@/types/database";
 
 // ── Location definitions ────────────────────────────────────────────
 interface CourseLocation {
@@ -52,14 +53,11 @@ const FACILITIES: CourseLocation[] = [
   { id: "parking-lot", label: "Parking Lot", type: "facility", icon: <Car className="w-4 h-4" /> },
 ];
 
-const ALL_LOCATIONS = [...HOLES, ...FACILITIES];
-
 // ── Helper: match observation to a location ─────────────────────────
 function obsMatchesLocation(obs: CourseObservation, loc: CourseLocation): boolean {
   if (loc.type === "hole" && loc.holeNumber) {
     return obs.hole_number === loc.holeNumber;
   }
-  // Facility match: check the location field (case-insensitive)
   if (loc.type === "facility") {
     const locLower = (obs.location || "").toLowerCase();
     const labelLower = loc.label.toLowerCase();
@@ -72,17 +70,15 @@ function obsMatchesLocation(obs: CourseObservation, loc: CourseLocation): boolea
 export default function CourseWalkPage() {
   const { user } = useAuth();
   const { observations, addObservation, deleteObservation } = useObservations();
-  const { uploadAndCreatePhoto, getPhotoUrl, getThumbnailUrl } = usePhotos();
+  const { uploadAndCreatePhoto } = usePhotos();
 
   const [selectedLocation, setSelectedLocation] = useState<CourseLocation | null>(null);
 
-  // Get observation counts per location
   const countForLocation = useCallback(
     (loc: CourseLocation) => observations.filter((o) => obsMatchesLocation(o, loc)).length,
     [observations]
   );
 
-  // Get observations for selected location
   const locationObservations = selectedLocation
     ? observations.filter((o) => obsMatchesLocation(o, selectedLocation))
     : [];
@@ -115,9 +111,8 @@ export default function CourseWalkPage() {
           onBack={() => setSelectedLocation(null)}
           onAddObservation={addObservation}
           onDeleteObservation={deleteObservation}
-          uploadAndCreatePhoto={uploadAndCreatePhoto}
-          getPhotoUrl={getPhotoUrl}
-          getThumbnailUrl={getThumbnailUrl}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          uploadAndCreatePhoto={uploadAndCreatePhoto as any}
         />
       ) : (
         <>
@@ -192,11 +187,15 @@ interface LocationDetailProps {
   observations: CourseObservation[];
   userId: string;
   onBack: () => void;
-  onAddObservation: (obs: Omit<CourseObservation, "id" | "created_by" | "created_at" | "updated_at" | "is_addressed" | "linked_plan_item_id">) => Promise<CourseObservation | null>;
+  onAddObservation: (
+    obs: Omit<CourseObservation, "id" | "created_by" | "created_at" | "updated_at" | "is_addressed" | "linked_plan_item_id">
+  ) => Promise<CourseObservation | null>;
   onDeleteObservation: (id: string) => Promise<boolean>;
-  uploadAndCreatePhoto: (file: File | Blob, metadata: { photoType: "condition"; caption?: string }, userId: string) => Promise<Photo>;
-  getPhotoUrl: (photo: Photo) => string;
-  getThumbnailUrl: (photo: Photo) => string | null;
+  uploadAndCreatePhoto: (
+    file: File | Blob,
+    metadata: { photoType: string; caption?: string },
+    userId: string
+  ) => Promise<Photo>;
 }
 
 function LocationDetail({
@@ -207,16 +206,16 @@ function LocationDetail({
   onAddObservation,
   onDeleteObservation,
   uploadAndCreatePhoto,
-  getPhotoUrl,
-  getThumbnailUrl,
 }: LocationDetailProps) {
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Photo capture state
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Two separate file inputs: one for camera, one for gallery/upload
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [selectedPhotos, setSelectedPhotos] = useState<{ file: File; preview: string }[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
@@ -232,33 +231,44 @@ function LocationDetail({
     return () => {
       selectedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
     };
-  }, [selectedPhotos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const imageFiles = files.filter(
-      (f) => f.type.startsWith("image/") && f.size <= 20 * 1024 * 1024
+      (f: File) => f.type.startsWith("image/") && f.size <= 20 * 1024 * 1024
     );
-    const newPhotos = imageFiles.map((file) => ({
+    const newPhotos = imageFiles.map((file: File) => ({
       file,
       preview: URL.createObjectURL(file),
     }));
     setSelectedPhotos((prev) => [...prev, ...newPhotos]);
-
     // Reset input so same file can be selected again
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    e.target.value = "";
   }, []);
 
   const removePhoto = useCallback((index: number) => {
     setSelectedPhotos((prev) => {
-      URL.revokeObjectURL(prev[index].preview);
-      return prev.filter((_, i) => i !== index);
+      const copy = [...prev];
+      URL.revokeObjectURL(copy[index].preview);
+      copy.splice(index, 1);
+      return copy;
     });
   }, []);
+
+  const resetForm = useCallback(() => {
+    setDescription("");
+    setError(null);
+    selectedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
+    setSelectedPhotos([]);
+    setShowForm(false);
+  }, [selectedPhotos]);
 
   const handleSubmit = async () => {
     if (!description.trim() && selectedPhotos.length === 0) return;
     setSaving(true);
+    setError(null);
 
     try {
       // Upload photos first if any
@@ -266,15 +276,20 @@ function LocationDetail({
       if (selectedPhotos.length > 0 && userId) {
         setUploadingPhotos(true);
         for (const { file } of selectedPhotos) {
-          const photo = await uploadAndCreatePhoto(
-            file,
-            {
-              photoType: "condition",
-              caption: `${location.label} observation`,
-            },
-            userId
-          );
-          uploadedPhotoIds.push(photo.id);
+          try {
+            const photo = await uploadAndCreatePhoto(
+              file,
+              {
+                photoType: "condition",
+                caption: `${location.label} observation`,
+              },
+              userId
+            );
+            uploadedPhotoIds.push(photo.id);
+          } catch (photoErr) {
+            console.error("Photo upload failed:", photoErr);
+            // Continue saving the observation even if photo upload fails
+          }
         }
         setUploadingPhotos(false);
       }
@@ -284,25 +299,36 @@ function LocationDetail({
         ? description.trim().slice(0, 80)
         : `Photo observation - ${location.label}`;
 
-      await onAddObservation({
+      const result = await onAddObservation({
         title,
         description: description.trim() || `Photo observation at ${location.label}`,
         category: "other",
         sentiment: "neutral",
         location: location.type === "facility" ? location.label : null,
-        hole_number: location.holeNumber || null,
+        hole_number: location.type === "hole" && location.holeNumber ? location.holeNumber : null,
         zone_id: null,
         photo_ids: uploadedPhotoIds.length > 0 ? uploadedPhotoIds : null,
         tags: [location.type === "hole" ? `hole-${location.holeNumber}` : location.id],
       });
 
-      // Reset form
+      if (!result) {
+        setError("Failed to save observation. Please try again.");
+        setSaving(false);
+        return;
+      }
+
+      // Success — reset form
       setDescription("");
       selectedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
       setSelectedPhotos([]);
       setShowForm(false);
     } catch (err) {
       console.error("Error saving observation:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
       setSaving(false);
       setUploadingPhotos(false);
@@ -369,17 +395,20 @@ function LocationDetail({
               New Observation — {location.label}
             </h3>
             <button
-              onClick={() => {
-                setShowForm(false);
-                setDescription("");
-                selectedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
-                setSelectedPhotos([]);
-              }}
+              onClick={resetForm}
               className="text-muted-foreground hover:text-foreground"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Description */}
           <div className="mb-4">
@@ -393,13 +422,21 @@ function LocationDetail({
             />
           </div>
 
-          {/* Photo capture */}
+          {/* Photo section */}
           <div className="mb-4">
+            {/* Hidden file inputs — camera and gallery are separate */}
             <input
-              ref={fileInputRef}
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
-              capture={isMobile ? "environment" : undefined}
+              capture="environment"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
               onChange={handleFileSelect}
               className="hidden"
               multiple
@@ -427,27 +464,31 @@ function LocationDetail({
               </div>
             )}
 
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Camera className="w-4 h-4" />
-              {isMobile ? "Take Photo" : "Add Photo"}
-            </Button>
+            <div className="flex gap-2">
+              {isMobile && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera className="w-4 h-4" />
+                  Take Photo
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => galleryInputRef.current?.click()}
+              >
+                <ImagePlus className="w-4 h-4" />
+                Upload Photo
+              </Button>
+            </div>
           </div>
 
           {/* Submit */}
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowForm(false);
-                setDescription("");
-                selectedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
-                setSelectedPhotos([]);
-              }}
-            >
+            <Button variant="outline" onClick={resetForm}>
               Cancel
             </Button>
             <Button
@@ -497,9 +538,13 @@ function LocationDetail({
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    {/* Photos */}
                     {obs.photo_ids && obs.photo_ids.length > 0 && (
-                      <ObservationPhotos photoIds={obs.photo_ids} />
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Camera className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">
+                          {obs.photo_ids.length} photo{obs.photo_ids.length !== 1 ? "s" : ""} attached
+                        </span>
+                      </div>
                     )}
 
                     <p className="text-sm mt-1">{obs.description}</p>
@@ -541,32 +586,6 @@ function LocationDetail({
           <Camera className="w-6 h-6" />
         </button>
       )}
-    </div>
-  );
-}
-
-// ── Observation photo thumbnails ────────────────────────────────────
-function ObservationPhotos({ photoIds }: { photoIds: string[] }) {
-  // We show photo IDs as placeholders — the photos are stored in Supabase
-  // and linked by ID. The photo gallery can show full images.
-  // For inline display we attempt to load them via the photos table.
-  const { photos, loading, fetchPhotos } = usePhotos();
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!loaded && photoIds.length > 0) {
-      setLoaded(true);
-      // Fetch won't filter by ID directly, but we can use the photos hook
-      // The photos are already in storage, so we show a count badge
-    }
-  }, [loaded, photoIds]);
-
-  return (
-    <div className="flex items-center gap-1.5 mb-2">
-      <Camera className="w-3.5 h-3.5 text-muted-foreground" />
-      <span className="text-xs text-muted-foreground">
-        {photoIds.length} photo{photoIds.length !== 1 ? "s" : ""} attached
-      </span>
     </div>
   );
 }
