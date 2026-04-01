@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     if (authError) {
       console.error("PIN auth sign-in failed:", authError.message, "code:", authError.code, "status:", authError.status);
       return NextResponse.json(
-        { error: `PIN login failed: ${authError.message}` },
+        { error: "PIN login failed. Please contact your superintendent." },
         { status: 401 }
       );
     }
