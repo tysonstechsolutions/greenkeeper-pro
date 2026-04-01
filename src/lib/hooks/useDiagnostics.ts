@@ -268,28 +268,10 @@ export function useDiagnostics() {
       setError(null);
 
       try {
-        // 1. Upload image to Supabase storage (uses "photos" bucket)
+        // 1. Get current user
         const {
           data: { user },
         } = await supabase.auth.getUser();
-
-        const userId = user?.id || "anonymous";
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const fileName = `${userId}/${year}/${month}/diag-${Date.now()}-${imageFile.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("photos")
-          .upload(fileName, imageFile, { cacheControl: "3600", upsert: false });
-
-        if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from("photos")
-          .getPublicUrl(fileName);
-
-        const photoUrl = urlData.publicUrl;
 
         // 2. Resize image and convert to base64 for API (max 1200px to stay under size limits)
         const base64 = await new Promise<string>((resolve, reject) => {
@@ -312,9 +294,11 @@ export function useDiagnostics() {
             const ctx = canvas.getContext("2d");
             if (!ctx) { reject(new Error("Canvas not supported")); return; }
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", 0.8));
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+            URL.revokeObjectURL(img.src);
+            resolve(dataUrl);
           };
-          img.onerror = () => reject(new Error("Failed to load image for resize"));
+          img.onerror = () => reject(new Error("Failed to load image"));
           img.src = URL.createObjectURL(imageFile);
         });
 
@@ -336,7 +320,6 @@ export function useDiagnostics() {
             const errorData = await response.json();
             errorMessage = errorData.error || errorMessage;
           } catch {
-            // Response wasn't JSON (e.g. "Request Entity Too Large")
             const text = await response.text().catch(() => "");
             errorMessage = text || `Server error (${response.status})`;
           }
@@ -345,7 +328,34 @@ export function useDiagnostics() {
 
         const { data: diagnosisResult } = await response.json();
 
-        // 4. Save to diagnostics table
+        // 4. Try to upload image to storage (non-blocking — diagnosis works even if this fails)
+        let photoUrl = base64.substring(0, 100) + "..."; // fallback: truncated data URL placeholder
+        try {
+          const userId = user?.id || "anonymous";
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, "0");
+          const fileName = `${userId}/${year}/${month}/diag-${Date.now()}.jpg`;
+          const { error: uploadError } = await supabase.storage
+            .from("photos")
+            .upload(fileName, imageFile, { cacheControl: "3600", upsert: false });
+
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage
+              .from("photos")
+              .getPublicUrl(fileName);
+            photoUrl = urlData.publicUrl;
+          } else {
+            console.warn("Photo upload failed (non-critical):", uploadError.message);
+            // Use the base64 as the photo URL so the image still shows
+            photoUrl = base64;
+          }
+        } catch (storageErr) {
+          console.warn("Storage upload error (non-critical):", storageErr);
+          photoUrl = base64;
+        }
+
+        // 5. Save to diagnostics table
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: record, error: insertError } = await (supabase.from("diagnostics") as any)
           .insert({
