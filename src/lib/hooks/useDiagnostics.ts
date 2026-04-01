@@ -291,12 +291,31 @@ export function useDiagnostics() {
 
         const photoUrl = urlData.publicUrl;
 
-        // 2. Convert image to base64 for API
+        // 2. Resize image and convert to base64 for API (max 1200px to stay under size limits)
         const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(imageFile);
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const maxSize = 1200;
+            let { width, height } = img;
+            if (width > maxSize || height > maxSize) {
+              if (width > height) {
+                height = Math.round((height * maxSize) / width);
+                width = maxSize;
+              } else {
+                width = Math.round((width * maxSize) / height);
+                height = maxSize;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { reject(new Error("Canvas not supported")); return; }
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          };
+          img.onerror = () => reject(new Error("Failed to load image for resize"));
+          img.src = URL.createObjectURL(imageFile);
         });
 
         // 3. Call the diagnostics API
@@ -312,8 +331,16 @@ export function useDiagnostics() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Diagnosis failed");
+          let errorMessage = "Diagnosis failed";
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            // Response wasn't JSON (e.g. "Request Entity Too Large")
+            const text = await response.text().catch(() => "");
+            errorMessage = text || `Server error (${response.status})`;
+          }
+          throw new Error(errorMessage);
         }
 
         const { data: diagnosisResult } = await response.json();

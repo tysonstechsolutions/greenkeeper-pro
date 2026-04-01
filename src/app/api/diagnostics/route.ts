@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+// Allow larger request bodies for image uploads (resized base64 images)
+export const maxDuration = 60; // Allow up to 60 seconds for AI analysis
+
 // System prompt for the AI agronomist
 const SYSTEM_PROMPT = `You are an expert golf course superintendent and agronomist. You specialize in cool-season turf management for the Northern Illinois / Great Lakes region (USDA Zone 5b-6a).
 
