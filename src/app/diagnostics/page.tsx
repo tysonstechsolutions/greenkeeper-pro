@@ -14,7 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";h
+} from "@/components/ui/select";
 import { useDiagnostics } from "@/lib/hooks/useDiagnostics";
 import { useCourseZones, formatZoneName } from "@/lib/hooks/useCourseZones";
 
