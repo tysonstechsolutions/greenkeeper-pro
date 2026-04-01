@@ -622,4 +622,66 @@ export function useDiagnostics() {
 
         if (taskError) throw taskError;
 
-        // 5. Update diagnostic to link to 
+        // 5. Update diagnostic to link to task and set to treating
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from("diagnostics") as any)
+          .update({
+            status: "treating",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", diagnosticId);
+
+        // Update local state
+        setDiagnostics((prev) =>
+          prev.map((d) =>
+            d.id === diagnosticId ? { ...d, status: "treating" } : d
+          )
+        );
+
+        return task.id;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to create task";
+        setError(message);
+        console.error("Error creating task from diagnosis:", err);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeCourse?.id, supabase]
+  );
+
+  // Get count of active diagnoses
+  const getActiveDiagnosesCount = useCallback(async (): Promise<number> => {
+    if (!activeCourse?.id) return 0;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { count, error } = await (supabase.from("diagnostics") as any)
+        .select("*", { count: "exact", head: true })
+        .eq("course_id", activeCourse.id)
+        .in("status", ["diagnosed", "treating", "monitoring"]);
+
+      if (error) throw error;
+
+      return count || 0;
+    } catch (err) {
+      console.error("Error getting active diagnoses count:", err);
+      return 0;
+    }
+  }, [activeCourse?.id, supabase]);
+
+  return {
+    diagnostics,
+    loading,
+    error,
+    diagnosing,
+    fetchDiagnostics,
+    fetchDiagnosis,
+    submitDiagnosis,
+    askFollowUp,
+    updateStatus,
+    createTaskFromDiagnosis,
+    getActiveDiagnosesCount,
+  };
+}

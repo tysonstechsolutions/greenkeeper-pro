@@ -434,4 +434,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Diagnostics API error:", error);
 
-    const message = error instanceof Error ? error.message 
+    const message = error instanceof Error ? error.message : "An unexpected error occurred";
+
+    return NextResponse.json(
+      { error: message, success: false },
+      { status: 500 }
+    );
+  }
+}
