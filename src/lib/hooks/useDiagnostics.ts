@@ -169,8 +169,7 @@ export function useDiagnostics() {
         let query = (supabase.from("diagnostics") as any)
           .select(
             `
-            *,
-            zone:course_zones(id, name, zone_type, hole_number)
+            *
           `
           )
           .eq("course_id", activeCourse.id)
@@ -229,8 +228,7 @@ export function useDiagnostics() {
         const { data, error: fetchError } = await (supabase.from("diagnostics") as any)
           .select(
             `
-            *,
-            zone:course_zones(id, name, zone_type, hole_number)
+            *
           `
           )
           .eq("id", id)
@@ -355,36 +353,33 @@ export function useDiagnostics() {
           photoUrl = base64;
         }
 
-        // 5. Save to diagnostics table
+        // 5. Save to diagnostics table (use a short placeholder if photo_url is base64 to avoid DB size issues)
+        const dbPhotoUrl = photoUrl.startsWith("data:") ? "pending-upload" : photoUrl;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: record, error: insertError } = await (supabase.from("diagnostics") as any)
           .insert({
             course_id: activeCourse.id,
             created_by: user?.id || null,
             zone_id: zoneId || null,
-            photo_url: photoUrl,
+            photo_url: dbPhotoUrl,
             description: description || null,
             category: category || "auto",
             status: "diagnosed",
             full_response: diagnosisResult,
             conversation: [],
           })
-          .select(
-            `
-            *,
-            zone:course_zones(id, name, zone_type, hole_number)
-          `
-          )
+          .select("*")
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) throw new Error(`Failed to save diagnosis: ${insertError.message}`);
 
         // Update local state
         setDiagnostics((prev) => [record as unknown as Diagnostic, ...prev]);
 
         return record as unknown as Diagnostic;
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to submit diagnosis";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const message = err instanceof Error ? err.message : (err as any)?.message || JSON.stringify(err) || "Failed to submit diagnosis";
         setError(message);
         console.error("Error submitting diagnosis:", err);
         return null;
