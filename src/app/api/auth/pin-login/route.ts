@@ -77,11 +77,9 @@ export async function POST(request: Request) {
     });
 
     if (authError) {
-      // If password doesn't match (first time), try updating it
-      // This handles the transition from temp passwords to PIN passwords
-      console.error("PIN auth sign-in failed:", authError.message);
+      console.error("PIN auth sign-in failed:", authError.message, "code:", authError.code, "status:", authError.status);
       return NextResponse.json(
-        { error: "PIN login is not set up for this account. Contact your superintendent." },
+        { error: `PIN login failed: ${authError.message}` },
         { status: 401 }
       );
     }
