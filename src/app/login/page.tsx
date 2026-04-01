@@ -134,8 +134,19 @@ export default function LoginPage() {
             </Button>
           </form>
 
+          {/* PIN Login */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <a
+              href="/pin-login"
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-muted/50 hover:bg-muted text-sm font-medium text-foreground transition-colors"
+            >
+              <span className="text-lg">🔢</span>
+              Crew PIN Login
+            </a>
+          </div>
+
           {/* Links */}
-          <div className="mt-6 pt-6 border-t border-border space-y-3">
+          <div className="mt-4 space-y-3">
             <p className="text-sm text-muted-foreground text-center">
               Golfer?{" "}
               <a href="/join" className="text-primary font-medium hover:underline">

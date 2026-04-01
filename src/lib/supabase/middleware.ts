@@ -38,7 +38,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Define public routes that don't require authentication
-  const publicRoutes = ["/login", "/invite", "/auth/callback", "/auth/confirm", "/join"];
+  const publicRoutes = ["/login", "/pin-login", "/invite", "/auth/callback", "/auth/confirm", "/join"];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
@@ -53,7 +53,7 @@ export async function updateSession(request: NextRequest) {
 
   // If user is logged in and trying to access login page,
   // redirect to appropriate dashboard based on role
-  if (user && request.nextUrl.pathname === "/login") {
+  if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/pin-login")) {
     const url = request.nextUrl.clone();
     // For now, redirect to dashboard - the client-side will handle role-based routing
     url.pathname = "/dashboard";
