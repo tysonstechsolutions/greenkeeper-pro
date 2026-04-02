@@ -3,26 +3,23 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Wrench,
   ArrowLeft,
   Edit2,
+  Trash2,
+  Camera,
+  X,
+  Plus,
+  AlertCircle,
+  Check,
+  Loader2,
   Clock,
-  DollarSign,
-  Calendar,
   MapPin,
   Hash,
   Tag,
+  Calendar,
+  DollarSign,
   Package,
   AlertTriangle,
-  CheckCircle,
-  Plus,
-  ChevronDown,
-  Loader2,
-  ClipboardCheck,
-  X,
-  Camera,
-  AlertCircle,
-  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
@@ -60,23 +57,22 @@ import {
   equipmentTypeLabels,
   equipmentStatusLabels,
   equipmentStatusColors,
+  conditionStatusLabels,
+  conditionStatusColors,
   logTypeLabels,
   logTypeColors,
-  preOpChecklists,
+  fuelTypeLabels,
+  preInspectionChecklist,
+  postInspectionChecklist,
+  cleaningChecklist,
   getChecklistCategory,
   type EquipmentWithLogs,
   type CreateLogData,
+  type CreateInspectionData,
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useNotifications } from "@/lib/hooks/useNotifications";
-import type { EquipmentLog, EquipmentStatus, EquipmentLogType, PartUsed } from "@/types/database";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
+import type { Equipment, EquipmentLog, EquipmentInspection } from "@/types/database";
 
 export default function EquipmentDetailPage() {
   const params = useParams();
@@ -86,25 +82,50 @@ export default function EquipmentDetailPage() {
   const {
     fetchEquipmentItem,
     updateEquipment,
-    updateHours,
-    retireEquipment,
+    uploadEquipmentPhoto,
+    deleteEquipmentPhoto,
     createLog,
+    createInspection,
+    fetchLatestInspection,
     loading,
-    error,
   } = useEquipment();
 
   const equipmentId = params.id as string;
-
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-
-  // Hours edit
-  const [editingHours, setEditingHours] = useState(false);
-  const [newHours, setNewHours] = useState("");
-
-  // Log entry sheet
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [logSheetOpen, setLogSheetOpen] = useState(false);
+  const [inspectionSheetOpen, setInspectionSheetOpen] = useState(false);
+  const [currentInspectionType, setCurrentInspectionType] = useState<
+    "pre" | "post" | "cleaning"
+  >("pre");
+  const [latestInspection, setLatestInspection] = useState<EquipmentInspection | null>(null);
+
+  // Edit form state
+  const [editForm, setEditForm] = useState({
+    name: "",
+    equipment_type: "",
+    make: "",
+    model: "",
+    year: "",
+    serial_number: "",
+    asset_tag: "",
+    status: "",
+    condition_status: "",
+    condition_notes: "",
+    needs_parts_ordered: false,
+    parts_needed: "",
+    estimated_repair_cost: "",
+    fuel_type: "",
+    location: "",
+    current_hours: "",
+    service_interval_hours: "",
+  });
+
+  // Log form state
   const [logForm, setLogForm] = useState<CreateLogData>({
     log_type: "service",
     description: "",
@@ -115,80 +136,136 @@ export default function EquipmentDetailPage() {
     downtime_hours: undefined,
     photos: [],
   });
-  const [newPartName, setNewPartName] = useState("");
-  const [newPartQty, setNewPartQty] = useState(1);
-  const [submittingLog, setSubmittingLog] = useState(false);
 
-  // Pre-op checklist dialog
-  const [preOpOpen, setPreOpOpen] = useState(false);
-  const [checklistItems, setChecklistItems] = useState<
-    { id: string; text: string; checked: boolean; flagged: boolean; notes: string }[]
+  // Inspection form state
+  const [inspectionItems, setInspectionItems] = useState<
+    Array<{ id: string; text: string; status: "ok" | "issue" | "na"; notes: string }>
   >([]);
-  const [submittingPreOp, setSubmittingPreOp] = useState(false);
+  const [inspectionOverall, setInspectionOverall] = useState<"pass" | "fail" | "needs_attention">(
+    "pass"
+  );
+  const [inspectionNotes, setInspectionNotes] = useState("");
+  const [engineHours, setEngineHours] = useState("");
+  const [fuelLevel, setFuelLevel] = useState<
+    "full" | "three_quarter" | "half" | "quarter" | "empty" | "na"
+  >("na");
+  const [oilLevel, setOilLevel] = useState<"full" | "ok" | "low" | "critical" | "na">("na");
 
-  // Retire confirmation
-  const [retireDialogOpen, setRetireDialogOpen] = useState(false);
-
-  // Check permissions
-  const canEdit =
-    user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
-  const canRetire = user?.role === "super" || user?.role === "asst_super";
+  // Permission checks
+  const canEdit = user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
+  const canDelete = user?.role === "super" || user?.role === "asst_super";
 
   // Load equipment data
   const loadEquipment = useCallback(async () => {
     const data = await fetchEquipmentItem(equipmentId);
     if (data) {
       setEquipment(data);
-      setNewHours(String(data.current_hours ?? 0));
+      setEditForm({
+        name: data.name,
+        equipment_type: data.equipment_type,
+        make: data.make || "",
+        model: data.model || "",
+        year: data.year ? String(data.year) : "",
+        serial_number: data.serial_number || "",
+        asset_tag: data.asset_tag || "",
+        status: data.status,
+        condition_status: data.condition_status,
+        condition_notes: data.condition_notes || "",
+        needs_parts_ordered: data.needs_parts_ordered,
+        parts_needed: data.parts_needed || "",
+        estimated_repair_cost: data.estimated_repair_cost ? String(data.estimated_repair_cost) : "",
+        fuel_type: data.fuel_type,
+        location: data.location || "",
+        current_hours: data.current_hours ? String(data.current_hours) : "",
+        service_interval_hours: data.service_interval_hours ? String(data.service_interval_hours) : "",
+      });
       setLogForm((prev) => ({
         ...prev,
         hours_at_service: data.current_hours ?? 0,
       }));
+
+      // Load latest inspection
+      const latest = await fetchLatestInspection(equipmentId, "pre");
+      if (latest) {
+        setLatestInspection(latest);
+      }
     }
     setIsLoading(false);
-  }, [equipmentId, fetchEquipmentItem]);
+  }, [equipmentId, fetchEquipmentItem, fetchLatestInspection]);
 
   useEffect(() => {
-    void loadEquipment(); // eslint-disable-line react-hooks/set-state-in-effect
+    void loadEquipment();
   }, [loadEquipment]);
 
-  // Status change handler
-  const handleStatusChange = async (newStatus: EquipmentStatus) => {
+  // Handle photo upload
+  const handlePhotoUpload = async (file: File) => {
     if (!equipment) return;
-    setStatusDropdownOpen(false);
-
-    const updated = await updateEquipment(equipment.id, { status: newStatus });
-    if (updated) {
-      setEquipment({ ...equipment, ...updated });
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadEquipmentPhoto(file, equipmentId);
+      if (url) {
+        const updatedPhotos = [...(equipment.photos || []), url];
+        const updated = await updateEquipment(equipmentId, { photos: updatedPhotos });
+        if (updated) {
+          setEquipment({ ...equipment, photos: updatedPhotos });
+        }
+      }
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
-  // Hours update handler
-  const handleHoursUpdate = async () => {
-    if (!equipment) return;
-
-    const hours = parseFloat(newHours);
-    if (isNaN(hours) || hours < 0) return;
-
-    const updated = await updateHours(equipment.id, hours);
-    if (updated) {
-      setEquipment({ ...equipment, ...updated });
-      setEditingHours(false);
+  // Handle photo deletion
+  const handlePhotoDelete = async (index: number) => {
+    if (!equipment || !equipment.photos) return;
+    const photoUrl = equipment.photos[index];
+    const success = await deleteEquipmentPhoto(photoUrl, equipmentId);
+    if (success) {
+      const updatedPhotos = equipment.photos.filter((_, i) => i !== index);
+      const updated = await updateEquipment(equipmentId, { photos: updatedPhotos });
+      if (updated) {
+        setEquipment({ ...equipment, photos: updatedPhotos });
+        setSelectedPhotoIndex(Math.max(0, index - 1));
+      }
     }
   };
 
-  // Log submission handler
+  // Handle equipment update
+  const handleEditSubmit = async () => {
+    const updateData: Partial<Equipment> = {
+      name: editForm.name,
+      equipment_type: editForm.equipment_type as any,
+      make: editForm.make || null,
+      model: editForm.model || null,
+      year: editForm.year ? parseInt(editForm.year) : null,
+      serial_number: editForm.serial_number || null,
+      asset_tag: editForm.asset_tag || null,
+      status: editForm.status as any,
+      condition_status: editForm.condition_status as any,
+      condition_notes: editForm.condition_notes || null,
+      needs_parts_ordered: editForm.needs_parts_ordered,
+      parts_needed: editForm.parts_needed || null,
+      estimated_repair_cost: editForm.estimated_repair_cost ? parseFloat(editForm.estimated_repair_cost) : null,
+      fuel_type: editForm.fuel_type as any,
+      location: editForm.location || null,
+      current_hours: editForm.current_hours ? parseFloat(editForm.current_hours) : null,
+      service_interval_hours: editForm.service_interval_hours ? parseFloat(editForm.service_interval_hours) : null,
+    };
+
+    const updated = await updateEquipment(equipmentId, updateData);
+    if (updated) {
+      setEquipment((prev) => (prev ? { ...prev, ...updated } : null));
+      setEditDialogOpen(false);
+    }
+  };
+
+  // Handle log submission
   const handleLogSubmit = async () => {
     if (!equipment || !logForm.description.trim()) return;
 
-    setSubmittingLog(true);
-    const newLog = await createLog(equipment.id, logForm);
-
+    const newLog = await createLog(equipmentId, logForm);
     if (newLog) {
-      // Refresh equipment data
       await loadEquipment();
-
-      // Reset form
       setLogForm({
         log_type: "service",
         description: "",
@@ -201,596 +278,472 @@ export default function EquipmentDetailPage() {
       });
       setLogSheetOpen(false);
     }
-    setSubmittingLog(false);
   };
 
-  // Add part to list
-  const handleAddPart = () => {
-    if (!newPartName.trim()) return;
+  // Handle inspection submission
+  const handleInspectionSubmit = async () => {
+    if (!equipment || !user) return;
 
-    const part: PartUsed = {
-      name: newPartName.trim(),
-      quantity: newPartQty,
+    const inspectionData: CreateInspectionData = {
+      equipment_id: equipmentId,
+      inspection_type: currentInspectionType,
+      condition_status: editForm.condition_status as any,
+      notes: inspectionNotes,
+      checklist_items: inspectionItems.reduce(
+        (acc, item) => {
+          acc[item.id] = item.status === "ok";
+          return acc;
+        },
+        {} as Record<string, boolean>
+      ),
+      inspector_id: user.id,
     };
 
-    setLogForm((prev) => ({
-      ...prev,
-      parts_used: [...(prev.parts_used || []), part],
-    }));
-
-    setNewPartName("");
-    setNewPartQty(1);
+    const inspection = await createInspection(inspectionData);
+    if (inspection) {
+      setLatestInspection(inspection);
+      setInspectionSheetOpen(false);
+      // Reset form
+      setInspectionItems([]);
+      setInspectionNotes("");
+      setEngineHours("");
+      setFuelLevel("na");
+      setOilLevel("na");
+      setInspectionOverall("pass");
+    }
   };
 
-  // Remove part from list
-  const handleRemovePart = (index: number) => {
-    setLogForm((prev) => ({
-      ...prev,
-      parts_used: prev.parts_used?.filter((_, i) => i !== index) || [],
-    }));
-  };
+  // Initialize inspection checklist
+  const openInspectionSheet = (type: "pre" | "post" | "cleaning") => {
+    setCurrentInspectionType(type);
+    let checklist: Array<{ id: string; text: string }>;
 
-  // Initialize pre-op checklist
-  const handleOpenPreOp = () => {
-    if (!equipment) return;
+    if (type === "pre") {
+      checklist = preInspectionChecklist;
+    } else if (type === "post") {
+      checklist = postInspectionChecklist;
+    } else {
+      checklist = cleaningChecklist;
+    }
 
-    const category = getChecklistCategory(equipment.equipment_type);
-    const items = preOpChecklists[category] || preOpChecklists.general;
-
-    setChecklistItems(
-      items.map((item) => ({
+    setInspectionItems(
+      checklist.map((item) => ({
         ...item,
-        checked: false,
-        flagged: false,
+        status: "na" as const,
         notes: "",
       }))
     );
-    setPreOpOpen(true);
+    setInspectionSheetOpen(true);
   };
 
-  // Submit pre-op checklist
-  const handleSubmitPreOp = async () => {
-    if (!equipment || !user) return;
-
-    setSubmittingPreOp(true);
-
-    // Check for flagged issues
-    const flaggedItems = checklistItems.filter((item) => item.flagged);
-    const hasIssues = flaggedItems.length > 0;
-
-    // Build description
-    let description = "Daily Pre-Operation Inspection\n\n";
-    checklistItems.forEach((item) => {
-      const status = item.flagged ? "ISSUE" : item.checked ? "OK" : "Skipped";
-      description += `- ${item.text}: ${status}`;
-      if (item.notes) {
-        description += ` (${item.notes})`;
-      }
-      description += "\n";
-    });
-
-    if (hasIssues) {
-      description += `\nISSUES FOUND:\n`;
-      flaggedItems.forEach((item) => {
-        description += `- ${item.text}: ${item.notes || "Flagged for review"}\n`;
-      });
-    }
-
-    // Create inspection log
-    const logData: CreateLogData = {
-      log_type: "inspection",
-      description,
-      hours_at_service: equipment.current_hours ?? undefined,
-    };
-
-    const newLog = await createLog(equipment.id, logData);
-
-    if (newLog) {
-      // If issues found, update status and notify
-      if (hasIssues) {
-        await updateEquipment(equipment.id, { status: "needs_service" });
-
-        // Create notification for super/mechanic
-        await createNotification(
-          user.id, // Would notify super/mechanic in real app
-          "equipment",
-          `Pre-Op Issue: ${equipment.name}`,
-          `${flaggedItems.length} issue(s) found during pre-operation check.`,
-          "equipment",
-          equipment.id
-        );
-      }
-
-      await loadEquipment();
-    }
-
-    setPreOpOpen(false);
-    setSubmittingPreOp(false);
-  };
-
-  // Retire equipment
-  const handleRetire = async () => {
-    if (!equipment) return;
-
-    const result = await retireEquipment(equipment.id);
-    if (result) {
-      router.push("/equipment");
-    }
-    setRetireDialogOpen(false);
-  };
-
-  // Calculate cost stats
-  const calculateCostStats = () => {
-    if (!equipment?.logs) return { total: 0, thisYear: 0, byType: [] };
-
-    const currentYear = new Date().getFullYear();
-    let total = 0;
-    let thisYear = 0;
-    const byType: Record<string, number> = {};
-
-    equipment.logs.forEach((log) => {
-      const cost = log.cost || 0;
-      total += cost;
-
-      const logYear = new Date(log.created_at).getFullYear();
-      if (logYear === currentYear) {
-        thisYear += cost;
-      }
-
-      if (!byType[log.log_type]) {
-        byType[log.log_type] = 0;
-      }
-      byType[log.log_type] += cost;
-    });
-
-    const byTypeArray = Object.entries(byType).map(([type, value]) => ({
-      name: logTypeLabels[type as EquipmentLogType],
-      value,
-      color: logTypeColors[type as EquipmentLogType],
-    }));
-
-    return { total, thisYear, byType: byTypeArray };
-  };
-
-  // Calculate total downtime
-  const calculateDowntime = () => {
-    if (!equipment?.logs) return 0;
-    return equipment.logs.reduce((sum, log) => sum + (log.downtime_hours || 0), 0);
-  };
-
-  if (isLoading || !equipment) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
   }
 
-  const statusColor = equipmentStatusColors[equipment.status];
-  const hoursRemaining =
-    equipment.next_service_due_hours && equipment.current_hours
-      ? equipment.next_service_due_hours - equipment.current_hours
-      : null;
-  const hoursPercent =
-    equipment.service_interval_hours &&
-    equipment.current_hours !== null &&
-    equipment.next_service_due_hours
-      ? Math.min(
-          100,
-          ((equipment.current_hours -
-            (equipment.next_service_due_hours - equipment.service_interval_hours)) /
-            equipment.service_interval_hours) *
-            100
-        )
-      : 0;
-  const needsService = hoursRemaining !== null && hoursRemaining <= 0;
+  if (!equipment) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Equipment not found</p>
+      </div>
+    );
+  }
 
-  const costStats = calculateCostStats();
-  const totalDowntime = calculateDowntime();
+  const displayPhotos = equipment.photos && equipment.photos.length > 0
+    ? equipment.photos
+    : equipment.photo_url
+    ? [equipment.photo_url]
+    : [];
+
+  const statusColor = equipmentStatusColors[equipment.status];
+  const conditionColor = conditionStatusColors[equipment.condition_status];
 
   return (
-    <div className="p-4 md:p-6 pb-24">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <DetailPageHeader
-        backHref="/equipment"
-        backLabel="Equipment"
         title={equipment.name}
-        subtitle={`${equipment.make} ${equipment.model}${equipment.year ? ` (${equipment.year})` : ""}`}
-        className="mb-6"
-        actions={
-          canEdit && (
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
-                style={{
-                  borderColor: statusColor,
-                  color: statusColor,
-                }}
-              >
-                {equipmentStatusLabels[equipment.status]}
-                <ChevronDown className="w-4 h-4 ml-2" />
-              </Button>
-
-              {statusDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-10 min-w-[160px]">
-                  {Object.entries(equipmentStatusLabels).map(([value, label]) => {
-                    if (value === "retired") return null;
-                    const status = value as EquipmentStatus;
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => handleStatusChange(status)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2"
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: equipmentStatusColors[status] }}
-                        />
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        }
+        backHref="/equipment"
+        backLabel="Back to Equipment"
       />
 
-      {/* Photo and Quick Info */}
-      <div className="grid md:grid-cols-2 gap-4 mb-6">
-        {/* Photo */}
-        <div className="bg-card rounded-lg border border-border overflow-hidden">
-          <div className="aspect-video bg-muted flex items-center justify-center">
-            {equipment.photo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={equipment.photo_url}
-                alt={equipment.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <Wrench className="w-16 h-16 text-muted-foreground" />
-            )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">{equipment.name}</h1>
+            <p className="text-gray-600">{equipmentTypeLabels[equipment.equipment_type]}</p>
           </div>
+          <Badge style={{ backgroundColor: statusColor }} className="text-white">
+            {equipmentStatusLabels[equipment.status]}
+          </Badge>
+          <Badge style={{ backgroundColor: conditionColor }} className="text-white">
+            {conditionStatusLabels[equipment.condition_status]}
+          </Badge>
         </div>
 
-        {/* Details Card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Details</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-muted-foreground text-xs">Type</p>
-                <p className="font-medium">{equipmentTypeLabels[equipment.equipment_type]}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-muted-foreground text-xs">Location</p>
-                <p className="font-medium">{equipment.location || "—"}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-muted-foreground text-xs">Serial #</p>
-                <p className="font-medium font-mono text-xs">{equipment.serial_number || "—"}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-muted-foreground text-xs">Asset Tag</p>
-                <p className="font-medium">{equipment.asset_tag || "—"}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-muted-foreground text-xs">Purchase Date</p>
-                <p className="font-medium">
-                  {equipment.purchase_date
-                    ? new Date(equipment.purchase_date).toLocaleDateString()
-                    : "—"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-muted-foreground text-xs">Purchase Price</p>
-                <p className="font-medium">
-                  {equipment.purchase_price
-                    ? `$${equipment.purchase_price.toLocaleString()}`
-                    : "—"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex gap-2">
+          {canEdit && (
+            <Button onClick={() => setEditDialogOpen(true)} variant="outline" size="sm">
+              <Edit2 className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+          )}
+          {canDelete && (
+            <Button onClick={() => setDeleteConfirmOpen(true)} variant="destructive" size="sm">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Hours & Service Card */}
-      <Card className="mb-6">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Hours & Service</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleOpenPreOp}>
-              <ClipboardCheck className="w-4 h-4 mr-2" />
-              Daily Pre-Op Check
-            </Button>
-          </div>
+      {/* Beyond Repair Banner */}
+      {equipment.condition_status === "beyond_repair" && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded flex items-center gap-2">
+          <AlertTriangle className="w-5 h-5" />
+          <span>This equipment has been marked as beyond repair and should not be used.</span>
+        </div>
+      )}
+
+      {/* Photo Gallery Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Photo Gallery</span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          {/* Current Hours */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Current Hours</span>
-            </div>
-
-            {editingHours ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  value={newHours}
-                  onChange={(e) => setNewHours(e.target.value)}
-                  className="w-24 h-8"
+        <CardContent className="space-y-4">
+          {displayPhotos.length > 0 && (
+            <>
+              {/* Main Photo */}
+              <div className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video">
+                <img
+                  src={displayPhotos[selectedPhotoIndex]}
+                  alt={`${equipment.name} photo ${selectedPhotoIndex + 1}`}
+                  className="w-full h-full object-cover"
                 />
-                <Button size="sm" onClick={handleHoursUpdate}>
-                  Save
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingHours(false);
-                    setNewHours(String(equipment.current_hours ?? 0));
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold">
-                  {equipment.current_hours?.toLocaleString() ?? 0}
-                </span>
-                <span className="text-muted-foreground">hrs</span>
                 {canEdit && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
-                    onClick={() => setEditingHours(true)}
+                  <button
+                    onClick={() => handlePhotoDelete(selectedPhotoIndex)}
+                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded"
                   >
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 )}
               </div>
-            )}
+
+              {/* Thumbnails */}
+              <div className="flex gap-2 overflow-x-auto">
+                {displayPhotos.map((photo, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedPhotoIndex(index)}
+                    className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-colors ${
+                      selectedPhotoIndex === index ? "border-blue-500" : "border-gray-300"
+                    }`}
+                  >
+                    <img src={photo} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {displayPhotos.length === 0 && (
+            <div className="flex items-center justify-center h-40 bg-gray-100 rounded-lg">
+              <p className="text-gray-500">No photos uploaded yet</p>
+            </div>
+          )}
+
+          {canEdit && (
+            <div>
+              <label htmlFor="photo-upload">
+                <Button
+                  asChild
+                  variant="outline"
+                  disabled={uploadingPhoto}
+                  className="cursor-pointer"
+                >
+                  <span>
+                    <Camera className="w-4 h-4 mr-2" />
+                    {uploadingPhoto ? "Uploading..." : "Add Photo"}
+                  </span>
+                </Button>
+              </label>
+              <input
+                id="photo-upload"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (file) handlePhotoUpload(file);
+                }}
+                className="hidden"
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Condition & Status Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Condition & Status</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Condition Status</Label>
+              <Badge style={{ backgroundColor: conditionColor }} className="text-white mt-1">
+                {conditionStatusLabels[equipment.condition_status]}
+              </Badge>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Equipment Status</Label>
+              <Badge style={{ backgroundColor: statusColor }} className="text-white mt-1">
+                {equipmentStatusLabels[equipment.status]}
+              </Badge>
+            </div>
           </div>
 
-          {/* Service Progress */}
-          {equipment.service_interval_hours && (
-            <div className="bg-muted/50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">Next Service Due</span>
-                <span
-                  className={`text-sm font-medium ${
-                    needsService ? "text-red-500" : ""
-                  }`}
-                >
-                  {needsService
-                    ? "OVERDUE"
-                    : `${hoursRemaining?.toLocaleString()} hrs remaining`}
-                </span>
-              </div>
+          {equipment.condition_notes && (
+            <div>
+              <Label className="text-sm font-medium">Condition Notes</Label>
+              <p className="text-sm text-gray-600 mt-1">{equipment.condition_notes}</p>
+            </div>
+          )}
 
-              <div className="h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    hoursPercent >= 100
-                      ? "bg-red-500"
-                      : hoursPercent >= 80
-                      ? "bg-yellow-500"
-                      : "bg-green-500"
-                  }`}
-                  style={{ width: `${Math.min(100, Math.max(0, hoursPercent))}%` }}
-                />
+          {equipment.needs_parts_ordered && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+              <div className="flex items-center gap-2 font-medium text-yellow-900">
+                <AlertCircle className="w-4 h-4" />
+                Parts Need Ordering
               </div>
-
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Service interval: {equipment.service_interval_hours.toLocaleString()} hrs
-                </span>
-                {equipment.next_service_due_date && (
-                  <span>
-                    or by{" "}
-                    {new Date(equipment.next_service_due_date).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-
-              {needsService && (
-                <div className="mt-3 flex items-center gap-2 text-red-500">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    Service overdue by{" "}
-                    {Math.abs(hoursRemaining ?? 0).toLocaleString()} hours
-                  </span>
-                </div>
+              {equipment.parts_needed && (
+                <p className="text-sm text-yellow-800 mt-1">{equipment.parts_needed}</p>
               )}
             </div>
           )}
+
+          {equipment.estimated_repair_cost && (
+            <div>
+              <Label className="text-sm font-medium">Estimated Repair Cost</Label>
+              <p className="text-lg font-semibold mt-1">
+                ${equipment.estimated_repair_cost.toFixed(2)}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Maintenance Log */}
-      <Card className="mb-6">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Maintenance Log</CardTitle>
+      {/* Equipment Details Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Equipment Details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-4">
+          {equipment.make && (
+            <div>
+              <Label className="text-sm font-medium">Make</Label>
+              <p className="text-sm text-gray-600">{equipment.make}</p>
+            </div>
+          )}
+          {equipment.model && (
+            <div>
+              <Label className="text-sm font-medium">Model</Label>
+              <p className="text-sm text-gray-600">{equipment.model}</p>
+            </div>
+          )}
+          {equipment.year && (
+            <div>
+              <Label className="text-sm font-medium">Year</Label>
+              <p className="text-sm text-gray-600">{equipment.year}</p>
+            </div>
+          )}
+          {equipment.serial_number && (
+            <div>
+              <Label className="text-sm font-medium">Serial Number</Label>
+              <p className="text-sm text-gray-600">{equipment.serial_number}</p>
+            </div>
+          )}
+          {equipment.asset_tag && (
+            <div>
+              <Label className="text-sm font-medium">Asset Tag</Label>
+              <p className="text-sm text-gray-600">{equipment.asset_tag}</p>
+            </div>
+          )}
+          {equipment.fuel_type && (
+            <div>
+              <Label className="text-sm font-medium">Fuel Type</Label>
+              <p className="text-sm text-gray-600">{fuelTypeLabels[equipment.fuel_type]}</p>
+            </div>
+          )}
+          {equipment.location && (
+            <div>
+              <Label className="text-sm font-medium">Location</Label>
+              <p className="text-sm text-gray-600">{equipment.location}</p>
+            </div>
+          )}
+          {equipment.current_hours !== null && (
+            <div>
+              <Label className="text-sm font-medium">Current Hours</Label>
+              <p className="text-sm text-gray-600">{equipment.current_hours.toFixed(1)}</p>
+            </div>
+          )}
+          {equipment.service_interval_hours !== null && (
+            <div>
+              <Label className="text-sm font-medium">Service Interval</Label>
+              <p className="text-sm text-gray-600">{equipment.service_interval_hours.toFixed(1)} hours</p>
+            </div>
+          )}
+          {equipment.purchase_date && (
+            <div>
+              <Label className="text-sm font-medium">Purchase Date</Label>
+              <p className="text-sm text-gray-600">
+                {new Date(equipment.purchase_date).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+          {equipment.purchase_price && (
+            <div>
+              <Label className="text-sm font-medium">Purchase Price</Label>
+              <p className="text-sm text-gray-600">${equipment.purchase_price.toFixed(2)}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Inspection Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Inspections</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <Button onClick={() => openInspectionSheet("pre")} variant="outline" size="sm">
+              Run Pre-Inspection
+            </Button>
+            <Button onClick={() => openInspectionSheet("post")} variant="outline" size="sm">
+              Run Post-Inspection
+            </Button>
+            <Button onClick={() => openInspectionSheet("cleaning")} variant="outline" size="sm">
+              Run Cleaning Check
+            </Button>
+          </div>
+
+          {latestInspection && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-medium mb-2">Latest Inspection</h3>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <Label className="text-xs font-medium">Type</Label>
+                  <p className="text-gray-600">
+                    {latestInspection.inspection_type === "pre"
+                      ? "Pre-Operation"
+                      : latestInspection.inspection_type === "post"
+                      ? "Post-Operation"
+                      : "Cleaning"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Status</Label>
+                  <p className="text-gray-600">{latestInspection.overall_status}</p>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium">Date</Label>
+                  <p className="text-gray-600">
+                    {new Date(latestInspection.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Maintenance Logs Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Maintenance Logs</span>
             {canEdit && (
-              <Button size="sm" onClick={() => setLogSheetOpen(true)}>
+              <Button onClick={() => setLogSheetOpen(true)} size="sm">
                 <Plus className="w-4 h-4 mr-2" />
-                Add Entry
+                Add Log
               </Button>
             )}
-          </div>
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {!equipment.logs || equipment.logs.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Wrench className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>No maintenance records yet</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
+          {equipment.logs && equipment.logs.length > 0 ? (
+            <div className="space-y-3">
               {equipment.logs.map((log) => (
-                <LogEntry key={log.id} log={log} />
+                <div key={log.id} className="border rounded p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge style={{ backgroundColor: logTypeColors[log.log_type] }} className="text-white">
+                      {logTypeLabels[log.log_type]}
+                    </Badge>
+                    <span className="text-sm text-gray-500">
+                      {new Date(log.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{log.description}</p>
+                  {log.cost && (
+                    <p className="text-sm text-gray-600 mt-2">
+                      Cost: <span className="font-medium">${log.cost.toFixed(2)}</span>
+                    </p>
+                  )}
+                  {log.parts_used && log.parts_used.length > 0 && (
+                    <div className="text-sm text-gray-600 mt-2">
+                      <p className="font-medium">Parts Used:</p>
+                      <ul className="list-disc list-inside">
+                        {log.parts_used.map((part, idx) => (
+                          <li key={idx}>
+                            {part.name} (qty: {part.quantity})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
+          ) : (
+            <p className="text-gray-500">No maintenance logs yet</p>
           )}
         </CardContent>
       </Card>
 
-      {/* Cost Summary */}
-      <Card className="mb-6">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Cost Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <div className="text-center p-3 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold text-primary">
-                ${costStats.total.toLocaleString()}
-              </p>
-              <p className="text-xs text-muted-foreground">Total Cost</p>
-            </div>
-            <div className="text-center p-3 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold">
-                ${costStats.thisYear.toLocaleString()}
-              </p>
-              <p className="text-xs text-muted-foreground">This Year</p>
-            </div>
-            <div className="text-center p-3 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold">{totalDowntime}</p>
-              <p className="text-xs text-muted-foreground">Downtime Hours</p>
-            </div>
-            <div className="text-center p-3 bg-muted/50 rounded-lg">
-              <p className="text-2xl font-bold">{equipment.logs?.length ?? 0}</p>
-              <p className="text-xs text-muted-foreground">Log Entries</p>
-            </div>
-          </div>
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Equipment</DialogTitle>
+          </DialogHeader>
 
-          {/* Cost by type chart */}
-          {costStats.byType.length > 0 && (
-            <div className="flex items-center gap-6">
-              <div className="w-32 h-32">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={costStats.byType}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={25}
-                      outerRadius={45}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {costStats.byType.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value) => [`$${(typeof value === "number" ? value : 0).toLocaleString()}`, ""]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1 space-y-2">
-                {costStats.byType.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span>{item.name}</span>
-                    </div>
-                    <span className="font-medium">${item.value.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="space-y-4">
+            {/* Basic Info */}
+            <div>
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Notes */}
-      {equipment.notes && (
-        <Card className="mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{equipment.notes}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Retire Button */}
-      {canRetire && (
-        <div className="text-center">
-          <Button
-            variant="outline"
-            className="text-red-500 border-red-500 hover:bg-red-50"
-            onClick={() => setRetireDialogOpen(true)}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Retire Equipment
-          </Button>
-        </div>
-      )}
-
-      {/* Add Log Sheet */}
-      <Sheet open={logSheetOpen} onOpenChange={setLogSheetOpen}>
-        <SheetContent className="overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Add Log Entry</SheetTitle>
-            <SheetDescription>
-              Record maintenance, repair, or other activity
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Log Type</Label>
-              <Select
-                value={logForm.log_type}
-                onValueChange={(value) =>
-                  setLogForm((prev) => ({ ...prev, log_type: value as EquipmentLogType }))
-                }
-              >
+            <div>
+              <Label htmlFor="equipment_type">Equipment Type</Label>
+              <Select value={editForm.equipment_type} onValueChange={(value) => setEditForm({ ...editForm, equipment_type: value })}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(logTypeLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
+                  {Object.entries(equipmentTypeLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
                       {label}
                     </SelectItem>
                   ))}
@@ -798,320 +751,449 @@ export default function EquipmentDetailPage() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Description *</Label>
-              <Textarea
-                value={logForm.description}
-                onChange={(e) =>
-                  setLogForm((prev) => ({ ...prev, description: e.target.value }))
-                }
-                placeholder="Describe the work performed..."
-                rows={3}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="make">Make</Label>
+                <Input
+                  id="make"
+                  value={editForm.make}
+                  onChange={(e) => setEditForm({ ...editForm, make: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="model">Model</Label>
+                <Input
+                  id="model"
+                  value={editForm.model}
+                  onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Hours at Service</Label>
+              <div>
+                <Label htmlFor="year">Year</Label>
                 <Input
+                  id="year"
                   type="number"
-                  value={logForm.hours_at_service ?? ""}
-                  onChange={(e) =>
-                    setLogForm((prev) => ({
-                      ...prev,
-                      hours_at_service: e.target.value ? parseFloat(e.target.value) : undefined,
-                    }))
-                  }
+                  value={editForm.year}
+                  onChange={(e) => setEditForm({ ...editForm, year: e.target.value })}
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label>Cost ($)</Label>
+              <div>
+                <Label htmlFor="serial_number">Serial Number</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  value={logForm.cost ?? ""}
-                  onChange={(e) =>
-                    setLogForm((prev) => ({
-                      ...prev,
-                      cost: e.target.value ? parseFloat(e.target.value) : undefined,
-                    }))
-                  }
-                  placeholder="0.00"
+                  id="serial_number"
+                  value={editForm.serial_number}
+                  onChange={(e) => setEditForm({ ...editForm, serial_number: e.target.value })}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Vendor</Label>
+            <div>
+              <Label htmlFor="asset_tag">Asset Tag</Label>
               <Input
-                value={logForm.vendor ?? ""}
-                onChange={(e) =>
-                  setLogForm((prev) => ({ ...prev, vendor: e.target.value }))
-                }
-                placeholder="Service provider or parts supplier"
+                id="asset_tag"
+                value={editForm.asset_tag}
+                onChange={(e) => setEditForm({ ...editForm, asset_tag: e.target.value })}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Downtime Hours</Label>
+            {/* Status & Condition */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select value={editForm.status} onValueChange={(value) => setEditForm({ ...editForm, status: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(equipmentStatusLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="condition_status">Condition</Label>
+                <Select value={editForm.condition_status} onValueChange={(value) => setEditForm({ ...editForm, condition_status: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(conditionStatusLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="condition_notes">Condition Notes</Label>
+              <Textarea
+                id="condition_notes"
+                value={editForm.condition_notes}
+                onChange={(e) => setEditForm({ ...editForm, condition_notes: e.target.value })}
+              />
+            </div>
+
+            {/* Parts & Repair */}
+            <div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="needs_parts"
+                  checked={editForm.needs_parts_ordered}
+                  onCheckedChange={(checked) =>
+                    setEditForm({ ...editForm, needs_parts_ordered: checked as boolean })
+                  }
+                />
+                <Label htmlFor="needs_parts" className="font-medium">Parts Need Ordering</Label>
+              </div>
+            </div>
+
+            {editForm.needs_parts_ordered && (
+              <div>
+                <Label htmlFor="parts_needed">Parts Needed</Label>
+                <Textarea
+                  id="parts_needed"
+                  value={editForm.parts_needed}
+                  onChange={(e) => setEditForm({ ...editForm, parts_needed: e.target.value })}
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="estimated_repair_cost">Estimated Repair Cost</Label>
               <Input
+                id="estimated_repair_cost"
                 type="number"
-                value={logForm.downtime_hours ?? ""}
-                onChange={(e) =>
-                  setLogForm((prev) => ({
-                    ...prev,
-                    downtime_hours: e.target.value ? parseFloat(e.target.value) : undefined,
-                  }))
-                }
-                placeholder="Hours out of service"
+                step="0.01"
+                value={editForm.estimated_repair_cost}
+                onChange={(e) => setEditForm({ ...editForm, estimated_repair_cost: e.target.value })}
               />
             </div>
 
-            {/* Parts Used */}
-            <div className="space-y-2">
-              <Label>Parts Used</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Part name"
-                  value={newPartName}
-                  onChange={(e) => setNewPartName(e.target.value)}
-                  className="flex-1"
-                />
-                <Input
-                  type="number"
-                  value={newPartQty}
-                  onChange={(e) => setNewPartQty(parseInt(e.target.value) || 1)}
-                  className="w-20"
-                  min={1}
-                />
-                <Button type="button" size="icon" onClick={handleAddPart}>
-                  <Plus className="w-4 h-4" />
-                </Button>
+            {/* Operational Details */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="fuel_type">Fuel Type</Label>
+                <Select value={editForm.fuel_type} onValueChange={(value) => setEditForm({ ...editForm, fuel_type: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(fuelTypeLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {logForm.parts_used && logForm.parts_used.length > 0 && (
-                <div className="space-y-1 mt-2">
-                  {logForm.parts_used.map((part, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between bg-muted rounded px-3 py-1.5 text-sm"
-                    >
-                      <span>
-                        {part.name} x{part.quantity}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => handleRemovePart(index)}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div>
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="current_hours">Current Hours</Label>
+                <Input
+                  id="current_hours"
+                  type="number"
+                  step="0.1"
+                  value={editForm.current_hours}
+                  onChange={(e) => setEditForm({ ...editForm, current_hours: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="service_interval_hours">Service Interval (Hours)</Label>
+                <Input
+                  id="service_interval_hours"
+                  type="number"
+                  step="0.1"
+                  value={editForm.service_interval_hours}
+                  onChange={(e) => setEditForm({ ...editForm, service_interval_hours: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
-          <SheetFooter>
-            <Button
-              onClick={handleLogSubmit}
-              disabled={!logForm.description.trim() || submittingLog}
-              className="w-full"
-            >
-              {submittingLog ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <CheckCircle className="w-4 h-4 mr-2" />
-              )}
-              Save Entry
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSubmit}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Inspection Sheet */}
+      <Sheet open={inspectionSheetOpen} onOpenChange={setInspectionSheetOpen}>
+        <SheetContent side="right" className="w-full sm:w-[540px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>
+              {currentInspectionType === "pre"
+                ? "Pre-Operation Inspection"
+                : currentInspectionType === "post"
+                ? "Post-Operation Inspection"
+                : "Cleaning Check"}
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-4 mt-4">
+            {/* Checklist Items */}
+            {inspectionItems.map((item, idx) => (
+              <div key={item.id} className="border rounded p-3">
+                <div className="font-medium mb-2">{item.text}</div>
+                <div className="flex gap-2 mb-2">
+                  {(["ok", "issue", "na"] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() =>
+                        setInspectionItems((prev) =>
+                          prev.map((i, index) =>
+                            index === idx ? { ...i, status } : i
+                          )
+                        )
+                      }
+                      className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                        item.status === status
+                          ? status === "ok"
+                            ? "bg-green-500 text-white"
+                            : status === "issue"
+                            ? "bg-red-500 text-white"
+                            : "bg-gray-500 text-white"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      {status === "ok" ? "OK" : status === "issue" ? "Issue" : "N/A"}
+                    </button>
+                  ))}
+                </div>
+                {item.status !== "na" && (
+                  <Input
+                    placeholder="Notes"
+                    value={item.notes}
+                    onChange={(e) =>
+                      setInspectionItems((prev) =>
+                        prev.map((i, index) =>
+                          index === idx ? { ...i, notes: e.target.value } : i
+                        )
+                      )
+                    }
+                    className="text-sm"
+                  />
+                )}
+              </div>
+            ))}
+
+            {/* Additional Fields */}
+            <div>
+              <Label htmlFor="engine-hours">Engine Hours</Label>
+              <Input
+                id="engine-hours"
+                type="number"
+                step="0.1"
+                value={engineHours}
+                onChange={(e) => setEngineHours(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="fuel-level">Fuel Level</Label>
+              <Select value={fuelLevel} onValueChange={(value: any) => setFuelLevel(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Full</SelectItem>
+                  <SelectItem value="three_quarter">Three Quarter</SelectItem>
+                  <SelectItem value="half">Half</SelectItem>
+                  <SelectItem value="quarter">Quarter</SelectItem>
+                  <SelectItem value="empty">Empty</SelectItem>
+                  <SelectItem value="na">N/A</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="oil-level">Oil Level</Label>
+              <Select value={oilLevel} onValueChange={(value: any) => setOilLevel(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Full</SelectItem>
+                  <SelectItem value="ok">OK</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="na">N/A</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="inspection-notes">Notes</Label>
+              <Textarea
+                id="inspection-notes"
+                value={inspectionNotes}
+                onChange={(e) => setInspectionNotes(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="inspection-overall">Overall Status</Label>
+              <Select value={inspectionOverall} onValueChange={(value: any) => setInspectionOverall(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pass">Pass</SelectItem>
+                  <SelectItem value="fail">Fail</SelectItem>
+                  <SelectItem value="needs_attention">Needs Attention</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setInspectionSheetOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleInspectionSubmit}>Submit Inspection</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Log Sheet */}
+      <Sheet open={logSheetOpen} onOpenChange={setLogSheetOpen}>
+        <SheetContent side="right" className="w-full sm:w-[540px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Add Maintenance Log</SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="log-type">Log Type</Label>
+              <Select
+                value={logForm.log_type}
+                onValueChange={(value: any) => setLogForm({ ...logForm, log_type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(logTypeLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="log-description">Description</Label>
+              <Textarea
+                id="log-description"
+                value={logForm.description}
+                onChange={(e) => setLogForm({ ...logForm, description: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="log-hours">Hours at Service</Label>
+              <Input
+                id="log-hours"
+                type="number"
+                step="0.1"
+                value={logForm.hours_at_service || 0}
+                onChange={(e) => setLogForm({ ...logForm, hours_at_service: parseFloat(e.target.value) })}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="log-cost">Cost</Label>
+              <Input
+                id="log-cost"
+                type="number"
+                step="0.01"
+                value={logForm.cost || ""}
+                onChange={(e) => setLogForm({ ...logForm, cost: e.target.value ? parseFloat(e.target.value) : undefined })}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="log-vendor">Vendor</Label>
+              <Input
+                id="log-vendor"
+                value={logForm.vendor || ""}
+                onChange={(e) => setLogForm({ ...logForm, vendor: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="log-downtime">Downtime Hours</Label>
+              <Input
+                id="log-downtime"
+                type="number"
+                step="0.1"
+                value={logForm.downtime_hours || ""}
+                onChange={(e) =>
+                  setLogForm({ ...logForm, downtime_hours: e.target.value ? parseFloat(e.target.value) : undefined })
+                }
+              />
+            </div>
+          </div>
+
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setLogSheetOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleLogSubmit} disabled={!logForm.description.trim()}>
+              Add Log
             </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
 
-      {/* Pre-Op Checklist Dialog */}
-      <Dialog open={preOpOpen} onOpenChange={setPreOpOpen}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Pre-Operation Checklist</DialogTitle>
-            <DialogDescription>
-              Complete all items before operating {equipment.name}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {checklistItems.map((item, index) => (
-              <div
-                key={item.id}
-                className={`p-3 rounded-lg border ${
-                  item.flagged
-                    ? "border-red-300 bg-red-50 dark:bg-red-950"
-                    : "border-border"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id={item.id}
-                    checked={item.checked}
-                    onCheckedChange={(checked) => {
-                      const newItems = [...checklistItems];
-                      newItems[index].checked = checked as boolean;
-                      if (checked) {
-                        newItems[index].flagged = false;
-                      }
-                      setChecklistItems(newItems);
-                    }}
-                  />
-                  <div className="flex-1">
-                    <label
-                      htmlFor={item.id}
-                      className={`text-sm cursor-pointer ${
-                        item.checked ? "line-through text-muted-foreground" : ""
-                      }`}
-                    >
-                      {item.text}
-                    </label>
-
-                    {item.flagged && (
-                      <Input
-                        placeholder="Describe the issue..."
-                        value={item.notes}
-                        onChange={(e) => {
-                          const newItems = [...checklistItems];
-                          newItems[index].notes = e.target.value;
-                          setChecklistItems(newItems);
-                        }}
-                        className="mt-2 h-8 text-sm"
-                      />
-                    )}
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant={item.flagged ? "destructive" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      const newItems = [...checklistItems];
-                      newItems[index].flagged = !newItems[index].flagged;
-                      if (newItems[index].flagged) {
-                        newItems[index].checked = false;
-                      }
-                      setChecklistItems(newItems);
-                    }}
-                  >
-                    <AlertCircle className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreOpOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitPreOp} disabled={submittingPreOp}>
-              {submittingPreOp ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <CheckCircle className="w-4 h-4 mr-2" />
-              )}
-              Complete Check
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Retire Confirmation */}
-      <Dialog open={retireDialogOpen} onOpenChange={setRetireDialogOpen}>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Retire Equipment</DialogTitle>
+            <DialogTitle>Delete Equipment</DialogTitle>
             <DialogDescription>
-              Are you sure you want to retire {equipment.name}? This will remove it
-              from the active equipment list but preserve all maintenance history.
+              Are you sure you want to delete {equipment.name}? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRetireDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleRetire}>
-              Retire Equipment
+            <Button variant="destructive" onClick={() => {
+              // Call delete function here
+              setDeleteConfirmOpen(false);
+              router.back();
+            }}>
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// Log entry component
-function LogEntry({ log }: { log: EquipmentLog }) {
-  const typeColor = logTypeColors[log.log_type];
-  const date = new Date(log.created_at);
-
-  return (
-    <div className="flex gap-3 p-3 bg-muted/50 rounded-lg">
-      <div
-        className="w-1 rounded-full flex-shrink-0"
-        style={{ backgroundColor: typeColor }}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <Badge
-            variant="outline"
-            style={{
-              backgroundColor: `${typeColor}15`,
-              borderColor: typeColor,
-              color: typeColor,
-            }}
-          >
-            {logTypeLabels[log.log_type]}
-          </Badge>
-          <span className="text-xs text-muted-foreground">
-            {date.toLocaleDateString()}
-          </span>
-        </div>
-
-        <p className="text-sm whitespace-pre-wrap">{log.description}</p>
-
-        <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-          {log.hours_at_service && (
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {log.hours_at_service.toLocaleString()} hrs
-            </span>
-          )}
-          {log.cost && (
-            <span className="flex items-center gap-1">
-              <DollarSign className="w-3 h-3" />
-              ${log.cost.toLocaleString()}
-            </span>
-          )}
-          {log.downtime_hours && (
-            <span className="flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              {log.downtime_hours}h downtime
-            </span>
-          )}
-          {log.vendor && <span>Vendor: {log.vendor}</span>}
-        </div>
-
-        {log.parts_used && log.parts_used.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {log.parts_used.map((part, i) => (
-              <Badge key={i} variant="secondary" className="text-xs">
-                {part.name} x{part.quantity}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

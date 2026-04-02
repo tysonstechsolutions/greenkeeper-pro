@@ -29,7 +29,6 @@ import {
   Trophy,
   ClipboardCheck,
   ArrowLeftRight,
-  Package,
   Flag,
   Vote,
 } from "lucide-react";
@@ -49,7 +48,7 @@ const mainNavItems = [
   { href: "/scoreboard", label: "Scoreboard", icon: Trophy },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/shift-swap", label: "Shift Swap", icon: ArrowLeftRight },
-  { href: "/equipment-checkout", label: "Equip Checkout", icon: Package },
+  { href: "/equipment", label: "Equipment", icon: Wrench },
 ];
 
 const courseNavItems = [
@@ -64,7 +63,6 @@ const courseNavItems = [
 ];
 
 const operationsNavItems = [
-  { href: "/equipment", label: "Equipment", icon: Wrench },
   { href: "/chemicals", label: "Chemicals", icon: FlaskConical },
   { href: "/irrigation", label: "Irrigation", icon: Droplets },
 ];

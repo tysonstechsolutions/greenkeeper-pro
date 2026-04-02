@@ -9,6 +9,12 @@ import type {
   EquipmentStatus,
   EquipmentLogType,
   PartUsed,
+  EquipmentInspection,
+  InspectionChecklistItem,
+  EquipmentCondition,
+  FuelType,
+  InspectionType,
+  InspectionStatus,
 } from "@/types/database";
 
 // Utility label maps
@@ -65,8 +71,39 @@ export const logTypeColors: Record<EquipmentLogType, string> = {
   hours_update: "#6b7280", // gray-500
 };
 
+export const conditionStatusLabels: Record<EquipmentCondition, string> = {
+  good: "Good",
+  fair: "Fair",
+  needs_repair: "Needs Repair",
+  beyond_repair: "Beyond Repair",
+  unknown: "Unknown",
+};
+
+export const conditionStatusColors: Record<EquipmentCondition, string> = {
+  good: "#22c55e", // green-500
+  fair: "#eab308", // yellow-500
+  needs_repair: "#f97316", // orange-500
+  beyond_repair: "#ef4444", // red-500
+  unknown: "#6b7280", // gray-500
+};
+
+export const fuelTypeLabels: Record<FuelType, string> = {
+  gasoline: "Gasoline",
+  diesel: "Diesel",
+  electric: "Electric",
+  hybrid: "Hybrid",
+  manual: "Manual/None",
+  other: "Other",
+};
+
+// Checklist template type (for defining available checklist items)
+export interface ChecklistTemplate {
+  id: string;
+  text: string;
+}
+
 // Pre-operation checklist items by equipment type category
-export const preOpChecklists: Record<string, { id: string; text: string }[]> = {
+export const preOpChecklists: Record<string, ChecklistTemplate[]> = {
   mower: [
     { id: "oil", text: "Check oil level" },
     { id: "fuel", text: "Check fuel level" },
@@ -113,6 +150,52 @@ export const preOpChecklists: Record<string, { id: string; text: string }[]> = {
     { id: "clean", text: "Equipment is clean and ready" },
   ],
 };
+
+// Pre-inspection checklist
+export const preInspectionChecklist: ChecklistTemplate[] = [
+  { id: "engine_hours", text: "Record engine hours" },
+  { id: "oil_level", text: "Check oil level" },
+  { id: "fuel_level", text: "Check fuel level" },
+  { id: "coolant", text: "Check coolant level" },
+  { id: "hydraulic_fluid", text: "Check hydraulic fluid" },
+  { id: "tire_pressure", text: "Check tire pressure/tracks" },
+  { id: "lights", text: "Test all lights (headlights, tail, turn signals)" },
+  { id: "horn", text: "Test horn/backup alarm" },
+  { id: "safety_devices", text: "Test safety shutoffs and kill switch" },
+  { id: "belts_hoses", text: "Inspect belts and hoses" },
+  { id: "leaks", text: "Check for fluid leaks" },
+  { id: "blades_cutting", text: "Inspect cutting units/blades" },
+  { id: "guards_shields", text: "Check guards and safety shields" },
+  { id: "mirrors", text: "Clean and adjust mirrors" },
+  { id: "brakes", text: "Test brakes" },
+  { id: "steering", text: "Check steering response" },
+  { id: "damage_body", text: "Check for body damage or dents" },
+  { id: "cleanliness", text: "General cleanliness check" },
+];
+
+// Post-inspection checklist
+export const postInspectionChecklist: ChecklistTemplate[] = [
+  { id: "clean_exterior", text: "Clean exterior/wash down" },
+  { id: "clean_deck", text: "Clean mowing deck/attachments" },
+  { id: "blow_off", text: "Blow off debris from engine area" },
+  { id: "check_damage", text: "Check for new damage" },
+  { id: "fluid_leaks", text: "Check for fluid leaks after use" },
+  { id: "engine_hours_final", text: "Record final engine hours" },
+  { id: "fuel_up", text: "Refuel if below half tank" },
+  { id: "park_properly", text: "Park in designated area" },
+  { id: "report_issues", text: "Report any issues found during use" },
+];
+
+// Cleaning checklist
+export const cleaningChecklist: ChecklistTemplate[] = [
+  { id: "wash_exterior", text: "Wash entire exterior" },
+  { id: "clean_engine", text: "Clean engine compartment" },
+  { id: "clean_undercarriage", text: "Clean undercarriage" },
+  { id: "clean_cab", text: "Clean operator station/cab" },
+  { id: "grease_points", text: "Grease all fittings" },
+  { id: "sharpen_blades", text: "Sharpen/check blade condition" },
+  { id: "air_filter", text: "Clean/replace air filter" },
+];
 
 // Map equipment types to checklist categories
 export function getChecklistCategory(equipmentType: EquipmentType): string {
@@ -178,6 +261,16 @@ export interface CreateLogData {
   photos?: string[];
 }
 
+export interface CreateInspectionData {
+  equipment_id: string;
+  inspection_type: InspectionType;
+  condition_status: EquipmentCondition;
+  notes?: string;
+  checklist_items?: Record<string, boolean>;
+  photos?: string[];
+  inspector_id?: string;
+}
+
 export interface EquipmentWithLogs extends Equipment {
   logs?: EquipmentLog[];
 }
@@ -190,12 +283,18 @@ interface UseEquipmentReturn {
   fetchEquipmentItem: (id: string) => Promise<EquipmentWithLogs | null>;
   createEquipment: (data: CreateEquipmentData) => Promise<Equipment | null>;
   updateEquipment: (id: string, data: Partial<Equipment>) => Promise<Equipment | null>;
+  deleteEquipment: (id: string) => Promise<boolean>;
   updateHours: (id: string, newHours: number) => Promise<Equipment | null>;
   retireEquipment: (id: string) => Promise<Equipment | null>;
   fetchEquipmentLogs: (equipmentId: string) => Promise<EquipmentLog[]>;
   createLog: (equipmentId: string, logData: CreateLogData) => Promise<EquipmentLog | null>;
   fetchDueForService: () => Promise<Equipment[]>;
   fetchEquipmentStats: () => Promise<EquipmentStats>;
+  uploadEquipmentPhoto: (file: File, equipmentId: string) => Promise<string | null>;
+  deleteEquipmentPhoto: (photoUrl: string, equipmentId: string) => Promise<boolean>;
+  createInspection: (data: CreateInspectionData) => Promise<EquipmentInspection | null>;
+  fetchInspections: (equipmentId: string) => Promise<EquipmentInspection[]>;
+  fetchLatestInspection: (equipmentId: string, type: InspectionType) => Promise<EquipmentInspection | null>;
   refetch: () => Promise<void>;
 }
 
@@ -677,6 +776,219 @@ export function useEquipment(): UseEquipmentReturn {
   }, [supabase]);
 
   /**
+   * Delete equipment record
+   */
+  const deleteEquipment = useCallback(
+    async (id: string): Promise<boolean> => {
+      setError(null);
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deleteError } = await (supabase.from("equipment") as any)
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) {
+          throw new Error(deleteError.message);
+        }
+
+        // Remove from local state
+        setEquipment((prev) => prev.filter((item) => item.id !== id));
+        return true;
+      } catch (err) {
+        console.error("Error deleting equipment:", err);
+        const message = err instanceof Error ? err.message : "Failed to delete equipment";
+        setError(message);
+        return false;
+      }
+    },
+    [supabase]
+  );
+
+  /**
+   * Upload equipment photo to storage
+   */
+  const uploadEquipmentPhoto = useCallback(
+    async (file: File, equipmentId: string): Promise<string | null> => {
+      setError(null);
+
+      try {
+        const timestamp = Date.now();
+        const filename = `${timestamp}-${file.name}`;
+        const filePath = `equipment/${equipmentId}/${filename}`;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: uploadError, data } = await (supabase.storage.from("photos") as any)
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(uploadError.message);
+        }
+
+        // Get public URL for the uploaded file
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: publicUrlData } = (supabase.storage.from("photos") as any)
+          .getPublicUrl(filePath);
+
+        return publicUrlData?.publicUrl || null;
+      } catch (err) {
+        console.error("Error uploading photo:", err);
+        const message = err instanceof Error ? err.message : "Failed to upload photo";
+        setError(message);
+        return null;
+      }
+    },
+    [supabase]
+  );
+
+  /**
+   * Delete equipment photo from storage and update equipment record
+   */
+  const deleteEquipmentPhoto = useCallback(
+    async (photoUrl: string, equipmentId: string): Promise<boolean> => {
+      setError(null);
+
+      try {
+        // Extract file path from URL
+        const urlParts = photoUrl.split("/");
+        const filename = urlParts[urlParts.length - 1];
+        const filePath = `equipment/${equipmentId}/${filename}`;
+
+        // Delete from storage
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: deleteError } = await (supabase.storage.from("photos") as any)
+          .remove([filePath]);
+
+        if (deleteError) {
+          throw new Error(deleteError.message);
+        }
+
+        // Update equipment record to remove photo from photos array
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: currentData } = await (supabase.from("equipment") as any)
+          .select("photos")
+          .eq("id", equipmentId)
+          .single();
+
+        if (currentData) {
+          const photos = (currentData.photos as string[]) || [];
+          const updatedPhotos = photos.filter((url) => url !== photoUrl);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from("equipment") as any)
+            .update({ photos: updatedPhotos })
+            .eq("id", equipmentId);
+        }
+
+        return true;
+      } catch (err) {
+        console.error("Error deleting photo:", err);
+        const message = err instanceof Error ? err.message : "Failed to delete photo";
+        setError(message);
+        return false;
+      }
+    },
+    [supabase]
+  );
+
+  /**
+   * Create equipment inspection record
+   */
+  const createInspection = useCallback(
+    async (data: CreateInspectionData): Promise<EquipmentInspection | null> => {
+      setError(null);
+
+      try {
+        const inspectionData = {
+          equipment_id: data.equipment_id,
+          inspection_type: data.inspection_type,
+          condition_status: data.condition_status,
+          notes: data.notes,
+          checklist_items: data.checklist_items || {},
+          photos: data.photos || [],
+          inspector_id: data.inspector_id,
+          status: "completed" as InspectionStatus,
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newInspection, error: insertError } = await (supabase.from("equipment_inspections") as any)
+          .insert(inspectionData)
+          .select()
+          .single();
+
+        if (insertError) {
+          throw new Error(insertError.message);
+        }
+
+        return newInspection as EquipmentInspection;
+      } catch (err) {
+        console.error("Error creating inspection:", err);
+        const message = err instanceof Error ? err.message : "Failed to create inspection";
+        setError(message);
+        return null;
+      }
+    },
+    [supabase]
+  );
+
+  /**
+   * Fetch inspections for equipment
+   */
+  const fetchInspections = useCallback(
+    async (equipmentId: string): Promise<EquipmentInspection[]> => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: fetchError } = await (supabase.from("equipment_inspections") as any)
+          .select("*")
+          .eq("equipment_id", equipmentId)
+          .order("created_at", { ascending: false });
+
+        if (fetchError) {
+          throw new Error(fetchError.message);
+        }
+
+        return (data as EquipmentInspection[]) || [];
+      } catch (err) {
+        console.error("Error fetching inspections:", err);
+        return [];
+      }
+    },
+    [supabase]
+  );
+
+  /**
+   * Fetch latest inspection of a specific type for equipment
+   */
+  const fetchLatestInspection = useCallback(
+    async (equipmentId: string, type: InspectionType): Promise<EquipmentInspection | null> => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error: fetchError } = await (supabase.from("equipment_inspections") as any)
+          .select("*")
+          .eq("equipment_id", equipmentId)
+          .eq("inspection_type", type)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (fetchError && fetchError.code !== "PGRST116") {
+          // PGRST116 = no rows returned, which is expected
+          throw new Error(fetchError.message);
+        }
+
+        return (data as EquipmentInspection) || null;
+      } catch (err) {
+        console.error("Error fetching latest inspection:", err);
+        return null;
+      }
+    },
+    [supabase]
+  );
+
+  /**
    * Refetch equipment list
    */
   const refetch = useCallback(async () => {
@@ -696,12 +1008,18 @@ export function useEquipment(): UseEquipmentReturn {
     fetchEquipmentItem,
     createEquipment,
     updateEquipment,
+    deleteEquipment,
     updateHours,
     retireEquipment,
     fetchEquipmentLogs,
     createLog,
     fetchDueForService,
     fetchEquipmentStats,
+    uploadEquipmentPhoto,
+    deleteEquipmentPhoto,
+    createInspection,
+    fetchInspections,
+    fetchLatestInspection,
     refetch,
   };
 }

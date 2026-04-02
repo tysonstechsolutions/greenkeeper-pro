@@ -13,6 +13,7 @@ import {
   Filter,
   ChevronRight,
   Loader2,
+  Camera,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -31,13 +32,15 @@ import {
   equipmentTypeLabels,
   equipmentStatusLabels,
   equipmentStatusColors,
+  conditionStatusLabels,
+  conditionStatusColors,
   type EquipmentFilters,
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
-import type { Equipment, EquipmentType, EquipmentStatus } from "@/types/database";
+import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/database";
 
 // Equipment type icons (simplified)
-function getEquipmentIcon(type: EquipmentType) {
+function getEquipmentIcon(_type: EquipmentType) {
   // Using Wrench for all - in production, you'd have specific icons
   return <Wrench className="w-8 h-8 text-muted-foreground" />;
 }
@@ -76,6 +79,16 @@ function StatCard({
   );
 }
 
+// Calculate condition stats from equipment array
+function calculateConditionStats(equipment: Equipment[]) {
+  return {
+    good: equipment.filter((eq) => eq.condition_status === "good").length,
+    needs_repair: equipment.filter((eq) => eq.condition_status === "needs_repair").length,
+    beyond_repair: equipment.filter((eq) => eq.condition_status === "beyond_repair").length,
+    parts_ordered: equipment.filter((eq) => eq.needs_parts_ordered === true).length,
+  };
+}
+
 // Equipment card component
 function EquipmentCard({
   item,
@@ -85,20 +98,7 @@ function EquipmentCard({
   onClick: () => void;
 }) {
   const statusColor = equipmentStatusColors[item.status];
-  const hoursRemaining =
-    item.next_service_due_hours && item.current_hours
-      ? item.next_service_due_hours - item.current_hours
-      : null;
-  const hoursPercent =
-    item.service_interval_hours && item.current_hours && item.next_service_due_hours
-      ? Math.min(
-          100,
-          ((item.current_hours - (item.next_service_due_hours - item.service_interval_hours)) /
-            item.service_interval_hours) *
-            100
-        )
-      : 0;
-  const needsService = hoursRemaining !== null && hoursRemaining <= 0;
+  const conditionColor = conditionStatusColors[item.condition_status];
 
   return (
     <Card
@@ -107,8 +107,8 @@ function EquipmentCard({
     >
       <CardContent className="p-4">
         <div className="flex gap-4">
-          {/* Photo or Icon */}
-          <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+          {/* Photo - larger and more prominent */}
+          <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 relative">
             {item.photo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -117,19 +117,40 @@ function EquipmentCard({
                 className="w-full h-full object-cover"
               />
             ) : (
-              getEquipmentIcon(item.equipment_type)
+              <div className="flex flex-col items-center justify-center gap-1">
+                <Camera className="w-8 h-8 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground text-center px-1">Add photo</span>
+              </div>
             )}
           </div>
 
           {/* Details */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div>
                 <h3 className="font-semibold text-sm truncate">{item.name}</h3>
                 <p className="text-xs text-muted-foreground">
-                  {item.make} {item.model} {item.year && `(${item.year})`}
+                  {equipmentTypeLabels[item.equipment_type]}
                 </p>
               </div>
+            </div>
+
+            {/* Badges row */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              {/* Condition badge */}
+              <Badge
+                variant="outline"
+                style={{
+                  backgroundColor: `${conditionColor}15`,
+                  borderColor: conditionColor,
+                  color: conditionColor,
+                }}
+                className="text-xs"
+              >
+                {conditionStatusLabels[item.condition_status]}
+              </Badge>
+
+              {/* Status badge */}
               <Badge
                 variant="outline"
                 style={{
@@ -137,54 +158,32 @@ function EquipmentCard({
                   borderColor: statusColor,
                   color: statusColor,
                 }}
+                className="text-xs"
               >
                 {equipmentStatusLabels[item.status]}
               </Badge>
-            </div>
 
-            {/* Hours */}
-            <div className="mt-2">
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-muted-foreground">
-                  {item.current_hours?.toLocaleString() ?? 0} hrs
-                </span>
-                {hoursRemaining !== null && (
-                  <span
-                    className={
-                      needsService ? "text-red-500 font-medium" : "text-muted-foreground"
-                    }
-                  >
-                    {needsService
-                      ? "Service due"
-                      : `${hoursRemaining.toLocaleString()} hrs to service`}
-                  </span>
-                )}
-              </div>
-
-              {/* Progress bar */}
-              {item.service_interval_hours && (
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      hoursPercent >= 100
-                        ? "bg-red-500"
-                        : hoursPercent >= 80
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                    }`}
-                    style={{ width: `${Math.min(100, Math.max(0, hoursPercent))}%` }}
-                  />
-                </div>
+              {/* Parts needed badge */}
+              {item.needs_parts_ordered && (
+                <Badge variant="secondary" className="text-xs">
+                  Parts Needed
+                </Badge>
               )}
             </div>
 
-            {/* Service alert */}
-            {needsService && (
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-yellow-600 dark:text-yellow-500">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Service overdue</span>
-              </div>
-            )}
+            {/* Hours and condition notes */}
+            <div className="text-xs space-y-1">
+              {item.current_hours !== null && (
+                <div className="text-muted-foreground">
+                  {item.current_hours.toLocaleString()} hrs
+                </div>
+              )}
+              {item.condition_notes && (
+                <div className="text-muted-foreground truncate">
+                  {item.condition_notes}
+                </div>
+              )}
+            </div>
           </div>
 
           <ChevronRight className="w-5 h-5 text-muted-foreground self-center flex-shrink-0" />
@@ -197,28 +196,16 @@ function EquipmentCard({
 export default function EquipmentPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { equipment, loading, error, fetchEquipment, fetchEquipmentStats } = useEquipment();
+  const { equipment, loading, error, fetchEquipment } = useEquipment();
 
-  const [stats, setStats] = useState({
-    operational: 0,
-    needs_service: 0,
-    in_repair: 0,
-    out_of_service: 0,
-    total: 0,
-  });
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<EquipmentType | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<EquipmentStatus | "all">("all");
+  const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
 
   // Check if user can add equipment
   const canAddEquipment =
     user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
-
-  // Load stats on mount
-  useEffect(() => {
-    fetchEquipmentStats().then(setStats);
-  }, [fetchEquipmentStats]);
 
   // Apply filters
   const applyFilters = useCallback(() => {
@@ -228,16 +215,12 @@ export default function EquipmentPage() {
       filters.type = typeFilter;
     }
 
-    if (statusFilter !== "all") {
-      filters.status = statusFilter;
-    }
-
     if (searchQuery.trim()) {
       filters.search = searchQuery.trim();
     }
 
     fetchEquipment(filters);
-  }, [typeFilter, statusFilter, searchQuery, fetchEquipment]);
+  }, [typeFilter, searchQuery, fetchEquipment]);
 
   // Debounced search
   useEffect(() => {
@@ -248,9 +231,12 @@ export default function EquipmentPage() {
     return () => clearTimeout(timeout);
   }, [applyFilters]);
 
+  // Calculate condition stats from current equipment array
+  const conditionStats = calculateConditionStats(equipment);
+
   // Handle stat card click
-  const handleStatClick = (status: EquipmentStatus | "all") => {
-    setStatusFilter((prev) => (prev === status ? "all" : status));
+  const handleConditionClick = (condition: EquipmentCondition | "all") => {
+    setConditionFilter((prev) => (prev === condition ? "all" : condition));
   };
 
   // Navigate to equipment detail
@@ -263,12 +249,18 @@ export default function EquipmentPage() {
     router.push("/equipment/new");
   };
 
+  // Filter equipment by condition
+  const filteredEquipment = equipment.filter((item) => {
+    if (conditionFilter === "all") return true;
+    return item.condition_status === conditionFilter;
+  });
+
   return (
     <div className="p-4 md:p-6 pb-24">
       <div className="flex items-center justify-between mb-6">
         <PageHeader
           title="Equipment"
-          description="Manage fleet and maintenance"
+          description="Manage fleet and monitor conditions"
           icon={Wrench}
         />
         {canAddEquipment && (
@@ -286,39 +278,39 @@ export default function EquipmentPage() {
         </div>
       )}
 
-      {/* Stats Cards */}
+      {/* Condition Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatCard
-          label="Operational"
-          count={stats.operational}
-          color={equipmentStatusColors.operational}
+          label="Good"
+          count={conditionStats.good}
+          color={conditionStatusColors.good}
           icon={CheckCircle}
-          onClick={() => handleStatClick("operational")}
-          active={statusFilter === "operational"}
+          onClick={() => handleConditionClick("good")}
+          active={conditionFilter === "good"}
         />
         <StatCard
-          label="Needs Service"
-          count={stats.needs_service}
-          color={equipmentStatusColors.needs_service}
-          icon={Clock}
-          onClick={() => handleStatClick("needs_service")}
-          active={statusFilter === "needs_service"}
+          label="Needs Repair"
+          count={conditionStats.needs_repair}
+          color={conditionStatusColors.needs_repair}
+          icon={AlertTriangle}
+          onClick={() => handleConditionClick("needs_repair")}
+          active={conditionFilter === "needs_repair"}
         />
         <StatCard
-          label="In Repair"
-          count={stats.in_repair}
-          color={equipmentStatusColors.in_repair}
-          icon={Wrench}
-          onClick={() => handleStatClick("in_repair")}
-          active={statusFilter === "in_repair"}
-        />
-        <StatCard
-          label="Out of Service"
-          count={stats.out_of_service}
-          color={equipmentStatusColors.out_of_service}
+          label="Beyond Repair"
+          count={conditionStats.beyond_repair}
+          color={conditionStatusColors.beyond_repair}
           icon={XCircle}
-          onClick={() => handleStatClick("out_of_service")}
-          active={statusFilter === "out_of_service"}
+          onClick={() => handleConditionClick("beyond_repair")}
+          active={conditionFilter === "beyond_repair"}
+        />
+        <StatCard
+          label="Parts Ordered"
+          count={conditionStats.parts_ordered}
+          color="#3b82f6"
+          icon={Clock}
+          onClick={() => setConditionFilter("all")}
+          active={false}
         />
       </div>
 
@@ -363,30 +355,30 @@ export default function EquipmentPage() {
         </div>
       </div>
 
-      {/* Status Filter Chips (when showFilters is true) */}
+      {/* Condition Filter Chips (when showFilters is true) */}
       {showFilters && (
         <div className="flex flex-wrap gap-2 mb-4">
           <Badge
-            variant={statusFilter === "all" ? "default" : "outline"}
+            variant={conditionFilter === "all" ? "default" : "outline"}
             className="cursor-pointer"
-            onClick={() => setStatusFilter("all")}
+            onClick={() => setConditionFilter("all")}
           >
-            All
+            All Conditions
           </Badge>
-          {Object.entries(equipmentStatusLabels).map(([value, label]) => {
-            if (value === "retired") return null;
-            const status = value as EquipmentStatus;
+          {Object.entries(conditionStatusLabels).map(([value, label]) => {
+            if (value === "unknown") return null;
+            const condition = value as EquipmentCondition;
             return (
               <Badge
                 key={value}
-                variant={statusFilter === status ? "default" : "outline"}
+                variant={conditionFilter === condition ? "default" : "outline"}
                 className="cursor-pointer"
                 style={
-                  statusFilter === status
-                    ? { backgroundColor: equipmentStatusColors[status] }
+                  conditionFilter === condition
+                    ? { backgroundColor: conditionStatusColors[condition] }
                     : {}
                 }
-                onClick={() => setStatusFilter(status)}
+                onClick={() => setConditionFilter(condition)}
               >
                 {label}
               </Badge>
@@ -400,20 +392,25 @@ export default function EquipmentPage() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      ) : equipment.length === 0 ? (
+      ) : filteredEquipment.length === 0 && equipment.length === 0 ? (
         <div className="text-center py-12">
-          <Wrench className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No equipment found</p>
+          <Camera className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground mb-4">No equipment yet. Upload photos of your equipment to get started.</p>
           {canAddEquipment && (
-            <Button onClick={handleAddClick} variant="outline" className="mt-4">
+            <Button onClick={handleAddClick} variant="outline">
               <Plus className="w-4 h-4 mr-2" />
               Add Equipment
             </Button>
           )}
         </div>
+      ) : filteredEquipment.length === 0 ? (
+        <div className="text-center py-12">
+          <AlertTriangle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">No equipment matches this condition</p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {equipment.map((item) => (
+          {filteredEquipment.map((item) => (
             <EquipmentCard
               key={item.id}
               item={item}

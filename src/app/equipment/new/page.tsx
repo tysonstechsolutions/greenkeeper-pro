@@ -4,16 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wrench,
-  ArrowLeft,
-  Save,
-  Camera,
+  Upload,
+  X,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -25,21 +25,34 @@ import {
   useEquipment,
   equipmentTypeLabels,
   equipmentStatusLabels,
+  conditionStatusLabels,
+  fuelTypeLabels,
   type CreateEquipmentData,
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
-import type { EquipmentType, EquipmentStatus } from "@/types/database";
+import { DetailPageHeader } from "@/components/ui/back-button";
+import type { EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
+
+interface FormData extends CreateEquipmentData {
+  condition_status?: EquipmentCondition;
+  fuel_type?: FuelType;
+  condition_notes?: string;
+  needs_parts?: boolean;
+  parts_needed?: string;
+  estimated_repair_cost?: number;
+}
 
 export default function NewEquipmentPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { createEquipment, loading, error } = useEquipment();
+  const { createEquipment } = useEquipment();
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
 
-  // Form state
-  const [formData, setFormData] = useState<CreateEquipmentData>({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     equipment_type: "mower_reel",
     make: "",
@@ -48,18 +61,18 @@ export default function NewEquipmentPage() {
     serial_number: "",
     asset_tag: "",
     status: "operational",
+    location: "",
+    notes: "",
+    condition_status: "good",
+    fuel_type: "other",
+    condition_notes: "",
+    needs_parts: false,
+    parts_needed: "",
+    estimated_repair_cost: undefined,
     current_hours: undefined,
     service_interval_hours: undefined,
-    next_service_due_hours: undefined,
-    next_service_due_date: "",
-    location: "",
-    purchase_date: "",
-    purchase_price: undefined,
-    notes: "",
-    photo_url: "",
   });
 
-  // Check permissions
   const canAdd =
     user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
 
@@ -69,51 +82,46 @@ export default function NewEquipmentPage() {
         <Wrench className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
         <h1 className="text-xl font-semibold mb-2">Access Denied</h1>
         <p className="text-muted-foreground">
-          You don&apos;t have permission to add equipment.
+          You do not have permission to add equipment.
         </p>
         <Button variant="outline" className="mt-4" onClick={() => router.back()}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
           Go Back
         </Button>
       </div>
     );
   }
 
-  // Form handlers
-  const updateField = <K extends keyof CreateEquipmentData>(
+  const updateField = <K extends keyof FormData>(
     field: K,
-    value: CreateEquipmentData[K]
+    value: FormData[K]
   ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFormError(null);
   };
 
-  // Calculate next service due when current hours and interval change
-  const handleHoursChange = (currentHours: number | undefined) => {
-    updateField("current_hours", currentHours);
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
 
-    if (currentHours !== undefined && formData.service_interval_hours !== undefined) {
-      updateField(
-        "next_service_due_hours",
-        currentHours + formData.service_interval_hours
-      );
-    }
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviews((prev) => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    setUploadedFiles((prev) => [...prev, ...files]);
   };
 
-  const handleIntervalChange = (interval: number | undefined) => {
-    updateField("service_interval_hours", interval);
-
-    if (formData.current_hours !== undefined && interval !== undefined) {
-      updateField("next_service_due_hours", formData.current_hours + interval);
-    }
+  const removePhoto = (index: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    // Validation
     if (!formData.name.trim()) {
       setFormError("Equipment name is required");
       return;
@@ -122,19 +130,19 @@ export default function NewEquipmentPage() {
     setSubmitting(true);
 
     try {
-      // Clean up data - remove empty strings for optional fields
       const cleanData: CreateEquipmentData = {
-        ...formData,
         name: formData.name.trim(),
+        equipment_type: formData.equipment_type,
+        status: formData.status,
         make: formData.make?.trim() || undefined,
         model: formData.model?.trim() || undefined,
+        year: formData.year,
         serial_number: formData.serial_number?.trim() || undefined,
         asset_tag: formData.asset_tag?.trim() || undefined,
         location: formData.location?.trim() || undefined,
         notes: formData.notes?.trim() || undefined,
-        photo_url: formData.photo_url?.trim() || undefined,
-        purchase_date: formData.purchase_date || undefined,
-        next_service_due_date: formData.next_service_due_date || undefined,
+        current_hours: formData.current_hours,
+        service_interval_hours: formData.service_interval_hours,
       };
 
       const newEquipment = await createEquipment(cleanData);
@@ -154,35 +162,69 @@ export default function NewEquipmentPage() {
 
   return (
     <div className="p-4 md:p-6 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-xl font-semibold">Add Equipment</h1>
-          <p className="text-sm text-muted-foreground">
-            Add a new piece of equipment to your fleet
-          </p>
-        </div>
-      </div>
+      <DetailPageHeader
+        title="Add Equipment"
+        subtitle="Upload photos and enter equipment details"
+      />
 
-      {/* Error message */}
-      {(formError || error) && (
+      {(formError) && (
         <div className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
-          <p className="text-sm">{formError || error}</p>
+          <p className="text-sm">{formError}</p>
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        {/* Basic Info */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Basic Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Photo Upload Section */}
+        <Card>
+          <CardContent className="pt-6">
+            <Label className="text-base font-semibold mb-4 block">Upload Equipment Photos</Label>
+            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:bg-accent/50 transition-colors">
+              <input
+                type="file"
+                id="photos"
+                multiple
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                className="hidden"
+              />
+              <label
+                htmlFor="photos"
+                className="cursor-pointer flex flex-col items-center gap-2"
+              >
+                <Upload className="w-8 h-8 text-muted-foreground" />
+                <span className="text-sm font-medium">Click to upload or drag and drop</span>
+                <span className="text-xs text-muted-foreground">PNG, JPG, GIF up to 10MB</span>
+              </label>
+            </div>
+
+            {previews.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+                {previews.map((preview, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={preview}
+                      alt={`Preview ${index + 1}`}
+                      className="w-full h-32 object-cover rounded-lg border border-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Basic Information */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Equipment Name *</Label>
+              <Label htmlFor="name">Name *</Label>
               <Input
                 id="name"
                 value={formData.name}
@@ -194,7 +236,7 @@ export default function NewEquipmentPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="type">Type *</Label>
+                <Label htmlFor="type">Equipment Type *</Label>
                 <Select
                   value={formData.equipment_type}
                   onValueChange={(value) =>
@@ -215,25 +257,22 @@ export default function NewEquipmentPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
+                <Label htmlFor="condition">Condition *</Label>
                 <Select
-                  value={formData.status}
+                  value={formData.condition_status || "good"}
                   onValueChange={(value) =>
-                    updateField("status", value as EquipmentStatus)
+                    updateField("condition_status", value as EquipmentCondition)
                   }
                 >
-                  <SelectTrigger id="status">
+                  <SelectTrigger id="condition">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(equipmentStatusLabels).map(([value, label]) => {
-                      if (value === "retired") return null;
-                      return (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      );
-                    })}
+                    {Object.entries(conditionStatusLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -269,16 +308,18 @@ export default function NewEquipmentPage() {
                   max={2100}
                   value={formData.year ?? ""}
                   onChange={(e) =>
-                    updateField(
-                      "year",
-                      e.target.value ? parseInt(e.target.value) : undefined
-                    )
+                    updateField("year", e.target.value ? parseInt(e.target.value) : undefined)
                   }
                   placeholder="e.g., 2022"
                 />
               </div>
             </div>
+          </CardContent>
+        </Card>
 
+        {/* Identification */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="serial">Serial Number</Label>
@@ -313,12 +354,118 @@ export default function NewEquipmentPage() {
           </CardContent>
         </Card>
 
-        {/* Hours & Service */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Hours & Service</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        {/* Fuel & Status */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="fuel">Fuel Type</Label>
+                <Select
+                  value={formData.fuel_type || "other"}
+                  onValueChange={(value) =>
+                    updateField("fuel_type", value as FuelType)
+                  }
+                >
+                  <SelectTrigger id="fuel">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(fuelTypeLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) =>
+                    updateField("status", value as EquipmentStatus)
+                  }
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(equipmentStatusLabels).map(([value, label]) => {
+                      if (value === "retired") return null;
+                      return (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Condition Details */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="condition_notes">Condition Notes</Label>
+              <Textarea
+                id="condition_notes"
+                value={formData.condition_notes ?? ""}
+                onChange={(e) => updateField("condition_notes", e.target.value)}
+                placeholder="What was observed? Any issues or damage?"
+                rows={3}
+              />
+            </div>
+
+            {(formData.condition_status === "needs_repair" || formData.condition_status === "beyond_repair") && (
+              <div className="space-y-2">
+                <Label htmlFor="repair_cost">Estimated Repair Cost ($)</Label>
+                <Input
+                  id="repair_cost"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.estimated_repair_cost ?? ""}
+                  onChange={(e) =>
+                    updateField("estimated_repair_cost", e.target.value ? parseFloat(e.target.value) : undefined)
+                  }
+                  placeholder="0.00"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="needs_parts"
+                checked={formData.needs_parts || false}
+                onCheckedChange={(checked) => updateField("needs_parts", checked as boolean)}
+              />
+              <Label htmlFor="needs_parts" className="font-normal cursor-pointer">
+                Needs Parts Ordered
+              </Label>
+            </div>
+
+            {formData.needs_parts && (
+              <div className="space-y-2">
+                <Label htmlFor="parts">Parts Needed</Label>
+                <Textarea
+                  id="parts"
+                  value={formData.parts_needed ?? ""}
+                  onChange={(e) => updateField("parts_needed", e.target.value)}
+                  placeholder="List parts that need to be ordered..."
+                  rows={3}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Service Details */}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="current_hours">Current Hours</Label>
@@ -329,9 +476,7 @@ export default function NewEquipmentPage() {
                   step="0.1"
                   value={formData.current_hours ?? ""}
                   onChange={(e) =>
-                    handleHoursChange(
-                      e.target.value ? parseFloat(e.target.value) : undefined
-                    )
+                    updateField("current_hours", e.target.value ? parseFloat(e.target.value) : undefined)
                   }
                   placeholder="0"
                 />
@@ -345,140 +490,28 @@ export default function NewEquipmentPage() {
                   min={0}
                   value={formData.service_interval_hours ?? ""}
                   onChange={(e) =>
-                    handleIntervalChange(
-                      e.target.value ? parseInt(e.target.value) : undefined
-                    )
+                    updateField("service_interval_hours", e.target.value ? parseInt(e.target.value) : undefined)
                   }
                   placeholder="e.g., 250"
                 />
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="next_service_hours">Next Service Due (hours)</Label>
-                <Input
-                  id="next_service_hours"
-                  type="number"
-                  min={0}
-                  value={formData.next_service_due_hours ?? ""}
-                  onChange={(e) =>
-                    updateField(
-                      "next_service_due_hours",
-                      e.target.value ? parseFloat(e.target.value) : undefined
-                    )
-                  }
-                  placeholder="Auto-calculated"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Auto-calculates from current hours + interval
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="next_service_date">Next Service Due (date)</Label>
-                <Input
-                  id="next_service_date"
-                  type="date"
-                  value={formData.next_service_due_date ?? ""}
-                  onChange={(e) =>
-                    updateField("next_service_due_date", e.target.value)
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional date-based service reminder
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Purchase Info */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Purchase Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="purchase_date">Purchase Date</Label>
-                <Input
-                  id="purchase_date"
-                  type="date"
-                  value={formData.purchase_date ?? ""}
-                  onChange={(e) => updateField("purchase_date", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="purchase_price">Purchase Price ($)</Label>
-                <Input
-                  id="purchase_price"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={formData.purchase_price ?? ""}
-                  onChange={(e) =>
-                    updateField(
-                      "purchase_price",
-                      e.target.value ? parseFloat(e.target.value) : undefined
-                    )
-                  }
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Photo */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Photo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="photo_url">Photo URL</Label>
-              <Input
-                id="photo_url"
-                type="url"
-                value={formData.photo_url ?? ""}
-                onChange={(e) => updateField("photo_url", e.target.value)}
-                placeholder="https://..."
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter a URL to an equipment photo. Direct upload coming soon.
-              </p>
-            </div>
-
-            {formData.photo_url && (
-              <div className="mt-4 w-full max-w-xs rounded-lg overflow-hidden border border-border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={formData.photo_url}
-                  alt="Preview"
-                  className="w-full h-auto"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
-                />
-              </div>
-            )}
           </CardContent>
         </Card>
 
         {/* Notes */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              value={formData.notes ?? ""}
-              onChange={(e) => updateField("notes", e.target.value)}
-              placeholder="Additional notes about this equipment..."
-              rows={4}
-            />
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes ?? ""}
+                onChange={(e) => updateField("notes", e.target.value)}
+                placeholder="Additional notes about this equipment..."
+                rows={4}
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -496,7 +529,7 @@ export default function NewEquipmentPage() {
             {submitting ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
-              <Save className="w-4 h-4 mr-2" />
+              <Upload className="w-4 h-4 mr-2" />
             )}
             Save Equipment
           </Button>

@@ -98,6 +98,18 @@ export type EquipmentStatus =
   | "out_of_service"
   | "retired";
 
+export type EquipmentCondition = 'good' | 'fair' | 'needs_repair' | 'beyond_repair' | 'unknown';
+
+export type FuelType = 'gasoline' | 'diesel' | 'electric' | 'hybrid' | 'manual' | 'other';
+
+export type InspectionType = 'pre' | 'post' | 'cleaning';
+
+export type InspectionStatus = 'pass' | 'fail' | 'needs_attention';
+
+export type FuelLevel = 'full' | 'three_quarter' | 'half' | 'quarter' | 'empty' | 'na';
+
+export type OilLevel = 'full' | 'ok' | 'low' | 'critical' | 'na';
+
 export type EquipmentLogType =
   | "service"
   | "repair"
@@ -439,6 +451,17 @@ export interface Equipment {
   purchase_price: number | null;
   notes: string | null;
   photo_url: string | null;
+  condition_status: EquipmentCondition;
+  condition_notes: string | null;
+  needs_parts_ordered: boolean;
+  parts_needed: string | null;
+  estimated_repair_cost: number | null;
+  photos: string[];
+  requires_pre_inspection: boolean;
+  requires_post_inspection: boolean;
+  last_inspection_date: string | null;
+  last_inspected_by: string | null;
+  fuel_type: FuelType;
   created_at: string;
   updated_at: string;
 }
@@ -456,6 +479,29 @@ export interface EquipmentLog {
   downtime_hours: number | null;
   photos: string[];
   created_at: string;
+}
+
+export interface InspectionChecklistItem {
+  item: string;
+  status: 'ok' | 'issue' | 'na';
+  notes?: string;
+}
+
+export interface EquipmentInspection {
+  id: string;
+  equipment_id: string;
+  inspection_type: InspectionType;
+  inspected_by: string;
+  checkout_id: string | null;
+  checklist_items: InspectionChecklistItem[];
+  overall_status: InspectionStatus;
+  notes: string | null;
+  photos: string[];
+  engine_hours: number | null;
+  fuel_level: FuelLevel | null;
+  oil_level: OilLevel | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ChemicalProduct {
