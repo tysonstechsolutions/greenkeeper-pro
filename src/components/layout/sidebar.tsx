@@ -23,14 +23,7 @@ import {
   Target,
   Cloud,
   Leaf,
-  Eye,
   Bot,
-  Coffee,
-  Trophy,
-  ClipboardCheck,
-  ArrowLeftRight,
-  Flag,
-  Vote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -38,30 +31,25 @@ import { useChannels } from "@/lib/hooks/useChannels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { RoleHidden } from "@/components/auth/role-guard";
 
+// ── Primary: daily-use tools every staff member touches ──
 const mainNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/briefing", label: "Morning Briefing", icon: Coffee },
-  { href: "/assistant", label: "AI Assistant", icon: Bot },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/scoreboard", label: "Scoreboard", icon: Trophy },
-  { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
-  { href: "/shift-swap", label: "Shift Swap", icon: ArrowLeftRight },
   { href: "/equipment", label: "Equipment", icon: Wrench },
 ];
 
+// ── Course: everything about the turf and course condition ──
 const courseNavItems = [
   { href: "/diagnostics", label: "Course Doctor", icon: Stethoscope },
-  { href: "/observations", label: "Observations", icon: Eye },
   { href: "/plan", label: "Annual Plan", icon: Target },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/weather", label: "Weather", icon: Cloud },
   { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/member/conditions", label: "Course Conditions", icon: Flag },
-  { href: "/polls", label: "Community Polls", icon: Vote },
 ];
 
+// ── Operations: chemicals, irrigation, staff ──
 const operationsNavItems = [
   { href: "/chemicals", label: "Chemicals", icon: FlaskConical },
   { href: "/irrigation", label: "Irrigation", icon: Droplets },
@@ -71,10 +59,12 @@ const managementOperationsItems = [
   { href: "/staff", label: "Staff", icon: Users },
 ];
 
+// ── Management: budget, reports, knowledge, settings ──
 const managementNavItems = [
   { href: "/budget", label: "Budget", icon: DollarSign },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
+  { href: "/assistant", label: "AI Assistant", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -208,7 +198,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="relative flex-1 px-2 py-3 space-y-0.5 overflow-y-auto gk-scrollbar">
-        {/* Primary */}
+        {/* Primary — daily tools */}
         <div className="space-y-0.5">
           {mainNavItems.map((item) => (
             <NavItem

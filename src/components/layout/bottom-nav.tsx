@@ -50,7 +50,7 @@ const moreRoutes = [
   "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
   "/briefing", "/assistant", "/scoreboard", "/checklists", "/shift-swap",
   "/equipment-checkout", "/observations", "/member/conditions",
-  "/polls",
+  "/polls", "/report-issue", "/member-insights",
 ];
 
 export function BottomNav() {

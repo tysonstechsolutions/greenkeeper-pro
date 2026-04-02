@@ -19,18 +19,29 @@ import {
   Bell,
   Flag,
   Lightbulb,
-  Eye,
+  Coffee,
+  Trophy,
+  ArrowLeftRight,
+  Bot,
+  Vote,
 } from "lucide-react";
 import { RoleHidden, RoleVisible } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 
+const dailyItems = [
+  { href: "/briefing", label: "Morning Briefing", description: "Daily priorities & conditions", icon: Coffee },
+  { href: "/scoreboard", label: "Scoreboard", description: "Staff performance & streaks", icon: Trophy },
+  { href: "/shift-swap", label: "Shift Swap", description: "Request & approve swaps", icon: ArrowLeftRight },
+  { href: "/assistant", label: "AI Assistant", description: "Ask anything about the course", icon: Bot },
+];
+
 const courseItems = [
-  { href: "/observations", label: "Course Observations", description: "Walk-through notes & issues", icon: Eye },
-  { href: "/diagnostics", label: "Course Doctor", description: "AI-powered turf diagnostics", icon: Stethoscope },
+  { href: "/diagnostics", label: "Course Doctor", description: "AI diagnostics & observations", icon: Stethoscope },
   { href: "/plan", label: "Annual Plan", description: "Goals & progress tracking", icon: Target },
   { href: "/course-map", label: "Course Map", description: "Interactive map view", icon: Map },
   { href: "/weather", label: "Weather", description: "Forecasts & alerts", icon: Cloud },
   { href: "/photos", label: "Photos", description: "Course documentation", icon: Camera },
+  { href: "/polls", label: "Community Polls", description: "Member surveys & votes", icon: Vote },
 ];
 
 const operationsItems = [
@@ -150,6 +161,7 @@ export default function MorePage() {
     <div className="p-4 md:p-6 pb-24">
       <h1 className="text-2xl font-semibold mb-6">More</h1>
 
+      <MenuSection title="Daily" items={dailyItems} />
       <MenuSection title="Course" items={courseItems} />
 
       {/* Operations - with management items hidden from crew/seasonal */}

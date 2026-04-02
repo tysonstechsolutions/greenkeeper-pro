@@ -23,6 +23,7 @@ import {
   Trash2,
   ArrowRight,
   Footprints,
+  Stethoscope,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -173,13 +174,10 @@ export default function ObservationsPage() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
-      {/* Header */}
+      {/* Header — unified Course Doctor branding */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Eye className="w-6 h-6 text-primary" />
-            Course Observations
-          </h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-[#1B4332]">Course Doctor</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {stats.total} observation{stats.total !== 1 ? "s" : ""}
             {stats.unaddressed > 0 && (
@@ -208,6 +206,28 @@ export default function ObservationsPage() {
             Add Observation
           </Button>
         </div>
+      </div>
+
+      {/* Tab Navigation — shared with diagnostics */}
+      <div className="flex border-b border-border mb-6">
+        <Link
+          href="/diagnostics"
+          className="px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Stethoscope className="h-4 w-4" />
+            Diagnose
+          </span>
+        </Link>
+        <Link
+          href="/observations"
+          className="px-4 py-2.5 text-sm font-medium border-b-2 border-[#1B4332] text-[#1B4332]"
+        >
+          <span className="flex items-center gap-2">
+            <Eye className="h-4 w-4" />
+            Observations
+          </span>
+        </Link>
       </div>
 
       {/* Quick stats bar */}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Camera, Upload, Loader2, History, Filter, Stethoscope, AlertTriangle, CheckCircle, Eye, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -199,9 +200,31 @@ export default function DiagnosticsPage() {
         <div>
           <h1 className="text-3xl font-bold text-[#1B4332]">Course Doctor</h1>
           <p className="text-muted-foreground">
-            AI-powered turf diagnostics and treatment planning
+            Diagnostics, observations, and treatment planning
           </p>
         </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex border-b border-border">
+        <Link
+          href="/diagnostics"
+          className="px-4 py-2.5 text-sm font-medium border-b-2 border-[#1B4332] text-[#1B4332]"
+        >
+          <span className="flex items-center gap-2">
+            <Stethoscope className="h-4 w-4" />
+            Diagnose
+          </span>
+        </Link>
+        <Link
+          href="/observations"
+          className="px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Eye className="h-4 w-4" />
+            Observations
+          </span>
+        </Link>
       </div>
 
       {/* New Diagnosis Section */}
