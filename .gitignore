@@ -44,4 +44,4 @@ next-env.d.ts
 nul
 
 # Equipment photos (stored in Supabase)
-equipment/
+/equipment/

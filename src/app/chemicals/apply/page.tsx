@@ -71,7 +71,7 @@ function ChemicalApplicationPageContent() {
   const searchParams = useSearchParams();
   const preselectedProductId = searchParams.get("product");
 
-  const { user } = useAuth();
+  const { user, isManager, isForeman } = useAuth();
   const { products, fetchProducts, createApplication, loading, error } = useChemicals();
   const { currentWeather, fetchCurrentWeather, loading: weatherLoading } = useWeather();
 
@@ -103,12 +103,8 @@ function ChemicalApplicationPageContent() {
   // Weather auto-fill state
   const [weatherAutoFilled, setWeatherAutoFilled] = useState(false);
 
-  // Permission check
-  const canApply =
-    user?.role === "super" ||
-    user?.role === "asst_super" ||
-    user?.role === "foreman" ||
-    user?.role === "mechanic";
+  // Permission check — use profile-based role checks
+  const canApply = isManager || isForeman;
 
   // Load products and weather on mount
   useEffect(() => {

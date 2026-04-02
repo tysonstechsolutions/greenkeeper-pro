@@ -77,7 +77,7 @@ import type { Equipment, EquipmentLog, EquipmentInspection } from "@/types/datab
 export default function EquipmentDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile, canManageEquipment, isManager } = useAuth();
   const { createNotification } = useNotifications();
   const {
     fetchEquipmentItem,
@@ -151,9 +151,9 @@ export default function EquipmentDetailPage() {
   >("na");
   const [oilLevel, setOilLevel] = useState<"full" | "ok" | "low" | "critical" | "na">("na");
 
-  // Permission checks
-  const canEdit = user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
-  const canDelete = user?.role === "super" || user?.role === "asst_super";
+  // Permission checks — use profile.role from the profiles table (not user metadata)
+  const canEdit = canManageEquipment;
+  const canDelete = canManageEquipment;
 
   // Load equipment data
   const loadEquipment = useCallback(async () => {

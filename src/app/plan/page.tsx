@@ -813,7 +813,7 @@ function WeeklyTab({
 
 export default function PlanPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isSuper, isAsstSuper } = useAuth();
   const {
     goals,
     loading,
@@ -842,8 +842,8 @@ export default function PlanPage() {
   });
   const [generating, setGenerating] = useState<string | null>(null);
 
-  // Permissions
-  const canEdit = user?.role === "super" || user?.role === "asst_super";
+  // Permissions — use profile-based role checks
+  const canEdit = isSuper || isAsstSuper;
 
   // Load data based on active tab
   useEffect(() => {

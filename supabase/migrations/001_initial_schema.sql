@@ -766,8 +766,11 @@ CREATE POLICY "messages_delete_own_or_manager" ON messages
 CREATE POLICY "equipment_select_all" ON equipment
   FOR SELECT USING (true);
 
-CREATE POLICY "equipment_insert_manager" ON equipment
-  FOR INSERT WITH CHECK (is_manager(auth.uid()));
+CREATE POLICY "equipment_insert_manager_mechanic" ON equipment
+  FOR INSERT WITH CHECK (
+    is_manager(auth.uid())
+    OR get_user_role(auth.uid()) = 'mechanic'
+  );
 
 CREATE POLICY "equipment_update_manager_mechanic" ON equipment
   FOR UPDATE USING (
@@ -775,8 +778,11 @@ CREATE POLICY "equipment_update_manager_mechanic" ON equipment
     OR get_user_role(auth.uid()) = 'mechanic'
   );
 
-CREATE POLICY "equipment_delete_manager" ON equipment
-  FOR DELETE USING (is_manager(auth.uid()));
+CREATE POLICY "equipment_delete_manager_mechanic" ON equipment
+  FOR DELETE USING (
+    is_manager(auth.uid())
+    OR get_user_role(auth.uid()) = 'mechanic'
+  );
 
 -- ============================================================================
 -- RLS POLICIES: EQUIPMENT LOGS

@@ -135,7 +135,7 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export default function BudgetPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isSuper: isSuperRole } = useAuth();
   const {
     fetchBudgetSummary,
     fetchMonthlySpend,
@@ -153,7 +153,7 @@ export default function BudgetPage() {
   const [costPerAcre, setCostPerAcre] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
 
-  const isSuper = user?.role === "super";
+  const isSuper = isSuperRole;
 
   // Fetch all budget data
   useEffect(() => {

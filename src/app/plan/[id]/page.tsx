@@ -94,7 +94,7 @@ export default function GoalDetailPage({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isSuper, isAsstSuper } = useAuth();
   const {
     fetchGoal,
     updateGoalStatus,
@@ -111,8 +111,8 @@ export default function GoalDetailPage({
   const [generating, setGenerating] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
-  // Permission check
-  const canEdit = user?.role === "super" || user?.role === "asst_super";
+  // Permission check — use profile-based role checks
+  const canEdit = isSuper || isAsstSuper;
 
   // Load goal data
   useEffect(() => {

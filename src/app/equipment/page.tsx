@@ -195,7 +195,7 @@ function EquipmentCard({
 
 export default function EquipmentPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, canManageEquipment } = useAuth();
   const { equipment, loading, error, fetchEquipment } = useEquipment();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -203,9 +203,8 @@ export default function EquipmentPage() {
   const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Check if user can add equipment
-  const canAddEquipment =
-    user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
+  // Check if user can add equipment — uses profile.role from profiles table
+  const canAddEquipment = canManageEquipment;
 
   // Apply filters
   const applyFilters = useCallback(() => {

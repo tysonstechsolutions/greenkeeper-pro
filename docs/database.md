@@ -397,9 +397,9 @@ The database schema is designed around these core principles:
 
 **RLS Policies**:
 - `equipment_select_all`: All users can read equipment
-- `equipment_insert_manager`: Only managers can insert equipment
+- `equipment_insert_manager_mechanic`: Managers and mechanics can insert equipment
 - `equipment_update_manager_mechanic`: Managers and mechanics can update equipment
-- `equipment_delete_manager`: Only managers can delete equipment
+- `equipment_delete_manager_mechanic`: Managers and mechanics can delete equipment
 
 ---
 

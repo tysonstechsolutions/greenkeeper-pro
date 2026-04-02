@@ -247,7 +247,7 @@ function REIAlertBanner({ activeREIs }: { activeREIs: ActiveREI[] }) {
 
 export default function ChemicalsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, canManageChemicals, isManager, isForeman } = useAuth();
   const {
     products,
     loading,
@@ -270,14 +270,9 @@ export default function ChemicalsPage() {
   const [showLowStock, setShowLowStock] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Check permissions
-  const canAddProduct =
-    user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
-  const canApply =
-    user?.role === "super" ||
-    user?.role === "asst_super" ||
-    user?.role === "foreman" ||
-    user?.role === "mechanic";
+  // Check permissions — use profile-based role checks
+  const canAddProduct = canManageChemicals;
+  const canApply = isManager || isForeman;
 
   // Load initial data
   useEffect(() => {

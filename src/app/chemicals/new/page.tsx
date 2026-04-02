@@ -48,7 +48,7 @@ const UNIT_OPTIONS = [
 
 export default function NewChemicalProductPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, canManageChemicals } = useAuth();
   const { createProduct, loading, error } = useChemicals();
 
   const [submitting, setSubmitting] = useState(false);
@@ -71,9 +71,8 @@ export default function NewChemicalProductPage() {
     notes: "",
   });
 
-  // Permission check
-  const canAdd =
-    user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
+  // Permission check — use profile-based role checks
+  const canAdd = canManageChemicals;
 
   if (!canAdd) {
     return (

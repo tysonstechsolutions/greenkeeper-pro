@@ -42,7 +42,7 @@ import type { PlanLevel, PlanCategory } from "@/types/database";
 function NewGoalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, isSuper, isAsstSuper } = useAuth();
   const { createGoal, fetchGoal, fetchGoals, goals, loading } = usePlanGoals();
 
   const [submitting, setSubmitting] = useState(false);
@@ -74,8 +74,8 @@ function NewGoalContent() {
     parent_goal_id: parentId || undefined,
   });
 
-  // Permission check
-  const canCreate = user?.role === "super" || user?.role === "asst_super";
+  // Permission check — use profile-based role checks
+  const canCreate = isSuper || isAsstSuper;
 
   // Load parent goal if specified
   useEffect(() => {

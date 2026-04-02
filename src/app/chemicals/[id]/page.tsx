@@ -59,7 +59,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 export default function ChemicalDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, canManageChemicals, canManageEquipment } = useAuth();
   const {
     getProduct,
     updateProduct,
@@ -84,9 +84,8 @@ export default function ChemicalDetailPage() {
   const [discontinueOpen, setDiscontinueOpen] = useState(false);
   const [discontinuing, setDiscontinuing] = useState(false);
 
-  // Permissions
-  const canEdit =
-    user?.role === "super" || user?.role === "asst_super" || user?.role === "mechanic";
+  // Permissions — use profile-based role checks
+  const canEdit = canManageChemicals;
 
   // Load product data
   useEffect(() => {

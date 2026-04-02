@@ -77,7 +77,7 @@ function formatDate(dateString: string): string {
 
 export default function ExpensesListPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isSuper } = useAuth();
   const {
     expenses,
     fetchExpenses,
@@ -104,8 +104,8 @@ export default function ExpensesListPage() {
   const [showDenyDialog, setShowDenyDialog] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
 
-  // Permission check
-  const canApprove = user?.role === "super";
+  // Permission check — use profile-based role checks
+  const canApprove = isSuper;
 
   // Calculate date range filters
   const getDateFilter = () => {
