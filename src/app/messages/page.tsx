@@ -807,16 +807,23 @@ function MessagesPageContent() {
         )}
       >
         {/* Header */}
-        <div className="p-4 border-b">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-semibold">Messages</h1>
+        <div className="p-4 border-b bg-card/50">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center">
+                <MessageCircle className="h-4 w-4 text-white" />
+              </div>
+              <h1 className="text-lg font-semibold">Messages</h1>
+            </div>
             {totalUnread > 0 && (
-              <Badge variant="default">{totalUnread}</Badge>
+              <Badge variant="default" className="h-6 min-w-6 px-2">
+                {totalUnread}
+              </Badge>
             )}
           </div>
 
           <Button
-            className="w-full"
+            className="w-full rounded-xl"
             onClick={() => setShowNewMessageModal(true)}
           >
             <MessageSquarePlus className="h-4 w-4 mr-2" />
@@ -937,14 +944,19 @@ function MessagesPageContent() {
         {!activeChannel ? (
           // Empty state
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-              <MessageCircle className="h-8 w-8 text-muted-foreground" />
+            <div className="relative mb-6">
+              <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-[#1B4332]/10 to-[#2D6A4F]/10 flex items-center justify-center">
+                <MessageCircle className="h-10 w-10 text-[#1B4332]/40" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <Plus className="h-4 w-4 text-primary" />
+              </div>
             </div>
             <h2 className="text-xl font-semibold mb-2">Start a conversation</h2>
-            <p className="text-muted-foreground mb-4">
-              Message your team and keep everyone in the loop.
+            <p className="text-sm text-muted-foreground mb-6 max-w-xs">
+              Message your team directly or create group channels to keep everyone in the loop.
             </p>
-            <Button onClick={() => setShowNewMessageModal(true)}>
+            <Button className="rounded-xl" onClick={() => setShowNewMessageModal(true)}>
               <MessageSquarePlus className="h-4 w-4 mr-2" />
               New Message
             </Button>
@@ -952,7 +964,7 @@ function MessagesPageContent() {
         ) : (
           <>
             {/* Conversation Header */}
-            <div className="h-16 px-4 border-b flex items-center justify-between shrink-0">
+            <div className="h-16 px-4 border-b bg-card/50 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
@@ -1055,9 +1067,12 @@ function MessagesPageContent() {
                     ))}
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <MessageCircle className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No messages yet. Say hello!</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center mb-4">
+                      <Send className="h-7 w-7 text-primary/30 -rotate-45" />
+                    </div>
+                    <p className="font-medium text-sm mb-1">No messages yet</p>
+                    <p className="text-xs text-muted-foreground">Start the conversation — say hello!</p>
                   </div>
                 ) : (
                   messages.map(renderMessage)

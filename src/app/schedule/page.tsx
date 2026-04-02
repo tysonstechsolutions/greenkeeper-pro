@@ -406,8 +406,54 @@ export default function SchedulePage() {
   // Loading state
   if (authLoading || loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="pb-20 md:pb-6">
+        <div className="p-4 md:p-6">
+          <PageHeader
+            title="Schedule"
+            description="Staff scheduling and shifts"
+            icon={Calendar}
+          />
+          {/* Skeleton loading */}
+          <div className="space-y-4 mt-4">
+            <div className="flex gap-2">
+              <div className="h-9 w-28 bg-muted rounded-lg animate-pulse" />
+              <div className="h-9 w-28 bg-muted rounded-lg animate-pulse" />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 bg-muted rounded-lg animate-pulse" />
+                <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+                <div className="h-9 w-9 bg-muted rounded-lg animate-pulse" />
+              </div>
+              <div className="h-9 w-20 bg-muted rounded-lg animate-pulse" />
+            </div>
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+              <div className="grid grid-cols-8 border-b border-border bg-muted/50">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="p-3">
+                    <div className="h-4 w-8 bg-muted rounded animate-pulse mx-auto" />
+                  </div>
+                ))}
+              </div>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="grid grid-cols-8 border-b border-border last:border-b-0">
+                  <div className="p-3 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+                    <div className="space-y-1">
+                      <div className="h-3.5 w-20 bg-muted rounded animate-pulse" />
+                      <div className="h-2.5 w-12 bg-muted rounded animate-pulse" />
+                    </div>
+                  </div>
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <div key={j} className="p-2 flex items-center justify-center">
+                      <div className="h-6 w-14 bg-muted rounded animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -439,7 +485,7 @@ export default function SchedulePage() {
         </PageHeader>
 
         {/* Tabs */}
-        <div className="flex gap-1 p-1 bg-muted rounded-lg mb-4 w-fit">
+        <div className="gk-animate-in gk-animate-in-1 flex gap-1 p-1 bg-muted rounded-lg mb-4 w-fit">
           {isManager && (
             <button
               onClick={() => setActiveTab("team")}
@@ -465,7 +511,7 @@ export default function SchedulePage() {
         </div>
 
         {/* Week Navigation */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="gk-animate-in gk-animate-in-2 flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={goToPreviousWeek}>
               <ChevronLeft className="w-5 h-5" />
@@ -627,7 +673,7 @@ export default function SchedulePage() {
               </div>
             ) : (
               /* Desktop Grid View */
-              <div className="bg-card rounded-lg border border-border overflow-hidden">
+              <div className="gk-animate-in gk-animate-in-3 bg-card rounded-xl border border-border overflow-hidden shadow-sm">
                 {/* Header */}
                 <div className="grid grid-cols-8 border-b border-border bg-muted/50">
                   <div className="p-3 text-sm font-medium text-muted-foreground">Staff</div>
@@ -901,7 +947,7 @@ export default function SchedulePage() {
             )}
 
             {/* Legend */}
-            <div className="flex flex-wrap items-center gap-3 mt-4 text-xs">
+            <div className="gk-animate-in gk-animate-in-4 flex flex-wrap items-center gap-3 mt-4 text-xs">
               {Object.entries(shiftTypeLabels).map(([type, label]) => (
                 <div key={type} className="flex items-center gap-1.5">
                   <span
@@ -937,7 +983,7 @@ export default function SchedulePage() {
             </div>
 
             {/* My Week Grid */}
-            <div className="bg-card rounded-lg border border-border overflow-hidden">
+            <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
               {/* Header */}
               <div className="grid grid-cols-7 border-b border-border bg-muted/50">
                 {weekDates.map((date, idx) => (
@@ -1017,12 +1063,12 @@ export default function SchedulePage() {
 
             {/* Summary */}
             {myScheduleData && (
-              <div className="bg-muted/50 rounded-lg p-4">
-                <h3 className="font-medium mb-2">This Week</h3>
+              <div className="gk-card p-4">
+                <h3 className="font-medium mb-3">This Week Summary</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Scheduled Days</p>
-                    <p className="text-lg font-semibold">
+                  <div className="p-3 bg-primary/5 rounded-xl text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Scheduled Days</p>
+                    <p className="text-2xl font-bold text-primary">
                       {
                         Object.values(myScheduleData.schedules).filter(
                           (s) => s.shift_type && s.shift_type !== "off"
@@ -1030,9 +1076,9 @@ export default function SchedulePage() {
                       }
                     </p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Days Off</p>
-                    <p className="text-lg font-semibold">
+                  <div className="p-3 bg-muted/60 rounded-xl text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Days Off</p>
+                    <p className="text-2xl font-bold">
                       {7 -
                         Object.values(myScheduleData.schedules).filter(
                           (s) => s.shift_type && s.shift_type !== "off"

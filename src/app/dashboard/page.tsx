@@ -229,6 +229,13 @@ export default function DashboardPage() {
                 <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
                   {greeting}, {firstName}
                 </h1>
+                {todaysTasks.total > 0 && (
+                  <p className="text-sm text-white/50 mt-1.5">
+                    {todaysTasks.completed === todaysTasks.total
+                      ? "All tasks complete for today"
+                      : `${todaysTasks.total - todaysTasks.completed} task${todaysTasks.total - todaysTasks.completed !== 1 ? "s" : ""} remaining today`}
+                  </p>
+                )}
               </div>
               <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/10">
                 <Leaf className="w-4 h-4 text-[#D4A853]" />
@@ -580,16 +587,24 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : activities.length > 0 ? (
-            <div className="space-y-1">
-              {activities.slice(0, 5).map((activity) => {
+            <div className="space-y-0.5">
+              {activities.slice(0, 5).map((activity, idx) => {
                 const IconComponent = getActivityIcon(activity.action_type);
+                const isCompleted = activity.action_type === "task_completed";
                 return (
                   <div
                     key={activity.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors"
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
+                    style={{ animationDelay: `${420 + idx * 60}ms` }}
                   >
-                    <div className="w-8 h-8 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
-                      <IconComponent className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                      isCompleted ? "bg-green-500/10" : "bg-muted/60"
+                    )}>
+                      <IconComponent className={cn(
+                        "w-3.5 h-3.5",
+                        isCompleted ? "text-green-600" : "text-muted-foreground"
+                      )} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">{activity.description}</p>
