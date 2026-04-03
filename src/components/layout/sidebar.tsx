@@ -31,40 +31,35 @@ import { useChannels } from "@/lib/hooks/useChannels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { RoleHidden } from "@/components/auth/role-guard";
 
-// ── Primary: daily-use tools every staff member touches ──
-const mainNavItems = [
+// ── Primary: always visible, core daily tools ──
+const primaryItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/schedule", label: "Schedule", icon: Calendar },
   { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/equipment", label: "Equipment", icon: Wrench },
 ];
 
-// ── Course: everything about the turf and course condition ──
-const courseNavItems = [
+// ── Maintenance: course care tools ──
+const maintenanceItems = [
   { href: "/diagnostics", label: "Course Doctor", icon: Stethoscope },
-  { href: "/plan", label: "Annual Plan", icon: Target },
+  { href: "/equipment", label: "Equipment", icon: Wrench },
+  { href: "/chemicals", label: "Chemicals", icon: FlaskConical },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/weather", label: "Weather", icon: Cloud },
-  { href: "/photos", label: "Photos", icon: Camera },
 ];
 
-// ── Operations: chemicals, irrigation, staff ──
-const operationsNavItems = [
-  { href: "/chemicals", label: "Chemicals", icon: FlaskConical },
-  { href: "/irrigation", label: "Irrigation", icon: Droplets },
-];
-
-const managementOperationsItems = [
+// ── Operations: staff, planning (managers only) ──
+const operationsItems = [
   { href: "/staff", label: "Staff", icon: Users },
+  { href: "/plan", label: "Annual Plan", icon: Target },
+  { href: "/assistant", label: "AI Assistant", icon: Bot },
 ];
 
-// ── Management: budget, reports, knowledge, settings ──
-const managementNavItems = [
+// ── Admin: budget, reports, settings (managers only) ──
+const adminItems = [
   { href: "/budget", label: "Budget", icon: DollarSign },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-  { href: "/assistant", label: "AI Assistant", icon: Bot },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -198,9 +193,9 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="relative flex-1 px-2 py-3 space-y-0.5 overflow-y-auto gk-scrollbar">
-        {/* Primary — daily tools */}
+        {/* Primary — always visible */}
         <div className="space-y-0.5">
-          {mainNavItems.map((item) => (
+          {primaryItems.map((item) => (
             <NavItem
               key={item.href}
               item={item}
@@ -211,10 +206,10 @@ export function Sidebar() {
           ))}
         </div>
 
-        {/* Course */}
-        <NavSection label="Course" isCollapsed={isCollapsed} />
+        {/* Maintenance */}
+        <NavSection label="Maintenance" isCollapsed={isCollapsed} />
         <div className="space-y-0.5">
-          {courseNavItems.map((item) => (
+          {maintenanceItems.map((item) => (
             <NavItem
               key={item.href}
               item={item}
@@ -224,19 +219,11 @@ export function Sidebar() {
           ))}
         </div>
 
-        {/* Operations */}
-        <NavSection label="Operations" isCollapsed={isCollapsed} />
-        <div className="space-y-0.5">
-          {operationsNavItems.map((item) => (
-            <NavItem
-              key={item.href}
-              item={item}
-              isActive={isActive(item.href)}
-              isCollapsed={isCollapsed}
-            />
-          ))}
-          <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
-            {managementOperationsItems.map((item) => (
+        {/* Operations — managers only */}
+        <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
+          <NavSection label="Operations" isCollapsed={isCollapsed} />
+          <div className="space-y-0.5">
+            {operationsItems.map((item) => (
               <NavItem
                 key={item.href}
                 item={item}
@@ -244,14 +231,14 @@ export function Sidebar() {
                 isCollapsed={isCollapsed}
               />
             ))}
-          </RoleHidden>
-        </div>
+          </div>
+        </RoleHidden>
 
-        {/* Management */}
+        {/* Admin — managers only */}
         <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
-          <NavSection label="Management" isCollapsed={isCollapsed} />
+          <NavSection label="Admin" isCollapsed={isCollapsed} />
           <div className="space-y-0.5">
-            {managementNavItems.map((item) => (
+            {adminItems.map((item) => (
               <NavItem
                 key={item.href}
                 item={item}

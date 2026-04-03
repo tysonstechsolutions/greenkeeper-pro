@@ -25,49 +25,48 @@ import {
   Bot,
   Vote,
 } from "lucide-react";
-import { RoleHidden, RoleVisible } from "@/components/auth/role-guard";
+import { RoleHidden } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 
-const dailyItems = [
-  { href: "/briefing", label: "Morning Briefing", description: "Daily priorities & conditions", icon: Coffee },
-  { href: "/scoreboard", label: "Scoreboard", description: "Staff performance & streaks", icon: Trophy },
-  { href: "/shift-swap", label: "Shift Swap", description: "Request & approve swaps", icon: ArrowLeftRight },
-  { href: "/assistant", label: "AI Assistant", description: "Ask anything about the course", icon: Bot },
-];
-
-const courseItems = [
+// ── MAINTENANCE: day-to-day course care ──
+const maintenanceItems = [
   { href: "/diagnostics", label: "Course Doctor", description: "AI diagnostics & observations", icon: Stethoscope },
-  { href: "/plan", label: "Annual Plan", description: "Goals & progress tracking", icon: Target },
-  { href: "/course-map", label: "Course Map", description: "Interactive map view", icon: Map },
-  { href: "/weather", label: "Weather", description: "Forecasts & alerts", icon: Cloud },
-  { href: "/photos", label: "Photos", description: "Course documentation", icon: Camera },
-  { href: "/polls", label: "Community Polls", description: "Member surveys & votes", icon: Vote },
-];
-
-const operationsItems = [
   { href: "/equipment", label: "Equipment", description: "Inventory & maintenance", icon: Wrench },
   { href: "/chemicals", label: "Chemicals", description: "Products & applications", icon: FlaskConical },
   { href: "/irrigation", label: "Irrigation", description: "Zones & schedules", icon: Droplets },
+  { href: "/photos", label: "Photos", description: "Course documentation", icon: Camera },
+  { href: "/weather", label: "Weather", description: "Forecasts & alerts", icon: Cloud },
+  { href: "/course-map", label: "Course Map", description: "Interactive map view", icon: Map },
 ];
 
-// Management-only operations items
-const managementOperationsItems = [
+// ── OPERATIONS: scheduling, staff, planning ──
+const operationsItems = [
+  { href: "/briefing", label: "Morning Briefing", description: "Daily priorities & conditions", icon: Coffee },
   { href: "/staff", label: "Staff", description: "Team management", icon: Users },
+  { href: "/shift-swap", label: "Shift Swap", description: "Request & approve swaps", icon: ArrowLeftRight },
+  { href: "/plan", label: "Annual Plan", description: "Goals & progress tracking", icon: Target },
+  { href: "/scoreboard", label: "Scoreboard", description: "Staff performance & streaks", icon: Trophy },
+  { href: "/assistant", label: "AI Assistant", description: "Ask anything about the course", icon: Bot },
 ];
 
-const managementItems = [
+// ── MEMBERS: golfer-facing features ──
+const membersItems = [
+  { href: "/member-insights", label: "Member Insights", description: "Golfer engagement & feedback", icon: Users },
+  { href: "/polls", label: "Community Polls", description: "Member surveys & votes", icon: Vote },
+  { href: "/feedback", label: "Golfer Feedback", description: "Log customer feedback", icon: Lightbulb },
+  { href: "/report-issue", label: "Report Issue", description: "Alert about course problems", icon: Flag },
+];
+
+// ── ADMIN: budget, reports, settings ──
+const adminItems = [
   { href: "/budget", label: "Budget", description: "Expenses & tracking", icon: DollarSign },
   { href: "/reports", label: "Reports", description: "Analytics & exports", icon: BarChart3 },
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen },
-  { href: "/member-insights", label: "Member Insights", description: "Golfer engagement & feedback", icon: Users },
-];
-
-const systemItems = [
   { href: "/notifications", label: "Notifications", description: "View all notifications", icon: Bell },
   { href: "/settings", label: "Settings", description: "App configuration", icon: Settings },
 ];
 
-// Pro-specific items
+// ── Pro Shop view (simplified) ──
 const proItems = [
   { href: "/report-issue", label: "Report Issue", description: "Alert maintenance about problems", icon: Flag },
   { href: "/feedback", label: "Golfer Feedback", description: "Log customer feedback", icon: Lightbulb },
@@ -78,13 +77,13 @@ const proItems = [
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen },
 ];
 
-// Member-specific items
-const memberItems = [
+// ── Member view (minimal) ──
+const memberCourseItems = [
   { href: "/weather", label: "Weather", description: "Forecasts & conditions", icon: Cloud },
   { href: "/course-map", label: "Course Map", description: "View the course layout", icon: Map },
 ];
 
-const memberSystemItems = [
+const memberAccountItems = [
   { href: "/settings/profile", label: "My Profile", description: "Update your information", icon: Settings },
   { href: "/notifications", label: "Notifications", description: "View all notifications", icon: Bell },
 ];
@@ -104,26 +103,26 @@ interface MenuSectionProps {
 function MenuSection({ title, items }: MenuSectionProps) {
   return (
     <div className="mb-6">
-      <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
         {title}
       </h2>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
+            className="flex items-center justify-between p-3.5 bg-card rounded-xl border border-border hover:border-primary/20 transition-all group"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <item.icon className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="font-medium">{item.label}</p>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
+                <p className="font-medium text-sm">{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.description}</p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
           </Link>
         ))}
       </div>
@@ -137,10 +136,10 @@ export default function MorePage() {
   // Member sees a minimal menu
   if (isMember) {
     return (
-      <div className="p-4 md:p-6 pb-24">
+      <div className="p-4 md:p-6 pb-24 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold mb-6">More</h1>
-        <MenuSection title="Course" items={memberItems} />
-        <MenuSection title="Account" items={memberSystemItems} />
+        <MenuSection title="Course" items={memberCourseItems} />
+        <MenuSection title="Account" items={memberAccountItems} />
       </div>
     );
   }
@@ -148,75 +147,33 @@ export default function MorePage() {
   // Pro sees a simplified menu
   if (isPro) {
     return (
-      <div className="p-4 md:p-6 pb-24">
+      <div className="p-4 md:p-6 pb-24 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold mb-6">More</h1>
         <MenuSection title="Pro Shop Tools" items={proItems} />
-        <MenuSection title="System" items={systemItems} />
+        <MenuSection title="Admin" items={[
+          { href: "/notifications", label: "Notifications", description: "View all notifications", icon: Bell },
+          { href: "/settings", label: "Settings", description: "App configuration", icon: Settings },
+        ]} />
       </div>
     );
   }
 
-  // Regular maintenance staff menu
+  // Staff / management menu — 4 clean categories
   return (
-    <div className="p-4 md:p-6 pb-24">
+    <div className="p-4 md:p-6 pb-24 max-w-2xl mx-auto">
       <h1 className="text-2xl font-semibold mb-6">More</h1>
 
-      <MenuSection title="Daily" items={dailyItems} />
-      <MenuSection title="Course" items={courseItems} />
+      <MenuSection title="Maintenance" items={maintenanceItems} />
 
-      {/* Operations - with management items hidden from crew/seasonal */}
-      <div className="mb-6">
-        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
-          Operations
-        </h2>
-        <div className="space-y-2">
-          {operationsItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <item.icon className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">{item.label}</p>
-                  <p className="text-sm text-muted-foreground">{item.description}</p>
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </Link>
-          ))}
-          <RoleHidden hiddenFromRoles={["crew", "seasonal", "pro"]}>
-            {managementOperationsItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center justify-between p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <item.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{item.label}</p>
-                    <p className="text-sm text-muted-foreground">{item.description}</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
-              </Link>
-            ))}
-          </RoleHidden>
-        </div>
-      </div>
-
-      {/* Management - hidden from crew/seasonal/pro */}
-      <RoleHidden hiddenFromRoles={["crew", "seasonal", "pro"]}>
-        <MenuSection title="Management" items={managementItems} />
+      <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
+        <MenuSection title="Operations" items={operationsItems} />
       </RoleHidden>
 
-      <MenuSection title="System" items={systemItems} />
+      <RoleHidden hiddenFromRoles={["crew", "seasonal"]}>
+        <MenuSection title="Members" items={membersItems} />
+      </RoleHidden>
+
+      <MenuSection title="Admin" items={adminItems} />
     </div>
   );
 }
