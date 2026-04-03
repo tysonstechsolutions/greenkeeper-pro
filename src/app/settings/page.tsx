@@ -110,7 +110,7 @@ export default function SettingsPage() {
       <div className="gk-animate-in gk-animate-in-1 mb-6">
         <Link
           href="/settings/profile"
-          className="flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 transition-all group"
+          className="flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/30 active:bg-muted/30 transition-all group"
         >
           <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center shrink-0 shadow-md">
             {profile?.avatar_url ? (
@@ -148,7 +148,7 @@ export default function SettingsPage() {
             <Link
               key={section.title}
               href={section.href}
-              className="flex items-center gap-4 p-3.5 bg-card rounded-xl border border-border hover:border-primary/20 transition-all group"
+              className="flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:bg-muted/30 transition-all group"
             >
               <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${section.color} flex items-center justify-center shadow-sm shrink-0`}>
                 <section.icon className="w-5 h-5 text-white" />
@@ -174,7 +174,7 @@ export default function SettingsPage() {
               <Link
                 key={section.title}
                 href={section.href}
-                className="flex items-center gap-4 p-3.5 bg-card rounded-xl border border-border hover:border-primary/20 transition-all group"
+                className="flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:bg-muted/30 transition-all group"
               >
                 <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${section.color} flex items-center justify-center shadow-sm shrink-0`}>
                   <section.icon className="w-5 h-5 text-white" />
@@ -212,7 +212,7 @@ export default function SettingsPage() {
 
           <button
             onClick={() => signOut()}
-            className="w-full flex items-center gap-4 p-3.5 bg-card rounded-xl border border-border hover:border-red-500/20 transition-all group text-left"
+            className="w-full flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-red-500/20 active:bg-red-50 dark:active:bg-red-950/20 transition-all group text-left"
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-400 to-red-500 flex items-center justify-center shadow-sm shrink-0">
               <LogOut className="w-5 h-5 text-white" />

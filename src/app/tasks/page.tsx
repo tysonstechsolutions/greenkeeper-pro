@@ -406,11 +406,11 @@ export default function TasksPage() {
           )}
         </PageHeader>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mt-4 border-b border-border">
+        {/* Tabs — horizontally scrollable on mobile */}
+        <div className="flex gap-1 mt-4 border-b border-border gk-scroll-x">
           <button
             onClick={() => setActiveTab("my")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "my"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -420,7 +420,7 @@ export default function TasksPage() {
           </button>
           <button
             onClick={() => setActiveTab("all")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "all"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -430,7 +430,7 @@ export default function TasksPage() {
           </button>
           <button
             onClick={() => setActiveTab("overdue")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === "overdue"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -518,7 +518,7 @@ export default function TasksPage() {
 
             {/* Status Chips */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              <label className="block text-xs font-medium text-muted-foreground mb-2">
                 Status
               </label>
               <div className="flex flex-wrap gap-2">
@@ -527,7 +527,7 @@ export default function TasksPage() {
                     <button
                       key={status}
                       onClick={() => toggleStatus(status)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      className={`px-3.5 py-2 rounded-full text-xs font-medium transition-colors active:scale-95 ${
                         selectedStatuses.includes(status)
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -542,7 +542,7 @@ export default function TasksPage() {
 
             {/* Priority Chips */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              <label className="block text-xs font-medium text-muted-foreground mb-2">
                 Priority
               </label>
               <div className="flex flex-wrap gap-2">
@@ -550,7 +550,7 @@ export default function TasksPage() {
                   <button
                     key={priority}
                     onClick={() => togglePriority(priority)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    className={`px-3.5 py-2 rounded-full text-xs font-medium transition-colors active:scale-95 ${
                       selectedPriorities.includes(priority)
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -624,7 +624,7 @@ export default function TasksPage() {
       {canCreateTasks && (
         <Link
           href="/tasks/new"
-          className="fixed bottom-24 right-4 md:hidden w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
+          className="fixed bottom-[100px] right-4 md:hidden w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
         >
           <Plus className="w-6 h-6" />
         </Link>
@@ -653,9 +653,9 @@ function TaskCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-card rounded-lg border border-border border-l-4 ${
+      className={`bg-card rounded-xl border border-border border-l-4 ${
         priorityBorders[task.priority]
-      } p-4 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer`}
+      } p-4 hover:border-primary/50 hover:shadow-sm active:bg-muted/30 transition-all cursor-pointer`}
     >
       <div className="flex items-start gap-3">
         {/* Main Content */}

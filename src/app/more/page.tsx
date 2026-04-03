@@ -102,27 +102,27 @@ interface MenuSectionProps {
 
 function MenuSection({ title, items }: MenuSectionProps) {
   return (
-    <div className="mb-6">
-      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+    <div className="mb-7">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5 px-1">
         {title}
       </h2>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="flex items-center justify-between p-3.5 bg-card rounded-xl border border-border hover:border-primary/20 transition-all group"
+            className="flex items-center justify-between p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:bg-muted/40 transition-all group"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <item.icon className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm">{item.label}</p>
-                <p className="text-xs text-muted-foreground">{item.description}</p>
+                <p className="font-medium text-[15px]">{item.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+            <ChevronRight className="w-5 h-5 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
           </Link>
         ))}
       </div>

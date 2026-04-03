@@ -165,11 +165,28 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Prevent pull-to-refresh browser behavior on mobile */
+    overscroll-behavior-y: contain;
   }
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Smoother scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Prevent tap highlight on mobile — we use our own active states */
+  a, button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Better text sizing on mobile — prevent iOS zoom on input focus */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  @media (min-width: 768px) {
+    input, select, textarea {
+      font-size: inherit;
+    }
   }
 }
 
@@ -431,4 +448,41 @@
   background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   pointer-events: none;
   border-radius: inherit;
+}
+
+/* ============================================ */
+/* Mobile-First Optimizations                   */
+/* ============================================ */
+
+/* Touch-friendly tap targets — iOS HIG minimum 44px */
+.gk-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Momentum scrolling container for mobile lists */
+.gk-scroll-mobile {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Safe area padding for notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Mobile-optimized horizontal scroll (for filter chips, tabs) */
+.gk-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.gk-scroll-x::-webkit-scrollbar {
+  display: none;
 }

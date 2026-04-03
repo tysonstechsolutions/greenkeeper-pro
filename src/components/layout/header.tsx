@@ -28,6 +28,7 @@ import {
   Leaf,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useWeather } from "@/lib/hooks/useWeather";
 import {
@@ -35,6 +36,7 @@ import {
   formatTimeAgo,
   type NotificationWithDetails,
 } from "@/lib/hooks/useNotifications";
+import { useScrollDirection } from "@/lib/hooks/useScrollDirection";
 import type { NotificationType } from "@/types/database";
 
 const roleLabels: Record<string, string> = {
@@ -92,6 +94,7 @@ export function Header() {
     markAsRead,
     markAllAsRead,
   } = useNotifications();
+  const scrollDirection = useScrollDirection();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -170,25 +173,50 @@ export function Header() {
   const weatherAvailable = currentWeather !== null;
   const weatherFailed = !weatherAvailable && weatherError !== null;
 
+  // Keep dropdowns open override: don't hide header when dropdown is open
+  const isDropdownOpen = menuOpen || notificationsOpen;
+  const shouldHide = scrollDirection === "down" && !isDropdownOpen;
+
   return (
-    <header className="sticky top-0 z-40 flex items-center justify-between h-14 px-4 bg-background/80 backdrop-blur-md border-b border-border/60">
-      {/* Left: Mobile logo */}
-      <div className="flex items-center gap-3">
+    <header
+      className={cn(
+        "sticky top-0 z-40 flex items-center justify-between h-12 md:h-14 px-3 md:px-4 bg-background/80 backdrop-blur-md border-b border-border/60",
+        "transition-transform duration-300 ease-in-out",
+        shouldHide ? "-translate-y-full md:translate-y-0" : "translate-y-0"
+      )}
+    >
+      {/* Left: Mobile logo — compact */}
+      <div className="flex items-center gap-2">
         <div className="flex items-center gap-2 md:hidden">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm">
-            <Leaf className="w-4 h-4 text-[#1B4332]" />
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm">
+            <Leaf className="w-3.5 h-3.5 text-[#1B4332]" />
           </div>
-          <span className="font-bold text-foreground text-sm tracking-tight">GreenKeeper</span>
+          <span className="font-bold text-foreground text-[13px] tracking-tight">GreenKeeper</span>
         </div>
       </div>
 
       {/* Right: Weather + Notifications + Profile */}
-      <div className="flex items-center gap-1.5">
-        {/* Live Weather — graceful fallback states */}
+      <div className="flex items-center gap-1">
+        {/* Mobile weather — compact inline chip */}
+        {weatherAvailable && (
+          <Link
+            href="/weather"
+            className="flex md:hidden items-center gap-1 px-2 py-1 rounded-full bg-muted/60 text-xs"
+          >
+            <span className="text-[#B68D40]">
+              {getWeatherIcon(currentWeather.conditions, "w-3.5 h-3.5")}
+            </span>
+            <span className="font-semibold text-foreground">
+              {Math.round(currentWeather.temp_f)}°
+            </span>
+          </Link>
+        )}
+
+        {/* Desktop weather — full widget */}
         {weatherAvailable ? (
           <Link
             href="/weather"
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm group"
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm group"
           >
             <span className="text-[#B68D40]">
               {getWeatherIcon(currentWeather.conditions, "w-4 h-4")}
@@ -213,14 +241,14 @@ export function Header() {
           /* Weather API failed — show a subtle link instead of "Loading..." forever */
           <Link
             href="/weather"
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm"
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm"
           >
             <Cloud className="w-4 h-4 text-muted-foreground" />
             <span className="text-muted-foreground text-xs">Weather</span>
           </Link>
         ) : (
           /* Still loading — show briefly, will resolve or fail */
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 text-sm">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 text-sm">
             <Cloud className="w-4 h-4 text-muted-foreground animate-pulse" />
             <span className="text-muted-foreground text-xs">Loading...</span>
           </div>
@@ -248,7 +276,7 @@ export function Header() {
 
           {/* Notifications Dropdown */}
           {notificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-card rounded-xl border border-border shadow-xl shadow-black/8 z-50 overflow-hidden">
+            <div className="absolute right-0 mt-2 w-[calc(100vw-24px)] sm:w-96 max-w-96 bg-card rounded-xl border border-border shadow-xl shadow-black/8 z-50 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
                 <h3 className="font-semibold text-sm">Notifications</h3>
                 {unreadCount > 0 && (
@@ -267,7 +295,7 @@ export function Header() {
                 )}
               </div>
 
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-[60vh] overflow-y-auto">
                 {notificationsLoading && notifications.length === 0 ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -283,12 +311,14 @@ export function Header() {
                       <button
                         key={notification.id}
                         onClick={() => handleNotificationClick(notification)}
-                        className={`w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors ${
+                        className={cn(
+                          "w-full text-left px-4 py-3.5 hover:bg-muted/50 transition-colors",
+                          "active:bg-muted/70", // Touch press feedback
                           !notification.is_read ? "bg-primary/[0.03]" : ""
-                        }`}
+                        )}
                       >
                         <div className="flex gap-3">
-                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0">
                             {notificationIcons[notification.notification_type]}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -317,11 +347,11 @@ export function Header() {
               </div>
 
               {notifications.length > 0 && (
-                <div className="border-t border-border px-4 py-2.5 bg-muted/20">
+                <div className="border-t border-border px-4 py-3 bg-muted/20">
                   <Link
                     href="/notifications"
                     onClick={() => setNotificationsOpen(false)}
-                    className="block text-center text-xs font-medium text-primary hover:underline"
+                    className="block text-center text-sm font-medium text-primary py-1 active:opacity-70"
                   >
                     View all notifications
                   </Link>
@@ -378,7 +408,7 @@ export function Header() {
               <Link
                 href="/settings"
                 onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/50 active:bg-muted/70 transition-colors"
               >
                 <Settings className="w-4 h-4 text-muted-foreground" />
                 Settings
@@ -388,7 +418,7 @@ export function Header() {
                 <Link
                   href="/settings/invite"
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/50 active:bg-muted/70 transition-colors"
                 >
                   <UserPlus className="w-4 h-4 text-muted-foreground" />
                   Invite Team Members
@@ -399,7 +429,7 @@ export function Header() {
 
               <button
                 onClick={handleSignOut}
-                className="flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors w-full text-left"
+                className="flex items-center gap-3 px-4 py-3 text-sm text-destructive hover:bg-destructive/10 active:bg-destructive/15 transition-colors w-full text-left"
               >
                 <LogOut className="w-4 h-4" />
                 Sign Out
@@ -411,3 +441,4 @@ export function Header() {
     </header>
   );
 }
+

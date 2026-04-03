@@ -72,7 +72,7 @@ export function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden safe-area-bottom">
       {/* Frosted glass background */}
       <div className="bg-background/80 backdrop-blur-xl border-t border-border/50">
-        <div className="flex items-center justify-around h-16 px-2 max-w-lg mx-auto">
+        <div className="flex items-center justify-around h-[72px] px-1 max-w-lg mx-auto">
           {navItems.map((item) => {
             const isActive =
               item.href === "/more"
@@ -86,27 +86,35 @@ export function BottomNav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors relative",
+                  "flex flex-col items-center justify-center flex-1 py-2 rounded-xl transition-all relative",
+                  "min-w-[64px] min-h-[56px]", // Minimum 48px+ touch targets
+                  "active:scale-95 active:bg-primary/5", // Haptic-feel press feedback
                   isActive
                     ? "text-primary"
-                    : "text-muted-foreground/70 hover:text-foreground"
+                    : "text-muted-foreground/60"
                 )}
               >
-                {/* Active indicator dot */}
+                {/* Active pill background */}
                 {isActive && (
-                  <span className="absolute top-1.5 w-1 h-1 rounded-full bg-[#B68D40]" />
+                  <span className="absolute inset-x-2 top-1 bottom-1 rounded-xl bg-primary/8" />
                 )}
-                <div className="relative mt-1">
-                  <item.icon className={cn("w-5 h-5", isActive && "text-primary")} />
+                <div className="relative z-10">
+                  <item.icon
+                    className={cn(
+                      "w-6 h-6 transition-all",
+                      isActive ? "text-primary" : "text-muted-foreground/60"
+                    )}
+                    strokeWidth={isActive ? 2.2 : 1.8}
+                  />
                   {badgeCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-background">
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-background">
                       {badgeCount > 9 ? "9+" : badgeCount}
                     </span>
                   )}
                 </div>
                 <span className={cn(
-                  "text-[10px] font-medium",
-                  isActive ? "text-primary" : "text-muted-foreground/60"
+                  "text-[11px] font-medium mt-0.5 relative z-10",
+                  isActive ? "text-primary font-semibold" : "text-muted-foreground/50"
                 )}>
                   {item.label}
                 </span>
