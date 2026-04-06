@@ -268,12 +268,14 @@ export default function EquipmentDetailPage() {
         setEditDialogOpen(false);
         // Show success briefly then clear
         setTimeout(() => setSaveSuccess(false), 3000);
-      } else {
-        setSaveError(equipmentError || "Failed to save changes. Please try again.");
       }
     } catch (err) {
       console.error("Error in handleEditSubmit:", err);
-      setSaveError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.");
+      // Show the real error from Supabase/network, not a generic message
+      const errorMsg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setSaveError(errorMsg.includes("fetch")
+        ? "Network error — check your internet connection and try again."
+        : errorMsg);
     } finally {
       setSaving(false);
     }

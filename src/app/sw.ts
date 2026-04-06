@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist, CacheFirst, NetworkFirst, ExpirationPlugin } from "serwist";
+import { Serwist, CacheFirst, NetworkFirst, NetworkOnly, ExpirationPlugin } from "serwist";
 
 // This declares the value of `injectionPoint` to TypeScript.
 declare global {
@@ -61,12 +61,24 @@ const serwist = new Serwist({
         ],
       }),
     },
-    // Supabase requests - Network First
+    // Supabase MUTATION requests (POST, PATCH, PUT, DELETE) - Network Only
+    // CRITICAL: Never cache mutation requests — caching these causes
+    // "failed to fetch" errors when saving equipment, tasks, etc.
     {
-      matcher: ({ url }) => url.hostname.includes("supabase"),
+      matcher: ({ url, request }) =>
+        url.hostname.includes("supabase") &&
+        request.method !== "GET" &&
+        request.method !== "HEAD",
+      handler: new NetworkOnly(),
+    },
+    // Supabase READ requests (GET) - Network First with cache fallback
+    {
+      matcher: ({ url, request }) =>
+        url.hostname.includes("supabase") &&
+        (request.method === "GET" || request.method === "HEAD"),
       handler: new NetworkFirst({
         cacheName: "supabase-cache-v1",
-        networkTimeoutSeconds: 10,
+        networkTimeoutSeconds: 15,
         plugins: [
           new ExpirationPlugin({
             maxEntries: 100,
