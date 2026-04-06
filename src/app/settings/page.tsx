@@ -229,7 +229,7 @@ export default function SettingsPage() {
       <div className="gk-animate-in gk-animate-in-5 text-center space-y-1">
         <div className="flex items-center justify-center gap-2 text-muted-foreground/60">
           <Leaf className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">GreenKeeper Pro</span>
+          <span className="text-xs font-medium">VMGC</span>
         </div>
         <p className="text-[11px] text-muted-foreground/40">v0.1.0 · Veterans Memorial Golf Course</p>
       </div>

@@ -191,7 +191,7 @@ export function Header() {
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm">
             <Leaf className="w-3.5 h-3.5 text-[#1B4332]" />
           </div>
-          <span className="font-bold text-foreground text-[13px] tracking-tight">GreenKeeper</span>
+          <span className="font-bold text-foreground text-[13px] tracking-tight">VMGC</span>
         </div>
       </div>
 

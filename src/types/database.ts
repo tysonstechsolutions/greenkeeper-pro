@@ -1,4 +1,4 @@
-// GreenKeeper Pro Database Types
+// VMGC Database Types
 // Auto-generated types for Supabase integration
 // Based on the complete schema from greenkeeper-pro-spec.md
 

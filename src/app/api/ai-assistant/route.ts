@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // =============================================
-// GreenKeeper Pro AI Assistant — API Route
+// VMGC AI Assistant — API Route
 // Uses Claude with tool_use to perform CRUD
 // operations across all Supabase tables.
 // =============================================
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
-const SYSTEM_PROMPT = `You are the GreenKeeper Pro AI Assistant for Veterans Memorial Golf Course at Naval Station Great Lakes, IL. You help the superintendent manage every aspect of the course through conversation.
+const SYSTEM_PROMPT = `You are the VMGC AI Assistant for Veterans Memorial Golf Course at Naval Station Great Lakes, IL. You help the superintendent manage every aspect of the course through conversation.
 
 You can perform actions like:
 - Adding/editing/viewing equipment, chemical products, staff profiles, tasks, schedules

@@ -171,7 +171,7 @@ export default function AssistantPage() {
             <Bot className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-semibold text-sm">GreenKeeper AI</h1>
+            <h1 className="font-semibold text-sm">VMGC AI</h1>
             <p className="text-xs text-muted-foreground">
               Ask me anything or tell me what to do
             </p>
@@ -194,7 +194,7 @@ export default function AssistantPage() {
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
               <Sparkles className="w-8 h-8 text-primary" />
             </div>
-            <h2 className="text-lg font-semibold mb-1">GreenKeeper AI Assistant</h2>
+            <h2 className="text-lg font-semibold mb-1">VMGC AI Assistant</h2>
             <p className="text-sm text-muted-foreground text-center mb-6">
               I can add equipment, manage staff, create tasks, track expenses, generate reports, and more. Just ask.
             </p>

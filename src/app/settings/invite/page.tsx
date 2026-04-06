@@ -184,7 +184,7 @@ export default function InvitePage() {
     <div className="p-4 md:p-6">
       <PageHeader
         title="Team Invites"
-        description="Invite new staff members to GreenKeeper Pro"
+        description="Invite new staff members to VMGC"
         icon={UserPlus}
       />
 

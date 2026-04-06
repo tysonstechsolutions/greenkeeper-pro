@@ -5,7 +5,7 @@
  *
  * Provides the active course context for the application.
  *
- * Currently, GreenKeeper Pro is single-tenant (one course per installation),
+ * Currently, VMGC is single-tenant (one course per installation),
  * so this hook returns a constant course ID. This design pattern allows for
  * easy future migration to multi-tenant architecture where users could belong
  * to multiple courses.

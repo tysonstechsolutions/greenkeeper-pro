@@ -17,13 +17,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GreenKeeper Pro",
+  title: "VMGC",
   description: "Championship Course Management for Veterans Memorial Golf Course",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "GreenKeeper Pro",
+    title: "VMGC",
     startupImage: [
       {
         url: "/icons/apple-touch-icon.svg",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
       },
     ],
   },
-  applicationName: "GreenKeeper Pro",
+  applicationName: "VMGC",
   formatDetection: {
     telephone: false,
   },

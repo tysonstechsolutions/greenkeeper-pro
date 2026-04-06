@@ -1,6 +1,6 @@
 {
-  "name": "GreenKeeper Pro",
-  "short_name": "GreenKeeper",
+  "name": "VMGC",
+  "short_name": "VMGC",
   "description": "Championship Golf Course Management — Veterans Memorial GC",
   "start_url": "/dashboard",
   "display": "standalone",
@@ -110,7 +110,7 @@
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "GreenKeeper Pro Dashboard"
+      "label": "VMGC Dashboard"
     }
   ]
 }

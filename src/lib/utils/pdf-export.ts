@@ -75,7 +75,7 @@ function addHeader(
   // Title
   pdf.setFontSize(18);
   pdf.setFont("helvetica", "bold");
-  pdf.setTextColor(27, 67, 50); // GreenKeeper brand color
+  pdf.setTextColor(27, 67, 50); // VMGC brand color
   pdf.text(options.title, marginLeft, yPos + 6);
   yPos += 10;
 
@@ -373,7 +373,7 @@ export function generateReportFilename(
   dateIdentifier?: string
 ): string {
   const date = dateIdentifier || new Date().toISOString().split("T")[0];
-  return `greenkeeper-${reportType}-report-${date}`;
+  return `vmgc-${reportType}-report-${date}`;
 }
 
 /**

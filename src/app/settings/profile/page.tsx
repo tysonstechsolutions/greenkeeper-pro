@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, User, Camera, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, User, Camera, Save, Loader2, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,8 @@ export default function ProfileSettingsPage() {
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [displayName, setDisplayName] = useState(profile?.display_name || "");
   const [phone, setPhone] = useState(profile?.phone || "");
@@ -22,6 +24,8 @@ export default function ProfileSettingsPage() {
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,9 +39,13 @@ export default function ProfileSettingsPage() {
 
       if (error) throw error;
       await refreshProfile();
-      router.back();
+      setSaveSuccess(true);
+      setTimeout(() => {
+        router.back();
+      }, 1000);
     } catch (err) {
       console.error("Error saving profile:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -45,6 +53,14 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="p-4 md:p-6 pb-24">
+      {/* Success toast */}
+      {saveSuccess && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-2 text-base font-medium">
+          <Check className="w-5 h-5" />
+          Profile saved successfully
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -128,6 +144,14 @@ export default function ProfileSettingsPage() {
           </p>
         </div>
 
+        {/* Error message */}
+        {saveError && (
+          <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-destructive">
+            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div className="text-sm font-medium">{saveError}</div>
+          </div>
+        )}
+
         {/* Save Button */}
         <Button onClick={handleSave} disabled={saving} className="w-full">
           {saving ? (
@@ -135,7 +159,7 @@ export default function ProfileSettingsPage() {
           ) : (
             <Save className="w-4 h-4 mr-2" />
           )}
-          Save Changes
+          {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
     </div>

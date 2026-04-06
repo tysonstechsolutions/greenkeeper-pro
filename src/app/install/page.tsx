@@ -52,7 +52,7 @@ export default function InstallPage() {
         </div>
         <h1 className="text-xl font-bold mb-2">Already Installed!</h1>
         <p className="text-sm text-muted-foreground max-w-xs">
-          You&apos;re already using GreenKeeper Pro as an app. You&apos;re all set.
+          You&apos;re already using VMGC as an app. You&apos;re all set.
         </p>
       </div>
     );
@@ -65,9 +65,9 @@ export default function InstallPage() {
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center shadow-lg mx-auto mb-4">
           <Leaf className="w-10 h-10 text-[#D4A853]" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight mb-2">Install GreenKeeper Pro</h1>
+        <h1 className="text-2xl font-bold tracking-tight mb-2">Install VMGC</h1>
         <p className="text-sm text-muted-foreground">
-          Add GreenKeeper to your home screen for instant access — no app store needed.
+          Add VMGC to your home screen for instant access — no app store needed.
         </p>
       </div>
 
@@ -192,7 +192,7 @@ function InstallInstructions({
         {
           number: 4,
           title: 'Tap "Add"',
-          description: "Confirm by tapping Add in the top-right corner. GreenKeeper Pro will appear on your home screen.",
+          description: "Confirm by tapping Add in the top-right corner. VMGC will appear on your home screen.",
           visual: (
             <div className="flex items-center justify-center p-4 bg-muted/50 rounded-xl">
               <div className="px-6 py-2 bg-blue-500 text-white rounded-lg font-semibold text-sm shadow-md">

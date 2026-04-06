@@ -19,8 +19,6 @@ import {
   Flag,
   Lightbulb,
   Coffee,
-  Trophy,
-  ArrowLeftRight,
   Bot,
   Vote,
   ChevronRight,
@@ -63,8 +61,6 @@ const leadershipQuickAccess: QuickItem[] = [
 
 const leadershipOperations: ListItem[] = [
   { href: "/plan", label: "Annual Plan", description: "Goals & progress", icon: Target, iconColor: "text-emerald-600", bgColor: "bg-emerald-500/10" },
-  { href: "/shift-swap", label: "Shift Swap", description: "Swaps & approvals", icon: ArrowLeftRight, iconColor: "text-amber-600", bgColor: "bg-amber-500/10" },
-  { href: "/scoreboard", label: "Scoreboard", description: "Performance", icon: Trophy, iconColor: "text-yellow-600", bgColor: "bg-yellow-500/10" },
   { href: "/irrigation", label: "Irrigation", description: "Zones & schedules", icon: Droplets, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
 ];
@@ -100,8 +96,6 @@ const foremanQuickAccess: QuickItem[] = [
 
 const foremanOperations: ListItem[] = [
   { href: "/staff", label: "Staff", description: "Team management", icon: Users, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
-  { href: "/shift-swap", label: "Shift Swap", description: "Swaps & approvals", icon: ArrowLeftRight, iconColor: "text-amber-600", bgColor: "bg-amber-500/10" },
-  { href: "/scoreboard", label: "Scoreboard", description: "Performance", icon: Trophy, iconColor: "text-yellow-600", bgColor: "bg-yellow-500/10" },
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
 ];
 
@@ -121,14 +115,13 @@ const mechanicQuickAccess: QuickItem[] = [
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CREW / SEASONAL (laborers)
-// Bare minimum: essentials for the job + shift swap.
+// Bare minimum: essentials for the job.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const crewQuickAccess: QuickItem[] = [
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/course-map", label: "Map", icon: Map, color: "from-teal-500 to-cyan-600" },
-  { href: "/shift-swap", label: "Shift Swap", icon: ArrowLeftRight, color: "from-amber-500 to-yellow-600" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -171,7 +164,7 @@ function QuickGrid({ items }: { items: QuickItem[] }) {
           <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center text-white shadow-sm`}>
             <item.icon className="w-5 h-5" />
           </div>
-          <span className="text-[11px] font-medium text-muted-foreground text-center leading-tight">
+          <span className="text-xs font-medium text-muted-foreground text-center leading-tight">
             {item.label}
           </span>
         </Link>
@@ -195,14 +188,14 @@ function SectionCard({ title, items, accent }: { title: string; items: ListItem[
               href={item.href}
               className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-muted/30 active:bg-muted/50 transition-colors group"
             >
-              <div className={`w-9 h-9 rounded-lg ${item.bgColor} flex items-center justify-center shrink-0`}>
-                <item.icon className={`w-4 h-4 ${item.iconColor}`} />
+              <div className={`w-10 h-10 rounded-lg ${item.bgColor} flex items-center justify-center shrink-0`}>
+                <item.icon className={`w-5 h-5 ${item.iconColor}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm">{item.label}</p>
-                <p className="text-[11px] text-muted-foreground">{item.description}</p>
+                <p className="font-medium text-base">{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.description}</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground/20 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
+              <ChevronRight className="w-5 h-5 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
             </Link>
           ))}
         </div>

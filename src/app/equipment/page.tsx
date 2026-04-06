@@ -102,13 +102,13 @@ function EquipmentCard({
 
   return (
     <Card
-      className="cursor-pointer hover:shadow-md transition-all"
+      className="cursor-pointer hover:shadow-md active:bg-muted/30 active:scale-[0.99] transition-all rounded-2xl"
       onClick={onClick}
     >
       <CardContent className="p-4">
         <div className="flex gap-4">
-          {/* Photo - larger and more prominent */}
-          <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 relative">
+          {/* Photo */}
+          <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
             {item.photo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -117,27 +117,19 @@ function EquipmentCard({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="flex flex-col items-center justify-center gap-1">
-                <Camera className="w-8 h-8 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground text-center px-1">Add photo</span>
-              </div>
+              <Camera className="w-8 h-8 text-muted-foreground" />
             )}
           </div>
 
           {/* Details */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div>
-                <h3 className="font-semibold text-sm truncate">{item.name}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {equipmentTypeLabels[item.equipment_type]}
-                </p>
-              </div>
-            </div>
+            <h3 className="font-bold text-base truncate">{item.name}</h3>
+            <p className="text-sm text-muted-foreground mb-2">
+              {equipmentTypeLabels[item.equipment_type]}
+            </p>
 
             {/* Badges row */}
-            <div className="flex flex-wrap gap-2 mb-2">
-              {/* Condition badge */}
+            <div className="flex flex-wrap gap-1.5">
               <Badge
                 variant="outline"
                 style={{
@@ -145,12 +137,10 @@ function EquipmentCard({
                   borderColor: conditionColor,
                   color: conditionColor,
                 }}
-                className="text-xs"
+                className="text-xs px-2 py-0.5"
               >
                 {conditionStatusLabels[item.condition_status]}
               </Badge>
-
-              {/* Status badge */}
               <Badge
                 variant="outline"
                 style={{
@@ -158,35 +148,26 @@ function EquipmentCard({
                   borderColor: statusColor,
                   color: statusColor,
                 }}
-                className="text-xs"
+                className="text-xs px-2 py-0.5"
               >
                 {equipmentStatusLabels[item.status]}
               </Badge>
-
-              {/* Parts needed badge */}
               {item.needs_parts_ordered && (
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs px-2 py-0.5">
                   Parts Needed
                 </Badge>
               )}
             </div>
 
-            {/* Hours and condition notes */}
-            <div className="text-xs space-y-1">
-              {item.current_hours !== null && (
-                <div className="text-muted-foreground">
-                  {item.current_hours.toLocaleString()} hrs
-                </div>
-              )}
-              {item.condition_notes && (
-                <div className="text-muted-foreground truncate">
-                  {item.condition_notes}
-                </div>
-              )}
-            </div>
+            {/* Hours */}
+            {item.current_hours !== null && (
+              <p className="text-sm text-muted-foreground mt-1.5">
+                {item.current_hours.toLocaleString()} hours
+              </p>
+            )}
           </div>
 
-          <ChevronRight className="w-5 h-5 text-muted-foreground self-center flex-shrink-0" />
+          <ChevronRight className="w-6 h-6 text-muted-foreground/40 self-center flex-shrink-0" />
         </div>
       </CardContent>
     </Card>
@@ -423,7 +404,7 @@ export default function EquipmentPage() {
       {canAddEquipment && (
         <button
           onClick={handleAddClick}
-          className="fixed bottom-20 right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center md:hidden hover:bg-primary/90 transition-colors"
+          className="fixed bottom-[100px] right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center md:hidden hover:bg-primary/90 active:scale-95 transition-all"
           aria-label="Add equipment"
         >
           <Plus className="w-6 h-6" />

@@ -50,7 +50,6 @@ import {
 import { useCourseZones, formatZoneName } from "@/lib/hooks/useCourseZones";
 import { useProfiles, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
 import {
-  CameraFAB,
   CameraCaptureModal,
 } from "@/components/features/photos/camera-capture";
 import { createClient } from "@/lib/supabase/client";
@@ -460,6 +459,16 @@ export default function PhotosPage() {
         icon={Camera}
       >
         <div className="flex items-center gap-2">
+          {user && (
+            <Button
+              size="sm"
+              onClick={() => setShowCameraModal(true)}
+              className="active:scale-95"
+            >
+              <Camera className="w-4 h-4 mr-1" />
+              Take Photo
+            </Button>
+          )}
           <Button
             variant={viewMode === "grid" ? "default" : "outline"}
             size="sm"
@@ -1173,9 +1182,6 @@ export default function PhotosPage() {
           )}
         </div>
       )}
-
-      {/* Camera FAB */}
-      {user && <CameraFAB onClick={() => setShowCameraModal(true)} />}
 
       {/* Camera Modal */}
       {user && (

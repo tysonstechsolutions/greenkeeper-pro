@@ -131,7 +131,7 @@ export function ChatBubble() {
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-green-600 flex items-center justify-center">
                 <Bot className="w-4 h-4 text-white" />
               </div>
-              <span className="font-semibold text-sm">GreenKeeper AI</span>
+              <span className="font-semibold text-sm">VMGC AI</span>
             </div>
             <div className="flex items-center gap-1">
               <Link

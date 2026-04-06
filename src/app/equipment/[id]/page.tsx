@@ -88,11 +88,15 @@ export default function EquipmentDetailPage() {
     createInspection,
     fetchLatestInspection,
     loading,
+    error: equipmentError,
   } = useEquipment();
 
   const equipmentId = params.id as string;
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
@@ -232,30 +236,46 @@ export default function EquipmentDetailPage() {
 
   // Handle equipment update
   const handleEditSubmit = async () => {
-    const updateData: Partial<Equipment> = {
-      name: editForm.name,
-      equipment_type: editForm.equipment_type as any,
-      make: editForm.make || null,
-      model: editForm.model || null,
-      year: editForm.year ? parseInt(editForm.year) : null,
-      serial_number: editForm.serial_number || null,
-      asset_tag: editForm.asset_tag || null,
-      status: editForm.status as any,
-      condition_status: editForm.condition_status as any,
-      condition_notes: editForm.condition_notes || null,
-      needs_parts_ordered: editForm.needs_parts_ordered,
-      parts_needed: editForm.parts_needed || null,
-      estimated_repair_cost: editForm.estimated_repair_cost ? parseFloat(editForm.estimated_repair_cost) : null,
-      fuel_type: editForm.fuel_type as any,
-      location: editForm.location || null,
-      current_hours: editForm.current_hours ? parseFloat(editForm.current_hours) : null,
-      service_interval_hours: editForm.service_interval_hours ? parseFloat(editForm.service_interval_hours) : null,
-    };
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
 
-    const updated = await updateEquipment(equipmentId, updateData);
-    if (updated) {
-      setEquipment((prev) => (prev ? { ...prev, ...updated } : null));
-      setEditDialogOpen(false);
+    try {
+      const updateData: Partial<Equipment> = {
+        name: editForm.name,
+        equipment_type: editForm.equipment_type as any,
+        make: editForm.make || null,
+        model: editForm.model || null,
+        year: editForm.year ? parseInt(editForm.year) : null,
+        serial_number: editForm.serial_number || null,
+        asset_tag: editForm.asset_tag || null,
+        status: editForm.status as any,
+        condition_status: editForm.condition_status as any,
+        condition_notes: editForm.condition_notes || null,
+        needs_parts_ordered: editForm.needs_parts_ordered,
+        parts_needed: editForm.parts_needed || null,
+        estimated_repair_cost: editForm.estimated_repair_cost ? parseFloat(editForm.estimated_repair_cost) : null,
+        fuel_type: editForm.fuel_type as any,
+        location: editForm.location || null,
+        current_hours: editForm.current_hours ? parseFloat(editForm.current_hours) : null,
+        service_interval_hours: editForm.service_interval_hours ? parseFloat(editForm.service_interval_hours) : null,
+      };
+
+      const updated = await updateEquipment(equipmentId, updateData);
+      if (updated) {
+        setEquipment((prev) => (prev ? { ...prev, ...updated } : null));
+        setSaveSuccess(true);
+        setEditDialogOpen(false);
+        // Show success briefly then clear
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        setSaveError(equipmentError || "Failed to save changes. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error in handleEditSubmit:", err);
+      setSaveError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -363,6 +383,14 @@ export default function EquipmentDetailPage() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Success toast */}
+      {saveSuccess && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-2 text-base font-medium">
+          <Check className="w-5 h-5" />
+          Changes saved successfully
+        </div>
+      )}
+
       {/* Header */}
       <DetailPageHeader
         title={equipment.name}
@@ -370,30 +398,41 @@ export default function EquipmentDetailPage() {
         backLabel="Back to Equipment"
       />
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">{equipment.name}</h1>
-            <p className="text-gray-600">{equipmentTypeLabels[equipment.equipment_type]}</p>
-          </div>
-          <Badge style={{ backgroundColor: statusColor }} className="text-white">
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">{equipment.name}</h1>
+          <p className="text-base text-muted-foreground mt-1">{equipmentTypeLabels[equipment.equipment_type]}</p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge style={{ backgroundColor: statusColor }} className="text-white text-sm px-3 py-1">
             {equipmentStatusLabels[equipment.status]}
           </Badge>
-          <Badge style={{ backgroundColor: conditionColor }} className="text-white">
+          <Badge style={{ backgroundColor: conditionColor }} className="text-white text-sm px-3 py-1">
             {conditionStatusLabels[equipment.condition_status]}
           </Badge>
         </div>
 
-        <div className="flex gap-2">
+        {/* Action buttons — large and easy to tap */}
+        <div className="flex gap-3">
           {canEdit && (
-            <Button onClick={() => setEditDialogOpen(true)} variant="outline" size="sm">
-              <Edit2 className="w-4 h-4 mr-2" />
-              Edit
+            <Button
+              onClick={() => { setSaveError(null); setEditDialogOpen(true); }}
+              size="lg"
+              className="flex-1 h-14 text-base font-semibold rounded-xl active:scale-95 transition-all"
+            >
+              <Edit2 className="w-5 h-5 mr-2" />
+              Edit Equipment
             </Button>
           )}
           {canDelete && (
-            <Button onClick={() => setDeleteConfirmOpen(true)} variant="destructive" size="sm">
-              <Trash2 className="w-4 h-4 mr-2" />
+            <Button
+              onClick={() => setDeleteConfirmOpen(true)}
+              variant="destructive"
+              size="lg"
+              className="h-14 px-6 text-base font-semibold rounded-xl active:scale-95 transition-all"
+            >
+              <Trash2 className="w-5 h-5 mr-2" />
               Delete
             </Button>
           )}
@@ -932,11 +971,28 @@ export default function EquipmentDetailPage() {
             </div>
           </div>
 
+          {/* Error message */}
+          {saveError && (
+            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-destructive">
+              <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div className="text-sm font-medium">{saveError}</div>
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleEditSubmit}>Save Changes</Button>
+            <Button onClick={handleEditSubmit} disabled={saving} className="min-w-[140px]">
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

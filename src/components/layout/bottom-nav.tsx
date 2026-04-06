@@ -48,7 +48,7 @@ const moreRoutes = [
   "/more", "/diagnostics", "/plan", "/course-map", "/weather", "/photos",
   "/equipment", "/chemicals", "/irrigation", "/staff", "/budget", "/reports",
   "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
-  "/briefing", "/assistant", "/scoreboard", "/checklists", "/shift-swap",
+  "/briefing", "/assistant", "/checklists",
   "/equipment-checkout", "/observations", "/member/conditions",
   "/polls", "/report-issue", "/member-insights", "/install",
 ];
@@ -113,8 +113,8 @@ export function BottomNav() {
                   )}
                 </div>
                 <span className={cn(
-                  "text-[11px] font-medium mt-0.5 relative z-10",
-                  isActive ? "text-primary font-semibold" : "text-muted-foreground/50"
+                  "text-xs font-medium mt-0.5 relative z-10",
+                  isActive ? "text-primary font-semibold" : "text-muted-foreground/60"
                 )}>
                   {item.label}
                 </span>

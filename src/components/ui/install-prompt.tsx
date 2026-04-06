@@ -126,7 +126,7 @@ export function InstallPrompt() {
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-[15px]">Install GreenKeeper Pro</h3>
+              <h3 className="font-semibold text-[15px]">Install VMGC</h3>
               <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                 Tap <Share className="w-3 h-3 inline -mt-0.5 text-blue-500" /> then &quot;Add to Home Screen&quot; to install
               </p>
@@ -182,7 +182,7 @@ export function InstallPrompt() {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-[15px]">Install GreenKeeper Pro</h3>
+            <h3 className="font-semibold text-[15px]">Install VMGC</h3>
             <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               Add to your home screen for instant, full-screen access
             </p>

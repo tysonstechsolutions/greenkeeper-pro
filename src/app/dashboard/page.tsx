@@ -375,7 +375,7 @@ export default function DashboardPage() {
               )}>
                 <action.icon className="w-5 h-5" />
               </div>
-              <span className="text-[11px] md:text-xs font-medium text-center text-muted-foreground leading-tight">
+              <span className="text-xs md:text-sm font-medium text-center text-muted-foreground leading-tight">
                 {action.label}
               </span>
             </Link>

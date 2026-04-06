@@ -181,7 +181,7 @@ export function Sidebar() {
           {!isCollapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-white text-sm tracking-tight leading-tight">
-                GreenKeeper
+                VMGC
               </span>
               <span className="text-[10px] font-medium text-[#B68D40] uppercase tracking-[0.08em]">
                 Pro

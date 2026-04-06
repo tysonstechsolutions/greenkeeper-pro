@@ -16,6 +16,6 @@
     <path d="M18 82 C18 82, 28 72, 50 52" stroke="#1B4332" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.5"/>
   </g>
   <!-- Text -->
-  <text x="256" y="368.64" font-family="system-ui, -apple-system, sans-serif" font-size="92.16" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="5.12">GreenKeeper</text>
+  <text x="256" y="368.64" font-family="system-ui, -apple-system, sans-serif" font-size="92.16" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="5.12">VMGC</text>
   <text x="256" y="445.44" font-family="system-ui, -apple-system, sans-serif" font-size="51.2" font-weight="600" fill="#B68D40" text-anchor="middle" letter-spacing="15.36">PRO</text>
 </svg>

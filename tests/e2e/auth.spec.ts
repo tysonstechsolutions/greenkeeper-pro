@@ -11,7 +11,7 @@ test.describe('Authentication', () => {
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
 
     // Check branding elements
-    await expect(page.getByRole('heading', { name: 'GreenKeeper Pro' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'VMGC' })).toBeVisible()
     await expect(page.getByText('Championship Course Management')).toBeVisible()
   })
 

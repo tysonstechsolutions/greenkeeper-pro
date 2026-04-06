@@ -1,4 +1,4 @@
-// Member-specific types for GreenKeeper Pro
+// Member-specific types for VMGC
 
 export type MemberType =
   | "active_duty"

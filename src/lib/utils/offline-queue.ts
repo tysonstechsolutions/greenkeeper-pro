@@ -47,7 +47,7 @@ interface OfflineQueueDB extends DBSchema {
   };
 }
 
-const DB_NAME = "greenkeeper-offline-queue";
+const DB_NAME = "vmgc-offline-queue";
 const DB_VERSION = 1;
 
 let db: IDBPDatabase<OfflineQueueDB> | null = null;

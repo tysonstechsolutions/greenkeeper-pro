@@ -70,7 +70,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
             <span className="text-primary-foreground font-bold text-2xl">GK</span>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">GreenKeeper Pro</h1>
+          <h1 className="text-2xl font-bold text-foreground">VMGC</h1>
           <p className="text-muted-foreground mt-1">Championship Course Management</p>
         </div>
 
