@@ -446,7 +446,7 @@ export default function ChemicalsPage() {
             value={typeFilter}
             onValueChange={(value) => setTypeFilter(value as ChemicalProductType | "all")}
           >
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
@@ -527,7 +527,7 @@ export default function ChemicalsPage() {
       {canApply && (
         <button
           onClick={handleApplyClick}
-          className="fixed bottom-20 right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center md:hidden hover:bg-primary/90 transition-colors"
+          className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center md:hidden hover:bg-primary/90 active:scale-95 transition-all"
           aria-label="Log application"
         >
           <Droplets className="w-6 h-6" />

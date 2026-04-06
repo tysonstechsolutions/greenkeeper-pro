@@ -99,7 +99,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
@@ -117,7 +117,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
@@ -138,7 +138,7 @@ export default function LoginPage() {
           <div className="mt-6 pt-6 border-t border-border">
             <a
               href="/pin-login"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-muted/50 hover:bg-muted text-sm font-medium text-foreground transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-muted/50 hover:bg-muted active:bg-muted/80 text-base font-medium text-foreground transition-colors"
             >
               <span className="text-lg">🔢</span>
               Crew PIN Login
@@ -146,14 +146,14 @@ export default function LoginPage() {
           </div>
 
           {/* Links */}
-          <div className="mt-4 space-y-3">
-            <p className="text-sm text-muted-foreground text-center">
+          <div className="mt-5 space-y-3">
+            <p className="text-sm text-muted-foreground text-center py-1">
               Golfer?{" "}
-              <a href="/join" className="text-primary font-medium hover:underline">
+              <a href="/join" className="text-primary font-medium hover:underline py-1 px-0.5">
                 Join our community
               </a>
             </p>
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-sm text-muted-foreground text-center py-1">
               Staff member?{" "}
               <span className="text-foreground font-medium">
                 Use the invite link from your superintendent.

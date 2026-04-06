@@ -362,20 +362,20 @@ export default function DashboardPage() {
             Quick Actions
           </h2>
         </div>
-        <div className="grid grid-cols-4 gap-2.5 md:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {quickActions.map((action) => (
             <Link
               key={action.href}
               href={action.href}
-              className="gk-action-btn flex flex-col items-center gap-2.5 p-3.5 md:p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
+              className="gk-action-btn flex flex-col items-center gap-2.5 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
             >
               <div className={cn(
-                "w-11 h-11 md:w-11 md:h-11 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
+                "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
                 action.color
               )}>
                 <action.icon className="w-5 h-5" />
               </div>
-              <span className="text-xs md:text-sm font-medium text-center text-muted-foreground leading-tight">
+              <span className="text-sm font-medium text-center text-muted-foreground leading-tight">
                 {action.label}
               </span>
             </Link>

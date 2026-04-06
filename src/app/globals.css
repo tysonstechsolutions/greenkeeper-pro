@@ -193,8 +193,13 @@
   }
 
   /* ── Accessibility: Older / Low-Vision Users ── */
-  /* Minimum touch targets for all interactive elements */
-  button, a, [role="button"], select, input[type="checkbox"], input[type="radio"] {
+  /* Minimum touch targets for all interactive elements (except inline/icon variants) */
+  button:not([data-slot="dialog-close"]):not(.inline-size),
+  a:not(.inline-link),
+  [role="button"],
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
     min-height: 44px;
   }
   /* Labels should be easily readable */
@@ -504,4 +509,35 @@
 
 .gk-scroll-x::-webkit-scrollbar {
   display: none;
+}
+
+/* ============================================ */
+/* Responsive & Safe Area Helpers               */
+/* ============================================ */
+
+/* Use 100dvh for full-height layouts (accounts for mobile browser chrome) */
+.h-screen-safe {
+  height: 100dvh;
+}
+
+/* Bottom nav spacer — prevents content from hiding behind fixed bottom nav */
+.pb-bottom-nav {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Landscape mode: prevent input zoom on iOS */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .gk-animate-in,
+  .gk-animate-in-1, .gk-animate-in-2, .gk-animate-in-3,
+  .gk-animate-in-4, .gk-animate-in-5, .gk-animate-in-6,
+  .gk-animate-in-7, .gk-animate-in-8 {
+    animation: none !important;
+  }
 }

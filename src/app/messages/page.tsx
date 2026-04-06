@@ -93,7 +93,7 @@ interface ChannelMemberInfo {
 export default function MessagesPage() {
   return (
     <Suspense fallback={
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="flex h-[calc(100dvh-4rem)] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     }>
@@ -780,7 +780,7 @@ function MessagesPageContent() {
 
   if (authLoading) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+      <div className="flex h-[calc(100dvh-4rem)] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -796,7 +796,7 @@ function MessagesPageContent() {
   // ============================================================================
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex h-[calc(100dvh-4rem)] overflow-hidden">
       {/* ================================================================== */}
       {/* LEFT PANEL - CHANNEL LIST */}
       {/* ================================================================== */}
@@ -1333,7 +1333,7 @@ function MessagesPageContent() {
             </SheetDescription>
           </SheetHeader>
 
-          <ScrollArea className="h-[calc(100vh-10rem)] mt-6">
+          <ScrollArea className="h-[calc(100dvh-10rem)] mt-6">
             <div className="space-y-2">
               {channelMembers.map((member) => (
                 <div

@@ -233,7 +233,7 @@ export default function CourseMapPage() {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-screen">
       {/* Header - desktop only */}
       <div className="hidden md:flex items-center justify-between p-4 pb-2">
         <PageHeader

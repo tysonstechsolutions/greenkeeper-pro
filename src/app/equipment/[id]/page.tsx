@@ -663,14 +663,14 @@ export default function EquipmentDetailPage() {
           <CardTitle>Inspections</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-2">
-            <Button onClick={() => openInspectionSheet("pre")} variant="outline" size="sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Button onClick={() => openInspectionSheet("pre")} variant="outline" size="sm" className="w-full">
               Run Pre-Inspection
             </Button>
-            <Button onClick={() => openInspectionSheet("post")} variant="outline" size="sm">
+            <Button onClick={() => openInspectionSheet("post")} variant="outline" size="sm" className="w-full">
               Run Post-Inspection
             </Button>
-            <Button onClick={() => openInspectionSheet("cleaning")} variant="outline" size="sm">
+            <Button onClick={() => openInspectionSheet("cleaning")} variant="outline" size="sm" className="w-full">
               Run Cleaning Check
             </Button>
           </div>
@@ -678,7 +678,7 @@ export default function EquipmentDetailPage() {
           {latestInspection && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-medium mb-2">Latest Inspection</h3>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <Label className="text-xs font-medium">Type</Label>
                   <p className="text-gray-600">

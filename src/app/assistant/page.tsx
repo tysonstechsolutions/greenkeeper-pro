@@ -163,7 +163,7 @@ export default function AssistantPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] max-w-4xl mx-auto">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">

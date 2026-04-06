@@ -259,7 +259,7 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-9 w-9 rounded-full"
+            className="relative rounded-full"
             onClick={() => {
               setNotificationsOpen(!notificationsOpen);
               setMenuOpen(false);
@@ -283,7 +283,7 @@ export function Header() {
                   <button
                     onClick={handleMarkAllAsRead}
                     disabled={markingAll}
-                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                    className="text-sm text-primary hover:underline flex items-center gap-1.5 py-1 px-2 -mr-2 rounded-lg active:bg-primary/10 transition-colors"
                   >
                     {markingAll ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -368,7 +368,7 @@ export function Header() {
               setMenuOpen(!menuOpen);
               setNotificationsOpen(false);
             }}
-            className="flex items-center gap-2 p-1 rounded-full hover:bg-muted/60 transition-colors"
+            className="flex items-center gap-2 p-1.5 rounded-full hover:bg-muted/60 active:bg-muted/80 transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center ring-2 ring-[#B68D40]/20">
               {profile?.avatar_url ? (

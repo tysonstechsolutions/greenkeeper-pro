@@ -601,7 +601,7 @@ function LocationDetail({
       {!showForm && (
         <button
           onClick={() => setShowForm(true)}
-          className="fixed bottom-20 right-6 sm:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors z-30"
+          className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] right-6 sm:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all z-30"
         >
           <Camera className="w-6 h-6" />
         </button>

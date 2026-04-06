@@ -619,7 +619,7 @@ export default function StaffPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 space-y-4 max-h-[calc(100vh-400px)] overflow-y-auto">
+                <div className="p-4 space-y-4 max-h-[calc(100dvh-400px)] overflow-y-auto">
                   {/* Contact info */}
                   <div>
                     <h3 className="text-sm font-semibold text-muted-foreground mb-2">

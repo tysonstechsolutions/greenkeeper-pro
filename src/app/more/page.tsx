@@ -151,20 +151,18 @@ const memberQuickAccess: QuickItem[] = [
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function QuickGrid({ items }: { items: QuickItem[] }) {
-  // Use 3 columns if fewer than 5 items, otherwise 4
-  const cols = items.length <= 4 ? "grid-cols-4" : items.length <= 6 ? "grid-cols-3" : "grid-cols-4";
   return (
-    <div className={`grid ${cols} gap-2.5 mb-6`}>
+    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-6">
       {items.map((item) => (
         <Link
           key={item.href}
           href={item.href}
-          className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-card border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30 transition-all"
+          className="flex flex-col items-center gap-2.5 p-3.5 rounded-2xl bg-card border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30 transition-all"
         >
-          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center text-white shadow-sm`}>
+          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center text-white shadow-sm`}>
             <item.icon className="w-5 h-5" />
           </div>
-          <span className="text-xs font-medium text-muted-foreground text-center leading-tight">
+          <span className="text-sm font-medium text-muted-foreground text-center leading-tight">
             {item.label}
           </span>
         </Link>
@@ -206,19 +204,19 @@ function SectionCard({ title, items, accent }: { title: string; items: ListItem[
 
 function BottomLinks({ showSettings = true }: { showSettings?: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-6 mt-2 mb-4">
-      <Link href="/notifications" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground active:opacity-70 transition-colors py-2">
-        <Bell className="w-3.5 h-3.5" />
+    <div className="flex items-center justify-center gap-2 mt-3 mb-6">
+      <Link href="/notifications" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground active:opacity-70 transition-colors py-3 px-4 rounded-xl">
+        <Bell className="w-4 h-4" />
         Notifications
       </Link>
       {showSettings && (
-        <Link href="/settings" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground active:opacity-70 transition-colors py-2">
-          <Settings className="w-3.5 h-3.5" />
+        <Link href="/settings" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground active:opacity-70 transition-colors py-3 px-4 rounded-xl">
+          <Settings className="w-4 h-4" />
           Settings
         </Link>
       )}
-      <Link href="/install" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground active:opacity-70 transition-colors py-2">
-        <Smartphone className="w-3.5 h-3.5" />
+      <Link href="/install" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground active:opacity-70 transition-colors py-3 px-4 rounded-xl">
+        <Smartphone className="w-4 h-4" />
         Install App
       </Link>
     </div>

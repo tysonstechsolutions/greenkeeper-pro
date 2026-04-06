@@ -1094,7 +1094,7 @@ export default function SchedulePage() {
 
       {/* Mobile Copy Week Button */}
       {isSuper && isMobile && activeTab === "team" && (
-        <div className="fixed bottom-20 right-4 z-30">
+        <div className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] right-4 z-30">
           <Button
             size="lg"
             className="rounded-full shadow-lg"
