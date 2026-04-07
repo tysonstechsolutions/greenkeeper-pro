@@ -8,6 +8,7 @@ import { Header } from "./header";
 import { OnlineStatus } from "@/components/ui/online-status";
 import { InstallPrompt } from "@/components/ui/install-prompt";
 import { ChatBubble } from "@/components/features/ai/chat-bubble";
+import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
 
 // Routes that should NOT show the app shell (sidebar, header, bottom nav)
 const PUBLIC_ROUTES = ["/login", "/pin-login", "/join", "/install", "/offline"];
@@ -29,6 +30,9 @@ export function AppShell({ children }: AppShellProps) {
   const { user } = useAuth();
   const isPublic = isPublicRoute(pathname);
 
+  // Auto-scroll focused inputs above the virtual keyboard on mobile
+  useKeyboardScroll();
+
   // Public pages get a clean layout with no chrome
   if (isPublic) {
     return (
@@ -40,7 +44,7 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-dvh bg-background overflow-x-hidden">
       {/* PWA Online Status Banner */}
       <OnlineStatus />
 
@@ -52,7 +56,7 @@ export function AppShell({ children }: AppShellProps) {
         <Header />
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0">
           {children}
         </main>
       </div>

@@ -177,6 +177,8 @@
     -moz-osx-font-smoothing: grayscale;
     /* Smoother scrolling on iOS */
     -webkit-overflow-scrolling: touch;
+    /* Prevent any horizontal overflow on mobile */
+    overflow-x: hidden;
   }
   /* Prevent tap highlight on mobile — we use our own active states */
   a, button, [role="button"] {
@@ -529,6 +531,23 @@
 @media screen and (orientation: landscape) and (max-height: 500px) {
   input, select, textarea {
     font-size: 16px !important;
+  }
+}
+
+/* ── Keyboard-aware scrolling ── */
+/* When an input is focused, ensure it's not hidden behind the keyboard */
+/* scroll-margin pushes the scroll target up so it's visible above keyboard */
+input:focus,
+select:focus,
+textarea:focus {
+  scroll-margin-bottom: 200px;
+  scroll-margin-top: 80px;
+}
+
+/* On mobile, the main scrollable area needs scroll-padding to account for keyboard */
+@media (max-width: 767px) {
+  main {
+    scroll-padding-bottom: 200px;
   }
 }
 

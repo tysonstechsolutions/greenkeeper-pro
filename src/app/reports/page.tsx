@@ -561,7 +561,7 @@ function DailyReportView({ report }: { report: DailyReportData }) {
 
       {/* Weather Summary */}
       {report.weather && (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-sm text-muted-foreground">High</p>
@@ -707,7 +707,7 @@ function WeeklyReportView({ report }: { report: WeeklyReportData }) {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">Task Completion</p>
@@ -814,7 +814,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
       </div>
 
       {/* Fleet Summary */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">Total Units</p>

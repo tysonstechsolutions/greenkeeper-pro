@@ -69,9 +69,9 @@ export function BottomNav() {
   );
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden safe-area-bottom">
-      {/* Frosted glass background */}
-      <div className="bg-background/80 backdrop-blur-xl border-t border-border/50">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/80 backdrop-blur-xl border-t border-border/50 safe-area-bottom">
+      {/* Nav content */}
+      <div>
         <div className="flex items-center justify-around h-[72px] px-1 max-w-lg mx-auto">
           {navItems.map((item) => {
             const isActive =

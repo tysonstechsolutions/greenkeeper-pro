@@ -240,7 +240,7 @@ export function Header() {
 
           {/* Notifications Dropdown */}
           {notificationsOpen && (
-            <div className="absolute right-0 mt-2 w-[calc(100vw-24px)] sm:w-96 max-w-96 bg-card rounded-xl border border-border shadow-xl shadow-black/8 z-50 overflow-hidden">
+            <div className="fixed right-3 left-3 sm:absolute sm:left-auto sm:right-0 mt-2 sm:w-96 bg-card rounded-xl border border-border shadow-xl shadow-black/8 z-50 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
                 <h3 className="font-semibold text-sm">Notifications</h3>
                 {unreadCount > 0 && (
