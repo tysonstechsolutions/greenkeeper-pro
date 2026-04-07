@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { COURSE } from "@/lib/constants";
 import type { WeatherLog } from "@/types/database";
 
 /**
@@ -18,11 +19,11 @@ import type { WeatherLog } from "@/types/database";
  *    NEXT_PUBLIC_WEATHER_API_KEY=your_api_key_here
  */
 
-// Veterans Memorial Golf Course at Naval Station Great Lakes, IL
+// Sourced from shared constants
 const LOCATION = {
-  lat: 42.3095,
-  lng: -87.8475,
-  name: "Veterans Memorial Golf Course, Great Lakes, IL",
+  lat: COURSE.lat,
+  lng: COURSE.lng,
+  name: `${COURSE.name}, ${COURSE.location}`,
 };
 
 const API_BASE_URL = "https://api.weatherapi.com/v1";

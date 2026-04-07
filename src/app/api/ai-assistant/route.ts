@@ -452,37 +452,45 @@ Be specific with rates and timing — this is for a professional superintendent.
           }
         }
 
-        const analysisRes = await fetch(ANTHROPIC_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 4096,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "image",
-                    source: {
-                      type: "base64",
-                      media_type: mediaType,
-                      data: imageData,
+        const analysisController = new AbortController();
+        const analysisTimeout = setTimeout(() => analysisController.abort(), 60_000);
+        let analysisRes: Response;
+        try {
+          analysisRes = await fetch(ANTHROPIC_API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 4096,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "image",
+                      source: {
+                        type: "base64",
+                        media_type: mediaType,
+                        data: imageData,
+                      },
                     },
-                  },
-                  {
-                    type: "text",
-                    text: diagnosisPrompt,
-                  },
-                ],
-              },
-            ],
-          }),
-        });
+                    {
+                      type: "text",
+                      text: diagnosisPrompt,
+                    },
+                  ],
+                },
+              ],
+            }),
+            signal: analysisController.signal,
+          });
+        } finally {
+          clearTimeout(analysisTimeout);
+        }
 
         if (!analysisRes.ok) {
           const errBody = await analysisRes.text();
@@ -645,21 +653,29 @@ async function callClaude(
   systemPrompt: string,
   messages: Array<{ role: string; content: unknown }>
 ) {
-  const res = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      tools: TOOLS,
-      messages,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000); // 60s per round
+  let res: Response;
+  try {
+    res = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: TOOLS,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     const errBody = await res.text();

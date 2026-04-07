@@ -401,7 +401,7 @@ export default function ReportsPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {[2023, 2024, 2025, 2026].map((y) => (
+                          {Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 3 + i).map((y) => (
                             <SelectItem key={y} value={String(y)}>
                               {y}
                             </SelectItem>
@@ -421,7 +421,7 @@ export default function ReportsPage() {
                         <SelectContent>
                           {Array.from({ length: 12 }, (_, i) => (
                             <SelectItem key={i + 1} value={String(i + 1)}>
-                              {new Date(2024, i).toLocaleString("default", { month: "long" })}
+                              {new Date(new Date().getFullYear(), i).toLocaleString("default", { month: "long" })}
                             </SelectItem>
                           ))}
                         </SelectContent>

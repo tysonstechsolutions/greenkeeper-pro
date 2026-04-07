@@ -98,15 +98,25 @@ export function ChatBubble() {
         return { role: m.role as "user" | "assistant", content: m.content };
       });
 
-      const res = await fetch("/api/ai-assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: apiMessages,
-          currentPage: pathname,
-          imageData: imageToSend || undefined,
-        }),
-      });
+      // 90-second timeout — AI tool-use loops can take a while
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90_000);
+
+      let res: Response;
+      try {
+        res = await fetch("/api/ai-assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: apiMessages,
+            currentPage: pathname,
+            imageData: imageToSend || undefined,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: "Request failed" }));
@@ -125,12 +135,15 @@ export function ChatBubble() {
         },
       ]);
     } catch (err) {
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `Sorry, something went wrong. Try again or use the full assistant page.`,
+          content: isTimeout
+            ? "Request timed out. Try a shorter question or use the full assistant page."
+            : "Sorry, something went wrong. Try again or use the full assistant page.",
           error: true,
         },
       ]);

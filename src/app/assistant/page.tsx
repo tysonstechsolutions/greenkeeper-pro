@@ -123,15 +123,25 @@ export default function AssistantPage() {
         return { role: msg.role as "user" | "assistant", content: msg.content };
       });
 
-      const res = await fetch("/api/ai-assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: apiMessages,
-          currentPage: pathname,
-          imageData: imageToSend || undefined,
-        }),
-      });
+      // 90-second timeout — AI tool-use loops can take a while
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90_000);
+
+      let res: Response;
+      try {
+        res = await fetch("/api/ai-assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: apiMessages,
+            currentPage: pathname,
+            imageData: imageToSend || undefined,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: "Request failed" }));
@@ -150,13 +160,16 @@ export default function AssistantPage() {
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : "Something went wrong";
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      const errMsg = isTimeout
+        ? "The request timed out. Try a simpler question or try again."
+        : err instanceof Error ? err.message : "Something went wrong";
       setError(errMsg);
 
       const errorMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `Sorry, I ran into an issue: ${errMsg}. Please try again.`,
+        content: `Sorry, I ran into an issue: ${errMsg}`,
         timestamp: new Date(),
         error: true,
       };
