@@ -98,7 +98,7 @@ function GreenImage({
         fill
         sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 180px"
         className="object-cover"
-        style={{ filter: "blur(0.4px) contrast(1.05) saturate(1.1)", imageRendering: "auto" }}
+        style={{ filter: "contrast(1.08) saturate(1.15)", imageRendering: "auto" }}
         quality={90}
         onError={() => setImgError(true)}
       />

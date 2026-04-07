@@ -424,7 +424,7 @@ export default function GreenDetailPage() {
           onTouchEnd={isPlacingPin ? handleImageTap : undefined}
         >
           {/* The green image */}
-          <div className="relative aspect-square sm:aspect-[4/3] md:aspect-[3/2] lg:aspect-[16/9] bg-gradient-to-b from-emerald-50 to-emerald-100/50 max-w-[1200px] mx-auto w-full">
+          <div className="relative aspect-square sm:aspect-[4/3] md:aspect-[4/3] lg:aspect-[4/3] bg-gradient-to-b from-emerald-50 to-emerald-100/50 max-w-[900px] mx-auto w-full">
             {imgError ? (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center">
@@ -439,7 +439,7 @@ export default function GreenDetailPage() {
                 fill
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px"
                 className="object-cover"
-                style={{ filter: "blur(0.3px) contrast(1.05) saturate(1.1)", imageRendering: "auto" }}
+                style={{ filter: "contrast(1.08) saturate(1.15)", imageRendering: "auto" }}
                 quality={90}
                 priority
                 onError={() => setImgError(true)}
