@@ -109,6 +109,17 @@ export default function HoleDetailPage() {
   const [savingFix, setSavingFix] = useState(false);
   const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
 
+  // Feedback messages
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Auto-clear feedback after 4 seconds
+  useEffect(() => {
+    if (feedbackMsg) {
+      const timer = setTimeout(() => setFeedbackMsg(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackMsg]);
+
   // Create task dialog
   const [taskDialogObs, setTaskDialogObs] = useState<HoleObservation | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
@@ -148,9 +159,9 @@ export default function HoleDetailPage() {
     const rect = container.getBoundingClientRect();
     let clientX: number, clientY: number;
 
-    if ("touches" in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
+    if ("changedTouches" in e) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
     } else {
       clientX = e.clientX;
       clientY = e.clientY;
@@ -198,6 +209,7 @@ export default function HoleDetailPage() {
       }
     } catch (err) {
       console.error("Failed to generate fix instructions:", err);
+      setFeedbackMsg({ type: "error", text: "Failed to generate fix instructions. Try again." });
     } finally {
       setGeneratingFix(false);
     }
@@ -232,6 +244,9 @@ export default function HoleDetailPage() {
       setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
+      setFeedbackMsg({ type: "success", text: "Observation reported successfully." });
+    } else {
+      setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
     }
     setSubmitting(false);
   };
@@ -262,6 +277,7 @@ export default function HoleDetailPage() {
 
       if (error) {
         console.error("Failed to create task:", error);
+        setFeedbackMsg({ type: "error", text: "Failed to create task. Please try again." });
       } else if (task) {
         // Link observation to task
         await updateObservation(obs.id, {
@@ -270,9 +286,11 @@ export default function HoleDetailPage() {
         });
         setTaskDialogObs(null);
         setSelectedObs(null);
+        setFeedbackMsg({ type: "success", text: "Task created and linked to observation." });
       }
     } catch (err) {
       console.error("Task creation error:", err);
+      setFeedbackMsg({ type: "error", text: "Failed to create task. Please try again." });
     } finally {
       setCreatingTask(false);
     }
@@ -295,9 +313,14 @@ export default function HoleDetailPage() {
   const handleSaveFix = async () => {
     if (!selectedObs) return;
     setSavingFix(true);
-    await updateObservation(selectedObs.id, { fix_instructions: editFixText.trim() || null });
-    setSelectedObs({ ...selectedObs, fix_instructions: editFixText.trim() || null });
-    setEditingFix(false);
+    const result = await updateObservation(selectedObs.id, { fix_instructions: editFixText.trim() || null });
+    if (result) {
+      setSelectedObs({ ...selectedObs, fix_instructions: editFixText.trim() || null });
+      setEditingFix(false);
+      setFeedbackMsg({ type: "success", text: "Fix instructions saved." });
+    } else {
+      setFeedbackMsg({ type: "error", text: "Failed to save fix instructions." });
+    }
     setSavingFix(false);
   };
 
@@ -374,6 +397,25 @@ export default function HoleDetailPage() {
         </div>
       </div>
 
+      {/* Feedback Banner */}
+      {feedbackMsg && (
+        <div className={`mx-4 md:mx-6 mb-3 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
+          feedbackMsg.type === "success"
+            ? "bg-green-50 text-green-700 border border-green-200"
+            : "bg-red-50 text-red-700 border border-red-200"
+        }`}>
+          {feedbackMsg.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+          )}
+          {feedbackMsg.text}
+          <button className="ml-auto" onClick={() => setFeedbackMsg(null)}>
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Hole Image with Pins */}
       <div className="px-4 md:px-6 mb-6">
         <div
@@ -384,7 +426,7 @@ export default function HoleDetailPage() {
               : "border-border"
           }`}
           onClick={handleImageTap}
-          onTouchStart={isPlacingPin ? handleImageTap : undefined}
+          onTouchEnd={isPlacingPin ? handleImageTap : undefined}
         >
           {/* The hole image */}
           <div className="relative aspect-[4/5] sm:aspect-[3/4] md:aspect-[4/3] lg:aspect-[16/9] bg-gradient-to-b from-green-50 to-green-100/50">

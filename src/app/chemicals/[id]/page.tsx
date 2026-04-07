@@ -59,13 +59,12 @@ import { useAuth } from "@/lib/hooks/useAuth";
 export default function ChemicalDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, canManageChemicals, canManageEquipment } = useAuth();
+  const { canManageChemicals } = useAuth();
   const {
     getProduct,
     updateProduct,
     updateInventory,
     getProductApplicationHistory,
-    loading,
     error,
   } = useChemicals();
 
@@ -214,7 +213,7 @@ export default function ChemicalDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/chemicals/${product.id}/edit`)}
+              onClick={() => router.push(`/chemicals`)}
             >
               <Edit2 className="w-4 h-4 mr-2" />
               Edit

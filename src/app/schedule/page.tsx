@@ -975,7 +975,7 @@ export default function SchedulePage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => router.push("/schedule/time-off/new")}
+                onClick={() => router.push("/schedule/time-off")}
               >
                 <CalendarPlus className="w-4 h-4 mr-2" />
                 Request Time Off

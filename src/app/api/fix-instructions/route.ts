@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { issueTypeLabels } from "@/lib/hole-constants";
+import type { HoleIssueType } from "@/types/database";
 
 // POST /api/fix-instructions
 // Generates step-by-step fix instructions for a hole observation using Claude
@@ -21,25 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const issueTypeLabels: Record<string, string> = {
-      fungus_disease: "Fungus / Disease",
-      dry_spot: "Dry Spot",
-      wet_area: "Wet Area",
-      bare_spot: "Bare Spot",
-      weed_pressure: "Weed Pressure",
-      pest_damage: "Pest Damage",
-      mechanical_damage: "Mechanical Damage",
-      drainage: "Drainage Issue",
-      bunker_issue: "Bunker Issue",
-      tree_issue: "Tree Issue",
-      irrigation_issue: "Irrigation Issue",
-      turf_thin: "Thin Turf",
-      algae: "Algae",
-      frost_damage: "Frost Damage",
-      other: "Other",
-    };
-
-    const issueLabel = issueTypeLabels[issue_type] || issue_type;
+    const issueLabel = issueTypeLabels[issue_type as HoleIssueType] || issue_type;
 
     const prompt = `You are the turf management expert for Veterans Memorial Golf Course at Naval Station Great Lakes, IL (USDA Zone 5b-6a). The course has Creeping Bentgrass greens and Kentucky Bluegrass/Perennial Ryegrass fairways.
 
