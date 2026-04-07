@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   MapPin,
   Plus,
@@ -423,7 +424,7 @@ export default function GreenDetailPage() {
           onTouchEnd={isPlacingPin ? handleImageTap : undefined}
         >
           {/* The green image */}
-          <div className="relative aspect-square sm:aspect-[4/3] md:aspect-[3/2] lg:aspect-[16/9] bg-gradient-to-b from-emerald-50 to-emerald-100/50">
+          <div className="relative aspect-square sm:aspect-[4/3] md:aspect-[3/2] lg:aspect-[16/9] bg-gradient-to-b from-emerald-50 to-emerald-100/50 max-w-[1200px] mx-auto w-full">
             {imgError ? (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center">
@@ -432,10 +433,15 @@ export default function GreenDetailPage() {
                 </div>
               </div>
             ) : (
-              <img
+              <Image
                 src={`/greens/green-${holeNumber}.png`}
                 alt={`Green ${holeNumber}`}
-                className="w-full h-full object-cover"
+                fill
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1200px"
+                className="object-cover"
+                style={{ filter: "blur(0.3px) contrast(1.05) saturate(1.1)", imageRendering: "auto" }}
+                quality={90}
+                priority
                 onError={() => setImgError(true)}
                 draggable={false}
               />
