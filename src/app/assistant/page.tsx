@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import {
   Bot,
   Send,
@@ -10,6 +11,9 @@ import {
   Trash2,
   RotateCcw,
   AlertCircle,
+  Camera,
+  X,
+  ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -20,13 +24,13 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
   error?: boolean;
-  // Store raw Claude content blocks for conversation continuity
   rawContent?: unknown;
+  imagePreview?: string;
 }
 
 const EXAMPLE_PROMPTS = [
   "What equipment do we have and what needs service?",
-  "Add a new Toro Greensmaster 3150 to equipment",
+  "What's the weather look like? Good day to spray?",
   "Show me all pending tasks for this week",
   "What's our chemical inventory looking like?",
   "Create a task to aerate greens on holes 1-9 tomorrow",
@@ -38,13 +42,17 @@ const EXAMPLE_PROMPTS = [
 ];
 
 export default function AssistantPage() {
+  const pathname = usePathname();
   const { profile, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -61,10 +69,32 @@ export default function AssistantPage() {
     e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 10 * 1024 * 1024) return; // 10MB max
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setPendingImage(base64);
+      setPendingImagePreview(base64);
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const clearPendingImage = () => {
+    setPendingImage(null);
+    setPendingImagePreview(null);
+  };
+
   const sendMessage = async (messageText?: string) => {
     const text = messageText || input.trim();
-    if (!text || isLoading) return;
+    if ((!text && !pendingImage) || isLoading) return;
 
+    const finalText = text || (pendingImage ? "Analyze this photo" : "");
     setInput("");
     setError(null);
     if (inputRef.current) {
@@ -74,15 +104,18 @@ export default function AssistantPage() {
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: text,
+      content: finalText,
       timestamp: new Date(),
+      imagePreview: pendingImagePreview || undefined,
     };
+
+    const imageToSend = pendingImage;
+    clearPendingImage();
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
-      // Build conversation history for Claude
       const apiMessages = [...messages, userMessage].map((msg) => {
         if (msg.role === "assistant" && msg.rawContent) {
           return { role: "assistant" as const, content: msg.rawContent };
@@ -93,7 +126,11 @@ export default function AssistantPage() {
       const res = await fetch("/api/ai-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          currentPage: pathname,
+          imageData: imageToSend || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -141,18 +178,17 @@ export default function AssistantPage() {
   const clearChat = () => {
     setMessages([]);
     setError(null);
+    clearPendingImage();
   };
 
   const retryLast = () => {
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
     if (lastUserMsg) {
-      // Remove the last assistant message (the error)
       setMessages((prev) => {
         const newMsgs = [...prev];
         if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === "assistant") {
           newMsgs.pop();
         }
-        // Also remove the last user message — sendMessage will re-add it
         if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === "user") {
           newMsgs.pop();
         }
@@ -164,6 +200,16 @@ export default function AssistantPage() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] max-w-4xl mx-auto">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleImageSelect}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-3">
@@ -173,7 +219,7 @@ export default function AssistantPage() {
           <div>
             <h1 className="font-semibold text-sm">VMGC AI</h1>
             <p className="text-xs text-muted-foreground">
-              Ask me anything or tell me what to do
+              Ask me anything, attach photos for diagnosis
             </p>
           </div>
         </div>
@@ -189,14 +235,16 @@ export default function AssistantPage() {
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
-          /* Empty state with example prompts */
           <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
               <Sparkles className="w-8 h-8 text-primary" />
             </div>
             <h2 className="text-lg font-semibold mb-1">VMGC AI Assistant</h2>
-            <p className="text-sm text-muted-foreground text-center mb-6">
-              I can add equipment, manage staff, create tasks, track expenses, generate reports, and more. Just ask.
+            <p className="text-sm text-muted-foreground text-center mb-2">
+              I can manage equipment, tasks, staff, expenses, chemicals, and more. I know the current weather and can analyze photos of turf problems.
+            </p>
+            <p className="text-xs text-muted-foreground text-center mb-6">
+              Tap the camera icon to snap a photo for instant diagnosis.
             </p>
 
             <div className="w-full space-y-2">
@@ -217,7 +265,6 @@ export default function AssistantPage() {
             </div>
           </div>
         ) : (
-          /* Chat messages */
           <div className="space-y-6">
             {messages.map((msg) => (
               <div
@@ -247,6 +294,17 @@ export default function AssistantPage() {
                       : "bg-muted/60 border border-border/50 rounded-bl-md"
                   }`}
                 >
+                  {/* Image thumbnail */}
+                  {msg.imagePreview && (
+                    <div className="mb-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={msg.imagePreview}
+                        alt="Attached photo"
+                        className="max-w-[240px] rounded-lg"
+                      />
+                    </div>
+                  )}
                   <div className="whitespace-pre-wrap break-words">{msg.content}</div>
                   <div
                     className={`text-[10px] mt-1.5 ${
@@ -270,7 +328,6 @@ export default function AssistantPage() {
               </div>
             ))}
 
-            {/* Loading indicator */}
             {isLoading && (
               <div className="flex gap-3">
                 <div className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-primary to-green-600 flex items-center justify-center">
@@ -285,7 +342,6 @@ export default function AssistantPage() {
               </div>
             )}
 
-            {/* Error retry button */}
             {!isLoading && messages.length > 0 && messages[messages.length - 1].error && (
               <div className="flex justify-center">
                 <Button variant="outline" size="sm" onClick={retryLast} className="gap-1.5">
@@ -300,16 +356,52 @@ export default function AssistantPage() {
         )}
       </div>
 
+      {/* Pending image preview */}
+      {pendingImagePreview && (
+        <div className="px-4 py-2 border-t border-border/50">
+          <div className="relative inline-block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={pendingImagePreview}
+              alt="Pending upload"
+              className="h-20 rounded-lg border border-border"
+            />
+            <button
+              onClick={clearPendingImage}
+              className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-white rounded-full flex items-center justify-center"
+              aria-label="Remove image"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Photo attached — add details or just hit send
+          </p>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="border-t border-border bg-background/80 backdrop-blur-sm px-4 py-3">
         <div className="flex items-end gap-2 max-w-4xl mx-auto">
+          {/* Camera button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="h-11 w-11 rounded-xl shrink-0"
+            title="Attach a photo for diagnosis"
+          >
+            <Camera className="w-5 h-5" />
+          </Button>
+
           <div className="flex-1 relative">
             <textarea
               ref={inputRef}
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything or tell me what to do..."
+              placeholder={pendingImage ? "Describe what you see (optional)..." : "Ask anything or tell me what to do..."}
               rows={1}
               disabled={isLoading}
               className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 placeholder:text-muted-foreground/60"
@@ -318,7 +410,7 @@ export default function AssistantPage() {
           </div>
           <Button
             onClick={() => sendMessage()}
-            disabled={!input.trim() || isLoading}
+            disabled={(!input.trim() && !pendingImage) || isLoading}
             size="icon"
             className="h-11 w-11 rounded-xl shrink-0"
           >

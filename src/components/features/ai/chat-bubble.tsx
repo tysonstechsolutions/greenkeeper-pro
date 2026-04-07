@@ -11,6 +11,8 @@ import {
   Maximize2,
   Sparkles,
   AlertCircle,
+  Camera,
+  ImageIcon,
 } from "lucide-react";
 
 interface BubbleMessage {
@@ -19,6 +21,7 @@ interface BubbleMessage {
   content: string;
   error?: boolean;
   rawContent?: unknown;
+  imagePreview?: string; // base64 thumbnail for display
 }
 
 export function ChatBubble() {
@@ -27,8 +30,11 @@ export function ChatBubble() {
   const [messages, setMessages] = useState<BubbleMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Don't show bubble on the full assistant page or login
   if (pathname === "/assistant" || pathname === "/login" || pathname?.startsWith("/join") || pathname?.startsWith("/invite")) {
@@ -39,17 +45,47 @@ export function ChatBubble() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type and size
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 10 * 1024 * 1024) return; // 10MB max
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setPendingImage(base64);
+      setPendingImagePreview(base64);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const clearPendingImage = () => {
+    setPendingImage(null);
+    setPendingImagePreview(null);
+  };
+
   const sendMessage = async (text?: string) => {
     const msg = text || input.trim();
-    if (!msg || isLoading) return;
+    if ((!msg && !pendingImage) || isLoading) return;
 
+    const messageText = msg || (pendingImage ? "Analyze this photo" : "");
     setInput("");
 
     const userMsg: BubbleMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: msg,
+      content: messageText,
+      imagePreview: pendingImagePreview || undefined,
     };
+
+    const imageToSend = pendingImage;
+    clearPendingImage();
 
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
@@ -65,7 +101,11 @@ export function ChatBubble() {
       const res = await fetch("/api/ai-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          currentPage: pathname,
+          imageData: imageToSend || undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -109,6 +149,16 @@ export function ChatBubble() {
 
   return (
     <>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleImageSelect}
+      />
+
       {/* Floating bubble button — above bottom nav on mobile, bottom-right on desktop */}
       {!isOpen && (
         <button
@@ -162,7 +212,7 @@ export function ChatBubble() {
                   Ask me anything about the course, or tell me to do something.
                 </p>
                 <div className="mt-4 space-y-2 w-full">
-                  {["What tasks are due today?", "Add a new observation", "Show equipment status"].map(
+                  {["What tasks are due today?", "What's the weather look like?", "Show equipment status"].map(
                     (prompt, i) => (
                       <button
                         key={i}
@@ -191,6 +241,17 @@ export function ChatBubble() {
                           : "bg-muted/60 border border-border/50 rounded-bl-md"
                       }`}
                     >
+                      {/* Image thumbnail if user sent one */}
+                      {msg.imagePreview && (
+                        <div className="mb-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={msg.imagePreview}
+                            alt="Attached photo"
+                            className="w-full max-w-[200px] rounded-lg"
+                          />
+                        </div>
+                      )}
                       <div className="whitespace-pre-wrap break-words">{msg.content}</div>
                     </div>
                   </div>
@@ -208,21 +269,51 @@ export function ChatBubble() {
             )}
           </div>
 
+          {/* Pending image preview */}
+          {pendingImagePreview && (
+            <div className="px-3 py-2 border-t border-border/50 shrink-0">
+              <div className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={pendingImagePreview}
+                  alt="Pending upload"
+                  className="h-16 rounded-lg border border-border"
+                />
+                <button
+                  onClick={clearPendingImage}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center text-xs"
+                  aria-label="Remove image"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Input */}
           <div className="border-t border-border px-3 py-3 shrink-0">
             <div className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-1">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-colors disabled:opacity-30 shrink-0"
+                aria-label="Attach photo"
+                title="Attach a photo for diagnosis"
+              >
+                <Camera className="w-5 h-5" />
+              </button>
               <input
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask or command..."
+                placeholder={pendingImage ? "Describe what you see..." : "Ask or command..."}
                 disabled={isLoading}
                 className="flex-1 text-sm bg-transparent border-none outline-none placeholder:text-muted-foreground/50 disabled:opacity-50 py-2 min-h-[40px]"
               />
               <button
                 onClick={() => sendMessage()}
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && !pendingImage) || isLoading}
                 className="p-2.5 rounded-lg text-primary hover:bg-primary/10 active:bg-primary/15 transition-colors disabled:opacity-30 shrink-0"
                 aria-label="Send message"
               >

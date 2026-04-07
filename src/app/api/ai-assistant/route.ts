@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fetchWeather, getWeatherRecommendations } from "@/lib/utils/weather";
 
 // =============================================
 // VMGC AI Assistant — API Route
 // Uses Claude with tool_use to perform CRUD
 // operations across all Supabase tables.
+// Enhanced: weather awareness, page context,
+// photo diagnostics in chat.
 // =============================================
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+
+// Course coordinates for weather
+const COURSE_LAT = 42.3;
+const COURSE_LNG = -87.85;
 
 const SYSTEM_PROMPT = `You are the VMGC AI Assistant for Veterans Memorial Golf Course at Naval Station Great Lakes, IL. You help the superintendent manage every aspect of the course through conversation.
 
@@ -18,6 +25,8 @@ You can perform actions like:
 - Managing time-off requests, crew assignments, and notifications
 - Adding observations and updating improvement plans
 - Answering questions about course data, budgets, inventory, and staff
+- Fetching current weather conditions and forecasts for the course
+- Analyzing photos of turf conditions, diseases, pests, and damage
 
 IMPORTANT RULES:
 - Always confirm destructive actions (deletes) before executing them
@@ -28,6 +37,10 @@ IMPORTANT RULES:
 - When asked for reports, query the relevant tables and summarize the data clearly
 - The current user's profile ID will be provided — use it for created_by/assigned_by fields
 - Today's date: ${new Date().toISOString().split("T")[0]}
+- When the user asks about weather, use the get_weather tool — don't query weather_logs unless they ask for historical data
+- When the user shares a photo/image, use the analyze_image tool to diagnose it
+- You are PAGE-AWARE: the current page path is provided. Use it to be contextually helpful.
+  For example, if the user is on /equipment/abc-123 and asks "what's the status?", query that specific equipment record.
 
 Course details:
 - Location: Naval Station Great Lakes, North Chicago, IL (USDA Zone 5b-6a)
@@ -45,7 +58,7 @@ const TOOLS = [
       properties: {
         table: {
           type: "string",
-          description: "Table name: profiles, tasks, equipment, chemical_products, chemical_applications, expenses, budget_items, schedules, time_off_requests, course_zones, photos, notifications, weather_logs, irrigation_zones, irrigation_logs, equipment_logs, plan_goals, knowledge_articles, course_observations, improvement_plan_items, improvement_plans, golfer_feedback, community_posts, tee_times, round_ratings, channels, messages, activity_log",
+          description: "Table name: profiles, tasks, equipment, chemical_products, chemical_applications, expenses, budget_items, schedules, time_off_requests, course_zones, photos, notifications, weather_logs, irrigation_zones, irrigation_logs, equipment_logs, plan_goals, knowledge_articles, course_observations, improvement_plan_items, improvement_plans, golfer_feedback, community_posts, tee_times, round_ratings, channels, messages, activity_log, equipment_checkouts, diagnostics, shift_swap_posts",
         },
         select: {
           type: "string",
@@ -182,11 +195,48 @@ const TOOLS = [
       required: ["table", "column", "operation"],
     },
   },
+  {
+    name: "get_weather",
+    description: "Fetch current weather conditions and 3-day forecast for the golf course. Includes temperature, wind, humidity, rain chance, UV index, and turf management recommendations. Use this when the user asks about weather, when deciding if it's safe to spray chemicals, or when planning outdoor work.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        include_recommendations: {
+          type: "boolean",
+          description: "Include turf management recommendations based on current conditions. Default true.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "analyze_image",
+    description: "Analyze a turf/course photo for disease, pest, nutrient deficiency, or damage identification. The user must have attached an image in their message. This tool uses AI vision to diagnose the image and cross-references with the course's chemical inventory for treatment options. Returns diagnosis, treatment plan, and product recommendations.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        zone_name: {
+          type: "string",
+          description: "Which part of the course this is from (e.g. 'Green #7', 'Fairway 12', 'Rough near tee 3'). Ask the user if not provided.",
+        },
+        additional_context: {
+          type: "string",
+          description: "Any additional context about the issue (e.g. 'noticed this morning', 'spreading fast', 'only in shade areas')",
+        },
+      },
+      required: [],
+    },
+  },
 ];
 
-// Execute a tool call against Supabase
+// Execute a tool call against Supabase or external APIs
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function executeTool(toolName: string, input: any, supabase: any): Promise<any> {
+async function executeTool(
+  toolName: string,
+  input: any,
+  supabase: any,
+  imageData?: string | null
+): Promise<any> {
   try {
     switch (toolName) {
       case "query_table": {
@@ -271,8 +321,6 @@ async function executeTool(toolName: string, input: any, supabase: any): Promise
       }
 
       case "aggregate_query": {
-        // Supabase doesn't have native aggregate functions via JS client,
-        // so we fetch all values and compute client-side (fine for typical dataset sizes)
         let query = supabase.from(input.table).select(input.column);
         if (input.filters) {
           for (const filter of input.filters) {
@@ -305,6 +353,156 @@ async function executeTool(toolName: string, input: any, supabase: any): Promise
         }
 
         return { result: Math.round(result * 100) / 100, count: values.length };
+      }
+
+      case "get_weather": {
+        const weather = await fetchWeather(COURSE_LAT, COURSE_LNG, 3);
+        if (!weather) {
+          return { error: "Weather data not available. The WEATHER_API_KEY may not be configured." };
+        }
+
+        const includeRecs = input.include_recommendations !== false;
+        const recommendations = includeRecs
+          ? getWeatherRecommendations(weather.current)
+          : [];
+
+        return {
+          current: {
+            temperature: `${weather.current.temp_f}°F (feels like ${weather.current.feels_like_f}°F)`,
+            condition: weather.current.condition,
+            humidity: `${weather.current.humidity}%`,
+            wind: `${weather.current.wind_mph} mph ${weather.current.wind_direction}`,
+            uv_index: weather.current.uv,
+            precipitation: `${weather.current.precip_in} in`,
+            cloud_cover: `${weather.current.cloud}%`,
+          },
+          forecast: weather.forecast.map((day) => ({
+            date: day.date,
+            high: `${day.max_temp_f}°F`,
+            low: `${day.min_temp_f}°F`,
+            condition: day.condition,
+            rain_chance: `${day.chance_of_rain}%`,
+            snow_chance: `${day.chance_of_snow}%`,
+            max_wind: `${day.max_wind_mph} mph`,
+            humidity: `${day.avg_humidity}%`,
+            uv: day.uv,
+            sunrise: day.sunrise,
+            sunset: day.sunset,
+          })),
+          alerts: weather.alerts.length > 0 ? weather.alerts : "No active weather alerts",
+          recommendations: recommendations.length > 0 ? recommendations : ["Conditions look good for normal operations"],
+          location: weather.location,
+        };
+      }
+
+      case "analyze_image": {
+        if (!imageData) {
+          return { error: "No image was provided. Please ask the user to attach a photo." };
+        }
+
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+          return { error: "AI not configured for image analysis." };
+        }
+
+        // Fetch chemical inventory for cross-referencing
+        const { data: chemicals } = await supabase
+          .from("chemical_products")
+          .select("id, product_name, active_ingredient, product_type, signal_word, current_quantity_oz")
+          .gt("current_quantity_oz", 0);
+
+        const inventoryList = (chemicals || [])
+          .map((c: { product_name: string; active_ingredient: string | null; product_type: string; current_quantity_oz: number }) =>
+            `${c.product_name} (${c.active_ingredient || "unknown"}) - ${c.product_type} - ${c.current_quantity_oz}oz in stock`
+          )
+          .join("\n");
+
+        // Fetch weather for application window
+        const weather = await fetchWeather(COURSE_LAT, COURSE_LNG, 3);
+        const weatherContext = weather
+          ? `Current: ${weather.current.temp_f}°F, ${weather.current.condition}, Wind ${weather.current.wind_mph}mph, Humidity ${weather.current.humidity}%`
+          : "Weather data not available";
+
+        const diagnosisPrompt = `Analyze this golf course photo and provide a diagnosis.
+
+Course: Veterans Memorial GC, Naval Station Great Lakes, IL (USDA Zone 5b-6a)
+Greens: Creeping Bentgrass | Fairways: KBG/Perennial Rye | Rough: KBG/Tall Fescue
+${input.zone_name ? `Zone: ${input.zone_name}` : ""}
+${input.additional_context ? `Context: ${input.additional_context}` : ""}
+
+Current weather: ${weatherContext}
+
+Chemical inventory in stock:
+${inventoryList || "No inventory data available"}
+
+Provide your analysis as structured text with these sections:
+DIAGNOSIS: What you see, condition name, confidence level (high/medium/low), severity (1-5)
+IMMEDIATE ACTIONS: What to do right now (numbered list)
+TREATMENT PRODUCTS: Specific product recommendations with rates, noting which are IN STOCK
+APPLICATION WINDOW: Best time to apply based on weather
+FOLLOW-UP: What to check and when
+PREVENTION: Long-term cultural practices to prevent recurrence
+
+Be specific with rates and timing — this is for a professional superintendent.`;
+
+        // Determine media type from base64 header
+        let mediaType = "image/jpeg";
+        if (imageData.startsWith("data:")) {
+          const match = imageData.match(/^data:(image\/[a-z+]+);base64,/);
+          if (match) {
+            mediaType = match[1];
+            imageData = imageData.replace(/^data:image\/[a-z+]+;base64,/, "");
+          }
+        }
+
+        const analysisRes = await fetch(ANTHROPIC_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 4096,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "image",
+                    source: {
+                      type: "base64",
+                      media_type: mediaType,
+                      data: imageData,
+                    },
+                  },
+                  {
+                    type: "text",
+                    text: diagnosisPrompt,
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+
+        if (!analysisRes.ok) {
+          const errBody = await analysisRes.text();
+          return { error: `Image analysis failed: ${errBody}` };
+        }
+
+        const analysisData = await analysisRes.json();
+        const analysisText = analysisData.content
+          ?.filter((b: { type: string }) => b.type === "text")
+          ?.map((b: { text: string }) => b.text)
+          ?.join("\n") || "Unable to analyze the image.";
+
+        return {
+          analysis: analysisText,
+          weather_context: weatherContext,
+          inventory_checked: (chemicals || []).length,
+        };
       }
 
       default:
@@ -341,10 +539,41 @@ export async function POST(request: NextRequest) {
       .single();
 
     const body = await request.json();
-    const { messages: clientMessages } = body;
+    const { messages: clientMessages, currentPage, imageData } = body;
 
     if (!clientMessages || !Array.isArray(clientMessages)) {
       return NextResponse.json({ error: "Messages array is required" }, { status: 400 });
+    }
+
+    // Build page context
+    let pageContext = "";
+    if (currentPage) {
+      pageContext = `\n\nThe user is currently viewing: ${currentPage}`;
+
+      // Extract entity IDs from the URL for context
+      const equipmentMatch = currentPage.match(/\/equipment\/([a-f0-9-]+)/);
+      const taskMatch = currentPage.match(/\/tasks\/([a-f0-9-]+)/);
+      const planMatch = currentPage.match(/\/plan\/([a-f0-9-]+)/);
+
+      if (equipmentMatch) {
+        pageContext += `\nThey are looking at equipment ID: ${equipmentMatch[1]}. If they ask about "this equipment" or "this item", query the equipment table for this ID.`;
+      } else if (taskMatch) {
+        pageContext += `\nThey are looking at task ID: ${taskMatch[1]}. If they ask about "this task", query the tasks table for this ID.`;
+      } else if (planMatch) {
+        pageContext += `\nThey are looking at plan goal ID: ${planMatch[1]}. If they ask about "this goal", query the plan_goals table for this ID.`;
+      } else if (currentPage === "/dashboard") {
+        pageContext += `\nThey are on the main dashboard. Help with overview questions.`;
+      } else if (currentPage === "/equipment") {
+        pageContext += `\nThey are on the equipment list page. Help with equipment-related queries.`;
+      } else if (currentPage === "/tasks") {
+        pageContext += `\nThey are on the tasks list page.`;
+      } else if (currentPage === "/schedule") {
+        pageContext += `\nThey are on the schedule page. Help with scheduling questions.`;
+      } else if (currentPage === "/chemicals") {
+        pageContext += `\nThey are on the chemicals inventory page.`;
+      } else if (currentPage === "/messages") {
+        pageContext += `\nThey are in the messaging area.`;
+      }
     }
 
     // Build the system prompt with user context
@@ -355,6 +584,8 @@ Current user:
 - Role: ${profile?.role || "unknown"}
 - Profile ID: ${user.id}
 - Email: ${profile?.email || "unknown"}
+${pageContext}
+${imageData ? "\nThe user has attached an image to analyze. Use the analyze_image tool to diagnose it." : ""}
 
 When inserting records that need a created_by, submitted_by, or assigned_by field, use the profile ID: ${user.id}`;
 
@@ -374,7 +605,7 @@ When inserting records that need a created_by, submitted_by, or assigned_by fiel
       // Execute all tool calls
       const toolResults = [];
       for (const toolBlock of toolUseBlocks) {
-        const result = await executeTool(toolBlock.name, toolBlock.input, supabase);
+        const result = await executeTool(toolBlock.name, toolBlock.input, supabase, imageData);
         toolResults.push({
           type: "tool_result" as const,
           tool_use_id: toolBlock.id,
