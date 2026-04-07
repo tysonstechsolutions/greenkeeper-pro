@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import {
   MapPin,
   AlertTriangle,
@@ -67,7 +66,7 @@ function HoleImage({
   );
 }
 
-// ── Green image placeholder component ──
+// ── Green image component (SVG) ──
 function GreenImage({
   holeNumber,
   className = "",
@@ -91,18 +90,12 @@ function GreenImage({
   }
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
-      <Image
-        src={`/greens/green-${holeNumber}.png`}
-        alt={`Green ${holeNumber}`}
-        fill
-        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 180px"
-        className="object-cover"
-        style={{ filter: "contrast(1.08) saturate(1.15)", imageRendering: "auto" }}
-        quality={90}
-        onError={() => setImgError(true)}
-      />
-    </div>
+    <img
+      src={`/greens/green-${holeNumber}.svg`}
+      alt={`Green ${holeNumber}`}
+      className={`object-cover ${className}`}
+      onError={() => setImgError(true)}
+    />
   );
 }
 

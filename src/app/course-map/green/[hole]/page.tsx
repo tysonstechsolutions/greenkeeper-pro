@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import {
   MapPin,
   Plus,
@@ -423,25 +422,20 @@ export default function GreenDetailPage() {
           onClick={handleImageTap}
           onTouchEnd={isPlacingPin ? handleImageTap : undefined}
         >
-          {/* The green image */}
-          <div className="relative aspect-square sm:aspect-[4/3] bg-gradient-to-br from-emerald-800/20 via-emerald-50 to-emerald-100/50 max-w-[800px] mx-auto w-full">
+          {/* The green SVG */}
+          <div className="relative aspect-square max-w-[600px] mx-auto w-full">
             {imgError ? (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-800/20 via-emerald-50 to-emerald-100/50 rounded-2xl">
                 <div className="text-center">
                   <Circle className="w-16 h-16 text-emerald-300/40 mx-auto mb-2" />
                   <span className="text-5xl font-bold text-emerald-400/20">{holeNumber}</span>
                 </div>
               </div>
             ) : (
-              <Image
-                src={`/greens/green-${holeNumber}.png`}
+              <img
+                src={`/greens/green-${holeNumber}.svg`}
                 alt={`Green ${holeNumber}`}
-                fill
-                sizes="(max-width: 768px) 100vw, 800px"
-                className="object-cover"
-                style={{ filter: "contrast(1.08) saturate(1.15)" }}
-                quality={95}
-                priority
+                className="w-full h-full"
                 onError={() => setImgError(true)}
                 draggable={false}
               />

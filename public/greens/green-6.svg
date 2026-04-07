@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="g6" cx="48%" cy="42%" r="52%" fx="42%" fy="38%">
+      <stop offset="0%" stop-color="#8ad47c"/>
+      <stop offset="35%" stop-color="#6abf5e"/>
+      <stop offset="70%" stop-color="#4fa84a"/>
+      <stop offset="100%" stop-color="#3d8b3d"/>
+    </radialGradient>
+    <radialGradient id="bg6" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#2d5a3f"/>
+      <stop offset="100%" stop-color="#1f3d2b"/>
+    </radialGradient>
+    <clipPath id="clip6"><path d="M 347.7 49.2 C 313.9 43.8 195.5 30.8 160.9 30.0 C 126.3 29.2 142.0 34.0 140.1 44.4 C 138.3 54.7 159.0 76.6 149.7 92.3 C 140.4 107.9 101.3 129.0 84.3 138.5 C 67.2 148.1 51.3 133.2 47.6 149.7 C 43.8 166.2 50.8 213.3 61.9 237.5 C 73.1 261.7 105.8 277.2 114.6 295.0 C 123.4 312.8 106.9 332.2 114.6 344.5 C 122.3 356.7 147.1 364.4 160.9 368.4 C 174.7 372.4 183.8 372.4 197.6 368.4 C 211.4 364.4 237.5 362.6 243.9 344.5 C 250.3 326.4 232.2 276.4 235.9 259.9 C 239.6 243.4 263.8 252.7 266.2 245.5 C 268.6 238.3 251.9 224.7 250.3 216.8 C 248.7 208.8 247.9 204.0 256.7 197.6 C 265.4 191.2 292.6 195.7 303.0 178.5 C 313.3 161.2 312.8 106.6 318.9 93.8 C 325.0 81.1 336.5 95.7 339.7 101.8 C 342.9 107.9 334.1 127.1 338.1 130.6 C 342.1 134.0 359.4 134.0 363.6 122.6 C 367.9 111.1 366.3 74.2 363.6 61.9 C 361.0 49.7 381.4 54.5 347.7 49.2 Z"/></clipPath>
+    <filter id="soft6" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"/>
+    </filter>
+  </defs>
+  <!-- Dark fairway background -->
+  <rect width="400" height="400" fill="url(#bg6)" rx="16"/>
+  <!-- Subtle collar/fringe (slightly larger, darker green) -->
+  <g transform="translate(200 200) scale(1.08) translate(-200 -200)">
+    <path d="M 347.7 49.2 C 313.9 43.8 195.5 30.8 160.9 30.0 C 126.3 29.2 142.0 34.0 140.1 44.4 C 138.3 54.7 159.0 76.6 149.7 92.3 C 140.4 107.9 101.3 129.0 84.3 138.5 C 67.2 148.1 51.3 133.2 47.6 149.7 C 43.8 166.2 50.8 213.3 61.9 237.5 C 73.1 261.7 105.8 277.2 114.6 295.0 C 123.4 312.8 106.9 332.2 114.6 344.5 C 122.3 356.7 147.1 364.4 160.9 368.4 C 174.7 372.4 183.8 372.4 197.6 368.4 C 211.4 364.4 237.5 362.6 243.9 344.5 C 250.3 326.4 232.2 276.4 235.9 259.9 C 239.6 243.4 263.8 252.7 266.2 245.5 C 268.6 238.3 251.9 224.7 250.3 216.8 C 248.7 208.8 247.9 204.0 256.7 197.6 C 265.4 191.2 292.6 195.7 303.0 178.5 C 313.3 161.2 312.8 106.6 318.9 93.8 C 325.0 81.1 336.5 95.7 339.7 101.8 C 342.9 107.9 334.1 127.1 338.1 130.6 C 342.1 134.0 359.4 134.0 363.6 122.6 C 367.9 111.1 366.3 74.2 363.6 61.9 C 361.0 49.7 381.4 54.5 347.7 49.2 Z" fill="#3a7a3a" opacity="0.6" filter="url(#soft6)"/>
+  </g>
+  <!-- Main green surface -->
+  <path d="M 347.7 49.2 C 313.9 43.8 195.5 30.8 160.9 30.0 C 126.3 29.2 142.0 34.0 140.1 44.4 C 138.3 54.7 159.0 76.6 149.7 92.3 C 140.4 107.9 101.3 129.0 84.3 138.5 C 67.2 148.1 51.3 133.2 47.6 149.7 C 43.8 166.2 50.8 213.3 61.9 237.5 C 73.1 261.7 105.8 277.2 114.6 295.0 C 123.4 312.8 106.9 332.2 114.6 344.5 C 122.3 356.7 147.1 364.4 160.9 368.4 C 174.7 372.4 183.8 372.4 197.6 368.4 C 211.4 364.4 237.5 362.6 243.9 344.5 C 250.3 326.4 232.2 276.4 235.9 259.9 C 239.6 243.4 263.8 252.7 266.2 245.5 C 268.6 238.3 251.9 224.7 250.3 216.8 C 248.7 208.8 247.9 204.0 256.7 197.6 C 265.4 191.2 292.6 195.7 303.0 178.5 C 313.3 161.2 312.8 106.6 318.9 93.8 C 325.0 81.1 336.5 95.7 339.7 101.8 C 342.9 107.9 334.1 127.1 338.1 130.6 C 342.1 134.0 359.4 134.0 363.6 122.6 C 367.9 111.1 366.3 74.2 363.6 61.9 C 361.0 49.7 381.4 54.5 347.7 49.2 Z" fill="url(#g6)" stroke="#4a9e4a" stroke-width="1"/>
+  <!-- Mowing stripes clipped to green shape -->
+  <g clip-path="url(#clip6)">
+    <rect x="0" y="0" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="14" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="28" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="42" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="56" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="70" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="84" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="98" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="112" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="126" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="140" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="154" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="168" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="182" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="196" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="210" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="224" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="238" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="252" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="266" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="280" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="294" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="308" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="322" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="336" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="350" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="364" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="378" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="392" width="400" height="14" fill="white" opacity="0.06"/>
+  </g>
+  <!-- Hole number label -->
+  <text x="200.0" y="388" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="rgba(255,255,255,0.5)" letter-spacing="1">GREEN 6</text>
+</svg>

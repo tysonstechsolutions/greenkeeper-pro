@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="g11" cx="48%" cy="42%" r="52%" fx="42%" fy="38%">
+      <stop offset="0%" stop-color="#8ad47c"/>
+      <stop offset="35%" stop-color="#6abf5e"/>
+      <stop offset="70%" stop-color="#4fa84a"/>
+      <stop offset="100%" stop-color="#3d8b3d"/>
+    </radialGradient>
+    <radialGradient id="bg11" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#2d5a3f"/>
+      <stop offset="100%" stop-color="#1f3d2b"/>
+    </radialGradient>
+    <clipPath id="clip11"><path d="M 51.5 115.3 C 42.3 123.6 47.7 127.9 52.8 140.9 C 58.0 153.9 68.5 184.5 82.4 193.3 C 96.3 202.0 122.3 187.2 136.2 193.3 C 150.1 199.3 155.9 220.4 165.7 229.6 C 175.6 238.7 188.8 241.2 195.3 248.4 C 201.8 255.5 194.8 261.8 204.7 272.6 C 214.6 283.3 237.4 303.5 254.4 312.9 C 271.4 322.3 294.1 329.0 306.8 329.0 C 319.6 329.0 322.7 321.4 331.0 312.9 C 339.3 304.4 352.1 293.0 356.6 277.9 C 361.0 262.9 370.4 244.6 357.9 222.8 C 345.4 201.1 297.9 170.4 281.3 147.6 C 264.7 124.7 267.0 99.9 258.5 85.8 C 249.9 71.7 247.3 66.7 230.2 62.9 C 213.2 59.1 171.6 56.2 156.3 62.9 C 141.1 69.6 144.2 96.1 138.9 103.2 C 133.5 110.4 129.2 107.9 124.1 105.9 C 118.9 103.9 120.0 89.6 107.9 91.1 C 95.8 92.7 60.7 107.0 51.5 115.3 Z"/></clipPath>
+    <filter id="soft11" x="-5%" y="-5%" width="110%" height="110%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"/>
+    </filter>
+  </defs>
+  <!-- Dark fairway background -->
+  <rect width="400" height="400" fill="url(#bg11)" rx="16"/>
+  <!-- Subtle collar/fringe (slightly larger, darker green) -->
+  <g transform="translate(200 200) scale(1.08) translate(-200 -200)">
+    <path d="M 51.5 115.3 C 42.3 123.6 47.7 127.9 52.8 140.9 C 58.0 153.9 68.5 184.5 82.4 193.3 C 96.3 202.0 122.3 187.2 136.2 193.3 C 150.1 199.3 155.9 220.4 165.7 229.6 C 175.6 238.7 188.8 241.2 195.3 248.4 C 201.8 255.5 194.8 261.8 204.7 272.6 C 214.6 283.3 237.4 303.5 254.4 312.9 C 271.4 322.3 294.1 329.0 306.8 329.0 C 319.6 329.0 322.7 321.4 331.0 312.9 C 339.3 304.4 352.1 293.0 356.6 277.9 C 361.0 262.9 370.4 244.6 357.9 222.8 C 345.4 201.1 297.9 170.4 281.3 147.6 C 264.7 124.7 267.0 99.9 258.5 85.8 C 249.9 71.7 247.3 66.7 230.2 62.9 C 213.2 59.1 171.6 56.2 156.3 62.9 C 141.1 69.6 144.2 96.1 138.9 103.2 C 133.5 110.4 129.2 107.9 124.1 105.9 C 118.9 103.9 120.0 89.6 107.9 91.1 C 95.8 92.7 60.7 107.0 51.5 115.3 Z" fill="#3a7a3a" opacity="0.6" filter="url(#soft11)"/>
+  </g>
+  <!-- Main green surface -->
+  <path d="M 51.5 115.3 C 42.3 123.6 47.7 127.9 52.8 140.9 C 58.0 153.9 68.5 184.5 82.4 193.3 C 96.3 202.0 122.3 187.2 136.2 193.3 C 150.1 199.3 155.9 220.4 165.7 229.6 C 175.6 238.7 188.8 241.2 195.3 248.4 C 201.8 255.5 194.8 261.8 204.7 272.6 C 214.6 283.3 237.4 303.5 254.4 312.9 C 271.4 322.3 294.1 329.0 306.8 329.0 C 319.6 329.0 322.7 321.4 331.0 312.9 C 339.3 304.4 352.1 293.0 356.6 277.9 C 361.0 262.9 370.4 244.6 357.9 222.8 C 345.4 201.1 297.9 170.4 281.3 147.6 C 264.7 124.7 267.0 99.9 258.5 85.8 C 249.9 71.7 247.3 66.7 230.2 62.9 C 213.2 59.1 171.6 56.2 156.3 62.9 C 141.1 69.6 144.2 96.1 138.9 103.2 C 133.5 110.4 129.2 107.9 124.1 105.9 C 118.9 103.9 120.0 89.6 107.9 91.1 C 95.8 92.7 60.7 107.0 51.5 115.3 Z" fill="url(#g11)" stroke="#4a9e4a" stroke-width="1"/>
+  <!-- Mowing stripes clipped to green shape -->
+  <g clip-path="url(#clip11)">
+    <rect x="0" y="0" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="14" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="28" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="42" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="56" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="70" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="84" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="98" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="112" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="126" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="140" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="154" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="168" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="182" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="196" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="210" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="224" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="238" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="252" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="266" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="280" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="294" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="308" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="322" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="336" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="350" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="364" width="400" height="14" fill="white" opacity="0.06"/>
+    <rect x="0" y="378" width="400" height="14" fill="black" opacity="0.04"/>
+    <rect x="0" y="392" width="400" height="14" fill="white" opacity="0.06"/>
+  </g>
+  <!-- Hole number label -->
+  <text x="200.0" y="388" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="rgba(255,255,255,0.5)" letter-spacing="1">GREEN 11</text>
+</svg>
