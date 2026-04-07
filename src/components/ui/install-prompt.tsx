@@ -116,7 +116,7 @@ export function InstallPrompt() {
   // iOS prompt
   if (showIOSPrompt) {
     return (
-      <div className="fixed bottom-[88px] left-3 right-3 z-50 md:left-auto md:right-4 md:max-w-sm animate-in slide-in-from-bottom-4 duration-300">
+      <div className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] left-3 right-3 z-50 md:left-auto md:right-4 md:bottom-4 md:max-w-sm animate-in slide-in-from-bottom-4 duration-300">
         <div className="bg-card border border-border rounded-2xl shadow-xl shadow-black/10 p-4">
           <div className="flex items-start gap-3">
             {/* Icon */}
@@ -172,7 +172,7 @@ export function InstallPrompt() {
   if (!showPrompt || !deferredPrompt) return null;
 
   return (
-    <div className="fixed bottom-[88px] left-3 right-3 z-50 md:left-auto md:right-4 md:max-w-sm animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] left-3 right-3 z-50 md:left-auto md:right-4 md:bottom-4 md:max-w-sm animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-card border border-border rounded-2xl shadow-xl shadow-black/10 p-4">
         <div className="flex items-start gap-3">
           {/* Icon */}

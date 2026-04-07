@@ -75,18 +75,18 @@ export function CourseStatusBanner({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 px-4 py-3 rounded-lg border",
+        "flex items-center justify-between gap-3 px-4 py-3 rounded-lg border",
         colors.bg,
         colors.border,
         className
       )}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={cn("p-2 rounded-full", colors.bg)}>
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className={cn("p-2 rounded-full shrink-0", colors.bg)}>
           <Icon className={cn("w-5 h-5", colors.text)} />
         </div>
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={cn("font-semibold", colors.text)}>{label}</span>
             {courseStatus.status === "frost_delay" && courseStatus.estimated_open_time && (
               <Badge variant="outline" className={cn("text-xs", colors.text, colors.border)}>
@@ -101,9 +101,9 @@ export function CourseStatusBanner({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {courseStatus.updated_by_name && (
-          <span className="text-xs text-muted-foreground hidden md:block">
+          <span className="text-xs text-muted-foreground hidden lg:block whitespace-nowrap">
             Updated {formatDistanceToNow(new Date(courseStatus.updated_at), { addSuffix: true })}
           </span>
         )}
@@ -111,7 +111,7 @@ export function CourseStatusBanner({
         {showUpdateButton && canUpdateStatus && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Update Status</span>
               </Button>

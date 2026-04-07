@@ -302,7 +302,7 @@ export default function CommunityPage() {
                   value={newPollQuestion}
                   onChange={(e) => setNewPollQuestion(e.target.value)}
                   placeholder="Poll question..."
-                  className="w-full px-4 py-3 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-4 py-3 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 {newPollOptions.map((opt, i) => (
                   <input
@@ -315,7 +315,7 @@ export default function CommunityPage() {
                       setNewPollOptions(newOpts);
                     }}
                     placeholder={`Option ${i + 1}`}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 ))}
                 {newPollOptions.length < 4 && (
@@ -352,7 +352,7 @@ export default function CommunityPage() {
                   onChange={(e) => setNewPostContent(e.target.value)}
                   placeholder="What's on your mind?"
                   rows={4}
-                  className="w-full px-4 py-3 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  className="w-full px-4 py-3 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 />
 
                 {newPostType === "photo" && (
@@ -601,7 +601,7 @@ export default function CommunityPage() {
                           }))
                         }
                         placeholder="Write a comment..."
-                        className="flex-1 px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="flex-1 px-3 py-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();

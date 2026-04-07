@@ -215,10 +215,10 @@ export default function DashboardPage() {
     <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto">
       {/* ===== Hero Welcome Section ===== */}
       <div className="gk-animate-in gk-animate-in-1 mb-6">
-        <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-hidden">
+        <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
           <div className="relative z-10">
-            <div className="flex items-start justify-between">
-              <div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
                 <p className="text-white/60 text-sm font-medium mb-1">
                   {new Date().toLocaleDateString("en-US", {
                     weekday: "long",
@@ -237,9 +237,9 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
-              <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/10">
+              <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/10 shrink-0">
                 <Leaf className="w-4 h-4 text-[#D4A853]" />
-                <span className="text-sm font-medium text-white/80">Veterans Memorial GC</span>
+                <span className="text-sm font-medium text-white/80 whitespace-nowrap">Veterans Memorial GC</span>
               </div>
             </div>
 
@@ -250,8 +250,8 @@ export default function DashboardPage() {
           </div>
 
           {/* Decorative elements */}
-          <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-[#B68D40]/10 rounded-full blur-2xl" />
-          <div className="absolute right-12 top-4 w-20 h-20 bg-[#B68D40]/5 rounded-full blur-xl" />
+          <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-[#B68D40]/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute right-12 top-4 w-20 h-20 bg-[#B68D40]/5 rounded-full blur-xl pointer-events-none" />
         </div>
       </div>
 

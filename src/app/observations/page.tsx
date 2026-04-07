@@ -318,7 +318,7 @@ export default function ObservationsPage() {
               <select
                 value={formCategory}
                 onChange={(e) => setFormCategory(e.target.value as ObservationCategory)}
-                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {CATEGORY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -337,7 +337,7 @@ export default function ObservationsPage() {
                 placeholder="e.g. Practice green, Clubhouse"
                 value={formLocation}
                 onChange={(e) => setFormLocation(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -352,7 +352,7 @@ export default function ObservationsPage() {
                 placeholder="1-18"
                 value={formHole}
                 onChange={(e) => setFormHole(e.target.value)}
-                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
           </div>
@@ -367,7 +367,7 @@ export default function ObservationsPage() {
               placeholder="e.g. priority, drainage, first-impression"
               value={formTags}
               onChange={(e) => setFormTags(e.target.value)}
-              className="w-full px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
 
@@ -422,7 +422,7 @@ export default function ObservationsPage() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as ObservationCategory | "all")}
-            className="px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="all">All Categories</option>
             {CATEGORY_OPTIONS.map((opt) => (
@@ -433,7 +433,7 @@ export default function ObservationsPage() {
           <select
             value={sentimentFilter}
             onChange={(e) => setSentimentFilter(e.target.value as ObservationSentiment | "all")}
-            className="px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="all">All Types</option>
             <option value="negative">Needs Work</option>
@@ -445,7 +445,7 @@ export default function ObservationsPage() {
           <select
             value={addressedFilter}
             onChange={(e) => setAddressedFilter(e.target.value as "all" | "open" | "addressed")}
-            className="px-3 py-2 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="px-3 py-2 border border-input rounded-lg bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="all">All Status</option>
             <option value="open">Open</option>

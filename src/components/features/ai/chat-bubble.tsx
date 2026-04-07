@@ -309,7 +309,7 @@ export function ChatBubble() {
                 onKeyDown={handleKeyDown}
                 placeholder={pendingImage ? "Describe what you see..." : "Ask or command..."}
                 disabled={isLoading}
-                className="flex-1 text-sm bg-transparent border-none outline-none placeholder:text-muted-foreground/50 disabled:opacity-50 py-2 min-h-[40px]"
+                className="flex-1 text-base bg-transparent border-none outline-none placeholder:text-muted-foreground/50 disabled:opacity-50 py-2 min-h-[40px]"
               />
               <button
                 onClick={() => sendMessage()}

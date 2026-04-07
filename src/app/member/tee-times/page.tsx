@@ -303,7 +303,7 @@ export default function TeeTimesPage() {
                           setPlayerNames(newNames);
                         }}
                         placeholder={`Player ${i + 2} name`}
-                        className="w-full px-4 py-2 mb-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full px-4 py-2 mb-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     ))}
                   </div>
@@ -333,7 +333,7 @@ export default function TeeTimesPage() {
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Any special requests..."
                     rows={2}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   />
                 </div>
 

@@ -414,7 +414,7 @@ export function CameraFAB({ onClick, className }: CameraFABProps) {
     <button
       onClick={onClick}
       className={cn(
-        "fixed bottom-[100px] md:bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 flex items-center justify-center transition-transform hover:scale-105 active:scale-95",
+        "fixed bottom-[calc(100px+env(safe-area-inset-bottom,0px))] md:bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 flex items-center justify-center transition-transform hover:scale-105 active:scale-95",
         className
       )}
       aria-label="Take photo"

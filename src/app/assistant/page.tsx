@@ -404,7 +404,7 @@ export default function AssistantPage() {
               placeholder={pendingImage ? "Describe what you see (optional)..." : "Ask anything or tell me what to do..."}
               rows={1}
               disabled={isLoading}
-              className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 placeholder:text-muted-foreground/60"
+              className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-12 text-base focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 placeholder:text-muted-foreground/60"
               style={{ maxHeight: "150px" }}
             />
           </div>

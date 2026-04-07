@@ -211,7 +211,7 @@ export default function MemberFeedbackPage() {
                     value={roundDate}
                     onChange={(e) => setRoundDate(e.target.value)}
                     max={new Date().toISOString().split("T")[0]}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
 
@@ -282,7 +282,7 @@ export default function MemberFeedbackPage() {
                           e.target.value ? parseInt(e.target.value) : null
                         )
                       }
-                      className="w-full px-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+                      className="w-full px-4 py-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
                     >
                       <option value="">Select a hole...</option>
                       {Array.from({ length: 18 }, (_, i) => i + 1).map(
@@ -307,7 +307,7 @@ export default function MemberFeedbackPage() {
                     onChange={(e) => setComments(e.target.value)}
                     placeholder="Share your experience..."
                     rows={3}
-                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   />
                 </div>
 
