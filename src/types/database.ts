@@ -987,6 +987,7 @@ export interface HoleObservation {
   status: HoleObservationStatus;
   title: string;
   description: string | null;
+  fix_instructions: string | null; // How to fix it — written by super or AI-generated
   photo_url: string | null;
   reported_by: string;
   task_id: string | null; // linked task when created from observation

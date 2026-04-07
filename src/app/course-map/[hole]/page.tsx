@@ -17,6 +17,8 @@ import {
   Loader2,
   ClipboardList,
   ArrowUpRight,
+  Sparkles,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,15 +93,21 @@ export default function HoleDetailPage() {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
+    fix_instructions: "",
     issue_type: "other" as HoleIssueType,
     priority: "normal" as TaskPriority,
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [generatingFix, setGeneratingFix] = useState(false);
 
   // View observation detail
   const [selectedObs, setSelectedObs] = useState<HoleObservation | null>(null);
+  const [editingFix, setEditingFix] = useState(false);
+  const [editFixText, setEditFixText] = useState("");
+  const [savingFix, setSavingFix] = useState(false);
+  const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
 
   // Create task dialog
   const [taskDialogObs, setTaskDialogObs] = useState<HoleObservation | null>(null);
@@ -166,6 +174,35 @@ export default function HoleDetailPage() {
     reader.readAsDataURL(file);
   };
 
+  // ── AI Generate Fix Instructions ──
+  const handleGenerateFix = async () => {
+    if (!formData.title.trim()) return;
+    setGeneratingFix(true);
+    try {
+      const res = await fetch("/api/fix-instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: formData.title,
+          issue_type: formData.issue_type,
+          priority: formData.priority,
+          description: formData.description || undefined,
+          hole_number: holeNumber,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fix_instructions) {
+          setFormData((p) => ({ ...p, fix_instructions: data.fix_instructions }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to generate fix instructions:", err);
+    } finally {
+      setGeneratingFix(false);
+    }
+  };
+
   // ── Submit Observation ──
   const handleSubmit = async () => {
     if (!pendingPin || !formData.title.trim()) return;
@@ -184,6 +221,7 @@ export default function HoleDetailPage() {
       priority: formData.priority,
       title: formData.title.trim(),
       description: formData.description.trim() || null,
+      fix_instructions: formData.fix_instructions.trim() || null,
       photo_url: photoUrl,
     });
 
@@ -191,7 +229,7 @@ export default function HoleDetailPage() {
       // Reset form
       setShowForm(false);
       setPendingPin(null);
-      setFormData({ title: "", description: "", issue_type: "other", priority: "normal" });
+      setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
     }
@@ -208,7 +246,7 @@ export default function HoleDetailPage() {
       const { data: task, error } = await (supabase.from("tasks") as any)
         .insert({
           title: `Hole ${obs.hole_number}: ${obs.title}`,
-          description: `${issueTypeLabels[obs.issue_type]} reported on Hole ${obs.hole_number}.\n\n${obs.description || "No additional details."}${obs.photo_url ? `\n\nPhoto: ${obs.photo_url}` : ""}`,
+          description: `${issueTypeLabels[obs.issue_type]} reported on Hole ${obs.hole_number}.\n\n${obs.description || "No additional details."}${obs.fix_instructions ? `\n\n--- How to Fix ---\n${obs.fix_instructions}` : ""}${obs.photo_url ? `\n\nPhoto: ${obs.photo_url}` : ""}`,
           category: obs.issue_type === "bunker_issue" ? "bunker" : obs.issue_type === "irrigation_issue" ? "irrigation" : obs.issue_type === "mechanical_damage" ? "mechanical" : "greens",
           priority: obs.priority,
           status: "pending",
@@ -250,6 +288,43 @@ export default function HoleDetailPage() {
     await updateObservation(obs.id, updates);
     if (selectedObs?.id === obs.id) {
       setSelectedObs({ ...obs, ...updates });
+    }
+  };
+
+  // ── Save Fix Instructions on Existing Observation ──
+  const handleSaveFix = async () => {
+    if (!selectedObs) return;
+    setSavingFix(true);
+    await updateObservation(selectedObs.id, { fix_instructions: editFixText.trim() || null });
+    setSelectedObs({ ...selectedObs, fix_instructions: editFixText.trim() || null });
+    setEditingFix(false);
+    setSavingFix(false);
+  };
+
+  const handleGenerateFixForObs = async (obs: HoleObservation) => {
+    setGeneratingFixForObs(true);
+    try {
+      const res = await fetch("/api/fix-instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: obs.title,
+          issue_type: obs.issue_type,
+          priority: obs.priority,
+          description: obs.description || undefined,
+          hole_number: obs.hole_number,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fix_instructions) {
+          setEditFixText(data.fix_instructions);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to generate fix:", err);
+    } finally {
+      setGeneratingFixForObs(false);
     }
   };
 
@@ -485,6 +560,12 @@ export default function HoleDetailPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-sm truncate">{obs.title}</p>
+                      {obs.fix_instructions && (
+                        <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
+                          <Wrench className="w-3 h-3 mr-0.5" />
+                          Fix
+                        </Badge>
+                      )}
                       {obs.task_id && (
                         <Badge variant="outline" className="text-[10px] h-5 shrink-0">
                           <ClipboardList className="w-3 h-3 mr-0.5" />
@@ -616,6 +697,45 @@ export default function HoleDetailPage() {
               />
             </div>
 
+            {/* Fix Instructions */}
+            {(isSuper || isForeman) && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="obs-fix" className="flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5" />
+                    How to Fix
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    disabled={!formData.title.trim() || generatingFix}
+                    onClick={handleGenerateFix}
+                  >
+                    {generatingFix ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                    {generatingFix ? "Generating..." : "AI Generate"}
+                  </Button>
+                </div>
+                <Textarea
+                  id="obs-fix"
+                  placeholder="Step-by-step instructions for the crew..."
+                  rows={5}
+                  value={formData.fix_instructions}
+                  onChange={(e) => setFormData((p) => ({ ...p, fix_instructions: e.target.value }))}
+                />
+                {formData.fix_instructions && (
+                  <p className="text-[10px] text-muted-foreground">
+                    This will be visible to the crew assigned to fix this issue.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Photo */}
             <div className="space-y-2">
               <Label>Photo (optional)</Label>
@@ -665,7 +785,7 @@ export default function HoleDetailPage() {
       </Sheet>
 
       {/* ── Observation Detail Sheet ── */}
-      <Sheet open={!!selectedObs} onOpenChange={(open) => !open && setSelectedObs(null)}>
+      <Sheet open={!!selectedObs} onOpenChange={(open) => { if (!open) { setSelectedObs(null); setEditingFix(false); } }}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
           {selectedObs && (
             <>
@@ -707,6 +827,95 @@ export default function HoleDetailPage() {
                 {selectedObs.description && (
                   <p className="text-sm text-foreground">{selectedObs.description}</p>
                 )}
+
+                {/* Fix Instructions */}
+                {editingFix ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5" />
+                        How to Fix
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={generatingFixForObs}
+                        onClick={() => handleGenerateFixForObs(selectedObs)}
+                      >
+                        {generatingFixForObs ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        {generatingFixForObs ? "Generating..." : "AI Generate"}
+                      </Button>
+                    </div>
+                    <Textarea
+                      rows={6}
+                      value={editFixText}
+                      onChange={(e) => setEditFixText(e.target.value)}
+                      placeholder="Step-by-step instructions for the crew..."
+                      className="bg-white"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-[#1B4332] hover:bg-[#2D6A4F]"
+                        disabled={savingFix}
+                        onClick={handleSaveFix}
+                      >
+                        {savingFix ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setEditingFix(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : selectedObs.fix_instructions ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5" />
+                        How to Fix
+                      </p>
+                      {(isSuper || isForeman) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-amber-700"
+                          onClick={() => {
+                            setEditFixText(selectedObs.fix_instructions || "");
+                            setEditingFix(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-sm text-amber-900 whitespace-pre-line">{selectedObs.fix_instructions}</p>
+                  </div>
+                ) : (isSuper || isForeman) && selectedObs.status !== "resolved" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => {
+                      setEditFixText("");
+                      setEditingFix(true);
+                    }}
+                  >
+                    <Wrench className="w-4 h-4 mr-2" />
+                    Add Fix Instructions
+                  </Button>
+                ) : null}
 
                 {/* Meta info */}
                 <div className="text-xs text-muted-foreground space-y-1">

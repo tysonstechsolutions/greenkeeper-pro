@@ -86,6 +86,7 @@ export interface CreateHoleObservationData {
   priority: TaskPriority;
   title: string;
   description?: string | null;
+  fix_instructions?: string | null;
   photo_url?: string | null;
 }
 
@@ -184,7 +185,7 @@ export function useHoleObservations() {
   );
 
   const updateObservation = useCallback(
-    async (id: string, updates: Partial<Pick<HoleObservation, "status" | "priority" | "description" | "task_id" | "resolved_at" | "resolved_by">>) => {
+    async (id: string, updates: Partial<Pick<HoleObservation, "status" | "priority" | "description" | "fix_instructions" | "task_id" | "resolved_at" | "resolved_by">>) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: updated, error } = await (supabase.from("hole_observations") as any)
