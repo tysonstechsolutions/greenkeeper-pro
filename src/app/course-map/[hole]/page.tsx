@@ -269,27 +269,33 @@ export default function HoleDetailPage() {
 
         {/* Navigation between holes */}
         <div className="flex items-center justify-between mt-2 mb-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={holeNumber <= 1}
-            onClick={() => router.push(`/course-map/${holeNumber - 1}`)}
-          >
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            Hole {holeNumber - 1}
-          </Button>
+          {holeNumber > 1 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/course-map/${holeNumber - 1}`)}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Hole {holeNumber - 1}
+            </Button>
+          ) : (
+            <div className="w-20" />
+          )}
           <span className="text-sm text-muted-foreground">
             {activeCount} active issue{activeCount !== 1 ? "s" : ""}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={holeNumber >= 18}
-            onClick={() => router.push(`/course-map/${holeNumber + 1}`)}
-          >
-            Hole {holeNumber + 1}
-            <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
+          {holeNumber < 18 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/course-map/${holeNumber + 1}`)}
+            >
+              Hole {holeNumber + 1}
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          ) : (
+            <div className="w-20" />
+          )}
         </div>
       </div>
 
@@ -306,7 +312,7 @@ export default function HoleDetailPage() {
           onTouchStart={isPlacingPin ? handleImageTap : undefined}
         >
           {/* The hole image */}
-          <div className="relative aspect-[3/4] sm:aspect-[3/5] md:aspect-[2/3] bg-gradient-to-b from-green-50 to-green-100/50">
+          <div className="relative aspect-[4/5] sm:aspect-[3/4] md:aspect-[4/3] lg:aspect-[16/9] bg-gradient-to-b from-green-50 to-green-100/50">
             {imgError ? (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center">
