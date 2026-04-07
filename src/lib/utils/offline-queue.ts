@@ -354,12 +354,12 @@ export function setupOfflineListeners(): () => void {
   }
 
   const handleOnline = async () => {
-    console.log("Back online, syncing queue...");
+    console.info("[OfflineQueue] Back online, syncing queue...");
     await syncQueue();
   };
 
   const handleOffline = () => {
-    console.log("Gone offline, queue mode active");
+    console.info("[OfflineQueue] Gone offline, queue mode active");
   };
 
   window.addEventListener("online", handleOnline);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchWeather, getWeatherRecommendations } from "@/lib/utils/weather";
+import { COURSE, APP_CONFIG } from "@/lib/constants";
 
 // =============================================
 // VMGC AI Assistant — API Route
@@ -11,10 +12,6 @@ import { fetchWeather, getWeatherRecommendations } from "@/lib/utils/weather";
 // =============================================
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-
-// Course coordinates for weather
-const COURSE_LAT = 42.3;
-const COURSE_LNG = -87.85;
 
 const SYSTEM_PROMPT = `You are the VMGC AI Assistant for Veterans Memorial Golf Course at Naval Station Great Lakes, IL. You help the superintendent manage every aspect of the course through conversation.
 
@@ -356,7 +353,7 @@ async function executeTool(
       }
 
       case "get_weather": {
-        const weather = await fetchWeather(COURSE_LAT, COURSE_LNG, 3);
+        const weather = await fetchWeather(COURSE.lat, COURSE.lng, 3);
         if (!weather) {
           return { error: "Weather data not available. The WEATHER_API_KEY may not be configured." };
         }
@@ -418,7 +415,7 @@ async function executeTool(
           .join("\n");
 
         // Fetch weather for application window
-        const weather = await fetchWeather(COURSE_LAT, COURSE_LNG, 3);
+        const weather = await fetchWeather(COURSE.lat, COURSE.lng, 3);
         const weatherContext = weather
           ? `Current: ${weather.current.temp_f}°F, ${weather.current.condition}, Wind ${weather.current.wind_mph}mph, Humidity ${weather.current.humidity}%`
           : "Weather data not available";

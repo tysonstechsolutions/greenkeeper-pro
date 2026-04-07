@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Bell,
-  Sun,
   LogOut,
   Settings,
   UserPlus,
@@ -17,19 +16,16 @@ import {
   MessageSquare,
   AlertTriangle,
   Cloud,
-  CloudRain,
-  CloudSnow,
-  CloudSun,
-  CloudFog,
-  CloudLightning,
   Wrench,
   Clock,
   Wind,
   Leaf,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { WeatherIcon } from "@/components/ui/weather-icon";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { useWeather } from "@/lib/hooks/useWeather";
 import {
   useNotifications,
@@ -37,19 +33,8 @@ import {
   type NotificationWithDetails,
 } from "@/lib/hooks/useNotifications";
 import { useScrollDirection } from "@/lib/hooks/useScrollDirection";
+import { APP_CONFIG } from "@/lib/constants";
 import type { NotificationType } from "@/types/database";
-
-const roleLabels: Record<string, string> = {
-  super: "Superintendent",
-  asst_super: "Asst. Superintendent",
-  foreman: "Foreman",
-  mechanic: "Mechanic",
-  crew: "Crew Member",
-  seasonal: "Seasonal",
-  pro: "Golf Pro",
-  member: "Member",
-  director: "Director",
-};
 
 const notificationIcons: Record<NotificationType, React.ReactNode> = {
   task_assigned: <CheckSquare className="w-4 h-4 text-blue-500" />,
@@ -63,22 +48,8 @@ const notificationIcons: Record<NotificationType, React.ReactNode> = {
   reminder: <Bell className="w-4 h-4 text-indigo-500" />,
 };
 
-function getWeatherIcon(condition: string, className: string = "w-4 h-4") {
-  const c = condition.toLowerCase();
-  if (c.includes("thunder") || c.includes("lightning")) return <CloudLightning className={className} />;
-  if (c.includes("snow") || c.includes("sleet") || c.includes("ice")) return <CloudSnow className={className} />;
-  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) return <CloudRain className={className} />;
-  if (c.includes("fog") || c.includes("mist") || c.includes("haze")) return <CloudFog className={className} />;
-  if (c.includes("cloud") || c.includes("overcast")) {
-    if (c.includes("partly") || c.includes("partial")) return <CloudSun className={className} />;
-    return <Cloud className={className} />;
-  }
-  if (c.includes("sunny") || c.includes("clear")) return <Sun className={className} />;
-  return <CloudSun className={className} />;
-}
-
-// Notification polling interval: 2 minutes (was 60s — too aggressive)
-const NOTIFICATION_POLL_INTERVAL = 120_000;
+// Notification polling interval — sourced from shared config
+const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 
 export function Header() {
   const router = useRouter();
@@ -162,13 +133,6 @@ export function Header() {
     }
   };
 
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return "U";
-    const parts = name.split(" ");
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name.substring(0, 2).toUpperCase();
-  };
-
   // Determine weather widget state
   const weatherAvailable = currentWeather !== null;
   const weatherFailed = !weatherAvailable && weatherError !== null;
@@ -204,7 +168,7 @@ export function Header() {
             className="flex md:hidden items-center gap-1 px-2 py-1 rounded-full bg-muted/60 text-xs"
           >
             <span className="text-[#B68D40]">
-              {getWeatherIcon(currentWeather.conditions, "w-3.5 h-3.5")}
+              <WeatherIcon condition={currentWeather.conditions} className="w-3.5 h-3.5" />
             </span>
             <span className="font-semibold text-foreground">
               {Math.round(currentWeather.temp_f)}°
@@ -219,7 +183,7 @@ export function Header() {
             className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm group"
           >
             <span className="text-[#B68D40]">
-              {getWeatherIcon(currentWeather.conditions, "w-4 h-4")}
+              <WeatherIcon condition={currentWeather.conditions} className="w-4 h-4" />
             </span>
             <span className="font-semibold text-foreground">
               {Math.round(currentWeather.temp_f)}°F

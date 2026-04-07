@@ -456,7 +456,7 @@ export function useEquipment(): UseEquipmentReturn {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id: _id, created_at: _ca, updated_at: _ua, ...updateFields } = data as any;
 
-      console.log("[useEquipment] Updating equipment:", id, "with fields:", Object.keys(updateFields));
+      console.debug("[useEquipment] Updating equipment:", id, "with fields:", Object.keys(updateFields));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: updated, error: updateError } = await (supabase.from("equipment") as any)
@@ -472,7 +472,7 @@ export function useEquipment(): UseEquipmentReturn {
         throw new Error(message);
       }
 
-      console.log("[useEquipment] Update successful:", updated?.id);
+      console.debug("[useEquipment] Update successful:", updated?.id);
 
       // Update local state
       setEquipment((prev) =>

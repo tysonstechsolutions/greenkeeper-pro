@@ -81,7 +81,7 @@ export function useRealtimeSubscription<T extends { id: string }>({
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           setIsSubscribed(true);
-          console.log(`Realtime subscription active: ${table}`);
+          console.debug(`[Realtime] Subscription active: ${table}`);
         } else if (status === "CHANNEL_ERROR") {
           setIsSubscribed(false);
           console.error(`Realtime subscription error: ${table}`);

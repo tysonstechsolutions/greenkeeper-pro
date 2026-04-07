@@ -6,49 +6,12 @@ import { useWeather } from "@/lib/hooks/useWeather";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Cloud,
-  CloudRain,
-  CloudSnow,
-  Sun,
-  CloudSun,
-  CloudFog,
-  CloudLightning,
   Wind,
   Droplets,
   AlertCircle,
   ChevronRight,
 } from "lucide-react";
-
-/**
- * Get weather icon based on condition text
- */
-function getWeatherIcon(condition: string, className: string = "w-8 h-8") {
-  const lowerCondition = condition.toLowerCase();
-
-  if (lowerCondition.includes("thunder") || lowerCondition.includes("lightning")) {
-    return <CloudLightning className={className} />;
-  }
-  if (lowerCondition.includes("snow") || lowerCondition.includes("sleet") || lowerCondition.includes("ice")) {
-    return <CloudSnow className={className} />;
-  }
-  if (lowerCondition.includes("rain") || lowerCondition.includes("drizzle") || lowerCondition.includes("shower")) {
-    return <CloudRain className={className} />;
-  }
-  if (lowerCondition.includes("fog") || lowerCondition.includes("mist") || lowerCondition.includes("haze")) {
-    return <CloudFog className={className} />;
-  }
-  if (lowerCondition.includes("cloud") || lowerCondition.includes("overcast")) {
-    if (lowerCondition.includes("partly") || lowerCondition.includes("partial")) {
-      return <CloudSun className={className} />;
-    }
-    return <Cloud className={className} />;
-  }
-  if (lowerCondition.includes("sunny") || lowerCondition.includes("clear")) {
-    return <Sun className={className} />;
-  }
-
-  return <CloudSun className={className} />;
-}
+import { WeatherIcon } from "@/components/ui/weather-icon";
 
 interface WeatherWidgetProps {
   /** Additional class name */
@@ -164,7 +127,7 @@ export function WeatherWidget({ className, refreshInterval = 30 }: WeatherWidget
 
           {/* Weather icon */}
           <div className="text-muted-foreground">
-            {getWeatherIcon(currentWeather.conditions, "w-12 h-12")}
+            <WeatherIcon condition={currentWeather.conditions} className="w-12 h-12" />
           </div>
         </div>
 
@@ -241,7 +204,7 @@ export function WeatherInline({ className }: { className?: string }) {
       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors ${className}`}
       aria-label="View weather details"
     >
-      {getWeatherIcon(currentWeather.conditions, "w-4 h-4")}
+      <WeatherIcon condition={currentWeather.conditions} className="w-4 h-4" />
       <span className="font-medium">{Math.round(currentWeather.temp_f)}°F</span>
       {hasAlerts && (
         <span className="w-2 h-2 rounded-full bg-orange-500" />

@@ -336,7 +336,7 @@ async function callClaudeAPI(
       // Retry on 5xx or 429 errors with backoff
       if ((response.status >= 500 || response.status === 429) && retryCount < 2) {
         const delay = Math.pow(2, retryCount) * 1000;
-        console.log(`Retrying Claude API call in ${delay}ms...`);
+        console.warn(`[Diagnostics] Retrying Claude API call in ${delay}ms (attempt ${retryCount + 2})`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         return callClaudeAPI(systemPrompt, messages, retryCount + 1);
       }
@@ -361,7 +361,7 @@ async function callClaudeAPI(
     // Retry on network errors with backoff
     if (retryCount < 2 && error instanceof Error && (error.message.includes("fetch") || error.message.includes("network"))) {
       const delay = Math.pow(2, retryCount) * 1000;
-      console.log(`Retrying Claude API call after network error in ${delay}ms...`);
+      console.warn(`[Diagnostics] Retrying Claude API after network error in ${delay}ms (attempt ${retryCount + 2})`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return callClaudeAPI(systemPrompt, messages, retryCount + 1);
     }

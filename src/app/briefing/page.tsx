@@ -3,12 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  Sun,
-  Cloud,
   CloudRain,
-  CloudSnow,
-  CloudSun,
-  CloudLightning,
   Wind,
   Droplets,
   Thermometer,
@@ -32,6 +27,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { WeatherIcon } from "@/components/ui/weather-icon";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useWeather } from "@/lib/hooks/useWeather";
 import { createClient } from "@/lib/supabase/client";
@@ -74,17 +70,7 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-function getWeatherIcon(condition: string, className: string = "w-8 h-8") {
-  const c = condition.toLowerCase();
-  if (c.includes("thunder") || c.includes("lightning")) return <CloudLightning className={className} />;
-  if (c.includes("snow") || c.includes("sleet") || c.includes("ice")) return <CloudSnow className={className} />;
-  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) return <CloudRain className={className} />;
-  if (c.includes("cloud") || c.includes("overcast")) {
-    if (c.includes("partly") || c.includes("partial")) return <CloudSun className={className} />;
-    return <Cloud className={className} />;
-  }
-  return <Sun className={className} />;
-}
+// Weather icon is now shared — see @/components/ui/weather-icon
 
 export default function BriefingPage() {
   const { profile } = useAuth();
@@ -366,7 +352,7 @@ export default function BriefingPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="text-sky-600">
-                {getWeatherIcon(currentWeather.conditions, "w-12 h-12")}
+                <WeatherIcon condition={currentWeather.conditions} className="w-12 h-12" />
               </div>
               <div>
                 <div className="text-4xl font-bold">{currentWeather.temp_f}°F</div>
