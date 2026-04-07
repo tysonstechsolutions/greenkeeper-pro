@@ -517,17 +517,8 @@ export default function ChemicalDetailPage() {
 
       {/* Application History */}
       <Card className="mb-6">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Application History</CardTitle>
-          {applications.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push(`/chemicals/${product.id}/history`)}
-            >
-              View All
-            </Button>
-          )}
         </CardHeader>
         <CardContent>
           {applications.length === 0 ? (

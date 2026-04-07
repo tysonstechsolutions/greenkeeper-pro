@@ -304,11 +304,6 @@ function HoleCard({
           className="w-full h-full"
         />
 
-        {/* Hole Number Badge */}
-        <div className="absolute top-2 left-2 w-7 h-7 rounded-lg bg-[#1B4332] flex items-center justify-center shadow-md">
-          <span className="text-white text-sm font-bold">{hole.holeNumber}</span>
-        </div>
-
         {/* Issue Count Badge */}
         {hasIssues && (
           <div
