@@ -1,0 +1,1092 @@
+"use client";
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  MapPin,
+  Plus,
+  Circle,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  Camera,
+  X,
+  Loader2,
+  ClipboardList,
+  ArrowUpRight,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { DetailPageHeader } from "@/components/ui/back-button";
+import {
+  useGreenObservations,
+  greenIssueTypeLabels,
+  greenIssueTypeIcons,
+  greenStatusLabels,
+  greenStatusColors,
+  greenPriorityLabels,
+  greenPriorityColors,
+} from "@/lib/hooks/useGreenObservations";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { createClient } from "@/lib/supabase/client";
+import type {
+  GreenIssueType,
+  GreenObservation,
+  GreenObservationStatus,
+  TaskPriority,
+} from "@/types/database";
+
+export default function GreenDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { user, isSuper, isForeman } = useAuth();
+  const holeNumber = parseInt(params.hole as string, 10);
+
+  const {
+    observations,
+    loading,
+    getObservationsForGreen,
+    createObservation,
+    updateObservation,
+    uploadPhoto,
+  } = useGreenObservations();
+
+  // Pin placement mode
+  const [isPlacingPin, setIsPlacingPin] = useState(false);
+  const [pendingPin, setPendingPin] = useState<{ x: number; y: number } | null>(null);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
+  // Observation form
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    fix_instructions: "",
+    issue_type: "other" as GreenIssueType,
+    priority: "normal" as TaskPriority,
+  });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [generatingFix, setGeneratingFix] = useState(false);
+
+  // View observation detail
+  const [selectedObs, setSelectedObs] = useState<GreenObservation | null>(null);
+  const [editingFix, setEditingFix] = useState(false);
+  const [editFixText, setEditFixText] = useState("");
+  const [savingFix, setSavingFix] = useState(false);
+  const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
+
+  // Feedback messages
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Auto-clear feedback after 4 seconds
+  useEffect(() => {
+    if (feedbackMsg) {
+      const timer = setTimeout(() => setFeedbackMsg(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [feedbackMsg]);
+
+  // Create task dialog
+  const [taskDialogObs, setTaskDialogObs] = useState<GreenObservation | null>(null);
+  const [creatingTask, setCreatingTask] = useState(false);
+
+  // Filter
+  const [statusFilter, setStatusFilter] = useState<string>("active");
+
+  const greenObs = getObservationsForGreen(holeNumber);
+  const filteredObs = greenObs.filter((o) => {
+    if (statusFilter === "active") return o.status !== "resolved";
+    if (statusFilter === "resolved") return o.status === "resolved";
+    return true;
+  });
+
+  const [imgError, setImgError] = useState(false);
+
+  // Validate hole number
+  if (isNaN(holeNumber) || holeNumber < 1 || holeNumber > 18) {
+    return (
+      <div className="p-4 text-center py-12">
+        <p className="text-muted-foreground">Invalid green number</p>
+        <Button variant="outline" className="mt-4" onClick={() => router.push("/course-map")}>
+          Back to Course Map
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Handle Image Tap ──
+  const handleImageTap = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!isPlacingPin) return;
+    e.preventDefault();
+
+    const container = imageContainerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    let clientX: number, clientY: number;
+
+    if ("changedTouches" in e) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+    setPendingPin({ x, y });
+    setIsPlacingPin(false);
+    setShowForm(true);
+  };
+
+  // ── Handle Photo Selection ──
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  // ── AI Generate Fix Instructions ──
+  const handleGenerateFix = async () => {
+    if (!formData.title.trim()) return;
+    setGeneratingFix(true);
+    try {
+      const res = await fetch("/api/green-fix-instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: formData.title,
+          issue_type: formData.issue_type,
+          priority: formData.priority,
+          description: formData.description || undefined,
+          hole_number: holeNumber,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fix_instructions) {
+          setFormData((p) => ({ ...p, fix_instructions: data.fix_instructions }));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to generate fix instructions:", err);
+      setFeedbackMsg({ type: "error", text: "Failed to generate fix instructions. Try again." });
+    } finally {
+      setGeneratingFix(false);
+    }
+  };
+
+  // ── Submit Observation ──
+  const handleSubmit = async () => {
+    if (!pendingPin || !formData.title.trim()) return;
+    setSubmitting(true);
+
+    let photoUrl: string | null = null;
+    if (photoFile) {
+      photoUrl = await uploadPhoto(photoFile);
+    }
+
+    const result = await createObservation({
+      hole_number: holeNumber,
+      pin_x: pendingPin.x,
+      pin_y: pendingPin.y,
+      issue_type: formData.issue_type,
+      priority: formData.priority,
+      title: formData.title.trim(),
+      description: formData.description.trim() || null,
+      fix_instructions: formData.fix_instructions.trim() || null,
+      photo_url: photoUrl,
+    });
+
+    if (result) {
+      setShowForm(false);
+      setPendingPin(null);
+      setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setFeedbackMsg({ type: "success", text: "Green observation reported successfully." });
+    } else {
+      setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
+    }
+    setSubmitting(false);
+  };
+
+  // ── Create Task from Observation ──
+  const handleCreateTask = async (obs: GreenObservation) => {
+    setCreatingTask(true);
+    const supabase = createClient();
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: task, error } = await (supabase.from("tasks") as any)
+        .insert({
+          title: `Green ${obs.hole_number}: ${obs.title}`,
+          description: `${greenIssueTypeLabels[obs.issue_type]} reported on Green ${obs.hole_number}.\n\n${obs.description || "No additional details."}${obs.fix_instructions ? `\n\n--- How to Fix ---\n${obs.fix_instructions}` : ""}${obs.photo_url ? `\n\nPhoto: ${obs.photo_url}` : ""}`,
+          category: "greens",
+          priority: obs.priority,
+          status: "pending",
+          due_date: new Date().toISOString().split("T")[0],
+          hole_numbers: [obs.hole_number],
+          assigned_by: user?.id,
+          equipment_needed: [],
+          materials_needed: [],
+          checklist: [],
+        })
+        .select("id, title, status")
+        .single();
+
+      if (error) {
+        console.error("Failed to create task:", error);
+        setFeedbackMsg({ type: "error", text: "Failed to create task. Please try again." });
+      } else if (task) {
+        await updateObservation(obs.id, {
+          task_id: task.id,
+          status: "in_progress",
+        });
+        setTaskDialogObs(null);
+        setSelectedObs(null);
+        setFeedbackMsg({ type: "success", text: "Task created and linked to green observation." });
+      }
+    } catch (err) {
+      console.error("Task creation error:", err);
+      setFeedbackMsg({ type: "error", text: "Failed to create task. Please try again." });
+    } finally {
+      setCreatingTask(false);
+    }
+  };
+
+  // ── Update Observation Status ──
+  const handleStatusChange = async (obs: GreenObservation, newStatus: GreenObservationStatus) => {
+    const updates: Partial<GreenObservation> = { status: newStatus };
+    if (newStatus === "resolved") {
+      updates.resolved_at = new Date().toISOString();
+      updates.resolved_by = user?.id || null;
+    }
+    await updateObservation(obs.id, updates);
+    if (selectedObs?.id === obs.id) {
+      setSelectedObs({ ...obs, ...updates });
+    }
+  };
+
+  // ── Save Fix Instructions on Existing Observation ──
+  const handleSaveFix = async () => {
+    if (!selectedObs) return;
+    setSavingFix(true);
+    const result = await updateObservation(selectedObs.id, { fix_instructions: editFixText.trim() || null });
+    if (result) {
+      setSelectedObs({ ...selectedObs, fix_instructions: editFixText.trim() || null });
+      setEditingFix(false);
+      setFeedbackMsg({ type: "success", text: "Fix instructions saved." });
+    } else {
+      setFeedbackMsg({ type: "error", text: "Failed to save fix instructions." });
+    }
+    setSavingFix(false);
+  };
+
+  const handleGenerateFixForObs = async (obs: GreenObservation) => {
+    setGeneratingFixForObs(true);
+    try {
+      const res = await fetch("/api/green-fix-instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: obs.title,
+          issue_type: obs.issue_type,
+          priority: obs.priority,
+          description: obs.description || undefined,
+          hole_number: obs.hole_number,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fix_instructions) {
+          setEditFixText(data.fix_instructions);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to generate fix:", err);
+    } finally {
+      setGeneratingFixForObs(false);
+    }
+  };
+
+  const activeCount = greenObs.filter((o) => o.status !== "resolved").length;
+
+  return (
+    <div className="pb-24">
+      {/* Header */}
+      <div className="p-4 md:p-6 pb-0">
+        <DetailPageHeader
+          title={`Green ${holeNumber}`}
+          subtitle="Putting surface observation & tracking"
+          backHref="/course-map"
+        />
+
+        {/* Navigation between greens */}
+        <div className="flex items-center justify-between mt-2 mb-4">
+          {holeNumber > 1 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/course-map/green/${holeNumber - 1}`)}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Green {holeNumber - 1}
+            </Button>
+          ) : (
+            <div className="w-20" />
+          )}
+          <span className="text-sm text-muted-foreground">
+            {activeCount} active issue{activeCount !== 1 ? "s" : ""}
+          </span>
+          {holeNumber < 18 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/course-map/green/${holeNumber + 1}`)}
+            >
+              Green {holeNumber + 1}
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          ) : (
+            <div className="w-20" />
+          )}
+        </div>
+      </div>
+
+      {/* Feedback Banner */}
+      {feedbackMsg && (
+        <div className={`mx-4 md:mx-6 mb-3 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
+          feedbackMsg.type === "success"
+            ? "bg-green-50 text-green-700 border border-green-200"
+            : "bg-red-50 text-red-700 border border-red-200"
+        }`}>
+          {feedbackMsg.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+          )}
+          {feedbackMsg.text}
+          <button className="ml-auto" onClick={() => setFeedbackMsg(null)}>
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Green Image with Pins */}
+      <div className="px-4 md:px-6 mb-6">
+        <div
+          ref={imageContainerRef}
+          className={`relative rounded-2xl overflow-hidden border-2 transition-colors ${
+            isPlacingPin
+              ? "border-emerald-500 ring-2 ring-emerald-500/30 cursor-crosshair"
+              : "border-border"
+          }`}
+          onClick={handleImageTap}
+          onTouchEnd={isPlacingPin ? handleImageTap : undefined}
+        >
+          {/* The green image */}
+          <div className="relative aspect-square sm:aspect-[4/3] md:aspect-[3/2] lg:aspect-[16/9] bg-gradient-to-b from-emerald-50 to-emerald-100/50">
+            {imgError ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Circle className="w-16 h-16 text-emerald-300/40 mx-auto mb-2" />
+                  <span className="text-5xl font-bold text-emerald-400/20">{holeNumber}</span>
+                </div>
+              </div>
+            ) : (
+              <img
+                src={`/greens/green-${holeNumber}.png`}
+                alt={`Green ${holeNumber}`}
+                className="w-full h-full object-cover"
+                onError={() => setImgError(true)}
+                draggable={false}
+              />
+            )}
+
+            {/* Existing pins */}
+            {greenObs
+              .filter((o) => o.status !== "resolved")
+              .map((obs) => (
+                <button
+                  key={obs.id}
+                  className="absolute z-10 -translate-x-1/2 -translate-y-full group"
+                  style={{
+                    left: `${obs.pin_x * 100}%`,
+                    top: `${obs.pin_y * 100}%`,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isPlacingPin) setSelectedObs(obs);
+                  }}
+                >
+                  {/* Pin marker */}
+                  <div className="relative">
+                    <svg
+                      width="28"
+                      height="36"
+                      viewBox="0 0 28 36"
+                      fill="none"
+                      className="drop-shadow-lg"
+                    >
+                      <path
+                        d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z"
+                        fill={greenPriorityColors[obs.priority].pin}
+                      />
+                      <circle cx="14" cy="13" r="6" fill="white" fillOpacity="0.9" />
+                    </svg>
+                    <span className="absolute top-[6px] left-1/2 -translate-x-1/2 text-[10px] font-bold"
+                      style={{ color: greenPriorityColors[obs.priority].pin }}
+                    >
+                      {greenIssueTypeIcons[obs.issue_type]}
+                    </span>
+                  </div>
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-card border border-border rounded-lg shadow-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                    {obs.title}
+                  </div>
+                </button>
+              ))}
+
+            {/* Pending pin */}
+            {pendingPin && (
+              <div
+                className="absolute z-20 -translate-x-1/2 -translate-y-full animate-bounce"
+                style={{
+                  left: `${pendingPin.x * 100}%`,
+                  top: `${pendingPin.y * 100}%`,
+                }}
+              >
+                <svg width="32" height="40" viewBox="0 0 28 36" fill="none">
+                  <path
+                    d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z"
+                    fill="#059669"
+                  />
+                  <circle cx="14" cy="13" r="6" fill="white" fillOpacity="0.9" />
+                  <circle cx="14" cy="13" r="3" fill="#059669" />
+                </svg>
+              </div>
+            )}
+          </div>
+
+          {/* Pin placement mode overlay */}
+          {isPlacingPin && (
+            <div className="absolute inset-0 bg-black/5 flex items-end justify-center pb-4 pointer-events-none">
+              <div className="bg-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Tap to place pin on green
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons below image */}
+        <div className="flex gap-2 mt-3">
+          {isPlacingPin ? (
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setIsPlacingPin(false);
+                setPendingPin(null);
+              }}
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              className="flex-1 bg-emerald-700 hover:bg-emerald-600"
+              onClick={() => setIsPlacingPin(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Report Green Issue
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Observations List */}
+      <div className="px-4 md:px-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Green Observations</h2>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+          </div>
+        ) : filteredObs.length === 0 ? (
+          <Card className="py-8">
+            <CardContent className="text-center">
+              <CheckCircle2 className="w-10 h-10 text-green-400 mx-auto mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">
+                {statusFilter === "active"
+                  ? "No active issues on this green"
+                  : statusFilter === "resolved"
+                  ? "No resolved issues yet"
+                  : "No observations recorded"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tap &quot;Report Green Issue&quot; to drop a pin and log a problem
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {filteredObs.map((obs) => (
+              <button
+                key={obs.id}
+                onClick={() => setSelectedObs(obs)}
+                className="w-full text-left bg-card rounded-xl border border-border p-3 hover:bg-muted/50 active:scale-[0.99] transition-all"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
+                    {greenIssueTypeIcons[obs.issue_type]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-sm truncate">{obs.title}</p>
+                      {obs.fix_instructions && (
+                        <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
+                          <Wrench className="w-3 h-3 mr-0.5" />
+                          Fix
+                        </Badge>
+                      )}
+                      {obs.task_id && (
+                        <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                          <ClipboardList className="w-3 h-3 mr-0.5" />
+                          Task
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {greenIssueTypeLabels[obs.issue_type]}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <Badge
+                        className={`text-[10px] ${greenPriorityColors[obs.priority].bg} ${greenPriorityColors[obs.priority].text} border-0`}
+                      >
+                        {greenPriorityLabels[obs.priority]}
+                      </Badge>
+                      <Badge
+                        className={`text-[10px] ${greenStatusColors[obs.status].bg} ${greenStatusColors[obs.status].text} border-0`}
+                      >
+                        {greenStatusLabels[obs.status]}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(obs.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  {obs.photo_url && (
+                    <img
+                      src={obs.photo_url}
+                      alt=""
+                      className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
+                    />
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Observation Form Sheet ── */}
+      <Sheet open={showForm} onOpenChange={(open) => {
+        if (!open) {
+          setShowForm(false);
+          setPendingPin(null);
+          setPhotoFile(null);
+          setPhotoPreview(null);
+        }
+      }}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Circle className="w-5 h-5 text-emerald-600" />
+              Report Issue — Green {holeNumber}
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-4 mt-4 pb-6">
+            {/* Title */}
+            <div className="space-y-2">
+              <Label htmlFor="obs-title">What&apos;s the issue? *</Label>
+              <Input
+                id="obs-title"
+                placeholder="e.g., Ball mark cluster front-right"
+                value={formData.title}
+                onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
+              />
+            </div>
+
+            {/* Issue Type & Priority */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Issue Type</Label>
+                <Select
+                  value={formData.issue_type}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, issue_type: v as GreenIssueType }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(greenIssueTypeLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        <span className="flex items-center gap-2">
+                          <span>{greenIssueTypeIcons[value as GreenIssueType]}</span>
+                          {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, priority: v as TaskPriority }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(greenPriorityLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: greenPriorityColors[value as TaskPriority].pin }}
+                          />
+                          {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="obs-desc">Details (optional)</Label>
+              <Textarea
+                id="obs-desc"
+                placeholder="Describe the green issue in more detail..."
+                rows={3}
+                value={formData.description}
+                onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+
+            {/* Fix Instructions */}
+            {(isSuper || isForeman) && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="obs-fix" className="flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5" />
+                    How to Fix
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    disabled={!formData.title.trim() || generatingFix}
+                    onClick={handleGenerateFix}
+                  >
+                    {generatingFix ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                    {generatingFix ? "Generating..." : "AI Generate"}
+                  </Button>
+                </div>
+                <Textarea
+                  id="obs-fix"
+                  placeholder="Step-by-step instructions for the crew..."
+                  rows={5}
+                  value={formData.fix_instructions}
+                  onChange={(e) => setFormData((p) => ({ ...p, fix_instructions: e.target.value }))}
+                />
+                {formData.fix_instructions && (
+                  <p className="text-[10px] text-muted-foreground">
+                    This will be visible to the crew assigned to fix this green issue.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Photo */}
+            <div className="space-y-2">
+              <Label>Photo (optional)</Label>
+              {photoPreview ? (
+                <div className="relative w-full h-48 rounded-lg overflow-hidden border border-border">
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                  <button
+                    className="absolute top-2 right-2 bg-black/50 rounded-full p-1"
+                    onClick={() => {
+                      setPhotoFile(null);
+                      setPhotoPreview(null);
+                    }}
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 h-20 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
+                  <Camera className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Add a photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Submit */}
+            <Button
+              className="w-full bg-emerald-700 hover:bg-emerald-600"
+              disabled={!formData.title.trim() || submitting}
+              onClick={handleSubmit}
+            >
+              {submitting ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Circle className="w-4 h-4 mr-2" />
+              )}
+              Submit Green Observation
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Observation Detail Sheet ── */}
+      <Sheet open={!!selectedObs} onOpenChange={(open) => { if (!open) { setSelectedObs(null); setEditingFix(false); } }}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+          {selectedObs && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <span className="text-lg">{greenIssueTypeIcons[selectedObs.issue_type]}</span>
+                  {selectedObs.title}
+                </SheetTitle>
+              </SheetHeader>
+
+              <div className="space-y-4 mt-4 pb-6">
+                {/* Status & Priority badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    className={`${greenPriorityColors[selectedObs.priority].bg} ${greenPriorityColors[selectedObs.priority].text} border-0`}
+                  >
+                    {greenPriorityLabels[selectedObs.priority]}
+                  </Badge>
+                  <Badge
+                    className={`${greenStatusColors[selectedObs.status].bg} ${greenStatusColors[selectedObs.status].text} border-0`}
+                  >
+                    {greenStatusLabels[selectedObs.status]}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {greenIssueTypeLabels[selectedObs.issue_type]}
+                  </span>
+                </div>
+
+                {/* Photo */}
+                {selectedObs.photo_url && (
+                  <img
+                    src={selectedObs.photo_url}
+                    alt="Issue photo"
+                    className="w-full h-48 object-cover rounded-xl border border-border"
+                  />
+                )}
+
+                {/* Description */}
+                {selectedObs.description && (
+                  <p className="text-sm text-foreground">{selectedObs.description}</p>
+                )}
+
+                {/* Fix Instructions */}
+                {editingFix ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5" />
+                        How to Fix
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={generatingFixForObs}
+                        onClick={() => handleGenerateFixForObs(selectedObs)}
+                      >
+                        {generatingFixForObs ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        {generatingFixForObs ? "Generating..." : "AI Generate"}
+                      </Button>
+                    </div>
+                    <Textarea
+                      rows={6}
+                      value={editFixText}
+                      onChange={(e) => setEditFixText(e.target.value)}
+                      placeholder="Step-by-step instructions for the crew..."
+                      className="bg-white"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-emerald-700 hover:bg-emerald-600"
+                        disabled={savingFix}
+                        onClick={handleSaveFix}
+                      >
+                        {savingFix ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setEditingFix(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : selectedObs.fix_instructions ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5" />
+                        How to Fix
+                      </p>
+                      {(isSuper || isForeman) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-amber-700"
+                          onClick={() => {
+                            setEditFixText(selectedObs.fix_instructions || "");
+                            setEditingFix(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-sm text-amber-900 whitespace-pre-line">{selectedObs.fix_instructions}</p>
+                  </div>
+                ) : (isSuper || isForeman) && selectedObs.status !== "resolved" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => {
+                      setEditFixText("");
+                      setEditingFix(true);
+                    }}
+                  >
+                    <Wrench className="w-4 h-4 mr-2" />
+                    Add Fix Instructions
+                  </Button>
+                ) : null}
+
+                {/* Meta info */}
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p className="flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    Reported {new Date(selectedObs.created_at).toLocaleDateString()} at{" "}
+                    {new Date(selectedObs.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                  {selectedObs.reporter && (
+                    <p>By {selectedObs.reporter.full_name}</p>
+                  )}
+                  {selectedObs.resolved_at && (
+                    <p className="flex items-center gap-1.5 text-green-600">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Resolved {new Date(selectedObs.resolved_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+
+                {/* Linked task */}
+                {selectedObs.task && (
+                  <Card>
+                    <CardContent className="p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">{selectedObs.task.title}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {selectedObs.task.status?.replace("_", " ")}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push(`/tasks/${selectedObs.task!.id}`)}
+                      >
+                        <ArrowUpRight className="w-4 h-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Actions */}
+                <div className="space-y-2">
+                  {selectedObs.status !== "resolved" && (
+                    <div className="flex gap-2">
+                      {selectedObs.status === "open" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleStatusChange(selectedObs, "in_progress")}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Mark In Progress
+                        </Button>
+                      )}
+                      {selectedObs.status === "in_progress" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleStatusChange(selectedObs, "monitoring")}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          Monitor
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-green-600 border-green-200 hover:bg-green-50"
+                        onClick={() => handleStatusChange(selectedObs, "resolved")}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                        Resolve
+                      </Button>
+                    </div>
+                  )}
+
+                  {!selectedObs.task_id && selectedObs.status !== "resolved" && (
+                    <Button
+                      className="w-full bg-emerald-700 hover:bg-emerald-600"
+                      onClick={() => setTaskDialogObs(selectedObs)}
+                    >
+                      <ClipboardList className="w-4 h-4 mr-2" />
+                      Create Task from This
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Create Task Confirmation Dialog ── */}
+      <Dialog open={!!taskDialogObs} onOpenChange={(open) => !open && setTaskDialogObs(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Task</DialogTitle>
+            <DialogDescription>
+              This will create a new task from this green observation and link them together.
+            </DialogDescription>
+          </DialogHeader>
+          {taskDialogObs && (
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="font-medium text-sm">
+                Green {taskDialogObs.hole_number}: {taskDialogObs.title}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {greenIssueTypeLabels[taskDialogObs.issue_type]} · {greenPriorityLabels[taskDialogObs.priority]} priority
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTaskDialogObs(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-700 hover:bg-emerald-600"
+              disabled={creatingTask}
+              onClick={() => taskDialogObs && handleCreateTask(taskDialogObs)}
+            >
+              {creatingTask ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <ClipboardList className="w-4 h-4 mr-2" />
+              )}
+              Create Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

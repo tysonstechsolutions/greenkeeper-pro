@@ -1000,6 +1000,58 @@ export interface HoleObservation {
   task?: Pick<Task, "id" | "title" | "status"> | null;
 }
 
+// ── Green Observation Types ──
+
+export type GreenIssueType =
+  | "fungus_disease"
+  | "dry_spot"
+  | "wet_area"
+  | "bare_spot"
+  | "weed_pressure"
+  | "pest_damage"
+  | "mechanical_damage"
+  | "irrigation_issue"
+  | "algae"
+  | "frost_damage"
+  | "ball_marks"
+  | "scalping"
+  | "compaction"
+  | "thatch_buildup"
+  | "aeration_needed"
+  | "topdressing_needed"
+  | "moss"
+  | "shade_stress"
+  | "traffic_wear"
+  | "chemical_burn"
+  | "poor_drainage"
+  | "uneven_surface"
+  | "other";
+
+export type GreenObservationStatus = "open" | "in_progress" | "resolved" | "monitoring";
+
+export interface GreenObservation {
+  id: string;
+  hole_number: number;
+  pin_x: number; // 0-1 relative X position on the green image
+  pin_y: number; // 0-1 relative Y position on the green image
+  issue_type: GreenIssueType;
+  priority: TaskPriority;
+  status: GreenObservationStatus;
+  title: string;
+  description: string | null;
+  fix_instructions: string | null;
+  photo_url: string | null;
+  reported_by: string;
+  task_id: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined data
+  reporter?: Pick<Profile, "id" | "full_name" | "avatar_url" | "role"> | null;
+  task?: Pick<Task, "id" | "title" | "status"> | null;
+}
+
 export interface ImprovementPlanItem {
   id: string;
   title: string;

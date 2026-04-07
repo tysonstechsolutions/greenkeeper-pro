@@ -1,0 +1,56 @@
+// Shared constants for green observation system
+// Used by both client components and API routes
+
+import type { GreenIssueType } from "@/types/database";
+
+export const greenIssueTypeLabels: Record<GreenIssueType, string> = {
+  fungus_disease: "Fungus / Disease",
+  dry_spot: "Dry Spot",
+  wet_area: "Wet Area",
+  bare_spot: "Bare Spot",
+  weed_pressure: "Weed Pressure",
+  pest_damage: "Pest Damage",
+  mechanical_damage: "Mechanical Damage",
+  irrigation_issue: "Irrigation Issue",
+  algae: "Algae",
+  frost_damage: "Frost Damage",
+  ball_marks: "Ball Marks",
+  scalping: "Scalping",
+  compaction: "Compaction",
+  thatch_buildup: "Thatch Buildup",
+  aeration_needed: "Aeration Needed",
+  topdressing_needed: "Topdressing Needed",
+  moss: "Moss",
+  shade_stress: "Shade Stress",
+  traffic_wear: "Traffic Wear",
+  chemical_burn: "Chemical Burn",
+  poor_drainage: "Poor Drainage",
+  uneven_surface: "Uneven Surface",
+  other: "Other",
+};
+
+export const greenIssueTypeIcons: Record<GreenIssueType, string> = {
+  fungus_disease: "🍄",
+  dry_spot: "☀️",
+  wet_area: "💧",
+  bare_spot: "🟫",
+  weed_pressure: "🌿",
+  pest_damage: "🐛",
+  mechanical_damage: "⚙️",
+  irrigation_issue: "💦",
+  algae: "🟢",
+  frost_damage: "❄️",
+  ball_marks: "⛳",
+  scalping: "✂️",
+  compaction: "🔨",
+  thatch_buildup: "🧹",
+  aeration_needed: "🕳️",
+  topdressing_needed: "🏖️",
+  moss: "🌲",
+  shade_stress: "🌑",
+  traffic_wear: "👣",
+  chemical_burn: "🧪",
+  poor_drainage: "🌊",
+  uneven_surface: "📐",
+  other: "📍",
+};
