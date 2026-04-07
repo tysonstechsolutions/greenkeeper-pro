@@ -954,6 +954,51 @@ export interface CourseObservation {
   updated_at: string;
 }
 
+// ==========================================
+// Hole Observations (Pin-on-Map Reports)
+// ==========================================
+
+export type HoleIssueType =
+  | "fungus_disease"
+  | "dry_spot"
+  | "wet_area"
+  | "bare_spot"
+  | "weed_pressure"
+  | "pest_damage"
+  | "mechanical_damage"
+  | "drainage"
+  | "bunker_issue"
+  | "tree_issue"
+  | "irrigation_issue"
+  | "turf_thin"
+  | "algae"
+  | "frost_damage"
+  | "other";
+
+export type HoleObservationStatus = "open" | "in_progress" | "resolved" | "monitoring";
+
+export interface HoleObservation {
+  id: string;
+  hole_number: number;
+  pin_x: number; // 0-1 relative X position on the hole image
+  pin_y: number; // 0-1 relative Y position on the hole image
+  issue_type: HoleIssueType;
+  priority: TaskPriority; // reuse: critical | high | normal | low
+  status: HoleObservationStatus;
+  title: string;
+  description: string | null;
+  photo_url: string | null;
+  reported_by: string;
+  task_id: string | null; // linked task when created from observation
+  resolved_at: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined data
+  reporter?: Pick<Profile, "id" | "full_name" | "avatar_url" | "role"> | null;
+  task?: Pick<Task, "id" | "title" | "status"> | null;
+}
+
 export interface ImprovementPlanItem {
   id: string;
   title: string;
