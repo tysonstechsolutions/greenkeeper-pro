@@ -8,6 +8,7 @@ import type {
   GreenIssueType,
   GreenObservationStatus,
   TaskPriority,
+  AreaPoint,
 } from "@/types/database";
 
 // Re-export shared constants
@@ -45,8 +46,9 @@ export const greenPriorityColors: Record<TaskPriority, { bg: string; text: strin
 
 export interface CreateGreenObservationData {
   hole_number: number;
-  pin_x: number;
-  pin_y: number;
+  pin_x: number; // centroid X
+  pin_y: number; // centroid Y
+  area_path?: AreaPoint[] | null; // freehand drawn boundary
   issue_type: GreenIssueType;
   priority: TaskPriority;
   title: string;

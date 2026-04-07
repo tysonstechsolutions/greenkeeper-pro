@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  MapPin,
   Plus,
   Circle,
   AlertTriangle,
@@ -19,6 +18,7 @@ import {
   ArrowUpRight,
   Sparkles,
   Wrench,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +59,9 @@ import {
 } from "@/lib/hooks/useGreenObservations";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import GreenDrawingCanvas, { computeCentroid, simplifyPath } from "@/components/green-drawing-canvas";
 import type {
+  AreaPoint,
   GreenIssueType,
   GreenObservation,
   GreenObservationStatus,
@@ -81,10 +83,10 @@ export default function GreenDetailPage() {
     uploadPhoto,
   } = useGreenObservations();
 
-  // Pin placement mode
-  const [isPlacingPin, setIsPlacingPin] = useState(false);
-  const [pendingPin, setPendingPin] = useState<{ x: number; y: number } | null>(null);
-  const imageContainerRef = useRef<HTMLDivElement>(null);
+  // Drawing mode state (replaces pin placement)
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentPath, setCurrentPath] = useState<AreaPoint[]>([]);
+  const [drawnPath, setDrawnPath] = useState<AreaPoint[] | null>(null);
 
   // Observation form
   const [showForm, setShowForm] = useState(false);
@@ -146,30 +148,26 @@ export default function GreenDetailPage() {
     );
   }
 
-  // ── Handle Image Tap ──
-  const handleImageTap = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (!isPlacingPin) return;
-    e.preventDefault();
+  // ── Drawing handlers ──
+  const handleDrawStart = (point: AreaPoint) => {
+    setCurrentPath([point]);
+  };
 
-    const container = imageContainerRef.current;
-    if (!container) return;
+  const handleDrawPoint = (point: AreaPoint) => {
+    setCurrentPath((prev) => [...prev, point]);
+  };
 
-    const rect = container.getBoundingClientRect();
-    let clientX: number, clientY: number;
-
-    if ("changedTouches" in e) {
-      clientX = e.changedTouches[0].clientX;
-      clientY = e.changedTouches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
+  const handleDrawEnd = () => {
+    if (currentPath.length < 3) {
+      // Not enough points for a valid area — reset
+      setCurrentPath([]);
+      return;
     }
-
-    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-
-    setPendingPin({ x, y });
-    setIsPlacingPin(false);
+    // Simplify and store the drawn path
+    const simplified = simplifyPath(currentPath, 0.008);
+    setDrawnPath(simplified);
+    setCurrentPath([]);
+    setIsDrawing(false);
     setShowForm(true);
   };
 
@@ -215,8 +213,11 @@ export default function GreenDetailPage() {
 
   // ── Submit Observation ──
   const handleSubmit = async () => {
-    if (!pendingPin || !formData.title.trim()) return;
+    if (!drawnPath || drawnPath.length < 3 || !formData.title.trim()) return;
     setSubmitting(true);
+
+    // Compute centroid from the drawn area for backward compatibility
+    const centroid = computeCentroid(drawnPath);
 
     let photoUrl: string | null = null;
     if (photoFile) {
@@ -225,8 +226,9 @@ export default function GreenDetailPage() {
 
     const result = await createObservation({
       hole_number: holeNumber,
-      pin_x: pendingPin.x,
-      pin_y: pendingPin.y,
+      pin_x: centroid.x,
+      pin_y: centroid.y,
+      area_path: drawnPath,
       issue_type: formData.issue_type,
       priority: formData.priority,
       title: formData.title.trim(),
@@ -237,7 +239,8 @@ export default function GreenDetailPage() {
 
     if (result) {
       setShowForm(false);
-      setPendingPin(null);
+      setDrawnPath(null);
+      setCurrentPath([]);
       setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -410,133 +413,49 @@ export default function GreenDetailPage() {
         </div>
       )}
 
-      {/* Green Image with Pins */}
+      {/* Green Image with Drawing Canvas */}
       <div className="px-4 md:px-6 mb-6">
         <div
-          ref={imageContainerRef}
           className={`relative rounded-2xl overflow-hidden border-2 transition-colors ${
-            isPlacingPin
-              ? "border-emerald-500 ring-2 ring-emerald-500/30 cursor-crosshair"
+            isDrawing
+              ? "border-emerald-500 ring-2 ring-emerald-500/30"
               : "border-border"
           }`}
-          onClick={handleImageTap}
-          onTouchEnd={isPlacingPin ? handleImageTap : undefined}
         >
-          {/* The green SVG */}
-          <div className="relative aspect-square max-w-[600px] mx-auto w-full">
-            {imgError ? (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-800/20 via-emerald-50 to-emerald-100/50 rounded-2xl">
-                <div className="text-center">
-                  <Circle className="w-16 h-16 text-emerald-300/40 mx-auto mb-2" />
-                  <span className="text-5xl font-bold text-emerald-400/20">{holeNumber}</span>
-                </div>
-              </div>
-            ) : (
-              <img
-                src={`/greens/green-${holeNumber}.svg`}
-                alt={`Green ${holeNumber}`}
-                className="w-full h-full"
-                onError={() => setImgError(true)}
-                draggable={false}
-              />
-            )}
-
-            {/* Existing pins */}
-            {greenObs
-              .filter((o) => o.status !== "resolved")
-              .map((obs) => (
-                <button
-                  key={obs.id}
-                  className="absolute z-10 -translate-x-1/2 -translate-y-full group"
-                  style={{
-                    left: `${obs.pin_x * 100}%`,
-                    top: `${obs.pin_y * 100}%`,
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isPlacingPin) setSelectedObs(obs);
-                  }}
-                >
-                  {/* Pin marker */}
-                  <div className="relative">
-                    <svg
-                      width="28"
-                      height="36"
-                      viewBox="0 0 28 36"
-                      fill="none"
-                      className="drop-shadow-lg"
-                    >
-                      <path
-                        d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z"
-                        fill={greenPriorityColors[obs.priority].pin}
-                      />
-                      <circle cx="14" cy="13" r="6" fill="white" fillOpacity="0.9" />
-                    </svg>
-                    <span className="absolute top-[6px] left-1/2 -translate-x-1/2 text-[10px] font-bold"
-                      style={{ color: greenPriorityColors[obs.priority].pin }}
-                    >
-                      {greenIssueTypeIcons[obs.issue_type]}
-                    </span>
-                  </div>
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-card border border-border rounded-lg shadow-lg text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-                    {obs.title}
-                  </div>
-                </button>
-              ))}
-
-            {/* Pending pin */}
-            {pendingPin && (
-              <div
-                className="absolute z-20 -translate-x-1/2 -translate-y-full animate-bounce"
-                style={{
-                  left: `${pendingPin.x * 100}%`,
-                  top: `${pendingPin.y * 100}%`,
-                }}
-              >
-                <svg width="32" height="40" viewBox="0 0 28 36" fill="none">
-                  <path
-                    d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z"
-                    fill="#059669"
-                  />
-                  <circle cx="14" cy="13" r="6" fill="white" fillOpacity="0.9" />
-                  <circle cx="14" cy="13" r="3" fill="#059669" />
-                </svg>
-              </div>
-            )}
-          </div>
-
-          {/* Pin placement mode overlay */}
-          {isPlacingPin && (
-            <div className="absolute inset-0 bg-black/5 flex items-end justify-center pb-4 pointer-events-none">
-              <div className="bg-emerald-700 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                Tap to place pin on green
-              </div>
-            </div>
-          )}
+          <GreenDrawingCanvas
+            holeNumber={holeNumber}
+            isDrawing={isDrawing}
+            currentPath={currentPath}
+            onDrawPoint={handleDrawPoint}
+            onDrawEnd={handleDrawEnd}
+            onDrawStart={handleDrawStart}
+            observations={greenObs}
+            onZoneTap={(obs) => setSelectedObs(obs)}
+            imgError={imgError}
+            onImgError={() => setImgError(true)}
+          />
         </div>
 
         {/* Action buttons below image */}
         <div className="flex gap-2 mt-3">
-          {isPlacingPin ? (
+          {isDrawing ? (
             <Button
               variant="outline"
               className="flex-1"
               onClick={() => {
-                setIsPlacingPin(false);
-                setPendingPin(null);
+                setIsDrawing(false);
+                setCurrentPath([]);
               }}
             >
               <X className="w-4 h-4 mr-2" />
-              Cancel
+              Cancel Drawing
             </Button>
           ) : (
             <Button
               className="flex-1 bg-emerald-700 hover:bg-emerald-600"
-              onClick={() => setIsPlacingPin(true)}
+              onClick={() => setIsDrawing(true)}
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Pencil className="w-4 h-4 mr-2" />
               Report Green Issue
             </Button>
           )}
@@ -575,7 +494,7 @@ export default function GreenDetailPage() {
                   : "No observations recorded"}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Tap &quot;Report Green Issue&quot; to drop a pin and log a problem
+                Tap &quot;Report Green Issue&quot; to draw around the affected area
               </p>
             </CardContent>
           </Card>
@@ -594,6 +513,12 @@ export default function GreenDetailPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-sm truncate">{obs.title}</p>
+                      {obs.area_path && obs.area_path.length >= 3 && (
+                        <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-emerald-300 text-emerald-700 bg-emerald-50">
+                          <Pencil className="w-3 h-3 mr-0.5" />
+                          Zone
+                        </Badge>
+                      )}
                       {obs.fix_instructions && (
                         <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
                           <Wrench className="w-3 h-3 mr-0.5" />
@@ -644,7 +569,7 @@ export default function GreenDetailPage() {
       <Sheet open={showForm} onOpenChange={(open) => {
         if (!open) {
           setShowForm(false);
-          setPendingPin(null);
+          setDrawnPath(null);
           setPhotoFile(null);
           setPhotoPreview(null);
         }
@@ -652,12 +577,30 @@ export default function GreenDetailPage() {
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <Circle className="w-5 h-5 text-emerald-600" />
+              <Pencil className="w-5 h-5 text-emerald-600" />
               Report Issue — Green {holeNumber}
             </SheetTitle>
           </SheetHeader>
 
           <div className="space-y-4 mt-4 pb-6">
+            {/* Area drawn confirmation */}
+            {drawnPath && drawnPath.length >= 3 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                Area marked with {drawnPath.length} points
+                <button
+                  className="ml-auto text-xs underline"
+                  onClick={() => {
+                    setShowForm(false);
+                    setDrawnPath(null);
+                    setIsDrawing(true);
+                  }}
+                >
+                  Redraw
+                </button>
+              </div>
+            )}
+
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="obs-title">What&apos;s the issue? *</Label>
@@ -803,13 +746,13 @@ export default function GreenDetailPage() {
             {/* Submit */}
             <Button
               className="w-full bg-emerald-700 hover:bg-emerald-600"
-              disabled={!formData.title.trim() || submitting}
+              disabled={!drawnPath || drawnPath.length < 3 || !formData.title.trim() || submitting}
               onClick={handleSubmit}
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               ) : (
-                <Circle className="w-4 h-4 mr-2" />
+                <Pencil className="w-4 h-4 mr-2" />
               )}
               Submit Green Observation
             </Button>
@@ -845,6 +788,12 @@ export default function GreenDetailPage() {
                   <span className="text-xs text-muted-foreground">
                     {greenIssueTypeLabels[selectedObs.issue_type]}
                   </span>
+                  {selectedObs.area_path && selectedObs.area_path.length >= 3 && (
+                    <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 bg-emerald-50">
+                      <Pencil className="w-3 h-3 mr-0.5" />
+                      Zone mapped
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Photo */}

@@ -1029,11 +1029,18 @@ export type GreenIssueType =
 
 export type GreenObservationStatus = "open" | "in_progress" | "resolved" | "monitoring";
 
+/** A single point in the freehand-drawn area path (0-1 relative coords) */
+export interface AreaPoint {
+  x: number;
+  y: number;
+}
+
 export interface GreenObservation {
   id: string;
   hole_number: number;
-  pin_x: number; // 0-1 relative X position on the green image
-  pin_y: number; // 0-1 relative Y position on the green image
+  pin_x: number; // centroid X of the drawn area (0-1 relative)
+  pin_y: number; // centroid Y of the drawn area (0-1 relative)
+  area_path: AreaPoint[] | null; // freehand drawn boundary points (null for legacy pin-only)
   issue_type: GreenIssueType;
   priority: TaskPriority;
   status: GreenObservationStatus;
