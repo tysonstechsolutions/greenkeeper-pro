@@ -3,8 +3,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Plus,
-  Circle,
   AlertTriangle,
   CheckCircle2,
   Clock,
@@ -59,7 +57,7 @@ import {
 } from "@/lib/hooks/useGreenObservations";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
-import GreenDrawingCanvas, { computeCentroid, simplifyPath } from "@/components/green-drawing-canvas";
+import GreenDrawingCanvas, { computeCentroid } from "@/components/green-drawing-canvas";
 import type {
   AreaPoint,
   GreenIssueType,
@@ -83,9 +81,8 @@ export default function GreenDetailPage() {
     uploadPhoto,
   } = useGreenObservations();
 
-  // Drawing mode state (replaces pin placement)
+  // Drawing mode state
   const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPath, setCurrentPath] = useState<AreaPoint[]>([]);
   const [drawnPath, setDrawnPath] = useState<AreaPoint[] | null>(null);
 
   // Observation form
@@ -112,7 +109,6 @@ export default function GreenDetailPage() {
   // Feedback messages
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Auto-clear feedback after 4 seconds
   useEffect(() => {
     if (feedbackMsg) {
       const timer = setTimeout(() => setFeedbackMsg(null), 4000);
@@ -148,41 +144,25 @@ export default function GreenDetailPage() {
     );
   }
 
-  // ── Drawing handlers ──
-  const handleDrawStart = (point: AreaPoint) => {
-    setCurrentPath([point]);
-  };
-
-  const handleDrawPoint = (point: AreaPoint) => {
-    setCurrentPath((prev) => [...prev, point]);
-  };
-
-  const handleDrawEnd = () => {
-    if (currentPath.length < 3) {
-      // Not enough points for a valid area — reset
-      setCurrentPath([]);
-      return;
-    }
-    // Simplify and store the drawn path
-    const simplified = simplifyPath(currentPath, 0.008);
-    setDrawnPath(simplified);
-    setCurrentPath([]);
+  // ── Drawing complete handler (called from canvas with final simplified path) ──
+  const handleDrawComplete = useCallback((path: AreaPoint[]) => {
+    setDrawnPath(path);
     setIsDrawing(false);
     setShowForm(true);
-  };
+  }, []);
 
   // ── Handle Photo Selection ──
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setPhotoPreview(reader.result as string);
     reader.readAsDataURL(file);
-  };
+  }, []);
 
   // ── AI Generate Fix Instructions ──
-  const handleGenerateFix = async () => {
+  const handleGenerateFix = useCallback(async () => {
     if (!formData.title.trim()) return;
     setGeneratingFix(true);
     try {
@@ -209,14 +189,13 @@ export default function GreenDetailPage() {
     } finally {
       setGeneratingFix(false);
     }
-  };
+  }, [formData.title, formData.issue_type, formData.priority, formData.description, holeNumber]);
 
   // ── Submit Observation ──
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!drawnPath || drawnPath.length < 3 || !formData.title.trim()) return;
     setSubmitting(true);
 
-    // Compute centroid from the drawn area for backward compatibility
     const centroid = computeCentroid(drawnPath);
 
     let photoUrl: string | null = null;
@@ -240,19 +219,18 @@ export default function GreenDetailPage() {
     if (result) {
       setShowForm(false);
       setDrawnPath(null);
-      setCurrentPath([]);
       setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
-      setFeedbackMsg({ type: "success", text: "Green observation reported successfully." });
+      setFeedbackMsg({ type: "success", text: "Observation reported successfully." });
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
     }
     setSubmitting(false);
-  };
+  }, [drawnPath, formData, photoFile, holeNumber, uploadPhoto, createObservation]);
 
   // ── Create Task from Observation ──
-  const handleCreateTask = async (obs: GreenObservation) => {
+  const handleCreateTask = useCallback(async (obs: GreenObservation) => {
     setCreatingTask(true);
     const supabase = createClient();
 
@@ -285,7 +263,7 @@ export default function GreenDetailPage() {
         });
         setTaskDialogObs(null);
         setSelectedObs(null);
-        setFeedbackMsg({ type: "success", text: "Task created and linked to green observation." });
+        setFeedbackMsg({ type: "success", text: "Task created and linked to observation." });
       }
     } catch (err) {
       console.error("Task creation error:", err);
@@ -293,10 +271,10 @@ export default function GreenDetailPage() {
     } finally {
       setCreatingTask(false);
     }
-  };
+  }, [user?.id, updateObservation]);
 
   // ── Update Observation Status ──
-  const handleStatusChange = async (obs: GreenObservation, newStatus: GreenObservationStatus) => {
+  const handleStatusChange = useCallback(async (obs: GreenObservation, newStatus: GreenObservationStatus) => {
     const updates: Partial<GreenObservation> = { status: newStatus };
     if (newStatus === "resolved") {
       updates.resolved_at = new Date().toISOString();
@@ -306,10 +284,10 @@ export default function GreenDetailPage() {
     if (selectedObs?.id === obs.id) {
       setSelectedObs({ ...obs, ...updates });
     }
-  };
+  }, [user?.id, updateObservation, selectedObs?.id]);
 
   // ── Save Fix Instructions on Existing Observation ──
-  const handleSaveFix = async () => {
+  const handleSaveFix = useCallback(async () => {
     if (!selectedObs) return;
     setSavingFix(true);
     const result = await updateObservation(selectedObs.id, { fix_instructions: editFixText.trim() || null });
@@ -321,9 +299,9 @@ export default function GreenDetailPage() {
       setFeedbackMsg({ type: "error", text: "Failed to save fix instructions." });
     }
     setSavingFix(false);
-  };
+  }, [selectedObs, editFixText, updateObservation]);
 
-  const handleGenerateFixForObs = async (obs: GreenObservation) => {
+  const handleGenerateFixForObs = useCallback(async (obs: GreenObservation) => {
     setGeneratingFixForObs(true);
     try {
       const res = await fetch("/api/green-fix-instructions", {
@@ -348,7 +326,7 @@ export default function GreenDetailPage() {
     } finally {
       setGeneratingFixForObs(false);
     }
-  };
+  }, []);
 
   const activeCount = greenObs.filter((o) => o.status !== "resolved").length;
 
@@ -425,10 +403,7 @@ export default function GreenDetailPage() {
           <GreenDrawingCanvas
             holeNumber={holeNumber}
             isDrawing={isDrawing}
-            currentPath={currentPath}
-            onDrawPoint={handleDrawPoint}
-            onDrawEnd={handleDrawEnd}
-            onDrawStart={handleDrawStart}
+            onDrawComplete={handleDrawComplete}
             observations={greenObs}
             onZoneTap={(obs) => setSelectedObs(obs)}
             imgError={imgError}
@@ -442,10 +417,7 @@ export default function GreenDetailPage() {
             <Button
               variant="outline"
               className="flex-1"
-              onClick={() => {
-                setIsDrawing(false);
-                setCurrentPath([]);
-              }}
+              onClick={() => setIsDrawing(false)}
             >
               <X className="w-4 h-4 mr-2" />
               Cancel Drawing
@@ -587,9 +559,11 @@ export default function GreenDetailPage() {
             {drawnPath && drawnPath.length >= 3 && (
               <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                Area marked with {drawnPath.length} points
-                <button
-                  className="ml-auto text-xs underline"
+                Affected area marked on green
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-6 text-xs text-emerald-700 hover:text-emerald-800 px-2"
                   onClick={() => {
                     setShowForm(false);
                     setDrawnPath(null);
@@ -597,7 +571,7 @@ export default function GreenDetailPage() {
                   }}
                 >
                   Redraw
-                </button>
+                </Button>
               </div>
             )}
 
@@ -609,6 +583,7 @@ export default function GreenDetailPage() {
                 placeholder="e.g., Ball mark cluster front-right"
                 value={formData.title}
                 onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
+                autoFocus
               />
             </div>
 
@@ -754,7 +729,7 @@ export default function GreenDetailPage() {
               ) : (
                 <Pencil className="w-4 h-4 mr-2" />
               )}
-              Submit Green Observation
+              Submit Observation
             </Button>
           </div>
         </SheetContent>
