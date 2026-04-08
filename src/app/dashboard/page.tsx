@@ -15,7 +15,7 @@ import {
   Target,
   ChevronRight,
   Calendar,
-  Stethoscope,
+  Map,
   Plus,
   Camera,
   Wrench,
@@ -40,7 +40,6 @@ import {
   type PlanOverview,
 } from "@/lib/hooks/usePlanGoals";
 import { Badge } from "@/components/ui/badge";
-import { useDiagnostics } from "@/lib/hooks/useDiagnostics";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -115,7 +114,7 @@ function formatActivityTime(timestamp: string): string {
 const quickActions = [
   { href: "/tasks/new", label: "New Task", icon: Plus, color: "from-blue-500 to-blue-600" },
   { href: "/photos", label: "Take Photo", icon: Camera, color: "from-emerald-500 to-emerald-600" },
-  { href: "/diagnostics", label: "Diagnose", icon: Stethoscope, color: "from-violet-500 to-violet-600" },
+  { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-teal-600" },
   { href: "/chemicals/apply", label: "Log Chemical", icon: FlaskConical, color: "from-amber-500 to-amber-600" },
 ];
 
@@ -125,7 +124,6 @@ export default function DashboardPage() {
   const { getAlerts } = useWeather();
   const alerts = getAlerts();
   const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
-  const { getActiveDiagnosesCount } = useDiagnostics();
   const { fetchMyTasks } = useTasks();
   const { activities, loading: activitiesLoading } = useRecentActivity();
 
@@ -138,7 +136,6 @@ export default function DashboardPage() {
 
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
-  const [activeDiagnosesCount, setActiveDiagnosesCount] = useState(0);
   const [staffCount, setStaffCount] = useState<number | null>(null);
   const [, setSecondaryLoaded] = useState(false);
   const currentYear = new Date().getFullYear();
@@ -182,13 +179,11 @@ export default function DashboardPage() {
 
     const secondaryTimer = setTimeout(async () => {
       const supabase = createClient();
-      const [overview, diagnosesCount, staffResult] = await Promise.all([
+      const [overview, staffResult] = await Promise.all([
         fetchPlanOverview(currentYear),
-        getActiveDiagnosesCount(),
         supabase.from("profiles").select("id", { count: "exact", head: true }).neq("role", "member"),
       ]);
       setPlanOverview(overview);
-      setActiveDiagnosesCount(diagnosesCount);
       if (staffResult.count !== null) setStaffCount(staffResult.count);
 
       await fetchGoals({
@@ -201,7 +196,7 @@ export default function DashboardPage() {
     }, 300);
 
     return () => clearTimeout(secondaryTimer);
-  }, [fetchMyTasks, fetchGoals, fetchPlanOverview, getActiveDiagnosesCount, currentYear, currentMonth]);
+  }, [fetchMyTasks, fetchGoals, fetchPlanOverview, currentYear, currentMonth]);
 
   const focusGoals = useMemo(
     () =>
@@ -386,9 +381,9 @@ export default function DashboardPage() {
       {/* ===== Main Content Grid ===== */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
 
-        {/* Course Doctor Widget */}
+        {/* Course Map Widget */}
         <Link
-          href="/diagnostics"
+          href="/course-map"
           className="gk-animate-in gk-animate-in-5 gk-card group p-5 relative overflow-hidden"
         >
           {/* Decorative background */}
@@ -398,26 +393,21 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center shadow-sm">
-                  <Stethoscope className="w-5 h-5 text-white" />
+                  <Map className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-sm">Course Doctor</h2>
+                  <h2 className="font-semibold text-sm">Course Map</h2>
                   <p className="text-[11px] text-muted-foreground">AI-powered diagnostics</p>
                 </div>
               </div>
-              {activeDiagnosesCount > 0 && (
-                <Badge className="bg-[#1B4332] hover:bg-[#1B4332] text-white text-[10px] px-2 py-0.5 gk-badge-glow">
-                  {activeDiagnosesCount} active
-                </Badge>
-              )}
             </div>
 
             <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-              Identify turf diseases, pests, and nutrient deficiencies with AI-powered image analysis and get treatment recommendations.
+              Pin issues on holes and greens, snap a photo, and get instant AI diagnosis with treatment plans.
             </p>
 
             <div className="flex items-center gap-1.5 text-sm text-primary font-medium group-hover:gap-2.5 transition-all">
-              Start diagnosis
+              Open map
               <ArrowRight className="w-4 h-4" />
             </div>
           </div>

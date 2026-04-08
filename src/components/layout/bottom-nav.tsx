@@ -45,11 +45,11 @@ const memberNavItems = [
 ];
 
 const moreRoutes = [
-  "/more", "/diagnostics", "/plan", "/course-map", "/weather", "/photos",
+  "/more", "/plan", "/course-map", "/weather", "/photos",
   "/equipment", "/chemicals", "/irrigation", "/staff", "/budget", "/reports",
   "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
   "/briefing", "/assistant", "/checklists",
-  "/equipment-checkout", "/observations", "/member/conditions",
+  "/equipment-checkout", "/member/conditions",
   "/polls", "/report-issue", "/member-insights", "/install",
 ];
 

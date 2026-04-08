@@ -989,6 +989,7 @@ export interface HoleObservation {
   description: string | null;
   fix_instructions: string | null; // How to fix it — written by super or AI-generated
   photo_url: string | null;
+  diagnosis_result: DiagnosisResult | null; // AI diagnosis with treatment plan
   reported_by: string;
   task_id: string | null; // linked task when created from observation
   resolved_at: string | null;
@@ -1035,6 +1036,61 @@ export interface AreaPoint {
   y: number;
 }
 
+// ── Diagnosis Result (from AI analysis) ──
+
+export interface DiagnosisProduct {
+  name: string;
+  active_ingredient: string;
+  type: string;
+  application_rate: string;
+  rate_per_acre: string;
+  water_volume: string;
+  method: string;
+  timing: string;
+  rei_hours: number;
+  precautions: string[];
+  in_inventory: boolean;
+  alternative_products: string[];
+}
+
+export interface DiagnosisFollowUp {
+  days_after: number;
+  action: string;
+  what_to_look_for: string;
+  if_no_improvement: string;
+}
+
+export interface DiagnosisResult {
+  diagnosis: {
+    condition: string;
+    scientific_name: string;
+    confidence: "high" | "medium" | "low";
+    confidence_reason: string;
+    severity: number;
+    severity_label: string;
+    category: string;
+    description: string;
+    differential: string[];
+  };
+  treatment: {
+    immediate_actions: string[];
+    products: DiagnosisProduct[];
+    application_window: {
+      best_date: string;
+      best_time: string;
+      ideal_temp_range: string;
+      max_wind: string;
+      rain_buffer: string;
+      avoid?: string;
+    };
+    follow_up: DiagnosisFollowUp[];
+  };
+  prevention: string[];
+  additional_notes: string;
+  lab_test_recommended: boolean;
+  extension_contact: string;
+}
+
 export interface GreenObservation {
   id: string;
   hole_number: number;
@@ -1048,6 +1104,7 @@ export interface GreenObservation {
   description: string | null;
   fix_instructions: string | null;
   photo_url: string | null;
+  diagnosis_result: DiagnosisResult | null; // AI diagnosis with treatment plan
   reported_by: string;
   task_id: string | null;
   resolved_at: string | null;

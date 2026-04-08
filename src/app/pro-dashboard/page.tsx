@@ -33,7 +33,6 @@ import { useWeather } from "@/lib/hooks/useWeather";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { usePhotos } from "@/lib/hooks/usePhotos";
 import { useGolferFeedback } from "@/lib/hooks/useGolferFeedback";
-import { useDiagnostics } from "@/lib/hooks/useDiagnostics";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -63,11 +62,9 @@ export default function ProDashboardPage() {
   const { fetchTeamTasks } = useTasks();
   const { photos: recentPhotosData, fetchPhotos } = usePhotos();
   const { feedback, fetchFeedback, getNewFeedbackCount } = useGolferFeedback();
-  const { getActiveDiagnosesCount } = useDiagnostics();
 
   const [todaysTasks, setTodaysTasks] = useState<TaskWithRelations[]>([]);
   const [newFeedbackCount, setNewFeedbackCount] = useState(0);
-  const [activeDiagnoses, setActiveDiagnoses] = useState(0);
   const [loading, setLoading] = useState(true);
   const hasFetchedRef = useRef(false);
 
@@ -104,19 +101,15 @@ export default function ProDashboardPage() {
       // Load recent photos
       await fetchPhotos({}, 0);
 
-      // Load feedback count and active diagnoses
-      const [feedbackCount, diagnosesCount] = await Promise.all([
-        getNewFeedbackCount(),
-        getActiveDiagnosesCount(),
-      ]);
+      // Load feedback count
+      const feedbackCount = await getNewFeedbackCount();
       setNewFeedbackCount(feedbackCount);
-      setActiveDiagnoses(diagnosesCount);
 
       setLoading(false);
     };
 
     loadData();
-  }, [fetchTeamTasks, fetchPhotos, getNewFeedbackCount, getActiveDiagnosesCount]);
+  }, [fetchTeamTasks, fetchPhotos, getNewFeedbackCount]);
 
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
@@ -286,7 +279,7 @@ export default function ProDashboardPage() {
               Course Conditions
             </h2>
             <Link
-              href="/diagnostics"
+              href="/course-map"
               className="text-sm text-primary hover:underline flex items-center gap-1"
             >
               Details
@@ -295,21 +288,6 @@ export default function ProDashboardPage() {
           </div>
 
           <div className="space-y-4">
-            {/* Active Diagnoses Alert */}
-            {activeDiagnoses > 0 && (
-              <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-                    Active Issues
-                  </span>
-                  <Badge className="bg-yellow-500">{activeDiagnoses}</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Course Doctor has {activeDiagnoses} active diagnosis{activeDiagnoses !== 1 ? "es" : ""}
-                </p>
-              </div>
-            )}
-
             {/* Condition Summary */}
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-muted/50 rounded-lg">

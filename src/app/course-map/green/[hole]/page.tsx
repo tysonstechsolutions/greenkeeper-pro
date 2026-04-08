@@ -60,8 +60,10 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import GreenDrawingCanvas, { computeCentroid } from "@/components/green-drawing-canvas";
+import TreatmentPlanView from "@/components/treatment-plan-view";
 import type {
   AreaPoint,
+  DiagnosisResult,
   GreenIssueType,
   GreenObservation,
   GreenObservationStatus,
@@ -104,6 +106,7 @@ export default function GreenDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [generatingFix, setGeneratingFix] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [diagnosisResult, setDiagnosisResult] = useState<DiagnosisResult | null>(null);
 
   // Camera input ref for triggering
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -166,13 +169,14 @@ export default function GreenDetailPage() {
     setFormStep("photo");
     setShowForm(true);
     setAnalyzeError(null);
+    setDiagnosisResult(null);
     // Reset form data for new observation
     setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
     setPhotoFile(null);
     setPhotoPreview(null);
   }, []);
 
-  // ── Handle Photo Capture & Auto-Analyze ──
+  // ── Handle Photo Capture & Auto-Analyze + Diagnose ──
   const handlePhotoCaptured = useCallback(async (file: File) => {
     setPhotoFile(file);
     const reader = new FileReader();
@@ -181,10 +185,11 @@ export default function GreenDetailPage() {
       setPhotoPreview(base64);
       setFormStep("analyzing");
       setAnalyzeError(null);
+      setDiagnosisResult(null);
 
-      // Send to AI for analysis
+      // Send to combined AI endpoint (identifies issue + generates treatment plan)
       try {
-        const res = await fetch("/api/analyze-observation-photo", {
+        const res = await fetch("/api/analyze-and-diagnose", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -201,7 +206,11 @@ export default function GreenDetailPage() {
             title: data.title || prev.title,
             description: data.description || prev.description,
             issue_type: (data.issue_type as GreenIssueType) || prev.issue_type,
+            fix_instructions: data.fix_instructions || prev.fix_instructions,
           }));
+          if (data.diagnosis_result) {
+            setDiagnosisResult(data.diagnosis_result as DiagnosisResult);
+          }
           setFormStep("review");
         } else {
           console.error("Photo analysis failed:", res.status);
@@ -273,11 +282,13 @@ export default function GreenDetailPage() {
       description: formData.description.trim() || null,
       fix_instructions: formData.fix_instructions.trim() || null,
       photo_url: photoUrl,
+      diagnosis_result: diagnosisResult as unknown as Record<string, unknown> | null,
     });
 
     if (result) {
       setShowForm(false);
       setDrawnPath(null);
+      setDiagnosisResult(null);
       setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -941,6 +952,11 @@ export default function GreenDetailPage() {
                     <p className="text-sm text-amber-900 whitespace-pre-line">{selectedObs.fix_instructions}</p>
                   </div>
                 ) : null}
+
+                {/* AI Treatment Plan */}
+                {selectedObs.diagnosis_result && (
+                  <TreatmentPlanView data={selectedObs.diagnosis_result} />
+                )}
 
                 {/* Meta info */}
                 <div className="text-xs text-muted-foreground space-y-1">

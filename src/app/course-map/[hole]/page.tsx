@@ -63,7 +63,9 @@ import {
 } from "@/lib/hooks/useHoleObservations";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import TreatmentPlanView from "@/components/treatment-plan-view";
 import type {
+  DiagnosisResult,
   HoleIssueType,
   HoleObservation,
   HoleObservationStatus,
@@ -107,6 +109,7 @@ export default function HoleDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [generatingFix, setGeneratingFix] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [diagnosisResult, setDiagnosisResult] = useState<DiagnosisResult | null>(null);
 
   // View observation detail
   const [selectedObs, setSelectedObs] = useState<HoleObservation | null>(null);
@@ -186,13 +189,14 @@ export default function HoleDetailPage() {
     setFormStep("photo");
     setShowForm(true);
     setAnalyzeError(null);
+    setDiagnosisResult(null);
     // Reset form data for new observation
     setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
     setPhotoFile(null);
     setPhotoPreview(null);
   };
 
-  // ── Handle Photo Capture & Auto-Analyze ──
+  // ── Handle Photo Capture & Auto-Analyze + Diagnose ──
   const handlePhotoCaptured = useCallback(async (file: File) => {
     setPhotoFile(file);
     const reader = new FileReader();
@@ -201,9 +205,10 @@ export default function HoleDetailPage() {
       setPhotoPreview(base64);
       setFormStep("analyzing");
       setAnalyzeError(null);
+      setDiagnosisResult(null);
 
       try {
-        const res = await fetch("/api/analyze-observation-photo", {
+        const res = await fetch("/api/analyze-and-diagnose", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -220,7 +225,11 @@ export default function HoleDetailPage() {
             title: data.title || prev.title,
             description: data.description || prev.description,
             issue_type: (data.issue_type as HoleIssueType) || prev.issue_type,
+            fix_instructions: data.fix_instructions || prev.fix_instructions,
           }));
+          if (data.diagnosis_result) {
+            setDiagnosisResult(data.diagnosis_result as DiagnosisResult);
+          }
           setFormStep("review");
         } else {
           console.error("Photo analysis failed:", res.status);
@@ -289,6 +298,7 @@ export default function HoleDetailPage() {
       description: formData.description.trim() || null,
       fix_instructions: formData.fix_instructions.trim() || null,
       photo_url: photoUrl,
+      diagnosis_result: diagnosisResult as unknown as Record<string, unknown> | null,
     });
 
     if (result) {
@@ -297,6 +307,7 @@ export default function HoleDetailPage() {
       setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
+      setDiagnosisResult(null);
       setFeedbackMsg({ type: "success", text: "Observation reported successfully." });
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
@@ -1032,6 +1043,11 @@ export default function HoleDetailPage() {
                     <p className="text-sm text-amber-900 whitespace-pre-line">{selectedObs.fix_instructions}</p>
                   </div>
                 ) : null}
+
+                {/* Treatment Plan */}
+                {selectedObs.diagnosis_result && (
+                  <TreatmentPlanView data={selectedObs.diagnosis_result as unknown as DiagnosisResult} />
+                )}
 
                 {/* Meta info */}
                 <div className="text-xs text-muted-foreground space-y-1">

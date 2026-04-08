@@ -73,7 +73,6 @@ export async function updateSession(request: NextRequest) {
     "/budget",
     "/reports",
     "/knowledge",
-    "/diagnostics",
     "/plan",
     "/pro-dashboard",
     "/report-issue",

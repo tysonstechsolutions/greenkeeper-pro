@@ -19,7 +19,6 @@ import {
   BookOpen,
   DollarSign,
   Users,
-  Stethoscope,
   Target,
   Cloud,
   Leaf,
@@ -41,7 +40,6 @@ const primaryItems = [
 
 // ── Maintenance: course care tools ──
 const maintenanceItems = [
-  { href: "/diagnostics", label: "Course Doctor", icon: Stethoscope },
   { href: "/equipment", label: "Equipment", icon: Wrench },
   { href: "/chemicals", label: "Chemicals", icon: FlaskConical },
   { href: "/course-map", label: "Course Map", icon: Map },

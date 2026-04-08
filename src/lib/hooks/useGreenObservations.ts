@@ -55,6 +55,7 @@ export interface CreateGreenObservationData {
   description?: string | null;
   fix_instructions?: string | null;
   photo_url?: string | null;
+  diagnosis_result?: Record<string, unknown> | null; // AI diagnosis with treatment plan
 }
 
 // ── Hook ──
