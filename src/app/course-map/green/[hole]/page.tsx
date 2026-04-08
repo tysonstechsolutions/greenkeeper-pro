@@ -507,12 +507,15 @@ export default function GreenDetailPage() {
                 if (!res.ok) throw new Error("Failed to generate PDF");
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `Hole-${holeNumber}-Green-Report-${new Date().toISOString().split("T")[0]}.pdf`;
-                a.click();
-                URL.revokeObjectURL(url);
-                setFeedbackMsg({ type: "success", text: "Report downloaded!" });
+                try {
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `Hole-${holeNumber}-Green-Report-${new Date().toISOString().split("T")[0]}.pdf`;
+                  a.click();
+                  setFeedbackMsg({ type: "success", text: "Report downloaded!" });
+                } finally {
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }
               } catch {
                 setFeedbackMsg({ type: "error", text: "Failed to generate report." });
               }

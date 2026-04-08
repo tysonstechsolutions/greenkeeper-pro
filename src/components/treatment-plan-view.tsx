@@ -110,20 +110,22 @@ export default function TreatmentPlanView({ data }: { data: DiagnosisResult }) {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {product.active_ingredient} · {product.type}
-                  </p>
+                  {(product.active_ingredient || product.type) && (
+                    <p className="text-xs text-muted-foreground">
+                      {[product.active_ingredient, product.type].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                    <span className="text-muted-foreground">Rate:</span>
-                    <span>{product.application_rate}</span>
-                    <span className="text-muted-foreground">Per acre:</span>
-                    <span>{product.rate_per_acre}</span>
-                    <span className="text-muted-foreground">Water:</span>
-                    <span>{product.water_volume}</span>
-                    <span className="text-muted-foreground">Method:</span>
-                    <span className="capitalize">{product.method}</span>
-                    <span className="text-muted-foreground">REI:</span>
-                    <span>{product.rei_hours} hours</span>
+                    {product.application_rate && (<><span className="text-muted-foreground">Rate:</span>
+                    <span>{product.application_rate}</span></>)}
+                    {product.rate_per_acre && (<><span className="text-muted-foreground">Per acre:</span>
+                    <span>{product.rate_per_acre}</span></>)}
+                    {product.water_volume && (<><span className="text-muted-foreground">Water:</span>
+                    <span>{product.water_volume}</span></>)}
+                    {product.method && (<><span className="text-muted-foreground">Method:</span>
+                    <span className="capitalize">{product.method}</span></>)}
+                    {product.rei_hours != null && (<><span className="text-muted-foreground">REI:</span>
+                    <span>{product.rei_hours} hours</span></>)}
                   </div>
                   {product.timing && (
                     <p className="text-xs text-muted-foreground">

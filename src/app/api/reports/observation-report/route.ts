@@ -104,7 +104,6 @@ export async function GET(request: NextRequest) {
     const addPage = () => {
       doc.addPage();
       y = margin;
-      addFooter();
     };
 
     const checkPageSpace = (needed: number) => {
@@ -113,21 +112,14 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    const addFooter = () => {
-      doc.setFontSize(8);
-      doc.setTextColor(...GRAY_400 as [number, number, number]);
-      doc.text(
-        `VMGC GreenKeeper Pro | Generated ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-        pageWidth / 2,
-        pageHeight - 8,
-        { align: "center" }
-      );
-      doc.text(
-        `Page ${doc.getNumberOfPages()}`,
-        pageWidth - margin,
-        pageHeight - 8,
-        { align: "right" }
-      );
+    const truncateText = (text: string, maxWidth: number, fontSize: number) => {
+      doc.setFontSize(fontSize);
+      if (doc.getTextWidth(text) <= maxWidth) return text;
+      let truncated = text;
+      while (doc.getTextWidth(truncated + "…") > maxWidth && truncated.length > 0) {
+        truncated = truncated.slice(0, -1);
+      }
+      return truncated + "…";
     };
 
     // ── HEADER ──
@@ -224,12 +216,24 @@ export async function GET(request: NextRequest) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(255, 255, 255);
-      doc.text(`#${i + 1}  ${observation.title}`, margin + 3, y + 5.5);
+
+      // Measure status text first to know how much space the title has
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      const statusText = `${observation.priority.toUpperCase()} | ${statusLabels[observation.status] || observation.status}`;
+      const statusWidth = doc.getTextWidth(statusText) + 8;
+
+      // Truncate title to fit
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      const titlePrefix = `#${i + 1}  `;
+      const maxTitleWidth = contentWidth - statusWidth - 8;
+      const truncatedTitle = truncateText(observation.title, maxTitleWidth - doc.getTextWidth(titlePrefix), 10);
+      doc.text(`${titlePrefix}${truncatedTitle}`, margin + 3, y + 5.5);
 
       // Priority + status on right
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      const statusText = `${observation.priority.toUpperCase()} | ${statusLabels[observation.status] || observation.status}`;
       doc.text(statusText, pageWidth - margin - 3, y + 5.5, { align: "right" });
 
       y += 10;
@@ -251,7 +255,9 @@ export async function GET(request: NextRequest) {
         try {
           const imgWidth = 60;
           const imgHeight = 45;
-          doc.addImage(photo, "JPEG", margin + 2, y, imgWidth, imgHeight);
+          // Auto-detect format from data URL (supports JPEG, PNG, WebP)
+          const imgFormat = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
+          doc.addImage(photo, imgFormat, margin + 2, y, imgWidth, imgHeight);
 
           // Description next to photo
           const textX = margin + imgWidth + 6;
@@ -342,8 +348,11 @@ export async function GET(request: NextRequest) {
 
         doc.setFontSize(7);
         doc.setTextColor(...GRAY_600 as [number, number, number]);
+        const severityDisplay = diag.diagnosis.severity_label
+          ? `${diag.diagnosis.severity_label} (${diag.diagnosis.severity}/5)`
+          : `${diag.diagnosis.severity}/5`;
         doc.text(
-          `Severity: ${diag.diagnosis.severity_label || diag.diagnosis.severity}/5  |  Confidence: ${diag.diagnosis.confidence}  |  Category: ${diag.diagnosis.category || "N/A"}`,
+          `Severity: ${severityDisplay}  |  Confidence: ${diag.diagnosis.confidence}  |  Category: ${diag.diagnosis.category || "N/A"}`,
           margin + 5, y + 15
         );
 
