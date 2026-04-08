@@ -16,6 +16,8 @@ import {
   X,
   Loader2,
   ClipboardList,
+  Download,
+  Mail,
   ArrowUpRight,
   Sparkles,
   Wrench,
@@ -506,6 +508,52 @@ export default function HoleDetailPage() {
           <button className="ml-auto" onClick={() => setFeedbackMsg(null)}>
             <X className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Export Actions */}
+      {holeObs.length > 0 && (
+        <div className="px-4 md:px-6 mb-3 flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-1.5"
+            onClick={async () => {
+              setFeedbackMsg({ type: "success", text: "Generating PDF report..." });
+              try {
+                const res = await fetch(`/api/reports/observation-report?hole=${holeNumber}&type=hole`);
+                if (!res.ok) throw new Error("Failed to generate PDF");
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `Hole-${holeNumber}-Fairway-Report-${new Date().toISOString().split("T")[0]}.pdf`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setFeedbackMsg({ type: "success", text: "Report downloaded!" });
+              } catch {
+                setFeedbackMsg({ type: "error", text: "Failed to generate report." });
+              }
+            }}
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download Report
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-1.5"
+            onClick={() => {
+              const subject = encodeURIComponent(`Hole ${holeNumber} Fairway Observation Report - ${new Date().toLocaleDateString()}`);
+              const body = encodeURIComponent(
+                `Hi,\n\nPlease find attached the observation report for Hole ${holeNumber} fairway.\n\nTotal observations: ${holeObs.length}\nOpen issues: ${holeObs.filter(o => o.status !== "resolved").length}\n\nGenerated from VMGC GreenKeeper Pro\n${window.location.origin}/course-map/${holeNumber}`
+              );
+              window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+            }}
+          >
+            <Mail className="w-3.5 h-3.5" />
+            Email Report
+          </Button>
         </div>
       )}
 
