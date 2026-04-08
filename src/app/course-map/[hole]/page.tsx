@@ -124,7 +124,9 @@ export default function HoleDetailPage() {
     priority: "normal" as TaskPriority,
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Feedback messages
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error" | "loading"; text: string } | null>(null);
@@ -329,11 +331,48 @@ export default function HoleDetailPage() {
       priority: obs.priority,
     });
     setEditingObs(true);
+    setAutoSaveStatus("idle");
   }, []);
 
+  // Auto-save: debounced save on every field change
+  const triggerAutoSave = useCallback((updates: Partial<HoleObservation>) => {
+    if (!selectedObs) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setAutoSaveStatus("saving");
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const result = await updateObservation(selectedObs.id, updates);
+      if (result) {
+        setSelectedObs((prev) => prev ? { ...prev, ...updates } : prev);
+        setAutoSaveStatus("saved");
+        setTimeout(() => setAutoSaveStatus("idle"), 1500);
+      } else {
+        setAutoSaveStatus("idle");
+        setFeedbackMsg({ type: "error", text: "Failed to save changes." });
+      }
+    }, 800);
+  }, [selectedObs, updateObservation]);
+
+  // Wrap setEditFormData to also trigger auto-save
+  const updateEditField = useCallback((field: string, value: string) => {
+    setEditFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      const updates: Partial<HoleObservation> = {
+        title: updated.title.trim(),
+        description: updated.description.trim() || null,
+        fix_instructions: updated.fix_instructions.trim() || null,
+        issue_type: updated.issue_type,
+        priority: updated.priority,
+      };
+      triggerAutoSave(updates);
+      return updated;
+    });
+  }, [triggerAutoSave]);
+
+  // Manual save (still available as backup)
   const handleSaveEdit = useCallback(async () => {
     if (!selectedObs) return;
     setSavingEdit(true);
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     const updates: Partial<HoleObservation> = {
       title: editFormData.title.trim(),
       description: editFormData.description.trim() || null,
@@ -370,6 +409,8 @@ export default function HoleDetailPage() {
         const data = await res.json();
         if (data.fix_instructions) {
           setEditFormData((p) => ({ ...p, fix_instructions: data.fix_instructions }));
+          // Auto-save the generated fix instructions
+          triggerAutoSave({ fix_instructions: data.fix_instructions });
         }
       }
     } catch (err) {
@@ -1042,7 +1083,26 @@ export default function HoleDetailPage() {
       {/* ══════════════════════════════════════════════════════════
           OBSERVATION DETAIL SHEET — View + Full Edit Mode
          ══════════════════════════════════════════════════════════ */}
-      <Sheet open={!!selectedObs} onOpenChange={(open) => { if (!open) { setSelectedObs(null); setEditingObs(false); } }}>
+      <Sheet open={!!selectedObs} onOpenChange={(open) => {
+        if (!open) {
+          // Flush pending auto-save before closing
+          if (editingObs && autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+            if (selectedObs) {
+              const updates: Partial<HoleObservation> = {
+                title: editFormData.title.trim(),
+                description: editFormData.description.trim() || null,
+                fix_instructions: editFormData.fix_instructions.trim() || null,
+                issue_type: editFormData.issue_type,
+                priority: editFormData.priority,
+              };
+              updateObservation(selectedObs.id, updates);
+            }
+          }
+          setSelectedObs(null);
+          setEditingObs(false);
+        }
+      }}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
           {selectedObs && !editingObs && (
             <>
@@ -1216,6 +1276,21 @@ export default function HoleDetailPage() {
                 <SheetTitle className="flex items-center gap-2">
                   <Edit3 className="w-5 h-5 text-[#B68D40]" />
                   Edit Observation
+                  {/* Auto-save indicator */}
+                  <span className="ml-auto text-xs font-normal">
+                    {autoSaveStatus === "saving" && (
+                      <span className="text-blue-600 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Saving...
+                      </span>
+                    )}
+                    {autoSaveStatus === "saved" && (
+                      <span className="text-green-600 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Saved
+                      </span>
+                    )}
+                  </span>
                 </SheetTitle>
               </SheetHeader>
 
@@ -1234,7 +1309,7 @@ export default function HoleDetailPage() {
                   <Label>Issue Title *</Label>
                   <Input
                     value={editFormData.title}
-                    onChange={(e) => setEditFormData((p) => ({ ...p, title: e.target.value }))}
+                    onChange={(e) => updateEditField("title", e.target.value)}
                     autoFocus
                   />
                 </div>
@@ -1245,7 +1320,7 @@ export default function HoleDetailPage() {
                     <Label>Issue Type</Label>
                     <Select
                       value={editFormData.issue_type}
-                      onValueChange={(v) => setEditFormData((p) => ({ ...p, issue_type: v as HoleIssueType }))}
+                      onValueChange={(v) => updateEditField("issue_type", v)}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -1266,7 +1341,7 @@ export default function HoleDetailPage() {
                     <Label>Priority</Label>
                     <Select
                       value={editFormData.priority}
-                      onValueChange={(v) => setEditFormData((p) => ({ ...p, priority: v as TaskPriority }))}
+                      onValueChange={(v) => updateEditField("priority", v)}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -1294,7 +1369,7 @@ export default function HoleDetailPage() {
                   <Textarea
                     rows={3}
                     value={editFormData.description}
-                    onChange={(e) => setEditFormData((p) => ({ ...p, description: e.target.value }))}
+                    onChange={(e) => updateEditField("description", e.target.value)}
                   />
                 </div>
 
@@ -1324,33 +1399,30 @@ export default function HoleDetailPage() {
                   <Textarea
                     rows={5}
                     value={editFormData.fix_instructions}
-                    onChange={(e) => setEditFormData((p) => ({ ...p, fix_instructions: e.target.value }))}
+                    onChange={(e) => updateEditField("fix_instructions", e.target.value)}
                     placeholder="Step-by-step instructions for the crew..."
                   />
                 </div>
 
-                {/* Save / Cancel */}
+                {/* Done button — changes auto-save, this just closes the sheet */}
                 <div className="flex gap-2">
                   <Button
                     className="flex-1 bg-[#1B4332] hover:bg-[#2D6A4F]"
-                    disabled={!editFormData.title.trim() || savingEdit}
-                    onClick={handleSaveEdit}
+                    onClick={() => {
+                      // Flush any pending auto-save immediately
+                      if (autoSaveTimerRef.current) {
+                        clearTimeout(autoSaveTimerRef.current);
+                        handleSaveEdit();
+                      } else {
+                        setEditingObs(false);
+                      }
+                    }}
                   >
-                    {savingEdit ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Save className="w-4 h-4 mr-2" />
-                    )}
-                    Save Changes
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setEditingObs(false)}
-                  >
-                    Cancel
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Done
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground text-center">Changes save automatically as you type</p>
               </div>
             </>
           )}
