@@ -141,7 +141,7 @@ export function useGreenObservations() {
   );
 
   const updateObservation = useCallback(
-    async (id: string, updates: Partial<Pick<GreenObservation, "status" | "priority" | "description" | "fix_instructions" | "task_id" | "resolved_at" | "resolved_by">>) => {
+    async (id: string, updates: Partial<Pick<GreenObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "task_id" | "resolved_at" | "resolved_by">>) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: updated, error } = await (supabase.from("green_observations") as any)
