@@ -290,9 +290,12 @@ export async function GET(request: NextRequest) {
             doc.setTextColor(...GRAY_600 as [number, number, number]);
             const fixLines = doc.splitTextToSize(observation.fix_instructions, textWidth);
             doc.text(fixLines.slice(0, 5), textX, textY);
+            textY += Math.min(fixLines.length, 5) * 3.5;
           }
 
-          y += imgHeight + 3;
+          // Use whichever is taller: the image or the text beside it
+          const textHeight = textY - y;
+          y += Math.max(imgHeight, textHeight) + 3;
         } catch {
           // Photo failed to embed, skip it
           y += 2;
@@ -328,10 +331,16 @@ export async function GET(request: NextRequest) {
       if (diag?.diagnosis) {
         checkPageSpace(30);
 
-        // Diagnosis box
+        // Diagnosis box — measure condition text to size box dynamically
+        const conditionText = `${diag.diagnosis.condition || "Unknown Condition"}${diag.diagnosis.scientific_name ? ` (${diag.diagnosis.scientific_name})` : ""}`;
+        doc.setFontSize(8);
+        const conditionLines = doc.splitTextToSize(conditionText, contentWidth - 14);
+        const conditionHeight = conditionLines.length * 3.5;
+        const diagBoxHeight = Math.max(18, 8 + conditionHeight + 6);
+
         doc.setFillColor(240, 253, 244); // green-50
         doc.setDrawColor(187, 247, 208); // green-200
-        doc.roundedRect(margin + 2, y, contentWidth - 4, 18, 2, 2, "FD");
+        doc.roundedRect(margin + 2, y, contentWidth - 4, diagBoxHeight, 2, 2, "FD");
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
@@ -341,22 +350,20 @@ export async function GET(request: NextRequest) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(...BRAND_GREEN as [number, number, number]);
-        doc.text(
-          `${diag.diagnosis.condition}${diag.diagnosis.scientific_name ? ` (${diag.diagnosis.scientific_name})` : ""}`,
-          margin + 5, y + 10
-        );
+        doc.text(conditionLines, margin + 5, y + 10);
 
+        const severityY = y + 10 + conditionHeight + 1;
         doc.setFontSize(7);
         doc.setTextColor(...GRAY_600 as [number, number, number]);
         const severityDisplay = diag.diagnosis.severity_label
           ? `${diag.diagnosis.severity_label} (${diag.diagnosis.severity}/5)`
           : `${diag.diagnosis.severity}/5`;
         doc.text(
-          `Severity: ${severityDisplay}  |  Confidence: ${diag.diagnosis.confidence}  |  Category: ${diag.diagnosis.category || "N/A"}`,
-          margin + 5, y + 15
+          `Severity: ${severityDisplay}  |  Confidence: ${diag.diagnosis.confidence || "N/A"}  |  Category: ${diag.diagnosis.category || "N/A"}`,
+          margin + 5, severityY
         );
 
-        y += 21;
+        y += diagBoxHeight + 3;
 
         // Treatment products table
         if (diag.treatment?.products?.length > 0) {
@@ -368,17 +375,17 @@ export async function GET(request: NextRequest) {
           y += 5;
 
           const tableData = diag.treatment.products.map((p: {
-            name: string;
-            active_ingredient: string;
-            application_rate: string;
-            method: string;
-            in_inventory: boolean;
-            timing: string;
+            name?: string;
+            active_ingredient?: string;
+            application_rate?: string;
+            method?: string;
+            in_inventory?: boolean;
+            timing?: string;
           }) => [
-            p.name,
-            p.active_ingredient,
-            p.application_rate,
-            p.method,
+            p.name || "Unknown Product",
+            p.active_ingredient || "—",
+            p.application_rate || "—",
+            p.method || "—",
             p.in_inventory ? "In Stock" : "Not in Stock",
             p.timing || "—",
           ]);
@@ -422,11 +429,11 @@ export async function GET(request: NextRequest) {
           doc.setFontSize(7);
           doc.setTextColor(...GRAY_600 as [number, number, number]);
           doc.text(
-            `Best Date: ${aw.best_date}  |  Time: ${aw.best_time}  |  Temp: ${aw.ideal_temp_range}`,
+            `Best Date: ${aw.best_date || "TBD"}  |  Time: ${aw.best_time || "TBD"}  |  Temp: ${aw.ideal_temp_range || "N/A"}`,
             margin + 5, y + 8.5
           );
           doc.text(
-            `Max Wind: ${aw.max_wind}  |  Rain Buffer: ${aw.rain_buffer}`,
+            `Max Wind: ${aw.max_wind || "N/A"}  |  Rain Buffer: ${aw.rain_buffer || "N/A"}`,
             margin + 5, y + 12
           );
 

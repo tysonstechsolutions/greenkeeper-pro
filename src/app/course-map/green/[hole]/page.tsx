@@ -127,10 +127,10 @@ export default function GreenDetailPage() {
   const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
 
   // Feedback messages
-  const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error" | "loading"; text: string } | null>(null);
 
   useEffect(() => {
-    if (feedbackMsg) {
+    if (feedbackMsg && feedbackMsg.type !== "loading") {
       const timer = setTimeout(() => setFeedbackMsg(null), 4000);
       return () => clearTimeout(timer);
     }
@@ -299,7 +299,7 @@ export default function GreenDetailPage() {
       setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
     }
     setSubmitting(false);
-  }, [drawnPath, formData, photoFile, holeNumber, uploadPhoto, createObservation]);
+  }, [drawnPath, formData, photoFile, holeNumber, uploadPhoto, createObservation, diagnosisResult]);
 
   // ── Edit saved observation ──
   const handleStartEdit = useCallback((obs: GreenObservation) => {
@@ -479,10 +479,14 @@ export default function GreenDetailPage() {
         <div className={`mx-4 md:mx-6 mb-3 px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 ${
           feedbackMsg.type === "success"
             ? "bg-green-50 text-green-700 border border-green-200"
+            : feedbackMsg.type === "loading"
+            ? "bg-blue-50 text-blue-700 border border-blue-200"
             : "bg-red-50 text-red-700 border border-red-200"
         }`}>
           {feedbackMsg.type === "success" ? (
             <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : feedbackMsg.type === "loading" ? (
+            <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
           ) : (
             <AlertTriangle className="w-4 h-4 shrink-0" />
           )}
@@ -501,7 +505,7 @@ export default function GreenDetailPage() {
             size="sm"
             className="text-xs gap-1.5"
             onClick={async () => {
-              setFeedbackMsg({ type: "success", text: "Generating PDF report..." });
+              setFeedbackMsg({ type: "loading", text: "Generating PDF report..." });
               try {
                 const res = await fetch(`/api/reports/observation-report?hole=${holeNumber}&type=green`);
                 if (!res.ok) throw new Error("Failed to generate PDF");
