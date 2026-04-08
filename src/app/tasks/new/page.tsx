@@ -454,7 +454,7 @@ export default function NewTaskPage() {
   }
 
   return (
-    <div className="pb-24">
+    <div className="pb-40">
       {/* Header */}
       <div className="sticky top-0 z-20 bg-background border-b border-border">
         <div className="flex items-center justify-between p-4">
@@ -1220,12 +1220,12 @@ export default function NewTaskPage() {
         )}
       </form>
 
-      {/* Fixed Submit Button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 safe-area-inset-bottom">
+      {/* Fixed Submit Button — positioned above bottom nav (72px) on mobile */}
+      <div className="fixed bottom-[72px] md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4 safe-area-inset-bottom">
         <Button
           onClick={handleSubmit}
           disabled={submitting}
-          className="w-full"
+          className="w-full bg-[#1B4332] hover:bg-[#2D6A4F]"
         >
           {submitting ? (
             <>

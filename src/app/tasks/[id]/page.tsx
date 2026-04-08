@@ -538,7 +538,7 @@ export default function TaskDetailPage() {
   const otherPhotos = photos.filter((p) => !["before", "after"].includes(p.photo_type));
 
   return (
-    <div className="pb-24">
+    <div className="pb-40">
       {/* Header */}
       <div className="sticky top-0 z-20 bg-background border-b border-border p-4">
         <DetailPageHeader
@@ -1159,7 +1159,7 @@ export default function TaskDetailPage() {
       </div>
 
       {/* Fixed Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 flex gap-3 safe-area-inset-bottom">
+      <div className="fixed bottom-[72px] md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4 flex gap-3 safe-area-inset-bottom">
         {getActionButton()}
 
         {task.status !== "blocked" &&

@@ -284,11 +284,13 @@ export default function HoleDetailPage() {
 
   // ── Submit Observation ──
   const handleSubmit = useCallback(async () => {
-    if (!pendingPin || !formData.title.trim() || !photoFile) return;
+    if (!pendingPin || !formData.title.trim()) return;
     setSubmitting(true);
 
     let photoUrl: string | null = null;
-    photoUrl = await uploadPhoto(photoFile);
+    if (photoFile) {
+      photoUrl = await uploadPhoto(photoFile);
+    }
 
     const result = await createObservation({
       hole_number: holeNumber,
@@ -839,7 +841,7 @@ export default function HoleDetailPage() {
                     />
                   </label>
 
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-col items-center gap-2">
                     <label className="text-xs text-muted-foreground underline cursor-pointer hover:text-foreground">
                       Or choose from gallery
                       <input
@@ -849,6 +851,12 @@ export default function HoleDetailPage() {
                         onChange={handlePhotoInputChange}
                       />
                     </label>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground mt-2"
+                      onClick={() => setFormStep("review")}
+                    >
+                      Skip photo — fill in manually
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1015,7 +1023,7 @@ export default function HoleDetailPage() {
                 {/* Submit */}
                 <Button
                   className="w-full bg-[#1B4332] hover:bg-[#2D6A4F]"
-                  disabled={!formData.title.trim() || !photoFile || submitting}
+                  disabled={!formData.title.trim() || submitting}
                   onClick={handleSubmit}
                 >
                   {submitting ? (

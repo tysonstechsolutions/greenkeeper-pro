@@ -265,13 +265,15 @@ export default function GreenDetailPage() {
 
   // ── Submit Observation ──
   const handleSubmit = useCallback(async () => {
-    if (!drawnPath || drawnPath.length < 3 || !formData.title.trim() || !photoFile) return;
+    if (!drawnPath || drawnPath.length < 3 || !formData.title.trim()) return;
     setSubmitting(true);
 
     const centroid = computeCentroid(drawnPath);
 
     let photoUrl: string | null = null;
-    photoUrl = await uploadPhoto(photoFile);
+    if (photoFile) {
+      photoUrl = await uploadPhoto(photoFile);
+    }
 
     const result = await createObservation({
       hole_number: holeNumber,
@@ -741,7 +743,7 @@ export default function GreenDetailPage() {
                     />
                   </label>
 
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-col items-center gap-2">
                     <label className="text-xs text-muted-foreground underline cursor-pointer hover:text-foreground">
                       Or choose from gallery
                       <input
@@ -751,6 +753,12 @@ export default function GreenDetailPage() {
                         onChange={handlePhotoInputChange}
                       />
                     </label>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground mt-2"
+                      onClick={() => setFormStep("review")}
+                    >
+                      Skip photo — fill in manually
+                    </button>
                   </div>
                 </div>
               </div>
@@ -918,7 +926,7 @@ export default function GreenDetailPage() {
                 {/* Submit */}
                 <Button
                   className="w-full bg-emerald-700 hover:bg-emerald-600"
-                  disabled={!drawnPath || drawnPath.length < 3 || !formData.title.trim() || !photoFile || submitting}
+                  disabled={!drawnPath || drawnPath.length < 3 || !formData.title.trim() || submitting}
                   onClick={handleSubmit}
                 >
                   {submitting ? (

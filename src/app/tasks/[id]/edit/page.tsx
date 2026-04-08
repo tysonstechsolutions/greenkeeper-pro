@@ -447,7 +447,7 @@ export default function EditTaskPage() {
   }
 
   return (
-    <div className="pb-24">
+    <div className="pb-40">
       {/* Header */}
       <DetailPageHeader
         backHref={`/tasks/${taskId}`}
@@ -1193,11 +1193,11 @@ export default function EditTaskPage() {
       </form>
 
       {/* Fixed Submit Button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4 safe-area-inset-bottom">
+      <div className="fixed bottom-[72px] md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4 safe-area-inset-bottom">
         <Button
           onClick={handleSubmit}
           disabled={submitting}
-          className="w-full"
+          className="w-full bg-[#1B4332] hover:bg-[#2D6A4F]"
         >
           {submitting ? (
             <>
