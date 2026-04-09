@@ -20,6 +20,8 @@ import {
   DollarSign,
   Package,
   AlertTriangle,
+  Download,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
@@ -107,6 +109,7 @@ export default function EquipmentDetailPage() {
     "pre" | "post" | "cleaning"
   >("pre");
   const [latestInspection, setLatestInspection] = useState<EquipmentInspection | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -216,6 +219,33 @@ export default function EquipmentDetailPage() {
       }
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  // Handle report download
+  const handleDownloadReport = async () => {
+    if (!equipment) return;
+    setGeneratingReport(true);
+    try {
+      const res = await fetch(`/api/reports/equipment-report?id=${equipmentId}`);
+      if (!res.ok) throw new Error("Failed to generate report");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = (equipment.name || "equipment")
+        .replace(/[^a-zA-Z0-9-_ ]/g, "")
+        .replace(/\s+/g, "-")
+        .toLowerCase();
+      a.download = `${safeName}-report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Report download error:", err);
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -439,6 +469,22 @@ export default function EquipmentDetailPage() {
             </Button>
           )}
         </div>
+
+        {/* Download Report Button */}
+        <Button
+          onClick={handleDownloadReport}
+          disabled={generatingReport}
+          variant="outline"
+          size="lg"
+          className="w-full h-12 text-base font-semibold rounded-xl active:scale-95 transition-all border-[#1B4332] text-[#1B4332] hover:bg-[#1B4332] hover:text-white"
+        >
+          {generatingReport ? (
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          ) : (
+            <FileText className="w-5 h-5 mr-2" />
+          )}
+          {generatingReport ? "Generating Report..." : equipment.condition_status === "beyond_repair" || equipment.status === "out_of_service" ? "Download DRMO Report" : "Download Equipment Report"}
+        </Button>
       </div>
 
       {/* Beyond Repair Banner */}
