@@ -25,6 +25,7 @@ import {
   Bot,
   Car,
   Building,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -47,6 +48,7 @@ const maintenanceItems = [
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },
+  { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/weather", label: "Weather", icon: Cloud },
 ];
 

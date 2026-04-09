@@ -24,6 +24,7 @@ import {
   Smartphone,
   Car,
   Building,
+  ShoppingCart,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -53,6 +54,7 @@ const leadershipQuickAccess: QuickItem[] = [
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
+  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
   { href: "/chemicals", label: "Chemicals", icon: FlaskConical, color: "from-violet-500 to-purple-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
@@ -89,6 +91,7 @@ const foremanQuickAccess: QuickItem[] = [
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
+  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
   { href: "/chemicals", label: "Chemicals", icon: FlaskConical, color: "from-violet-500 to-purple-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
@@ -112,6 +115,7 @@ const mechanicQuickAccess: QuickItem[] = [
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
+  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/irrigation", label: "Irrigation", icon: Droplets, color: "from-blue-500 to-indigo-600" },
@@ -128,6 +132,7 @@ const crewQuickAccess: QuickItem[] = [
   { href: "/course-map", label: "Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/parking-lot", label: "Parking", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
+  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

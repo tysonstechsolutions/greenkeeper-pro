@@ -17,7 +17,8 @@ export type ReportType =
   | "equipment"
   | "parking-lot"
   | "clubhouse"
-  | "observations";
+  | "observations"
+  | "order-list";
 
 export interface PDFExportOptions {
   /** Document title shown in PDF header */

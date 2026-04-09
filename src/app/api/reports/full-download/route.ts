@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       { name: "parking-lot-report", filename: "vmgc-parking-lot-report.pdf" },
       { name: "clubhouse-report", filename: "vmgc-clubhouse-report.pdf" },
       { name: "observation-report", filename: "vmgc-observation-report.pdf" },
+      { name: "order-list-report", filename: "vmgc-order-list-report.pdf" },
     ];
 
     const reportResults = await Promise.allSettled(

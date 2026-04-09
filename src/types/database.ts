@@ -539,6 +539,29 @@ export interface ClubhouseIssue {
   updated_at: string;
 }
 
+// ── Order Items ──
+export type OrderCategory = 'clubhouse' | 'cart_paths' | 'turf_course' | 'general';
+export type OrderPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type OrderItemStatus = 'needed' | 'ordered' | 'received';
+
+export interface OrderItem {
+  id: string;
+  created_by: string;
+  category: OrderCategory;
+  item_name: string;
+  description: string | null;
+  quantity: string | null;
+  estimated_cost: number | null;
+  priority: OrderPriority;
+  status: OrderItemStatus;
+  vendor: string | null;
+  notes: string | null;
+  ordered_date: string | null;
+  received_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EquipmentLog {
   id: string;
   equipment_id: string;

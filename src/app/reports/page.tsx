@@ -21,6 +21,7 @@ import {
   Building,
   Map,
   FileArchive,
+  ShoppingCart,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -120,9 +121,16 @@ const REPORT_TYPES = [
     icon: Map,
     color: "#0D9488",
   },
+  {
+    id: "order-list",
+    name: "Order List",
+    description: "Supplies, materials, and equipment parts to order",
+    icon: ShoppingCart,
+    color: "#059669",
+  },
 ];
 
-type ReportTypeId = "daily" | "weekly" | "monthly" | "staff" | "chemical" | "equipment" | "parking-lot" | "clubhouse" | "observations";
+type ReportTypeId = "daily" | "weekly" | "monthly" | "staff" | "chemical" | "equipment" | "parking-lot" | "clubhouse" | "observations" | "order-list";
 
 export default function ReportsPage() {
   const { profile } = useAuth();
@@ -221,7 +229,7 @@ export default function ReportsPage() {
   // Generate report
   const handleGenerateReport = useCallback(async (reportType: ReportTypeId) => {
     // PDF-direct reports
-    if (["equipment", "parking-lot", "clubhouse", "observations"].includes(reportType)) {
+    if (["equipment", "parking-lot", "clubhouse", "observations", "order-list"].includes(reportType)) {
       return handleDirectPDFDownload(reportType);
     }
     setGenerating(true);
@@ -532,10 +540,10 @@ export default function ReportsPage() {
                   </div>
                 )}
 
-                {(["parking-lot", "clubhouse", "observations"].includes(activeReport)) && (
+                {(["parking-lot", "clubhouse", "observations", "order-list"].includes(activeReport)) && (
                   <div className="py-2">
                     <p className="text-sm text-muted-foreground">
-                      This report will generate a PDF with all current {activeReport === "parking-lot" ? "parking lot & cart path" : activeReport === "clubhouse" ? "clubhouse" : "course observation"} issues and their photos. Click Generate to download.
+                      This report will generate a PDF with all current {activeReport === "parking-lot" ? "parking lot & cart path" : activeReport === "clubhouse" ? "clubhouse" : activeReport === "order-list" ? "order list" : "course observation"} {activeReport === "order-list" ? "items including equipment parts." : "issues and their photos."} Click Generate to download.
                     </p>
                   </div>
                 )}
