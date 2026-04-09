@@ -109,8 +109,8 @@ export default function EquipmentDetailPage() {
     error: equipmentError,
   } = useEquipment();
 
-  const { parts, fetchParts, addPart, updatePart, deletePart } = useEquipmentParts();
-  const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord } = useEquipmentServiceRecords();
+  const { parts, fetchParts, addPart, updatePart, deletePart, error: partsError } = useEquipmentParts();
+  const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord, error: serviceError } = useEquipmentServiceRecords();
 
   const equipmentId = params.id as string;
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);
@@ -690,14 +690,14 @@ export default function EquipmentDetailPage() {
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={() => { setAddingPart(false); setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" }); }}>Cancel</Button>
                 <Button size="sm" disabled={!newPart.name.trim()} onClick={async () => {
-                  const result = await addPart(equipmentId, {
+                  const { data: partResult, error: partErr } = await addPart(equipmentId, {
                     name: newPart.name,
                     part_number: newPart.part_number || undefined,
                     description: newPart.description || undefined,
                     quantity: parseInt(newPart.quantity) || 1,
                     estimated_cost: newPart.estimated_cost ? parseFloat(newPart.estimated_cost) : undefined,
                   });
-                  if (result) {
+                  if (partResult) {
                     setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" });
                     setAddingPart(false);
                     setSaveSuccess(true);
@@ -705,7 +705,7 @@ export default function EquipmentDetailPage() {
                     // Re-fetch to ensure sync
                     await fetchParts(equipmentId);
                   } else {
-                    alert("Failed to save part. Please try again.");
+                    alert(`Failed to save part: ${partErr || "Unknown error"}`);
                   }
                 }}>Add Part</Button>
               </div>
@@ -891,7 +891,7 @@ export default function EquipmentDetailPage() {
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" }); }}>Cancel</Button>
                 <Button size="sm" disabled={!newService.description.trim() || !newService.performed_by.trim()} onClick={async () => {
-                  const result = await addServiceRecord(equipmentId, {
+                  const { data: svcResult, error: svcErr } = await addServiceRecord(equipmentId, {
                     service_date: newService.service_date,
                     description: newService.description,
                     performed_by: newService.performed_by,
@@ -899,7 +899,7 @@ export default function EquipmentDetailPage() {
                     cost: newService.cost ? parseFloat(newService.cost) : undefined,
                     parts_used: newService.parts_used || undefined,
                   });
-                  if (result) {
+                  if (svcResult) {
                     setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
                     setAddingService(false);
                     setSaveSuccess(true);
@@ -907,7 +907,7 @@ export default function EquipmentDetailPage() {
                     // Re-fetch to ensure sync
                     await fetchServiceRecords(equipmentId);
                   } else {
-                    alert("Failed to save service record. Please try again.");
+                    alert(`Failed to save service record: ${svcErr || "Unknown error"}`);
                   }
                 }}>Add Record</Button>
               </div>

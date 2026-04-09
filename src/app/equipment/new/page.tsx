@@ -45,7 +45,7 @@ interface FormData extends CreateEquipmentData {
 export default function NewEquipmentPage() {
   const router = useRouter();
   const { user, canManageEquipment } = useAuth();
-  const { createEquipment } = useEquipment();
+  const { createEquipment, uploadEquipmentPhoto, updateEquipment } = useEquipment();
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -147,6 +147,18 @@ export default function NewEquipmentPage() {
       const newEquipment = await createEquipment(cleanData);
 
       if (newEquipment) {
+        // Upload photos to storage if any were selected
+        if (uploadedFiles.length > 0) {
+          const photoUrls: string[] = [];
+          for (const file of uploadedFiles) {
+            const url = await uploadEquipmentPhoto(file, newEquipment.id);
+            if (url) photoUrls.push(url);
+          }
+          // Update equipment record with photo URLs
+          if (photoUrls.length > 0) {
+            await updateEquipment(newEquipment.id, { photos: photoUrls });
+          }
+        }
         router.push(`/equipment/${newEquipment.id}`);
       } else {
         setFormError("Failed to create equipment. Please try again.");

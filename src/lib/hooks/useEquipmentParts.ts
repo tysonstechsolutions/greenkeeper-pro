@@ -7,20 +7,24 @@ import type { EquipmentPart } from "@/types/database";
 export function useEquipmentParts() {
   const [parts, setParts] = useState<EquipmentPart[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchParts = useCallback(async (equipmentId: string) => {
     setLoading(true);
+    setError(null);
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("equipment_parts") as any)
+      const { data, error: fetchError } = await (supabase.from("equipment_parts") as any)
         .select("*")
         .eq("equipment_id", equipmentId)
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (fetchError) throw fetchError;
       setParts(data || []);
       return data || [];
     } catch (err) {
       console.error("Error fetching equipment parts:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
       return [];
     } finally {
       setLoading(false);
@@ -35,10 +39,20 @@ export function useEquipmentParts() {
     status?: string;
     estimated_cost?: number;
     delay_reason?: string;
-  }) => {
+  }): Promise<{ data: EquipmentPart | null; error: string | null }> => {
+    setError(null);
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("equipment_parts") as any)
+
+      // Verify auth session before insert
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const msg = "You must be logged in to add parts. Please refresh the page and sign in again.";
+        setError(msg);
+        return { data: null, error: msg };
+      }
+
+      const { data, error: insertError } = await (supabase.from("equipment_parts") as any)
         .insert({
           equipment_id: equipmentId,
           name: part.name,
@@ -46,44 +60,63 @@ export function useEquipmentParts() {
           description: part.description || null,
           quantity: part.quantity || 1,
           status: part.status || "needed",
-          estimated_cost: part.estimated_cost || null,
+          estimated_cost: part.estimated_cost != null ? part.estimated_cost : null,
           delay_reason: part.delay_reason || null,
         })
         .select()
         .single();
-      if (error) throw error;
+
+      if (insertError) {
+        console.error("Supabase insert error:", insertError);
+        const msg = insertError.message || "Database error while saving part";
+        setError(msg);
+        return { data: null, error: msg };
+      }
+
       setParts((prev) => [data, ...prev]);
-      return data;
+      return { data, error: null };
     } catch (err) {
       console.error("Error adding part:", err);
-      return null;
+      const msg = err instanceof Error ? err.message : "Failed to save part";
+      setError(msg);
+      return { data: null, error: msg };
     }
   }, []);
 
-  const updatePart = useCallback(async (partId: string, updates: Partial<EquipmentPart>) => {
+  const updatePart = useCallback(async (partId: string, updates: Partial<EquipmentPart>): Promise<{ data: EquipmentPart | null; error: string | null }> => {
+    setError(null);
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("equipment_parts") as any)
+      const { data, error: updateError } = await (supabase.from("equipment_parts") as any)
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", partId)
         .select()
         .single();
-      if (error) throw error;
+
+      if (updateError) {
+        const msg = updateError.message || "Database error while updating part";
+        setError(msg);
+        return { data: null, error: msg };
+      }
+
       setParts((prev) => prev.map((p) => (p.id === partId ? data : p)));
-      return data;
+      return { data, error: null };
     } catch (err) {
       console.error("Error updating part:", err);
-      return null;
+      const msg = err instanceof Error ? err.message : "Failed to update part";
+      setError(msg);
+      return { data: null, error: msg };
     }
   }, []);
 
   const deletePart = useCallback(async (partId: string) => {
+    setError(null);
     try {
       const supabase = createClient();
-      const { error } = await (supabase.from("equipment_parts") as any)
+      const { error: deleteError } = await (supabase.from("equipment_parts") as any)
         .delete()
         .eq("id", partId);
-      if (error) throw error;
+      if (deleteError) throw deleteError;
       setParts((prev) => prev.filter((p) => p.id !== partId));
       return true;
     } catch (err) {
@@ -92,5 +125,5 @@ export function useEquipmentParts() {
     }
   }, []);
 
-  return { parts, loading, fetchParts, addPart, updatePart, deletePart };
+  return { parts, loading, error, fetchParts, addPart, updatePart, deletePart };
 }

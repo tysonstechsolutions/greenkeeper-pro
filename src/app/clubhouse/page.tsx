@@ -32,6 +32,12 @@ interface FormData {
   photos: string[];
 }
 
+interface StaffMember {
+  id: string;
+  full_name: string;
+  role: string;
+}
+
 export default function ClubhousePage() {
   const { issues, loading, fetchIssues, createIssue, updateIssue, deleteIssue } = useClubhouseIssues();
 
@@ -42,6 +48,7 @@ export default function ClubhousePage() {
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [formData, setFormData] = useState<FormData>({
     title: '',
     category: '',
@@ -56,6 +63,18 @@ export default function ClubhousePage() {
   useEffect(() => {
     fetchIssues();
   }, [fetchIssues]);
+
+  useEffect(() => {
+    const fetchStaff = async () => {
+      const supabase = createClient();
+      const { data } = await (supabase.from("profiles") as any)
+        .select("id, full_name, role")
+        .order("role")
+        .order("full_name");
+      if (data) setStaffMembers(data);
+    };
+    fetchStaff();
+  }, []);
 
   const filteredIssues = issues.filter((issue) => {
     const matchesSearch = issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -675,13 +694,30 @@ export default function ClubhousePage() {
               <Label htmlFor="assignedTo" className="font-semibold mb-2 block">
                 Assigned To
               </Label>
-              <Input
-                id="assignedTo"
-                name="assignedTo"
+              <Select
                 value={formData.assignedTo}
-                onChange={handleFormChange}
-                placeholder="Staff member name"
-              />
+                onValueChange={(value) => setFormData(prev => ({ ...prev, assignedTo: value }))}
+              >
+                <SelectTrigger id="assignedTo">
+                  <SelectValue placeholder="Select staff member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffMembers.filter(s => s.role === 'mechanic').length > 0 && (
+                    <>
+                      <SelectItem value="__mechanic_header" disabled>— Mechanics —</SelectItem>
+                      {staffMembers.filter(s => s.role === 'mechanic').map(s => (
+                        <SelectItem key={s.id} value={s.full_name}>{s.full_name}</SelectItem>
+                      ))}
+                      <SelectItem value="__all_header" disabled>— All Staff —</SelectItem>
+                    </>
+                  )}
+                  {staffMembers.filter(s => s.role !== 'mechanic').map(s => (
+                    <SelectItem key={s.id} value={s.full_name}>
+                      {s.full_name} ({s.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Estimated Cost */}

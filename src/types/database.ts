@@ -511,6 +511,7 @@ export interface ParkingLotIssue {
   photos: string[];
   repair_notes: string | null;
   estimated_cost: number | null;
+  assigned_to: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string;

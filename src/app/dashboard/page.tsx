@@ -117,6 +117,7 @@ const quickActions = [
   { href: "/photos", label: "Take Photo", icon: Camera, color: "from-emerald-500 to-emerald-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-teal-600" },
   { href: "/chemicals/apply", label: "Log Chemical", icon: FlaskConical, color: "from-amber-500 to-amber-600" },
+  { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-orange-600" },
   { href: "/reports", label: "Reports", icon: FileText, color: "from-[#1B4332] to-[#2D6A4F]" },
 ];
 
@@ -359,7 +360,7 @@ export default function DashboardPage() {
             Quick Actions
           </h2>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {quickActions.map((action) => (
             <Link
               key={action.href}

@@ -82,6 +82,7 @@ export function useParkingLotIssues() {
     severity: string;
     photos?: string[];
     estimated_cost?: number;
+    assigned_to?: string;
   }) => {
     try {
       const supabase = createClient();
@@ -98,6 +99,7 @@ export function useParkingLotIssues() {
           severity: issue.severity,
           photos: issue.photos || [],
           estimated_cost: issue.estimated_cost || null,
+          assigned_to: issue.assigned_to || null,
         })
         .select()
         .single();

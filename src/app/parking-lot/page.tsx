@@ -66,7 +66,14 @@ interface FormData {
   severity: typeof SEVERITIES[number];
   description: string;
   estimatedCost: string;
+  assignedTo: string;
   photos: string[];
+}
+
+interface StaffMember {
+  id: string;
+  full_name: string;
+  role: string;
 }
 
 export default function ParkingLotPage() {
@@ -80,6 +87,7 @@ export default function ParkingLotPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [formData, setFormData] = useState<FormData>({
     title: '',
     location: '',
@@ -87,12 +95,25 @@ export default function ParkingLotPage() {
     severity: 'moderate',
     description: '',
     estimatedCost: '',
+    assignedTo: '',
     photos: [],
   });
 
   useEffect(() => {
     fetchIssues();
   }, [fetchIssues]);
+
+  useEffect(() => {
+    const fetchStaff = async () => {
+      const supabase = createClient();
+      const { data } = await (supabase.from("profiles") as any)
+        .select("id, full_name, role")
+        .order("role")
+        .order("full_name");
+      if (data) setStaffMembers(data);
+    };
+    fetchStaff();
+  }, []);
 
   const filteredIssues = issues.filter((issue) => {
     const matchesSearch =
@@ -180,6 +201,7 @@ export default function ParkingLotPage() {
         severity: formData.severity,
         description: formData.description || undefined,
         estimated_cost: formData.estimatedCost ? parseFloat(formData.estimatedCost) : undefined,
+        assigned_to: formData.assignedTo || undefined,
         photos: formData.photos,
       });
 
@@ -195,6 +217,7 @@ export default function ParkingLotPage() {
         severity: 'moderate',
         description: '',
         estimatedCost: '',
+        assignedTo: '',
         photos: [],
       });
 
@@ -486,6 +509,18 @@ export default function ParkingLotPage() {
                           </div>
                         )}
 
+                        {/* Assigned To */}
+                        {issue.assigned_to && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700">
+                              Assigned To
+                            </p>
+                            <p className="mt-1 text-sm text-gray-600">
+                              {issue.assigned_to}
+                            </p>
+                          </div>
+                        )}
+
                         {/* Cost */}
                         {issue.estimated_cost != null && (
                           <div>
@@ -711,6 +746,37 @@ export default function ParkingLotPage() {
                   onChange={(e) => handleFormChange('estimatedCost', e.target.value)}
                 />
               </div>
+            </div>
+
+            {/* Assigned To */}
+            <div className="space-y-2">
+              <Label htmlFor="assignedTo" className="font-medium">
+                Assigned To
+              </Label>
+              <Select
+                value={formData.assignedTo}
+                onValueChange={(value) => handleFormChange('assignedTo', value)}
+              >
+                <SelectTrigger id="assignedTo">
+                  <SelectValue placeholder="Select staff member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffMembers.filter(s => s.role === 'mechanic').length > 0 && (
+                    <>
+                      <SelectItem value="__mechanic_header" disabled>— Mechanics —</SelectItem>
+                      {staffMembers.filter(s => s.role === 'mechanic').map(s => (
+                        <SelectItem key={s.id} value={s.full_name}>{s.full_name}</SelectItem>
+                      ))}
+                      <SelectItem value="__all_header" disabled>— All Staff —</SelectItem>
+                    </>
+                  )}
+                  {staffMembers.filter(s => s.role !== 'mechanic').map(s => (
+                    <SelectItem key={s.id} value={s.full_name}>
+                      {s.full_name} ({s.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Photo Upload */}
