@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Loader2,
   Camera,
+  FileText,
+  Download,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -183,6 +185,7 @@ export default function EquipmentPage() {
   const [typeFilter, setTypeFilter] = useState<EquipmentType | "all">("all");
   const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Check if user can add equipment — uses profile.role from profiles table
   const canAddEquipment = canManageEquipment;
@@ -229,6 +232,30 @@ export default function EquipmentPage() {
     router.push("/equipment/new");
   };
 
+  // Download equipment report
+  const handleDownloadReport = async () => {
+    setGeneratingReport(true);
+    try {
+      const params = new URLSearchParams();
+      if (conditionFilter !== "all") params.set("condition", conditionFilter);
+      const res = await fetch(`/api/reports/equipment-report${params.toString() ? `?${params}` : ""}`);
+      if (!res.ok) throw new Error("Failed to generate report");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vmgc-equipment-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Report download error:", err);
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
   // Filter equipment by condition
   const filteredEquipment = equipment.filter((item) => {
     if (conditionFilter === "all") return true;
@@ -243,12 +270,28 @@ export default function EquipmentPage() {
           description="Manage fleet and monitor conditions"
           icon={Wrench}
         />
-        {canAddEquipment && (
-          <Button onClick={handleAddClick} size="sm">
-            <Plus className="w-4 h-4 mr-2" />
-            Add
+        <div className="flex gap-2">
+          <Button
+            onClick={handleDownloadReport}
+            disabled={generatingReport || loading}
+            variant="outline"
+            size="sm"
+            className="border-[#1B4332] text-[#1B4332] hover:bg-[#1B4332] hover:text-white"
+          >
+            {generatingReport ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FileText className="w-4 h-4 mr-2" />
+            )}
+            {generatingReport ? "Generating..." : "Report"}
           </Button>
-        )}
+          {canAddEquipment && (
+            <Button onClick={handleAddClick} size="sm">
+              <Plus className="w-4 h-4 mr-2" />
+              Add
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Error message */}
