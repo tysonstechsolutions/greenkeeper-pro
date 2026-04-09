@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
-
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: Record<string, unknown>) => jsPDF;
-    lastAutoTable: { finalY: number };
-  }
-}
+import autoTable from "jspdf-autotable";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -199,7 +192,7 @@ export async function GET(request: NextRequest) {
         eq.parts_needed ? "Yes" : "—",
       ]);
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: y,
         head: [["Name", "Type", "Make/Model", "Serial #", "Tag", "Condition", "Status", "Parts?"]],
         body: rows,
@@ -208,7 +201,7 @@ export async function GET(request: NextRequest) {
         headStyles: { fillColor: BRAND_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
       });
-      y = doc.lastAutoTable.finalY + 10;
+      y = (doc as any).lastAutoTable.finalY + 10;
     }
 
     // ═══ DETAIL SECTIONS ═══

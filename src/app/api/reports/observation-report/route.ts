@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import { issueTypeLabels } from "@/lib/hole-constants";
 import { greenIssueTypeLabels } from "@/lib/green-constants";
 
-// Extend jsPDF type for autotable
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: (options: Record<string, unknown>) => jsPDF;
-    lastAutoTable: { finalY: number };
-  }
-}
-
-const BRAND_DARK = [27, 67, 50]; // #1B4332
-const BRAND_GREEN = [45, 106, 79]; // #2D6A4F
+const BRAND_DARK: [number, number, number] = [27, 67, 50]; // #1B4332
+const BRAND_GREEN: [number, number, number] = [45, 106, 79]; // #2D6A4F
 const BRAND_GOLD = [182, 141, 64]; // #B68D40
 const GRAY_600 = [75, 85, 99];
 const GRAY_400 = [156, 163, 175];
@@ -390,7 +382,7 @@ export async function GET(request: NextRequest) {
             p.timing || "—",
           ]);
 
-          doc.autoTable({
+          autoTable(doc, {
             startY: y,
             margin: { left: margin + 2, right: margin + 2 },
             head: [["Product", "Active Ingredient", "Rate", "Method", "Inventory", "Timing"]],
@@ -409,7 +401,7 @@ export async function GET(request: NextRequest) {
             },
           });
 
-          y = doc.lastAutoTable.finalY + 3;
+          y = (doc as any).lastAutoTable.finalY + 3;
         }
 
         // Application window
@@ -461,14 +453,14 @@ export async function GET(request: NextRequest) {
             fu.if_no_improvement || "—",
           ]);
 
-          doc.autoTable({
+          autoTable(doc, {
             startY: y,
             margin: { left: margin + 2, right: margin + 2 },
             head: [["When", "Action", "Look For", "If No Improvement"]],
             body: followData,
             styles: { fontSize: 7, cellPadding: 1.5 },
             headStyles: {
-              fillColor: BRAND_GREEN as number[],
+              fillColor: BRAND_GREEN,
               textColor: [255, 255, 255],
               fontSize: 7,
               fontStyle: "bold",
@@ -476,7 +468,7 @@ export async function GET(request: NextRequest) {
             alternateRowStyles: { fillColor: [245, 247, 250] },
           });
 
-          y = doc.lastAutoTable.finalY + 3;
+          y = (doc as any).lastAutoTable.finalY + 3;
         }
 
         // Prevention tips
