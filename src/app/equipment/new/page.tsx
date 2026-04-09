@@ -44,7 +44,7 @@ interface FormData extends CreateEquipmentData {
 
 export default function NewEquipmentPage() {
   const router = useRouter();
-  const { user, canManageEquipment } = useAuth();
+  const { user, profile, canManageEquipment } = useAuth();
   const { createEquipment, uploadEquipmentPhoto, updateEquipment } = useEquipment();
 
   const [submitting, setSubmitting] = useState(false);
@@ -73,7 +73,8 @@ export default function NewEquipmentPage() {
     service_interval_hours: undefined,
   });
 
-  const canAdd = canManageEquipment;
+  const equipmentRoles = ["super", "asst_super", "foreman", "mechanic", "director"];
+  const canAdd = canManageEquipment || (!!profile?.role && equipmentRoles.includes(profile.role));
 
   if (!canAdd) {
     return (

@@ -249,7 +249,7 @@ export function useAuthInternal(): UseAuthReturn {
   // Permission helpers — director can see everything (read-all oversight)
   const isManager = isSuper || isAsstSuper || isPro || isDirector;
   const canCreateInvites = isSuper || isAsstSuper || isDirector;
-  const canManageEquipment = isSuper || isAsstSuper || isMechanic || isDirector;
+  const canManageEquipment = isSuper || isAsstSuper || isForeman || isMechanic || isDirector;
   const canManageChemicals = isSuper || isAsstSuper || isDirector;
   const canApproveTimesheets = isSuper || isAsstSuper || isForeman || isDirector;
 

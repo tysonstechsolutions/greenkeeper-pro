@@ -95,7 +95,7 @@ interface StaffMember {
 export default function EquipmentDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, profile, canManageEquipment, isManager } = useAuth();
+  const { user, profile, canManageEquipment, isManager, loading: authLoading } = useAuth();
   const { createNotification } = useNotifications();
   const {
     fetchEquipmentItem,
@@ -180,8 +180,10 @@ export default function EquipmentDetailPage() {
   const [oilLevel, setOilLevel] = useState<"full" | "ok" | "low" | "critical" | "na">("na");
 
   // Permission checks — use profile.role from the profiles table (not user metadata)
-  const canEdit = canManageEquipment;
-  const canDelete = canManageEquipment;
+  // Direct role fallback in case canManageEquipment hasn't updated yet
+  const equipmentRoles = ["super", "asst_super", "foreman", "mechanic", "director"];
+  const canEdit = canManageEquipment || (!!profile?.role && equipmentRoles.includes(profile.role));
+  const canDelete = canManageEquipment || (!!profile?.role && equipmentRoles.includes(profile.role));
 
   // Load equipment data
   const loadEquipment = useCallback(async () => {
@@ -411,7 +413,7 @@ export default function EquipmentDetailPage() {
     setInspectionSheetOpen(true);
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin" />
