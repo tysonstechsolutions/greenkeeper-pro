@@ -5,6 +5,8 @@ import {
   Car,
   Plus,
   AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
   Camera,
   X,
   Search,
@@ -87,6 +89,7 @@ export default function ParkingLotPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  const [toastMessage, setToastMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [formData, setFormData] = useState<FormData>({
     title: '',
@@ -98,6 +101,11 @@ export default function ParkingLotPage() {
     assignedTo: '',
     photos: [],
   });
+
+  const showToast = (type: 'error' | 'success', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
 
   useEffect(() => {
     fetchIssues();
@@ -188,7 +196,7 @@ export default function ParkingLotPage() {
     e.preventDefault();
 
     if (!formData.title.trim() || !formData.location.trim()) {
-      alert('Please fill in title and location');
+      showToast('error', 'Please fill in title and location');
       return;
     }
 
@@ -206,7 +214,7 @@ export default function ParkingLotPage() {
       });
 
       if (!result) {
-        alert('Failed to save issue. Please try again.');
+        showToast('error', 'Failed to save issue. Please try again.');
         return;
       }
 
@@ -225,7 +233,7 @@ export default function ParkingLotPage() {
       await fetchIssues();
     } catch (error) {
       console.error('Failed to add issue:', error);
-      alert('Failed to add issue');
+      showToast('error', 'Failed to add issue');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,7 +244,7 @@ export default function ParkingLotPage() {
       await updateIssue(issueId, { status: newStatus as any });
     } catch (error) {
       console.error('Failed to update status:', error);
-      alert('Failed to update status');
+      showToast('error', 'Failed to update status');
     }
   };
 
@@ -249,12 +257,31 @@ export default function ParkingLotPage() {
       await deleteIssue(issueId);
     } catch (error) {
       console.error('Failed to delete issue:', error);
-      alert('Failed to delete issue');
+      showToast('error', 'Failed to delete issue');
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* Toast Message */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border max-w-md ${
+          toastMessage.type === 'error'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+        }`}>
+          {toastMessage.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+          )}
+          <span className="text-sm font-medium">{toastMessage.text}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-auto">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">

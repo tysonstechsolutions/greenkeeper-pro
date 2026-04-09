@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Building, Plus, AlertTriangle, ShoppingCart, Wrench, Sparkles, Camera, X, Search, Filter, MapPin, Check, Loader2, Clock, ChevronDown } from 'lucide-react';
+import { Building, Plus, AlertTriangle, ShoppingCart, Wrench, Sparkles, Camera, X, Search, Filter, MapPin, Check, Loader2, Clock, ChevronDown, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useClubhouseIssues, categoryLabels, categoryColors, clubhousePriorityLabels, clubhousePriorityColors, clubhouseStatusLabels, clubhouseStatusColors } from '@/lib/hooks/useClubhouseIssues';
 import { ClubhouseIssue } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,6 +49,7 @@ export default function ClubhousePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [toastMessage, setToastMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [formData, setFormData] = useState<FormData>({
     title: '',
     category: '',
@@ -59,6 +60,11 @@ export default function ClubhousePage() {
     estimatedCost: '',
     photos: [],
   });
+
+  const showToast = (type: 'error' | 'success', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
 
   useEffect(() => {
     fetchIssues();
@@ -152,7 +158,7 @@ export default function ClubhousePage() {
     e.preventDefault();
 
     if (!formData.title || !formData.category) {
-      alert('Please fill in required fields');
+      showToast('error', 'Please fill in required fields');
       return;
     }
 
@@ -170,7 +176,7 @@ export default function ClubhousePage() {
       });
 
       if (!result) {
-        alert('Failed to save issue. Please try again.');
+        showToast('error', 'Failed to save issue. Please try again.');
         return;
       }
 
@@ -188,7 +194,7 @@ export default function ClubhousePage() {
       await fetchIssues();
     } catch (error) {
       console.error('Error adding issue:', error);
-      alert('Failed to add issue');
+      showToast('error', 'Failed to add issue');
     } finally {
       setIsSubmitting(false);
     }
@@ -199,7 +205,7 @@ export default function ClubhousePage() {
       await updateIssue(issueId, { status: newStatus });
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status');
+      showToast('error', 'Failed to update status');
     }
   };
 
@@ -209,7 +215,7 @@ export default function ClubhousePage() {
       await deleteIssue(issueId);
     } catch (error) {
       console.error('Error deleting issue:', error);
-      alert('Failed to delete issue');
+      showToast('error', 'Failed to delete issue');
     }
   };
 
@@ -225,6 +231,25 @@ export default function ClubhousePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast Message */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border max-w-md animate-in fade-in slide-in-from-top-2 ${
+          toastMessage.type === 'error'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+        }`}>
+          {toastMessage.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+          )}
+          <span className="text-sm font-medium">{toastMessage.text}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-auto">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-8">
