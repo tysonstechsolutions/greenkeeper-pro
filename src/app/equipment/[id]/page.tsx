@@ -690,15 +690,23 @@ export default function EquipmentDetailPage() {
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={() => { setAddingPart(false); setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" }); }}>Cancel</Button>
                 <Button size="sm" disabled={!newPart.name.trim()} onClick={async () => {
-                  await addPart(equipmentId, {
+                  const result = await addPart(equipmentId, {
                     name: newPart.name,
                     part_number: newPart.part_number || undefined,
                     description: newPart.description || undefined,
                     quantity: parseInt(newPart.quantity) || 1,
                     estimated_cost: newPart.estimated_cost ? parseFloat(newPart.estimated_cost) : undefined,
                   });
-                  setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" });
-                  setAddingPart(false);
+                  if (result) {
+                    setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" });
+                    setAddingPart(false);
+                    setSaveSuccess(true);
+                    setTimeout(() => setSaveSuccess(false), 2000);
+                    // Re-fetch to ensure sync
+                    await fetchParts(equipmentId);
+                  } else {
+                    alert("Failed to save part. Please try again.");
+                  }
                 }}>Add Part</Button>
               </div>
             </div>
@@ -722,7 +730,7 @@ export default function EquipmentDetailPage() {
                     {part.description && <p className="text-xs text-gray-500 mt-1">{part.description}</p>}
                     <div className="text-xs text-gray-400 mt-1 flex gap-3">
                       <span>Qty: {part.quantity}</span>
-                      {part.estimated_cost && <span>Est: ${part.estimated_cost.toFixed(2)}</span>}
+                      {part.estimated_cost != null && <span>Est: ${Number(part.estimated_cost).toFixed(2)}</span>}
                     </div>
                   </div>
                   {canEdit && (
@@ -805,7 +813,7 @@ export default function EquipmentDetailPage() {
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" }); }}>Cancel</Button>
                 <Button size="sm" disabled={!newService.description.trim() || !newService.performed_by.trim()} onClick={async () => {
-                  await addServiceRecord(equipmentId, {
+                  const result = await addServiceRecord(equipmentId, {
                     service_date: newService.service_date,
                     description: newService.description,
                     performed_by: newService.performed_by,
@@ -813,8 +821,16 @@ export default function EquipmentDetailPage() {
                     cost: newService.cost ? parseFloat(newService.cost) : undefined,
                     parts_used: newService.parts_used || undefined,
                   });
-                  setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
-                  setAddingService(false);
+                  if (result) {
+                    setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
+                    setAddingService(false);
+                    setSaveSuccess(true);
+                    setTimeout(() => setSaveSuccess(false), 2000);
+                    // Re-fetch to ensure sync
+                    await fetchServiceRecords(equipmentId);
+                  } else {
+                    alert("Failed to save service record. Please try again.");
+                  }
                 }}>Add Record</Button>
               </div>
             </div>
