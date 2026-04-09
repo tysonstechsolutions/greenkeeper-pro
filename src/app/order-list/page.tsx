@@ -39,7 +39,6 @@ import {
   orderStatusColors,
 } from '@/lib/hooks/useOrderItems';
 import type { OrderItem } from '@/types/database';
-import { createClient } from '@/lib/supabase/client';
 
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -116,7 +115,7 @@ export default function OrderListPage() {
 
     setIsSubmitting(true);
     try {
-      await createItem({
+      const result = await createItem({
         name: formData.itemName,
         category: formData.category,
         description: formData.description || undefined,
@@ -126,6 +125,11 @@ export default function OrderListPage() {
         vendor: formData.vendor || undefined,
         notes: formData.notes || undefined,
       });
+
+      if (!result) {
+        alert('Failed to save order item. Please try again.');
+        return;
+      }
 
       setFormData({
         itemName: '',
@@ -139,6 +143,7 @@ export default function OrderListPage() {
       });
 
       setIsSheetOpen(false);
+      await fetchItems();
     } catch (error) {
       console.error('Failed to add order item:', error);
       alert('Failed to add order item');
@@ -149,10 +154,13 @@ export default function OrderListPage() {
 
   const handleMarkOrdered = async (itemId: string) => {
     try {
-      await updateItem(itemId, {
-        status: 'ordered',
-        ordered_date: new Date().toISOString(),
-      });
+      const result = await updateItem(itemId, {
+        status: 'ordered' as any,
+        ordered_date: new Date().toISOString().slice(0, 10),
+      } as any);
+      if (!result) {
+        alert('Failed to update status. Please try again.');
+      }
     } catch (error) {
       console.error('Failed to update status:', error);
       alert('Failed to update status');
@@ -161,10 +169,13 @@ export default function OrderListPage() {
 
   const handleMarkReceived = async (itemId: string) => {
     try {
-      await updateItem(itemId, {
-        status: 'received',
-        received_date: new Date().toISOString(),
-      });
+      const result = await updateItem(itemId, {
+        status: 'received' as any,
+        received_date: new Date().toISOString().slice(0, 10),
+      } as any);
+      if (!result) {
+        alert('Failed to update status. Please try again.');
+      }
     } catch (error) {
       console.error('Failed to update status:', error);
       alert('Failed to update status');
@@ -734,7 +745,7 @@ function OrderItemCard({
         )}
 
         {/* Cost */}
-        {item.estimated_cost && (
+        {item.estimated_cost != null && (
           <div>
             <p className="text-xs font-semibold text-gray-700">Est. Cost</p>
             <p className="mt-1 text-sm font-semibold text-gray-900">

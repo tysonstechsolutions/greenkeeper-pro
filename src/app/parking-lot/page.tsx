@@ -173,7 +173,7 @@ export default function ParkingLotPage() {
 
     setIsSubmitting(true);
     try {
-      await createIssue({
+      const result = await createIssue({
         title: formData.title,
         location: formData.location || undefined,
         issue_type: formData.issueType,
@@ -182,6 +182,11 @@ export default function ParkingLotPage() {
         estimated_cost: formData.estimatedCost ? parseFloat(formData.estimatedCost) : undefined,
         photos: formData.photos,
       });
+
+      if (!result) {
+        alert('Failed to save issue. Please try again.');
+        return;
+      }
 
       setFormData({
         title: '',
@@ -194,6 +199,7 @@ export default function ParkingLotPage() {
       });
 
       setIsSheetOpen(false);
+      await fetchIssues();
     } catch (error) {
       console.error('Failed to add issue:', error);
       alert('Failed to add issue');
@@ -481,7 +487,7 @@ export default function ParkingLotPage() {
                         )}
 
                         {/* Cost */}
-                        {issue.estimated_cost && (
+                        {issue.estimated_cost != null && (
                           <div>
                             <p className="text-xs font-semibold text-gray-700">
                               Estimated Cost

@@ -26,23 +26,21 @@ const categoryColors: Record<string, [number, number, number]> = {
 const categoryLabels: Record<string, string> = {
   clubhouse: "Clubhouse",
   cart_paths: "Cart Paths",
-  turf_course: "Turf Course",
+  turf_course: "Turf & Course",
   general: "General",
 };
 
 const priorityLabels: Record<string, string> = {
-  critical: "Critical",
-  high: "High",
-  medium: "Medium",
   low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
 };
 
 const statusLabels: Record<string, string> = {
-  pending: "Pending",
+  needed: "Needed",
   ordered: "Ordered",
   received: "Received",
-  in_stock: "In Stock",
-  needed: "Needed",
 };
 
 function s(val: unknown, fallback = "—"): string {

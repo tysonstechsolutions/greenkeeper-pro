@@ -139,7 +139,7 @@ export default function ClubhousePage() {
 
     setIsSubmitting(true);
     try {
-      await createIssue({
+      const result = await createIssue({
         title: formData.title,
         category: formData.category,
         priority: formData.priority,
@@ -149,6 +149,11 @@ export default function ClubhousePage() {
         estimated_cost: formData.estimatedCost ? parseFloat(formData.estimatedCost) : undefined,
         assigned_to: formData.assignedTo || undefined,
       });
+
+      if (!result) {
+        alert('Failed to save issue. Please try again.');
+        return;
+      }
 
       setFormData({
         title: '',
@@ -161,6 +166,7 @@ export default function ClubhousePage() {
         photos: [],
       });
       setIsSheetOpen(false);
+      await fetchIssues();
     } catch (error) {
       console.error('Error adding issue:', error);
       alert('Failed to add issue');
@@ -449,7 +455,7 @@ export default function ClubhousePage() {
                         <span className="font-semibold">Assigned to:</span> {issue.assigned_to}
                       </div>
                     )}
-                    {issue.estimated_cost && (
+                    {issue.estimated_cost != null && (
                       <div className="text-gray-700">
                         <span className="font-semibold">Est. Cost:</span> ${Number(issue.estimated_cost).toFixed(2)}
                       </div>

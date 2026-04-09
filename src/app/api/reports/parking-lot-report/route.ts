@@ -214,7 +214,7 @@ export async function GET(request: NextRequest) {
         typeLabels[issue.issue_type] || s(issue.issue_type),
         severityLabels[sev] || sev,
         statusLabels[issue.status] || s(issue.status),
-        issue.estimated_cost != null ? "$" + Number(issue.estimated_cost).toFixed(0) : "—",
+        issue.estimated_cost != null ? "$" + Number(issue.estimated_cost).toFixed(2) : "—",
         issue.created_at ? new Date(issue.created_at).toLocaleDateString("en-US") : "—",
       ];
     });

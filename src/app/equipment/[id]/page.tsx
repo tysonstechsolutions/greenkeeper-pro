@@ -626,7 +626,7 @@ export default function EquipmentDetailPage() {
             </div>
           )}
 
-          {equipment.estimated_repair_cost && (
+          {equipment.estimated_repair_cost != null && (
             <div>
               <Label className="text-sm font-medium">Estimated Repair Cost</Label>
               <p className="text-lg font-semibold mt-1">
@@ -1017,10 +1017,10 @@ export default function EquipmentDetailPage() {
               </p>
             </div>
           )}
-          {equipment.purchase_price && (
+          {equipment.purchase_price != null && (
             <div>
               <Label className="text-sm font-medium">Purchase Price</Label>
-              <p className="text-sm text-gray-600">${equipment.purchase_price.toFixed(2)}</p>
+              <p className="text-sm text-gray-600">${Number(equipment.purchase_price).toFixed(2)}</p>
             </div>
           )}
         </CardContent>
