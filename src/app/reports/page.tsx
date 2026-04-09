@@ -17,6 +17,10 @@ import {
   Loader2,
   ChevronRight,
   FileSpreadsheet,
+  Car,
+  Building,
+  Map,
+  FileArchive,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -95,9 +99,30 @@ const REPORT_TYPES = [
     icon: Wrench,
     color: "#95D5B2",
   },
+  {
+    id: "parking-lot",
+    name: "Parking Lot & Cart Path",
+    description: "Pavement conditions, potholes, cracks, and repairs",
+    icon: Car,
+    color: "#64748B",
+  },
+  {
+    id: "clubhouse",
+    name: "Clubhouse",
+    description: "Damage, cleaning, orders, and maintenance issues",
+    icon: Building,
+    color: "#D97706",
+  },
+  {
+    id: "observations",
+    name: "Course Observations",
+    description: "Hole and green condition observations",
+    icon: Map,
+    color: "#0D9488",
+  },
 ];
 
-type ReportTypeId = "daily" | "weekly" | "monthly" | "staff" | "chemical" | "equipment";
+type ReportTypeId = "daily" | "weekly" | "monthly" | "staff" | "chemical" | "equipment" | "parking-lot" | "clubhouse" | "observations";
 
 export default function ReportsPage() {
   const { profile } = useAuth();
@@ -142,8 +167,63 @@ export default function ReportsPage() {
     return reportType.requiresRole.includes(profile?.role || "");
   }, [profile?.role]);
 
+  // Direct PDF download for report types that have server-side PDF routes
+  const handleDirectPDFDownload = useCallback(async (reportType: string) => {
+    setGenerating(true);
+    try {
+      const routeMap: Record<string, string> = {
+        "equipment": "/api/reports/equipment-report",
+        "parking-lot": "/api/reports/parking-lot-report",
+        "clubhouse": "/api/reports/clubhouse-report",
+        "observations": "/api/reports/observation-report",
+      };
+      const url = routeMap[reportType];
+      if (!url) return;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to generate report");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `vmgc-${reportType}-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (error) {
+      console.error("Error downloading report:", error);
+      alert("Failed to download report. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }, []);
+
+  // Download all reports as ZIP
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const handleDownloadAll = useCallback(async () => {
+    setDownloadingAll(true);
+    try {
+      const res = await fetch("/api/reports/full-download");
+      if (!res.ok) throw new Error("Failed to generate full report");
+      const blob = await res.blob();
+      const contentType = res.headers.get("content-type") || "";
+      const ext = contentType.includes("zip") ? "zip" : "pdf";
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `vmgc-full-report-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (error) {
+      console.error("Error downloading full report:", error);
+      alert("Failed to download full report. Please try again.");
+    } finally {
+      setDownloadingAll(false);
+    }
+  }, []);
+
   // Generate report
   const handleGenerateReport = useCallback(async (reportType: ReportTypeId) => {
+    // PDF-direct reports
+    if (["equipment", "parking-lot", "clubhouse", "observations"].includes(reportType)) {
+      return handleDirectPDFDownload(reportType);
+    }
     setGenerating(true);
     try {
       switch (reportType) {
@@ -154,10 +234,6 @@ export default function ReportsPage() {
         case "weekly":
           const weekly = await generateWeeklyReport(selectedWeekStart);
           setWeeklyReport(weekly);
-          break;
-        case "equipment":
-          const equipment = await generateEquipmentReport(dateRange);
-          setEquipmentReport(equipment);
           break;
         case "chemical":
           const chemical = await generateChemicalReport(dateRange);
@@ -170,7 +246,7 @@ export default function ReportsPage() {
     } finally {
       setGenerating(false);
     }
-  }, [selectedDate, selectedWeekStart, dateRange, generateDailyReport, generateWeeklyReport, generateEquipmentReport, generateChemicalReport]);
+  }, [selectedDate, selectedWeekStart, dateRange, generateDailyReport, generateWeeklyReport, generateChemicalReport, handleDirectPDFDownload]);
 
   // Export handlers
   const handleExportPDF = async () => {
@@ -353,6 +429,32 @@ export default function ReportsPage() {
             })}
           </div>
 
+          {/* Download All Reports */}
+          <Card className="border-dashed border-2 border-[#1B4332]/30 bg-[#1B4332]/5">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#1B4332]/10">
+                  <FileArchive className="w-5 h-5 text-[#1B4332]" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Download All Reports</h3>
+                  <p className="text-xs text-muted-foreground">Equipment, Parking Lot, Clubhouse, and Course Observations as a ZIP</p>
+                </div>
+              </div>
+              <Button
+                onClick={handleDownloadAll}
+                disabled={downloadingAll}
+                className="bg-[#1B4332] hover:bg-[#2D6A4F]"
+              >
+                {downloadingAll ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>
+                ) : (
+                  <><Download className="w-4 h-4 mr-2" />Download All</>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Report Configuration */}
           {activeReport && (
             <Card>
@@ -427,6 +529,14 @@ export default function ReportsPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                )}
+
+                {(["parking-lot", "clubhouse", "observations"].includes(activeReport)) && (
+                  <div className="py-2">
+                    <p className="text-sm text-muted-foreground">
+                      This report will generate a PDF with all current {activeReport === "parking-lot" ? "parking lot & cart path" : activeReport === "clubhouse" ? "clubhouse" : "course observation"} issues and their photos. Click Generate to download.
+                    </p>
                   </div>
                 )}
 

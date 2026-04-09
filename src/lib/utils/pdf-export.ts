@@ -14,7 +14,10 @@ export type ReportType =
   | "monthly"
   | "staff"
   | "chemical"
-  | "equipment";
+  | "equipment"
+  | "parking-lot"
+  | "clubhouse"
+  | "observations";
 
 export interface PDFExportOptions {
   /** Document title shown in PDF header */

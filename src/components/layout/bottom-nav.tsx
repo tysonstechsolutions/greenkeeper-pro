@@ -51,6 +51,7 @@ const moreRoutes = [
   "/briefing", "/assistant", "/checklists",
   "/equipment-checkout", "/member/conditions",
   "/polls", "/report-issue", "/member-insights", "/install",
+  "/parking-lot", "/clubhouse",
 ];
 
 export function BottomNav() {

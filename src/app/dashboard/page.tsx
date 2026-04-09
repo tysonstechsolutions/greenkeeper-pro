@@ -29,6 +29,7 @@ import {
   MapPin,
   ArrowRight,
   Zap,
+  FileText,
 } from "lucide-react";
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
@@ -116,6 +117,7 @@ const quickActions = [
   { href: "/photos", label: "Take Photo", icon: Camera, color: "from-emerald-500 to-emerald-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-teal-600" },
   { href: "/chemicals/apply", label: "Log Chemical", icon: FlaskConical, color: "from-amber-500 to-amber-600" },
+  { href: "/reports", label: "Reports", icon: FileText, color: "from-[#1B4332] to-[#2D6A4F]" },
 ];
 
 export default function DashboardPage() {
