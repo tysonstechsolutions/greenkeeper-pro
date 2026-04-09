@@ -456,6 +456,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("Equipment report error:", err);
-    return NextResponse.json({ error: "Failed to generate report" }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "Failed to generate report", details: message }, { status: 500 });
   }
 }
