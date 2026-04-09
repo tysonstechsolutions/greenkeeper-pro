@@ -10,6 +10,8 @@ declare module "jspdf" {
   }
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 const BRAND_DARK: [number, number, number] = [27, 67, 50];
 const BRAND_GREEN: [number, number, number] = [45, 106, 79];
 const BRAND_GOLD: [number, number, number] = [182, 141, 64];
@@ -43,74 +45,73 @@ const fuelLabels: Record<string, string> = {
   hybrid: "Hybrid", manual: "Manual/None", other: "Other",
 };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-async function fetchImageAsBase64(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-    if (!res.ok) return null;
-    const buffer = await res.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
-    const ct = res.headers.get("content-type") || "image/jpeg";
-    return `data:${ct};base64,${base64}`;
-  } catch { return null; }
-}
-
-function safe(val: unknown, fallback = "—"): string {
+function s(val: unknown, fallback = "—"): string {
   if (val === null || val === undefined || val === "") return fallback;
   return String(val);
 }
 
-export async function GET(request: NextRequest) {
+async function fetchPhoto(url: string): Promise<string | null> {
   try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const b64 = Buffer.from(buf).toString("base64");
+    const ct = res.headers.get("content-type") || "image/jpeg";
+    return `data:${ct};base64,${b64}`;
+  } catch { return null; }
+}
+
+export async function GET(request: NextRequest) {
+  // Step-by-step with try/catch per section for debugging
+  let step = "init";
+  try {
+    // ── AUTH ──
+    step = "auth";
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch user profile
+    step = "profile";
     const { data: profile } = await (supabase.from("profiles") as any)
       .select("full_name, role").eq("id", user.id).single();
 
+    // ── FETCH EQUIPMENT ──
+    step = "fetch-equipment";
     const url = new URL(request.url);
     const singleId = url.searchParams.get("id");
-    const filterCondition = url.searchParams.get("condition"); // e.g. "beyond_repair"
+    const filterCondition = url.searchParams.get("condition");
 
-    // Fetch equipment
     let query = (supabase.from("equipment") as any)
       .select("*")
       .neq("status", "retired")
       .order("name", { ascending: true });
+    if (singleId) query = query.eq("id", singleId);
+    if (filterCondition) query = query.eq("condition_status", filterCondition);
 
-    if (singleId) {
-      query = query.eq("id", singleId);
+    const { data: items, error: fetchErr } = await query;
+    if (fetchErr) {
+      return NextResponse.json({ error: "DB error", details: fetchErr.message }, { status: 500 });
     }
-    if (filterCondition) {
-      query = query.eq("condition_status", filterCondition);
-    }
-
-    const { data: equipmentList, error } = await query;
-    if (error) {
-      console.error("Equipment query error:", error);
-      return NextResponse.json({ error: "Failed to fetch equipment" }, { status: 500 });
-    }
-    if (!equipmentList || equipmentList.length === 0) {
+    if (!items || items.length === 0) {
       return NextResponse.json({ error: "No equipment found" }, { status: 404 });
     }
 
-    // Pre-fetch first photo for each equipment (limit to 10 concurrent)
+    // ── FETCH PHOTOS (parallel, max 30) ──
+    step = "photos";
     const photoMap = new Map<string, string | null>();
-    const photoFetches = equipmentList.slice(0, 50).map(async (eq: any) => {
-      const photoUrl = eq.photos?.[0] || eq.photo_url;
+    const fetches = items.slice(0, 30).map(async (eq: any) => {
+      const photoUrl = (eq.photos && eq.photos.length > 0) ? eq.photos[0] : eq.photo_url;
       if (photoUrl) {
-        const data = await fetchImageAsBase64(photoUrl);
+        const data = await fetchPhoto(photoUrl);
         photoMap.set(eq.id, data);
       }
     });
-    await Promise.all(photoFetches);
+    await Promise.all(fetches);
 
-    // ── Generate PDF ──
+    // ── BUILD PDF ──
+    step = "pdf-init";
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pw = doc.internal.pageSize.getWidth();
     const ph = doc.internal.pageSize.getHeight();
@@ -118,22 +119,13 @@ export async function GET(request: NextRequest) {
     const cw = pw - m * 2;
     let y = m;
 
-    const checkSpace = (needed: number) => {
-      if (y + needed > ph - 20) { doc.addPage(); y = m; }
-    };
-
+    const needPage = (h: number) => { if (y + h > ph - 20) { doc.addPage(); y = m; } };
     const dateStr = new Date().toLocaleDateString("en-US", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
 
-    const isSingleReport = equipmentList.length === 1;
-    const hasDRMOItems = equipmentList.some((eq: any) =>
-      eq.condition_status === "beyond_repair" || eq.status === "out_of_service"
-    );
-
-    // ═══════════════════════════════════════════
-    // HEADER BAR
-    // ═══════════════════════════════════════════
+    // ═══ HEADER ═══
+    step = "pdf-header";
     doc.setFillColor(...BRAND_DARK);
     doc.rect(0, 0, pw, 34, "F");
     doc.setFillColor(...BRAND_GOLD);
@@ -142,40 +134,28 @@ export async function GET(request: NextRequest) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
     doc.setTextColor(...WHITE);
-    doc.text(
-      isSingleReport ? "Equipment Condition Report" : "Fleet Equipment Report",
-      m, 16
-    );
+    doc.text(items.length === 1 ? "Equipment Condition Report" : "Fleet Equipment Report", m, 16);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(...BRAND_GOLD);
-    doc.text(
-      hasDRMOItems ? "Includes DRMO / Disposal Candidates" : "Condition & Inventory Summary",
-      m, 24
-    );
+    doc.text("Condition & Inventory Summary", m, 24);
 
     doc.setFontSize(9);
     doc.setTextColor(...WHITE);
     doc.text(dateStr, pw - m, 14, { align: "right" });
-    if (profile?.full_name) {
-      doc.text(`Prepared by: ${profile.full_name}`, pw - m, 20, { align: "right" });
-    }
-    doc.text(`${equipmentList.length} item${equipmentList.length > 1 ? "s" : ""}`, pw - m, 26, { align: "right" });
-
+    if (profile?.full_name) doc.text("Prepared by: " + profile.full_name, pw - m, 20, { align: "right" });
+    doc.text(items.length + " item" + (items.length > 1 ? "s" : ""), pw - m, 26, { align: "right" });
     y = 42;
 
-    // ═══════════════════════════════════════════
-    // SUMMARY STATS (fleet report only)
-    // ═══════════════════════════════════════════
-    if (!isSingleReport) {
-      const stats = {
-        good: equipmentList.filter((e: any) => e.condition_status === "good").length,
-        fair: equipmentList.filter((e: any) => e.condition_status === "fair").length,
-        needs_repair: equipmentList.filter((e: any) => e.condition_status === "needs_repair").length,
-        beyond_repair: equipmentList.filter((e: any) => e.condition_status === "beyond_repair").length,
-        parts_ordered: equipmentList.filter((e: any) => e.needs_parts_ordered).length,
-      };
+    // ═══ SUMMARY STATS ═══
+    if (items.length > 1) {
+      step = "pdf-stats";
+      const good = items.filter((e: any) => e.condition_status === "good").length;
+      const fair = items.filter((e: any) => e.condition_status === "fair").length;
+      const repair = items.filter((e: any) => e.condition_status === "needs_repair").length;
+      const beyond = items.filter((e: any) => e.condition_status === "beyond_repair").length;
+      const parts = items.filter((e: any) => e.needs_parts_ordered).length;
 
       doc.setFillColor(245, 247, 250);
       doc.roundedRect(m, y, cw, 22, 3, 3, "F");
@@ -183,237 +163,181 @@ export async function GET(request: NextRequest) {
       doc.roundedRect(m, y, cw, 22, 3, 3, "S");
 
       const colW = cw / 5;
-      const statItems = [
-        { label: "Good", val: stats.good, color: conditionColors.good },
-        { label: "Fair", val: stats.fair, color: conditionColors.fair },
-        { label: "Needs Repair", val: stats.needs_repair, color: conditionColors.needs_repair },
-        { label: "Beyond Repair", val: stats.beyond_repair, color: conditionColors.beyond_repair },
-        { label: "Parts Ordered", val: stats.parts_ordered, color: ORANGE },
+      const statData = [
+        { label: "Good", val: good, color: conditionColors.good },
+        { label: "Fair", val: fair, color: conditionColors.fair },
+        { label: "Needs Repair", val: repair, color: conditionColors.needs_repair },
+        { label: "Beyond Repair", val: beyond, color: conditionColors.beyond_repair },
+        { label: "Parts Ordered", val: parts, color: ORANGE },
       ];
-
-      statItems.forEach((s, i) => {
+      statData.forEach((st, i) => {
         const cx = m + colW * i + colW / 2;
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(16);
-        doc.setTextColor(...s.color);
-        doc.text(String(s.val), cx, y + 10, { align: "center" });
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+        doc.setTextColor(...st.color);
+        doc.text(String(st.val), cx, y + 10, { align: "center" });
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
         doc.setTextColor(...GRAY_600);
-        doc.text(s.label, cx, y + 17, { align: "center" });
+        doc.text(st.label, cx, y + 17, { align: "center" });
       });
-
       y += 28;
 
-      // ═══════════════════════════════════════════
-      // MASTER TABLE — all equipment
-      // ═══════════════════════════════════════════
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
+      // ═══ MASTER TABLE ═══
+      step = "pdf-table";
+      doc.setFont("helvetica", "bold"); doc.setFontSize(12);
       doc.setTextColor(...BRAND_DARK);
       doc.text("Equipment Inventory", m, y + 5);
       y += 9;
 
-      const tableRows = equipmentList.map((eq: any) => [
-        safe(eq.name),
-        typeLabels[eq.equipment_type] || safe(eq.equipment_type),
+      const rows = items.map((eq: any) => [
+        s(eq.name),
+        typeLabels[eq.equipment_type] || s(eq.equipment_type),
         [eq.make, eq.model].filter(Boolean).join(" ") || "—",
-        safe(eq.serial_number),
-        safe(eq.asset_tag),
-        conditionLabels[eq.condition_status] || safe(eq.condition_status),
-        statusLabels[eq.status] || safe(eq.status),
+        s(eq.serial_number),
+        s(eq.asset_tag),
+        conditionLabels[eq.condition_status] || s(eq.condition_status),
+        statusLabels[eq.status] || s(eq.status),
         eq.parts_needed ? "Yes" : "—",
       ]);
 
       doc.autoTable({
         startY: y,
         head: [["Name", "Type", "Make/Model", "Serial #", "Tag", "Condition", "Status", "Parts?"]],
-        body: tableRows,
+        body: rows,
         margin: { left: m, right: m },
         styles: { fontSize: 7, cellPadding: 1.5 },
         headStyles: { fillColor: BRAND_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 22 },
-          2: { cellWidth: 28 },
-          3: { cellWidth: 22 },
-          4: { cellWidth: 12 },
-          5: { cellWidth: 22 },
-          6: { cellWidth: 22 },
-          7: { cellWidth: 14 },
-        },
-        didParseCell: (data: any) => {
-          // Color condition column
-          if (data.column.index === 5 && data.section === "body") {
-            const val = data.cell.raw as string;
-            if (val === "Beyond Repair") data.cell.styles.textColor = RED;
-            else if (val === "Needs Repair") data.cell.styles.textColor = ORANGE;
-            else if (val === "Good") data.cell.styles.textColor = conditionColors.good;
-          }
-        },
       });
-
       y = doc.lastAutoTable.finalY + 10;
     }
 
-    // ═══════════════════════════════════════════
-    // DETAILED SECTIONS — each equipment item
-    // ═══════════════════════════════════════════
-    for (let idx = 0; idx < equipmentList.length; idx++) {
-      const eq = equipmentList[idx];
-      const condition = eq.condition_status || "unknown";
-      const condLabel = conditionLabels[condition] || condition;
-      const condColor = conditionColors[condition] || GRAY_400;
+    // ═══ DETAIL SECTIONS ═══
+    step = "pdf-details";
+    for (let idx = 0; idx < items.length; idx++) {
+      const eq = items[idx];
+      const cond = eq.condition_status || "unknown";
+      const condLabel = conditionLabels[cond] || cond;
+      const condColor = conditionColors[cond] || GRAY_400;
       const eqStatus = statusLabels[eq.status] || eq.status || "Unknown";
-      const isDRMO = condition === "beyond_repair" || eq.status === "out_of_service";
+      const isDRMO = cond === "beyond_repair" || eq.status === "out_of_service";
       const photo = photoMap.get(eq.id) || null;
 
-      // Page break if near bottom
-      checkSpace(80);
+      needPage(75);
 
-      // ── Equipment header bar ──
-      const headerH = 14;
+      // Header bar
       doc.setFillColor(...(isDRMO ? RED : BRAND_GREEN));
-      doc.roundedRect(m, y, cw, headerH, 2, 2, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
+      doc.roundedRect(m, y, cw, 14, 2, 2, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11);
       doc.setTextColor(...WHITE);
-      doc.text(safe(eq.name, "Unnamed"), m + 4, y + 9);
+      doc.text(s(eq.name, "Unnamed"), m + 4, y + 9);
 
-      // Condition badge — right
+      // Condition badge
       doc.setFontSize(8);
-      const badgeText = isDRMO ? `DRMO — ${condLabel}` : condLabel;
-      const bw = doc.getTextWidth(badgeText) + 8;
-      doc.setFillColor(255, 255, 255);
+      const badgeTxt = isDRMO ? "DRMO - " + condLabel : condLabel;
+      const bw = doc.getTextWidth(badgeTxt) + 8;
+      doc.setFillColor(...WHITE);
       doc.roundedRect(pw - m - bw - 3, y + 3, bw, 8, 2, 2, "F");
       doc.setTextColor(...condColor);
-      doc.text(badgeText.toUpperCase(), pw - m - bw / 2 - 3, y + 8.5, { align: "center" });
+      doc.text(badgeTxt.toUpperCase(), pw - m - bw / 2 - 3, y + 8.5, { align: "center" });
+      y += 17;
 
-      y += headerH + 3;
-
-      // ── Photo + Details side by side ──
+      // Photo + details
       const detailStartY = y;
-      const photoWidth = photo ? 55 : 0;
-      const detailX = m + (photo ? photoWidth + 5 : 0);
-      const detailW = cw - (photo ? photoWidth + 5 : 0);
+      const photoW = photo ? 55 : 0;
+      const detailX = m + (photo ? photoW + 5 : 0);
 
       if (photo) {
         try {
           const fmt = photo.includes("image/png") ? "PNG" : "JPEG";
-          doc.addImage(photo, fmt, m, y, photoWidth, 40);
-        } catch {
-          // skip photo
-        }
+          doc.addImage(photo, fmt, m, y, photoW, 40);
+        } catch { /* skip photo */ }
       }
 
-      // Detail text
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
       doc.setTextColor(...GRAY_600);
-
       const lines = [
-        `Type: ${typeLabels[eq.equipment_type] || safe(eq.equipment_type)}`,
-        `Make/Model: ${[eq.make, eq.model].filter(Boolean).join(" ") || "—"}`,
-        `Year: ${safe(eq.year)}  |  Serial: ${safe(eq.serial_number)}`,
-        `Asset Tag: ${safe(eq.asset_tag)}  |  Fuel: ${fuelLabels[eq.fuel_type] || safe(eq.fuel_type)}`,
-        `Hours: ${eq.current_hours != null ? eq.current_hours + " hrs" : "—"}  |  Location: ${safe(eq.location)}`,
-        `Status: ${eqStatus}  |  Condition: ${condLabel}`,
+        "Type: " + (typeLabels[eq.equipment_type] || s(eq.equipment_type)),
+        "Make/Model: " + ([eq.make, eq.model].filter(Boolean).join(" ") || "—"),
+        "Year: " + s(eq.year) + "  |  Serial: " + s(eq.serial_number),
+        "Asset Tag: " + s(eq.asset_tag) + "  |  Fuel: " + (fuelLabels[eq.fuel_type] || s(eq.fuel_type)),
+        "Hours: " + (eq.current_hours != null ? eq.current_hours + " hrs" : "—") + "  |  Location: " + s(eq.location),
+        "Status: " + eqStatus + "  |  Condition: " + condLabel,
       ];
-
-      lines.forEach((line, i) => {
-        doc.text(line, detailX, y + 5 + i * 4.5);
-      });
-
+      lines.forEach((line, i) => { doc.text(line, detailX, y + 5 + i * 4.5); });
       y = Math.max(y + lines.length * 4.5 + 5, detailStartY + (photo ? 42 : 0));
 
-      // ── Condition notes ──
+      // Condition notes
       if (eq.condition_notes) {
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic"); doc.setFontSize(8);
         doc.setTextColor(...GRAY_600);
-        const noteLines = doc.splitTextToSize(`Notes: ${eq.condition_notes}`, cw - 8);
-        checkSpace(noteLines.length * 3.5 + 4);
-        doc.text(noteLines, m + 4, y);
-        y += noteLines.length * 3.5 + 2;
+        const nl = doc.splitTextToSize("Notes: " + eq.condition_notes, cw - 8);
+        needPage(nl.length * 3.5 + 4);
+        doc.text(nl, m + 4, y);
+        y += nl.length * 3.5 + 2;
       }
 
-      // ── Parts needed ──
+      // Parts needed
       if (eq.needs_parts_ordered || eq.parts_needed) {
-        checkSpace(14);
+        needPage(14);
         doc.setFillColor(255, 247, 237);
         doc.roundedRect(m, y, cw, 12, 2, 2, "F");
         doc.setDrawColor(251, 191, 36);
         doc.roundedRect(m, y, cw, 12, 2, 2, "S");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8);
         doc.setTextColor(...ORANGE);
         doc.text("PARTS NEEDED:", m + 4, y + 5);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(...GRAY_600);
-        doc.text(safe(eq.parts_needed, "Unspecified"), m + 35, y + 5);
+        doc.setFont("helvetica", "normal"); doc.setTextColor(...GRAY_600);
+        doc.text(s(eq.parts_needed, "Unspecified"), m + 35, y + 5);
         if (eq.estimated_repair_cost != null) {
-          doc.text(
-            `Est. Cost: $${Number(eq.estimated_repair_cost).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-            m + 4, y + 10
-          );
+          doc.text("Est. Cost: $" + Number(eq.estimated_repair_cost).toLocaleString("en-US", { minimumFractionDigits: 2 }), m + 4, y + 10);
         }
         y += 14;
       }
 
-      // ── DRMO box ──
+      // DRMO box
       if (isDRMO) {
-        checkSpace(12);
+        needPage(12);
         doc.setFillColor(254, 242, 242);
         doc.roundedRect(m, y, cw, 10, 2, 2, "F");
         doc.setFillColor(...RED);
         doc.rect(m, y, 2.5, 10, "F");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8);
         doc.setTextColor(...RED);
         doc.text("RECOMMENDED FOR DRMO / DISPOSAL", m + 6, y + 4);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
         doc.setTextColor(...GRAY_600);
-        const reason = condition === "beyond_repair"
-          ? "Beyond economical repair."
-          : "Currently out of service.";
-        doc.text(reason, m + 6, y + 8);
+        doc.text(cond === "beyond_repair" ? "Beyond economical repair." : "Currently out of service.", m + 6, y + 8);
         y += 12;
       }
 
-      // ── General notes ──
+      // Notes (truncated)
       if (eq.notes) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
         doc.setTextColor(...GRAY_600);
-        const nl = doc.splitTextToSize(`Notes: ${eq.notes}`, cw - 8);
-        const truncated = nl.slice(0, 3);
-        checkSpace(truncated.length * 3 + 2);
-        doc.text(truncated, m + 4, y + 3);
-        y += truncated.length * 3 + 4;
+        const nl = doc.splitTextToSize("Notes: " + eq.notes, cw - 8);
+        const trunc = nl.slice(0, 3);
+        needPage(trunc.length * 3 + 2);
+        doc.text(trunc, m + 4, y + 3);
+        y += trunc.length * 3 + 4;
       }
 
       // Separator
       y += 3;
-      if (idx < equipmentList.length - 1) {
+      if (idx < items.length - 1) {
         doc.setDrawColor(229, 231, 235);
         doc.line(m, y, pw - m, y);
         y += 5;
       }
     }
 
-    // ═══════════════════════════════════════════
-    // SIGNATURE BLOCK
-    // ═══════════════════════════════════════════
-    checkSpace(30);
+    // ═══ SIGNATURE BLOCK ═══
+    step = "pdf-signatures";
+    needPage(30);
     y += 5;
     doc.setDrawColor(200, 200, 200);
     doc.line(m, y, pw - m, y);
     y += 10;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.setTextColor(...GRAY_600);
     doc.text("Superintendent Signature:", m, y);
     doc.line(m + 42, y + 1, m + 100, y + 1);
@@ -425,38 +349,35 @@ export async function GET(request: NextRequest) {
     doc.text("Date:", m + 105, y);
     doc.line(m + 115, y + 1, m + 150, y + 1);
 
-    // ═══════════════════════════════════════════
-    // FOOTER on all pages
-    // ═══════════════════════════════════════════
-    const totalPages = doc.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
+    // ═══ FOOTER ═══
+    step = "pdf-footer";
+    const tp = doc.getNumberOfPages();
+    for (let i = 1; i <= tp; i++) {
       doc.setPage(i);
-      doc.setFontSize(7);
-      doc.setTextColor(...GRAY_400);
-      doc.text(`Page ${i} of ${totalPages}`, pw / 2, ph - 8, { align: "center" });
-      doc.text("VMGC GreenKeeper Pro — Equipment Report", m, ph - 8);
+      doc.setFontSize(7); doc.setTextColor(...GRAY_400);
+      doc.text("Page " + i + " of " + tp, pw / 2, ph - 8, { align: "center" });
+      doc.text("VMGC GreenKeeper Pro", m, ph - 8);
       doc.text(new Date().toLocaleDateString(), pw - m, ph - 8, { align: "right" });
     }
 
-    // ═══════════════════════════════════════════
-    // OUTPUT
-    // ═══════════════════════════════════════════
-    const pdfBuffer = doc.output("arraybuffer");
-    const fileName = isSingleReport
-      ? `${safe(equipmentList[0].name, "equipment").replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "-").toLowerCase()}-report.pdf`
-      : `vmgc-equipment-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+    // ═══ OUTPUT ═══
+    step = "pdf-output";
+    const buf = doc.output("arraybuffer");
+    const fname = items.length === 1
+      ? s(items[0].name, "equipment").replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "-").toLowerCase() + "-report.pdf"
+      : "vmgc-equipment-report-" + new Date().toISOString().slice(0, 10) + ".pdf";
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(buf, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Disposition": 'attachment; filename="' + fname + '"',
         "Cache-Control": "no-store",
       },
     });
   } catch (err) {
-    console.error("Equipment report error:", err);
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "Failed to generate report", details: message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Equipment report error at step [" + step + "]:", msg, err);
+    return NextResponse.json({ error: "Failed at: " + step, details: msg }, { status: 500 });
   }
 }
