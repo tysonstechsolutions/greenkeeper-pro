@@ -34,6 +34,7 @@ export function useEquipmentParts() {
     quantity?: number;
     status?: string;
     estimated_cost?: number;
+    delay_reason?: string;
   }) => {
     try {
       const supabase = createClient();
@@ -46,6 +47,7 @@ export function useEquipmentParts() {
           quantity: part.quantity || 1,
           status: part.status || "needed",
           estimated_cost: part.estimated_cost || null,
+          delay_reason: part.delay_reason || null,
         })
         .select()
         .single();

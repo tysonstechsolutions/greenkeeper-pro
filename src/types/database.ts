@@ -477,6 +477,7 @@ export interface EquipmentPart {
   quantity: number;
   status: EquipmentPartStatus;
   estimated_cost: number | null;
+  delay_reason: string | null;
   created_at: string;
   updated_at: string;
 }

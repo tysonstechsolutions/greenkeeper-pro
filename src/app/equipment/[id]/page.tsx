@@ -76,6 +76,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useEquipmentParts } from "@/lib/hooks/useEquipmentParts";
 import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecords";
+import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentLog, EquipmentInspection, EquipmentPart, EquipmentServiceRecord } from "@/types/database";
 
 const partStatusLabels: Record<string, string> = {
@@ -84,6 +85,12 @@ const partStatusLabels: Record<string, string> = {
 const partStatusColors: Record<string, string> = {
   needed: "#ea580c", ordered: "#ca8a04", received: "#16a34a",
 };
+
+interface StaffMember {
+  id: string;
+  full_name: string;
+  role: string;
+}
 
 export default function EquipmentDetailPage() {
   const params = useParams();
@@ -130,6 +137,10 @@ export default function EquipmentDetailPage() {
   // Service record form state
   const [addingService, setAddingService] = useState(false);
   const [newService, setNewService] = useState({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
+
+  // Staff members for dropdown
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [delayReasonInput, setDelayReasonInput] = useState<Record<string, string>>({});
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -214,6 +225,25 @@ export default function EquipmentDetailPage() {
   useEffect(() => {
     void loadEquipment();
   }, [loadEquipment]);
+
+  // Fetch staff members for dropdown
+  useEffect(() => {
+    async function loadStaff() {
+      const supabase = createClient();
+      const { data, error } = await (supabase.from("profiles") as any)
+        .select("id, full_name, role")
+        .order("role")
+        .order("full_name");
+      if (!error && data) {
+        setStaffMembers(data);
+      }
+    }
+    void loadStaff();
+  }, []);
+
+  // Get staff filtered for equipment service (mechanic only) vs all staff
+  const mechanicStaff = staffMembers.filter((s) => s.role === "mechanic");
+  const allStaff = staffMembers;
 
   // Handle photo upload
   const handlePhotoUpload = async (file: File) => {
@@ -702,17 +732,74 @@ export default function EquipmentDetailPage() {
                       <span>Qty: {part.quantity}</span>
                       {part.estimated_cost != null && <span>Est: ${Number(part.estimated_cost).toFixed(2)}</span>}
                     </div>
+                    {/* Delay reason display */}
+                    {part.delay_reason && part.status === "needed" && (
+                      <div className="mt-1.5 text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1 text-amber-800">
+                        <span className="font-semibold">Delayed:</span> {part.delay_reason}
+                      </div>
+                    )}
+                    {/* Delay reason input */}
+                    {delayReasonInput[part.id] !== undefined && (
+                      <div className="mt-2 flex gap-2 items-end">
+                        <div className="flex-1">
+                          <Label className="text-xs text-amber-700">Reason for delay *</Label>
+                          <Input
+                            placeholder="e.g. Backordered, supplier out of stock..."
+                            value={delayReasonInput[part.id]}
+                            onChange={(e) => setDelayReasonInput((prev) => ({ ...prev, [part.id]: e.target.value }))}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-amber-600 hover:bg-amber-700"
+                          disabled={!delayReasonInput[part.id]?.trim()}
+                          onClick={async () => {
+                            await updatePart(part.id, { delay_reason: delayReasonInput[part.id] } as any);
+                            setDelayReasonInput((prev) => {
+                              const next = { ...prev };
+                              delete next[part.id];
+                              return next;
+                            });
+                            setSaveSuccess(true);
+                            setTimeout(() => setSaveSuccess(false), 2000);
+                            await fetchParts(equipmentId);
+                          }}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => setDelayReasonInput((prev) => {
+                            const next = { ...prev };
+                            delete next[part.id];
+                            return next;
+                          })}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   {canEdit && (
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {part.status === "needed" && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updatePart(part.id, { status: "ordered" })}>
-                          Mark Ordered
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={() => updatePart(part.id, { status: "ordered" } as any)}>
+                            Ordered
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-amber-700" onClick={() => {
+                            setDelayReasonInput((prev) => ({ ...prev, [part.id]: part.delay_reason || "" }));
+                          }}>
+                            Delayed
+                          </Button>
+                        </>
                       )}
                       {part.status === "ordered" && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updatePart(part.id, { status: "received" })}>
-                          Mark Received
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={() => updatePart(part.id, { status: "received" } as any)}>
+                          Received
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => deletePart(part.id)}>
@@ -759,7 +846,25 @@ export default function EquipmentDetailPage() {
                 </div>
                 <div>
                   <Label htmlFor="svc-by" className="text-xs">Performed By *</Label>
-                  <Input id="svc-by" placeholder="Name of technician" value={newService.performed_by} onChange={(e) => setNewService({ ...newService, performed_by: e.target.value })} />
+                  <Select value={newService.performed_by} onValueChange={(val) => setNewService({ ...newService, performed_by: val })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select staff member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mechanicStaff.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">Mechanics</div>
+                          {mechanicStaff.map((s) => (
+                            <SelectItem key={s.id} value={s.full_name}>{s.full_name}</SelectItem>
+                          ))}
+                        </>
+                      )}
+                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">All Staff</div>
+                      {allStaff.filter((s) => s.role !== "mechanic").map((s) => (
+                        <SelectItem key={s.id} value={s.full_name}>{s.full_name} ({s.role})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div>
