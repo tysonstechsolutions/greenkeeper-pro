@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
-type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "member";
+type UserRole = "super" | "asst_super" | "director" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "member";
 
 // Role hierarchy for permission checking
 const roleHierarchy: Record<UserRole, number> = {
   super: 100,
   asst_super: 80,
+  director: 85, // Director of Golf - above asst_super but below super
   pro: 75, // Pro shop manager - above foreman but below asst_super
   foreman: 60,
   mechanic: 50,
@@ -20,13 +21,13 @@ const roleHierarchy: Record<UserRole, number> = {
 };
 
 // Management roles that can access admin features
-export const MANAGEMENT_ROLES: UserRole[] = ["super", "asst_super", "foreman", "pro"];
-export const ADMIN_ROLES: UserRole[] = ["super", "asst_super"];
+export const MANAGEMENT_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "pro"];
+export const ADMIN_ROLES: UserRole[] = ["super", "asst_super", "director"];
 export const SUPER_ONLY: UserRole[] = ["super"];
-// Pro-related roles - superintendent, assistant superintendent, and pro
-export const PRO_ROLES: UserRole[] = ["super", "asst_super", "pro"];
+// Pro-related roles - superintendent, assistant superintendent, director, and pro
+export const PRO_ROLES: UserRole[] = ["super", "asst_super", "director", "pro"];
 // Staff roles - all internal staff (not members)
-export const STAFF_ROLES: UserRole[] = ["super", "asst_super", "foreman", "mechanic", "crew", "seasonal", "pro"];
+export const STAFF_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "mechanic", "crew", "seasonal", "pro"];
 // Member role - external golfers
 export const MEMBER_ROLES: UserRole[] = ["member"];
 

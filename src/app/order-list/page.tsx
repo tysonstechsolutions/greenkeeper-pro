@@ -64,6 +64,12 @@ export default function OrderListPage() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+
+  const showToast = (type: 'error' | 'success', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
 
   const [formData, setFormData] = useState<FormData>({
     itemName: '',
@@ -109,7 +115,7 @@ export default function OrderListPage() {
     e.preventDefault();
 
     if (!formData.itemName.trim() || !formData.category) {
-      alert('Please fill in item name and category');
+      showToast('error', 'Please fill in item name and category');
       return;
     }
 
@@ -127,7 +133,7 @@ export default function OrderListPage() {
       });
 
       if (!result) {
-        alert('Failed to save order item. Please try again.');
+        showToast('error', 'Failed to save order item. Please try again.');
         return;
       }
 
@@ -146,7 +152,7 @@ export default function OrderListPage() {
       await fetchItems();
     } catch (error) {
       console.error('Failed to add order item:', error);
-      alert('Failed to add order item');
+      showToast('error', 'Failed to add order item');
     } finally {
       setIsSubmitting(false);
     }
@@ -159,11 +165,11 @@ export default function OrderListPage() {
         ordered_date: new Date().toISOString().slice(0, 10),
       } as any);
       if (!result) {
-        alert('Failed to update status. Please try again.');
+        showToast('error', 'Failed to update status. Please try again.');
       }
     } catch (error) {
       console.error('Failed to update status:', error);
-      alert('Failed to update status');
+      showToast('error', 'Failed to update status');
     }
   };
 
@@ -174,11 +180,11 @@ export default function OrderListPage() {
         received_date: new Date().toISOString().slice(0, 10),
       } as any);
       if (!result) {
-        alert('Failed to update status. Please try again.');
+        showToast('error', 'Failed to update status. Please try again.');
       }
     } catch (error) {
       console.error('Failed to update status:', error);
-      alert('Failed to update status');
+      showToast('error', 'Failed to update status');
     }
   };
 
@@ -191,7 +197,7 @@ export default function OrderListPage() {
       await deleteItem(itemId);
     } catch (error) {
       console.error('Failed to delete item:', error);
-      alert('Failed to delete item');
+      showToast('error', 'Failed to delete item');
     }
   };
 
@@ -214,7 +220,7 @@ export default function OrderListPage() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download report:', error);
-      alert('Failed to download report');
+      showToast('error', 'Failed to download report');
     } finally {
       setIsDownloading(false);
     }
@@ -222,6 +228,25 @@ export default function OrderListPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* Toast Message */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
+          toastMessage.type === 'error'
+            ? 'bg-red-50 border border-red-200 text-red-800'
+            : 'bg-green-50 border border-green-200 text-green-800'
+        }`}>
+          {toastMessage.type === 'error' ? (
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          ) : (
+            <Check className="h-4 w-4 flex-shrink-0" />
+          )}
+          <span className="text-sm font-medium">{toastMessage.text}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">

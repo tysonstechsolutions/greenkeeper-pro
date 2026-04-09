@@ -139,6 +139,12 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
+  const [toastMessage, setToastMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+
+  const showToast = (type: 'error' | 'success', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
 
   // Report-specific state
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
@@ -197,7 +203,7 @@ export default function ReportsPage() {
       URL.revokeObjectURL(a.href);
     } catch (error) {
       console.error("Error downloading report:", error);
-      alert("Failed to download report. Please try again.");
+      showToast('error', 'Failed to download report. Please try again.');
     } finally {
       setGenerating(false);
     }
@@ -220,7 +226,7 @@ export default function ReportsPage() {
       URL.revokeObjectURL(a.href);
     } catch (error) {
       console.error("Error downloading full report:", error);
-      alert("Failed to download full report. Please try again.");
+      showToast('error', 'Failed to download full report. Please try again.');
     } finally {
       setDownloadingAll(false);
     }
@@ -373,6 +379,18 @@ export default function ReportsPage() {
   return (
     <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
     <div className="p-4 md:p-6 pb-24">
+      {/* Toast Message */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
+          toastMessage.type === 'error'
+            ? 'bg-red-50 border border-red-200 text-red-800'
+            : 'bg-green-50 border border-green-200 text-green-800'
+        }`}>
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span className="text-sm font-medium">{toastMessage.text}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-2 text-gray-500 hover:text-gray-700">×</button>
+        </div>
+      )}
       <PageHeader
         title="Reports"
         description="Generate and export operational reports"

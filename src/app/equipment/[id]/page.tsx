@@ -707,7 +707,7 @@ export default function EquipmentDetailPage() {
                     // Re-fetch to ensure sync
                     await fetchParts(equipmentId);
                   } else {
-                    alert(`Failed to save part: ${partErr || "Unknown error"}`);
+                    setSaveError(`Failed to save part: ${partErr || "Unknown error"}`);
                   }
                 }}>Add Part</Button>
               </div>
@@ -909,7 +909,7 @@ export default function EquipmentDetailPage() {
                     // Re-fetch to ensure sync
                     await fetchServiceRecords(equipmentId);
                   } else {
-                    alert(`Failed to save service record: ${svcErr || "Unknown error"}`);
+                    setSaveError(`Failed to save service record: ${svcErr || "Unknown error"}`);
                   }
                 }}>Add Record</Button>
               </div>

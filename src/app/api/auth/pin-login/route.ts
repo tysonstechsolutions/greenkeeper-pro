@@ -3,11 +3,49 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 // Internal password used for PIN-authenticated users
-// This is not a security risk - the PIN is the actual auth factor
-const PIN_USER_PASSWORD = "GK_Pin_Auth_2026!vmgc";
+// The PIN is the actual auth factor; this password is stored in env vars
+const PIN_USER_PASSWORD = process.env.PIN_USER_PASSWORD || process.env.NEXT_PIN_USER_PASSWORD || "";
+
+// Simple in-memory rate limiting for PIN attempts
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_MAX = 5; // max attempts
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute window
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetTime) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return false;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) {
+    return true;
+  }
+  return false;
+}
 
 export async function POST(request: Request) {
   try {
+    // Check PIN_USER_PASSWORD is configured
+    if (!PIN_USER_PASSWORD) {
+      console.error("PIN_USER_PASSWORD environment variable is not set");
+      return NextResponse.json(
+        { error: "PIN login is not configured. Contact your administrator." },
+        { status: 500 }
+      );
+    }
+
+    // Rate limiting by IP
+    const forwarded = request.headers.get("x-forwarded-for");
+    const ip = forwarded?.split(",")[0]?.trim() || "unknown";
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { error: "Too many PIN attempts. Please wait a minute and try again." },
+        { status: 429 }
+      );
+    }
+
     const { pin } = await request.json();
 
     if (!pin || typeof pin !== "string" || pin.length < 4 || pin.length > 6) {

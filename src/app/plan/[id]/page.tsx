@@ -110,6 +110,12 @@ export default function GoalDetailPage({
   const [deleting, setDeleting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
+
+  const showToast = (type: 'error' | 'success', text: string) => {
+    setToastMessage({ type, text });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
 
   // Permission check — use profile-based role checks
   const canEdit = isSuper || isAsstSuper;
@@ -142,7 +148,7 @@ export default function GoalDetailPage({
     setDeleting(false);
 
     if (result.hasChildren) {
-      alert("Cannot delete a goal that has sub-goals. Delete sub-goals first.");
+      showToast('error', 'Cannot delete a goal that has sub-goals. Delete sub-goals first.');
       setShowDeleteDialog(false);
       return;
     }
@@ -243,6 +249,18 @@ export default function GoalDetailPage({
 
   return (
     <div className="p-4 md:p-6 pb-24">
+      {/* Toast Message */}
+      {toastMessage && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
+          toastMessage.type === 'error'
+            ? 'bg-red-50 border border-red-200 text-red-800'
+            : 'bg-green-50 border border-green-200 text-green-800'
+        }`}>
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span className="text-sm font-medium">{toastMessage.text}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-2 text-gray-500 hover:text-gray-700">×</button>
+        </div>
+      )}
       {/* Header */}
       <DetailPageHeader
         backHref={goal.parent ? `/plan/${goal.parent.id}` : "/plan"}
