@@ -466,6 +466,33 @@ export interface Equipment {
   updated_at: string;
 }
 
+export type EquipmentPartStatus = 'needed' | 'ordered' | 'received';
+
+export interface EquipmentPart {
+  id: string;
+  equipment_id: string;
+  name: string;
+  part_number: string | null;
+  description: string | null;
+  quantity: number;
+  status: EquipmentPartStatus;
+  estimated_cost: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EquipmentServiceRecord {
+  id: string;
+  equipment_id: string;
+  service_date: string;
+  description: string;
+  performed_by: string;
+  hours_at_service: number | null;
+  cost: number | null;
+  parts_used: string | null;
+  created_at: string;
+}
+
 export interface EquipmentLog {
   id: string;
   equipment_id: string;

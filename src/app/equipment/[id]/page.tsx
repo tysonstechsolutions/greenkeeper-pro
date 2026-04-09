@@ -74,7 +74,16 @@ import {
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useNotifications } from "@/lib/hooks/useNotifications";
-import type { Equipment, EquipmentLog, EquipmentInspection } from "@/types/database";
+import { useEquipmentParts } from "@/lib/hooks/useEquipmentParts";
+import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecords";
+import type { Equipment, EquipmentLog, EquipmentInspection, EquipmentPart, EquipmentServiceRecord } from "@/types/database";
+
+const partStatusLabels: Record<string, string> = {
+  needed: "Needed", ordered: "Ordered", received: "Received",
+};
+const partStatusColors: Record<string, string> = {
+  needed: "#ea580c", ordered: "#ca8a04", received: "#16a34a",
+};
 
 export default function EquipmentDetailPage() {
   const params = useParams();
@@ -93,6 +102,9 @@ export default function EquipmentDetailPage() {
     error: equipmentError,
   } = useEquipment();
 
+  const { parts, fetchParts, addPart, updatePart, deletePart } = useEquipmentParts();
+  const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord } = useEquipmentServiceRecords();
+
   const equipmentId = params.id as string;
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -110,6 +122,14 @@ export default function EquipmentDetailPage() {
   >("pre");
   const [latestInspection, setLatestInspection] = useState<EquipmentInspection | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+
+  // Parts form state
+  const [addingPart, setAddingPart] = useState(false);
+  const [newPart, setNewPart] = useState({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" });
+
+  // Service record form state
+  const [addingService, setAddingService] = useState(false);
+  const [newService, setNewService] = useState({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
 
   // Edit form state
   const [editForm, setEditForm] = useState({
@@ -196,9 +216,15 @@ export default function EquipmentDetailPage() {
       if (latest) {
         setLatestInspection(latest);
       }
+
+      // Load parts and service records
+      await Promise.all([
+        fetchParts(equipmentId),
+        fetchServiceRecords(equipmentId),
+      ]);
     }
     setIsLoading(false);
-  }, [equipmentId, fetchEquipmentItem, fetchLatestInspection]);
+  }, [equipmentId, fetchEquipmentItem, fetchLatestInspection, fetchParts, fetchServiceRecords]);
 
   useEffect(() => {
     void loadEquipment();
@@ -603,18 +629,6 @@ export default function EquipmentDetailPage() {
             </div>
           )}
 
-          {equipment.needs_parts_ordered && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-              <div className="flex items-center gap-2 font-medium text-yellow-900">
-                <AlertCircle className="w-4 h-4" />
-                Parts Need Ordering
-              </div>
-              {equipment.parts_needed && (
-                <p className="text-sm text-yellow-800 mt-1">{equipment.parts_needed}</p>
-              )}
-            </div>
-          )}
-
           {equipment.estimated_repair_cost && (
             <div>
               <Label className="text-sm font-medium">Estimated Repair Cost</Label>
@@ -622,6 +636,221 @@ export default function EquipmentDetailPage() {
                 ${equipment.estimated_repair_cost.toFixed(2)}
               </p>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Parts Needed Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Parts Needed
+              {parts.length > 0 && (
+                <Badge variant="outline" className="ml-1">{parts.length}</Badge>
+              )}
+            </span>
+            {canEdit && (
+              <Button onClick={() => setAddingPart(true)} size="sm" variant="outline">
+                <Plus className="w-4 h-4 mr-1" />
+                Add Part
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Add Part Form */}
+          {addingPart && (
+            <div className="border rounded-lg p-4 mb-4 bg-gray-50 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="part-name" className="text-xs">Part Name *</Label>
+                  <Input id="part-name" placeholder="e.g. Drive Belt" value={newPart.name} onChange={(e) => setNewPart({ ...newPart, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="part-number" className="text-xs">Part Number</Label>
+                  <Input id="part-number" placeholder="e.g. GX20072" value={newPart.part_number} onChange={(e) => setNewPart({ ...newPart, part_number: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="part-desc" className="text-xs">Description</Label>
+                <Textarea id="part-desc" placeholder="What is this part for?" value={newPart.description} onChange={(e) => setNewPart({ ...newPart, description: e.target.value })} className="h-16" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="part-qty" className="text-xs">Quantity</Label>
+                  <Input id="part-qty" type="number" min="1" value={newPart.quantity} onChange={(e) => setNewPart({ ...newPart, quantity: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="part-cost" className="text-xs">Estimated Cost</Label>
+                  <Input id="part-cost" type="number" step="0.01" placeholder="$0.00" value={newPart.estimated_cost} onChange={(e) => setNewPart({ ...newPart, estimated_cost: e.target.value })} />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => { setAddingPart(false); setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" }); }}>Cancel</Button>
+                <Button size="sm" disabled={!newPart.name.trim()} onClick={async () => {
+                  await addPart(equipmentId, {
+                    name: newPart.name,
+                    part_number: newPart.part_number || undefined,
+                    description: newPart.description || undefined,
+                    quantity: parseInt(newPart.quantity) || 1,
+                    estimated_cost: newPart.estimated_cost ? parseFloat(newPart.estimated_cost) : undefined,
+                  });
+                  setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" });
+                  setAddingPart(false);
+                }}>Add Part</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Parts List */}
+          {parts.length > 0 ? (
+            <div className="space-y-2">
+              {parts.map((part) => (
+                <div key={part.id} className="border rounded-lg p-3 flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{part.name}</span>
+                      {part.part_number && (
+                        <Badge variant="outline" className="text-xs font-mono">#{part.part_number}</Badge>
+                      )}
+                      <Badge style={{ backgroundColor: partStatusColors[part.status] }} className="text-white text-xs">
+                        {partStatusLabels[part.status]}
+                      </Badge>
+                    </div>
+                    {part.description && <p className="text-xs text-gray-500 mt-1">{part.description}</p>}
+                    <div className="text-xs text-gray-400 mt-1 flex gap-3">
+                      <span>Qty: {part.quantity}</span>
+                      {part.estimated_cost && <span>Est: ${part.estimated_cost.toFixed(2)}</span>}
+                    </div>
+                  </div>
+                  {canEdit && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {part.status === "needed" && (
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updatePart(part.id, { status: "ordered" })}>
+                          Mark Ordered
+                        </Button>
+                      )}
+                      {part.status === "ordered" && (
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updatePart(part.id, { status: "received" })}>
+                          Mark Received
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => deletePart(part.id)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-4">No parts needed</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Service History Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Service History
+              {serviceRecords.length > 0 && (
+                <Badge variant="outline" className="ml-1">{serviceRecords.length}</Badge>
+              )}
+            </span>
+            {canEdit && (
+              <Button onClick={() => setAddingService(true)} size="sm" variant="outline">
+                <Plus className="w-4 h-4 mr-1" />
+                Add Record
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Add Service Form */}
+          {addingService && (
+            <div className="border rounded-lg p-4 mb-4 bg-gray-50 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="svc-date" className="text-xs">Service Date *</Label>
+                  <Input id="svc-date" type="date" value={newService.service_date} onChange={(e) => setNewService({ ...newService, service_date: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="svc-by" className="text-xs">Performed By *</Label>
+                  <Input id="svc-by" placeholder="Name of technician" value={newService.performed_by} onChange={(e) => setNewService({ ...newService, performed_by: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="svc-desc" className="text-xs">What Was Done *</Label>
+                <Textarea id="svc-desc" placeholder="Describe the service performed..." value={newService.description} onChange={(e) => setNewService({ ...newService, description: e.target.value })} className="h-20" />
+              </div>
+              <div>
+                <Label htmlFor="svc-parts" className="text-xs">Parts Used</Label>
+                <Input id="svc-parts" placeholder="e.g. Oil filter, 5qt 10W-30" value={newService.parts_used} onChange={(e) => setNewService({ ...newService, parts_used: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="svc-hours" className="text-xs">Hours at Service</Label>
+                  <Input id="svc-hours" type="number" step="0.1" placeholder="0.0" value={newService.hours_at_service} onChange={(e) => setNewService({ ...newService, hours_at_service: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="svc-cost" className="text-xs">Cost</Label>
+                  <Input id="svc-cost" type="number" step="0.01" placeholder="$0.00" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" }); }}>Cancel</Button>
+                <Button size="sm" disabled={!newService.description.trim() || !newService.performed_by.trim()} onClick={async () => {
+                  await addServiceRecord(equipmentId, {
+                    service_date: newService.service_date,
+                    description: newService.description,
+                    performed_by: newService.performed_by,
+                    hours_at_service: newService.hours_at_service ? parseFloat(newService.hours_at_service) : undefined,
+                    cost: newService.cost ? parseFloat(newService.cost) : undefined,
+                    parts_used: newService.parts_used || undefined,
+                  });
+                  setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
+                  setAddingService(false);
+                }}>Add Record</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Service Records List */}
+          {serviceRecords.length > 0 ? (
+            <div className="space-y-3">
+              {serviceRecords.map((record) => (
+                <div key={record.id} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                      <span className="text-sm font-medium">{new Date(record.service_date).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-400">by</span>
+                      <span className="text-sm font-medium text-green-800">{record.performed_by}</span>
+                    </div>
+                    {canEdit && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => deleteServiceRecord(record.id)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{record.description}</p>
+                  {record.parts_used && (
+                    <p className="text-xs text-gray-500 mt-1"><span className="font-medium">Parts:</span> {record.parts_used}</p>
+                  )}
+                  <div className="text-xs text-gray-400 mt-1 flex gap-3">
+                    {record.hours_at_service && <span>{record.hours_at_service} hrs</span>}
+                    {record.cost && <span>Cost: ${Number(record.cost).toFixed(2)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-4">No service records yet</p>
           )}
         </CardContent>
       </Card>
@@ -931,29 +1160,11 @@ export default function EquipmentDetailPage() {
             </div>
 
             {/* Parts & Repair */}
-            <div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="needs_parts"
-                  checked={editForm.needs_parts_ordered}
-                  onCheckedChange={(checked) =>
-                    setEditForm({ ...editForm, needs_parts_ordered: checked as boolean })
-                  }
-                />
-                <Label htmlFor="needs_parts" className="font-medium">Parts Need Ordering</Label>
-              </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Parts are now managed in the <strong>Parts Needed</strong> section below. Use it to add individual parts with part numbers, descriptions, and track their order status.
+              </p>
             </div>
-
-            {editForm.needs_parts_ordered && (
-              <div>
-                <Label htmlFor="parts_needed">Parts Needed</Label>
-                <Textarea
-                  id="parts_needed"
-                  value={editForm.parts_needed}
-                  onChange={(e) => setEditForm({ ...editForm, parts_needed: e.target.value })}
-                />
-              </div>
-            )}
 
             <div>
               <Label htmlFor="estimated_repair_cost">Estimated Repair Cost</Label>

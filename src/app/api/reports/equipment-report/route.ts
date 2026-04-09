@@ -92,6 +92,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No equipment found" }, { status: 404 });
     }
 
+    // ── FETCH PARTS & SERVICE RECORDS ──
+    step = "fetch-parts-services";
+    const equipmentIds = items.map((eq: any) => eq.id);
+
+    const { data: allParts } = await (supabase.from("equipment_parts") as any)
+      .select("*")
+      .in("equipment_id", equipmentIds)
+      .order("created_at", { ascending: false });
+
+    const { data: allServiceRecords } = await (supabase.from("equipment_service_records") as any)
+      .select("*")
+      .in("equipment_id", equipmentIds)
+      .order("service_date", { ascending: false });
+
+    // Group by equipment_id
+    const partsMap = new Map<string, any[]>();
+    const serviceMap = new Map<string, any[]>();
+    (allParts || []).forEach((p: any) => {
+      if (!partsMap.has(p.equipment_id)) partsMap.set(p.equipment_id, []);
+      partsMap.get(p.equipment_id)!.push(p);
+    });
+    (allServiceRecords || []).forEach((r: any) => {
+      if (!serviceMap.has(r.equipment_id)) serviceMap.set(r.equipment_id, []);
+      serviceMap.get(r.equipment_id)!.push(r);
+    });
+
     // ── FETCH PHOTOS (parallel) ──
     step = "photos";
     const photoMap = new Map<string, string | null>();
@@ -153,7 +179,10 @@ export async function GET(request: NextRequest) {
     const fair = items.filter((e: any) => e.condition_status === "fair").length;
     const repair = items.filter((e: any) => e.condition_status === "needs_repair").length;
     const beyond = items.filter((e: any) => e.condition_status === "beyond_repair").length;
-    const partsCount = items.filter((e: any) => e.needs_parts_ordered).length;
+    const partsCount = items.filter((e: any) => {
+      const eqParts = partsMap.get(e.id) || [];
+      return eqParts.some((p: any) => p.status === "needed" || p.status === "ordered") || e.needs_parts_ordered;
+    }).length;
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
@@ -204,6 +233,9 @@ export async function GET(request: NextRequest) {
     const rows = items.map((eq: any) => {
       const cond = eq.condition_status || "unknown";
       const isDRMO = cond === "beyond_repair" || eq.status === "out_of_service";
+      const eqParts = partsMap.get(eq.id) || [];
+      const neededParts = eqParts.filter((p: any) => p.status === "needed" || p.status === "ordered");
+      const hasPartsNeeded = neededParts.length > 0 || eq.needs_parts_ordered;
       return [
         s(eq.name),
         typeLabels[eq.equipment_type] || s(eq.equipment_type),
@@ -211,7 +243,7 @@ export async function GET(request: NextRequest) {
         s(eq.serial_number),
         conditionLabels[cond] || cond,
         statusLabels[eq.status] || s(eq.status),
-        eq.needs_parts_ordered ? "Yes" : "—",
+        hasPartsNeeded ? `${neededParts.length || "Yes"}` : "—",
         isDRMO ? "YES" : "—",
       ];
     });
@@ -368,53 +400,129 @@ export async function GET(request: NextRequest) {
       // ── BOTTOM SECTIONS (full width) ──
       let by = Math.max(contentTop + 118, ry + 5);
 
-      // Parts Needed box
-      if (eq.needs_parts_ordered || eq.parts_needed) {
-        doc.setFillColor(255, 251, 235); // amber-50
-        doc.setDrawColor(251, 191, 36); // amber-400
-        doc.roundedRect(m, by, pw - m * 2, 18, 3, 3, "FD");
-
-        // Orange left accent bar
-        doc.setFillColor(...ORANGE);
-        doc.rect(m, by, 3, 18, "F");
-
+      // ── PARTS NEEDED TABLE ──
+      const eqParts = partsMap.get(eq.id) || [];
+      const neededParts = eqParts.filter((p: any) => p.status === "needed" || p.status === "ordered");
+      if (neededParts.length > 0) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(...ORANGE);
-        doc.text("PARTS NEEDED", m + 8, by + 7);
+        doc.text("PARTS NEEDED", m + 4, by + 4);
+        by += 6;
 
-        doc.setFont("helvetica", "normal");
+        const partStatusLabel: Record<string, string> = { needed: "Needed", ordered: "Ordered", received: "Received" };
+        const partRows = neededParts.map((p: any) => [
+          s(p.name),
+          s(p.part_number),
+          s(p.description),
+          String(p.quantity || 1),
+          partStatusLabel[p.status] || p.status,
+          p.estimated_cost != null ? "$" + Number(p.estimated_cost).toFixed(2) : "—",
+        ]);
+
+        autoTable(doc, {
+          startY: by,
+          head: [["Part Name", "Part #", "Description", "Qty", "Status", "Est. Cost"]],
+          body: partRows,
+          margin: { left: m + 2, right: m + 2 },
+          styles: { fontSize: 7, cellPadding: 1.2 },
+          headStyles: { fillColor: ORANGE, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
+          alternateRowStyles: { fillColor: [255, 251, 235] },
+          columnStyles: {
+            0: { cellWidth: 45 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 80 },
+            3: { cellWidth: 12, halign: "center" as const },
+            4: { cellWidth: 22, halign: "center" as const },
+            5: { cellWidth: 22, halign: "right" as const },
+          },
+        });
+        by = (doc as any).lastAutoTable.finalY + 4;
+      } else if (eq.needs_parts_ordered || eq.parts_needed) {
+        // Legacy fallback for old data
+        doc.setFillColor(255, 251, 235);
+        doc.setDrawColor(251, 191, 36);
+        doc.roundedRect(m, by, pw - m * 2, 14, 3, 3, "FD");
+        doc.setFillColor(...ORANGE);
+        doc.rect(m, by, 3, 14, "F");
+        doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
+        doc.setTextColor(...ORANGE);
+        doc.text("PARTS NEEDED", m + 8, by + 6);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
         doc.setTextColor(60, 60, 60);
-        const partsText = s(eq.parts_needed, "Parts needed — details not specified");
-        doc.text(partsText, m + 8, by + 13);
+        doc.text(s(eq.parts_needed, "Parts needed — see details"), m + 8, by + 11);
+        by += 18;
+      }
 
-        if (eq.estimated_repair_cost != null) {
+      // ── SERVICE HISTORY TABLE ──
+      const eqServices = serviceMap.get(eq.id) || [];
+      if (eqServices.length > 0) {
+        // Check if we need a new page for service history
+        if (by > ph - 55) {
+          doc.addPage();
+          // Mini header for continuation
+          doc.setFillColor(...BRAND_DARK);
+          doc.rect(0, 0, pw, 14, "F");
           doc.setFont("helvetica", "bold");
-          doc.setTextColor(...GRAY_600);
-          doc.text(
-            "Estimated Cost: $" + Number(eq.estimated_repair_cost).toLocaleString("en-US", { minimumFractionDigits: 2 }),
-            pw - m - 5, by + 7, { align: "right" }
-          );
+          doc.setFontSize(10);
+          doc.setTextColor(...WHITE);
+          doc.text(s(eq.name) + " — Service History (continued)", m + 4, 9);
+          by = 20;
         }
-        by += 22;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(...BRAND_GREEN);
+        doc.text("SERVICE HISTORY", m + 4, by + 4);
+        by += 6;
+
+        const svcRows = eqServices.slice(0, 10).map((r: any) => [
+          r.service_date ? new Date(r.service_date).toLocaleDateString("en-US") : "—",
+          s(r.performed_by),
+          s(r.description),
+          s(r.parts_used),
+          r.hours_at_service != null ? String(r.hours_at_service) : "—",
+          r.cost != null ? "$" + Number(r.cost).toFixed(2) : "—",
+        ]);
+
+        autoTable(doc, {
+          startY: by,
+          head: [["Date", "Performed By", "Description", "Parts Used", "Hours", "Cost"]],
+          body: svcRows,
+          margin: { left: m + 2, right: m + 2 },
+          styles: { fontSize: 7, cellPadding: 1.2 },
+          headStyles: { fillColor: BRAND_GREEN, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
+          alternateRowStyles: { fillColor: [240, 253, 244] },
+          columnStyles: {
+            0: { cellWidth: 25 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 80 },
+            3: { cellWidth: 50 },
+            4: { cellWidth: 16, halign: "center" as const },
+            5: { cellWidth: 22, halign: "right" as const },
+          },
+        });
+        by = (doc as any).lastAutoTable.finalY + 4;
       }
 
       // DRMO / Disposal recommendation
       if (isDRMO) {
-        doc.setFillColor(254, 242, 242); // red-50
-        doc.setDrawColor(252, 165, 165); // red-300
+        // Check if we need a new page
+        if (by > ph - 30) {
+          doc.addPage();
+          by = 15;
+        }
+        doc.setFillColor(254, 242, 242);
+        doc.setDrawColor(252, 165, 165);
         doc.roundedRect(m, by, pw - m * 2, 18, 3, 3, "FD");
-
-        // Red left accent bar
         doc.setFillColor(...RED);
         doc.rect(m, by, 3, 18, "F");
-
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
         doc.setTextColor(...RED);
         doc.text("RECOMMENDED FOR DRMO / DISPOSAL", m + 8, by + 8);
-
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
         doc.setTextColor(...GRAY_600);
@@ -434,9 +542,6 @@ export async function GET(request: NextRequest) {
         doc.text(noteLines.slice(0, 3), m + 4, by + 4);
         by += Math.min(noteLines.length, 3) * 3.5 + 6;
       }
-
-      // Inspection history from equipment_inspections if we have it
-      // (not queried — keeping it simple for now)
     }
 
     // ══════════════════════════════════════
