@@ -5,6 +5,7 @@ import autoTable from "jspdf-autotable";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// ── Brand Colors ──
 const BRAND_DARK: [number, number, number] = [27, 67, 50];
 const BRAND_GREEN: [number, number, number] = [45, 106, 79];
 const BRAND_GOLD: [number, number, number] = [182, 141, 64];
@@ -14,6 +15,7 @@ const RED: [number, number, number] = [220, 38, 38];
 const ORANGE: [number, number, number] = [234, 88, 12];
 const WHITE: [number, number, number] = [255, 255, 255];
 
+// ── Labels ──
 const conditionLabels: Record<string, string> = {
   good: "Good", fair: "Fair", needs_repair: "Needs Repair",
   beyond_repair: "Beyond Repair", unknown: "Unknown",
@@ -55,7 +57,6 @@ async function fetchPhoto(url: string): Promise<string | null> {
 }
 
 export async function GET(request: NextRequest) {
-  // Step-by-step with try/catch per section for debugging
   let step = "init";
   try {
     // ── AUTH ──
@@ -91,10 +92,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No equipment found" }, { status: 404 });
     }
 
-    // ── FETCH PHOTOS (parallel, max 30) ──
+    // ── FETCH PHOTOS (parallel) ──
     step = "photos";
     const photoMap = new Map<string, string | null>();
-    const fetches = items.slice(0, 30).map(async (eq: any) => {
+    const fetches = items.map(async (eq: any) => {
       const photoUrl = (eq.photos && eq.photos.length > 0) ? eq.photos[0] : eq.photo_url;
       if (photoUrl) {
         const data = await fetchPhoto(photoUrl);
@@ -105,107 +106,137 @@ export async function GET(request: NextRequest) {
 
     // ── BUILD PDF ──
     step = "pdf-init";
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pw = doc.internal.pageSize.getWidth();
-    const ph = doc.internal.pageSize.getHeight();
-    const m = 15;
-    const cw = pw - m * 2;
-    let y = m;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pw = doc.internal.pageSize.getWidth(); // 297mm
+    const ph = doc.internal.pageSize.getHeight(); // 210mm
+    const m = 12; // margin
 
-    const needPage = (h: number) => { if (y + h > ph - 20) { doc.addPage(); y = m; } };
     const dateStr = new Date().toLocaleDateString("en-US", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
 
-    // ═══ HEADER ═══
-    step = "pdf-header";
+    // ══════════════════════════════════════
+    // PAGE 1: COVER / SUMMARY PAGE
+    // ══════════════════════════════════════
+    step = "pdf-cover";
+
+    // Dark green header bar
     doc.setFillColor(...BRAND_DARK);
-    doc.rect(0, 0, pw, 34, "F");
+    doc.rect(0, 0, pw, 50, "F");
     doc.setFillColor(...BRAND_GOLD);
-    doc.rect(0, 34, pw, 1.5, "F");
+    doc.rect(0, 50, pw, 2, "F");
+
+    // Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(28);
+    doc.setTextColor(...WHITE);
+    doc.text("Fleet Equipment Report", m + 5, 24);
+
+    // Subtitle
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.setTextColor(...BRAND_GOLD);
+    doc.text("Vehicle & Machinery Grounds Committee", m + 5, 35);
+
+    // Right side info
+    doc.setFontSize(11);
+    doc.setTextColor(...WHITE);
+    doc.text(dateStr, pw - m - 5, 20, { align: "right" });
+    if (profile?.full_name) {
+      doc.text("Prepared by: " + profile.full_name, pw - m - 5, 30, { align: "right" });
+    }
+    doc.text(items.length + " Equipment Items", pw - m - 5, 40, { align: "right" });
+
+    // Summary stats
+    let y = 62;
+    const good = items.filter((e: any) => e.condition_status === "good").length;
+    const fair = items.filter((e: any) => e.condition_status === "fair").length;
+    const repair = items.filter((e: any) => e.condition_status === "needs_repair").length;
+    const beyond = items.filter((e: any) => e.condition_status === "beyond_repair").length;
+    const partsCount = items.filter((e: any) => e.needs_parts_ordered).length;
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(...WHITE);
-    doc.text(items.length === 1 ? "Equipment Condition Report" : "Fleet Equipment Report", m, 16);
+    doc.setFontSize(14);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("Fleet Condition Summary", m + 5, y);
+    y += 8;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...BRAND_GOLD);
-    doc.text("Condition & Inventory Summary", m, 24);
+    // Stat boxes
+    const statBoxW = (pw - m * 2 - 40) / 5;
+    const stats = [
+      { label: "Good", val: good, color: conditionColors.good },
+      { label: "Fair", val: fair, color: conditionColors.fair },
+      { label: "Needs Repair", val: repair, color: conditionColors.needs_repair },
+      { label: "Beyond Repair", val: beyond, color: conditionColors.beyond_repair },
+      { label: "Parts Needed", val: partsCount, color: ORANGE },
+    ];
 
-    doc.setFontSize(9);
-    doc.setTextColor(...WHITE);
-    doc.text(dateStr, pw - m, 14, { align: "right" });
-    if (profile?.full_name) doc.text("Prepared by: " + profile.full_name, pw - m, 20, { align: "right" });
-    doc.text(items.length + " item" + (items.length > 1 ? "s" : ""), pw - m, 26, { align: "right" });
-    y = 42;
-
-    // ═══ SUMMARY STATS ═══
-    if (items.length > 1) {
-      step = "pdf-stats";
-      const good = items.filter((e: any) => e.condition_status === "good").length;
-      const fair = items.filter((e: any) => e.condition_status === "fair").length;
-      const repair = items.filter((e: any) => e.condition_status === "needs_repair").length;
-      const beyond = items.filter((e: any) => e.condition_status === "beyond_repair").length;
-      const parts = items.filter((e: any) => e.needs_parts_ordered).length;
-
-      doc.setFillColor(245, 247, 250);
-      doc.roundedRect(m, y, cw, 22, 3, 3, "F");
+    stats.forEach((st, i) => {
+      const x = m + 5 + i * (statBoxW + 8);
+      // Box background
+      doc.setFillColor(248, 250, 252);
       doc.setDrawColor(229, 231, 235);
-      doc.roundedRect(m, y, cw, 22, 3, 3, "S");
+      doc.roundedRect(x, y, statBoxW, 28, 3, 3, "FD");
+      // Color bar at top
+      doc.setFillColor(...st.color);
+      doc.rect(x, y, statBoxW, 3, "F");
+      // Number
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(...st.color);
+      doc.text(String(st.val), x + statBoxW / 2, y + 16, { align: "center" });
+      // Label
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...GRAY_600);
+      doc.text(st.label, x + statBoxW / 2, y + 23, { align: "center" });
+    });
+    y += 38;
 
-      const colW = cw / 5;
-      const statData = [
-        { label: "Good", val: good, color: conditionColors.good },
-        { label: "Fair", val: fair, color: conditionColors.fair },
-        { label: "Needs Repair", val: repair, color: conditionColors.needs_repair },
-        { label: "Beyond Repair", val: beyond, color: conditionColors.beyond_repair },
-        { label: "Parts Ordered", val: parts, color: ORANGE },
-      ];
-      statData.forEach((st, i) => {
-        const cx = m + colW * i + colW / 2;
-        doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-        doc.setTextColor(...st.color);
-        doc.text(String(st.val), cx, y + 10, { align: "center" });
-        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-        doc.setTextColor(...GRAY_600);
-        doc.text(st.label, cx, y + 17, { align: "center" });
-      });
-      y += 28;
+    // Master inventory table
+    step = "pdf-table";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("Equipment Inventory", m + 5, y);
+    y += 6;
 
-      // ═══ MASTER TABLE ═══
-      step = "pdf-table";
-      doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-      doc.setTextColor(...BRAND_DARK);
-      doc.text("Equipment Inventory", m, y + 5);
-      y += 9;
-
-      const rows = items.map((eq: any) => [
+    const rows = items.map((eq: any) => {
+      const cond = eq.condition_status || "unknown";
+      const isDRMO = cond === "beyond_repair" || eq.status === "out_of_service";
+      return [
         s(eq.name),
         typeLabels[eq.equipment_type] || s(eq.equipment_type),
         [eq.make, eq.model].filter(Boolean).join(" ") || "—",
         s(eq.serial_number),
-        s(eq.asset_tag),
-        conditionLabels[eq.condition_status] || s(eq.condition_status),
+        conditionLabels[cond] || cond,
         statusLabels[eq.status] || s(eq.status),
-        eq.parts_needed ? "Yes" : "—",
-      ]);
+        eq.needs_parts_ordered ? "Yes" : "—",
+        isDRMO ? "YES" : "—",
+      ];
+    });
 
-      autoTable(doc, {
-        startY: y,
-        head: [["Name", "Type", "Make/Model", "Serial #", "Tag", "Condition", "Status", "Parts?"]],
-        body: rows,
-        margin: { left: m, right: m },
-        styles: { fontSize: 7, cellPadding: 1.5 },
-        headStyles: { fillColor: BRAND_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-      });
-      y = (doc as any).lastAutoTable.finalY + 10;
-    }
+    autoTable(doc, {
+      startY: y,
+      head: [["Name", "Type", "Make/Model", "Serial #", "Condition", "Status", "Parts?", "DRMO?"]],
+      body: rows,
+      margin: { left: m + 3, right: m + 3 },
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: BRAND_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        0: { fontStyle: "bold", cellWidth: 45 },
+        6: { halign: "center" as const, cellWidth: 14 },
+        7: { halign: "center" as const, cellWidth: 14 },
+      },
+    });
 
-    // ═══ DETAIL SECTIONS ═══
+    // ══════════════════════════════════════
+    // INDIVIDUAL EQUIPMENT PAGES (1 per page)
+    // Like a PowerPoint slide: photo left, details right
+    // ══════════════════════════════════════
     step = "pdf-details";
+
     for (let idx = 0; idx < items.length; idx++) {
       const eq = items[idx];
       const cond = eq.condition_status || "unknown";
@@ -215,145 +246,271 @@ export async function GET(request: NextRequest) {
       const isDRMO = cond === "beyond_repair" || eq.status === "out_of_service";
       const photo = photoMap.get(eq.id) || null;
 
-      needPage(75);
+      doc.addPage();
 
-      // Header bar
-      doc.setFillColor(...(isDRMO ? RED : BRAND_GREEN));
-      doc.roundedRect(m, y, cw, 14, 2, 2, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+      // ── TOP HEADER BAR ──
+      const headerColor = isDRMO ? RED : BRAND_DARK;
+      doc.setFillColor(...headerColor);
+      doc.rect(0, 0, pw, 22, "F");
+      doc.setFillColor(...BRAND_GOLD);
+      doc.rect(0, 22, pw, 1.5, "F");
+
+      // Equipment name
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
       doc.setTextColor(...WHITE);
-      doc.text(s(eq.name, "Unnamed"), m + 4, y + 9);
+      doc.text(s(eq.name, "Unnamed Equipment"), m + 4, 14);
 
-      // Condition badge
-      doc.setFontSize(8);
-      const badgeTxt = isDRMO ? "DRMO - " + condLabel : condLabel;
-      const bw = doc.getTextWidth(badgeTxt) + 8;
+      // Condition badge on right
+      const badgeText = isDRMO ? "DRMO — " + condLabel : condLabel;
+      doc.setFontSize(10);
+      const badgeW = doc.getTextWidth(badgeText) + 12;
       doc.setFillColor(...WHITE);
-      doc.roundedRect(pw - m - bw - 3, y + 3, bw, 8, 2, 2, "F");
+      doc.roundedRect(pw - m - badgeW - 2, 6, badgeW, 10, 3, 3, "F");
       doc.setTextColor(...condColor);
-      doc.text(badgeTxt.toUpperCase(), pw - m - bw / 2 - 3, y + 8.5, { align: "center" });
-      y += 17;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(badgeText.toUpperCase(), pw - m - badgeW / 2 - 2, 13, { align: "center" });
 
-      // Photo + details
-      const detailStartY = y;
-      const photoW = photo ? 55 : 0;
-      const detailX = m + (photo ? photoW + 5 : 0);
+      // Page item number
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(200, 200, 200);
+      doc.text(`${idx + 1} of ${items.length}`, pw - m - 4, 20, { align: "right" });
 
+      // ── LAYOUT: LEFT = PHOTO, RIGHT = DETAILS ──
+      const contentTop = 30;
+      const halfW = (pw - m * 2 - 10) / 2;
+      const leftX = m;
+      const rightX = m + halfW + 10;
+
+      // ── LEFT SIDE: PHOTO ──
       if (photo) {
         try {
           const fmt = photo.includes("image/png") ? "PNG" : "JPEG";
-          doc.addImage(photo, fmt, m, y, photoW, 40);
-        } catch { /* skip photo */ }
+          const maxPhotoW = halfW;
+          const maxPhotoH = 110;
+          // Maintain aspect ratio — use contain-style fit
+          doc.addImage(photo, fmt, leftX, contentTop, maxPhotoW, maxPhotoH);
+        } catch { /* skip */ }
+      } else {
+        // No photo placeholder
+        doc.setFillColor(243, 244, 246);
+        doc.setDrawColor(209, 213, 219);
+        doc.roundedRect(leftX, contentTop, halfW, 110, 4, 4, "FD");
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(...GRAY_400);
+        doc.text("No Photo Available", leftX + halfW / 2, contentTop + 55, { align: "center" });
       }
 
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      // ── RIGHT SIDE: DETAILS ──
+      let ry = contentTop;
+
+      // Type badge
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...BRAND_GREEN);
+      doc.text(typeLabels[eq.equipment_type] || s(eq.equipment_type), rightX, ry + 5);
+      ry += 10;
+
+      // Detail rows helper
+      const detailRow = (label: string, value: string) => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(...GRAY_600);
+        doc.text(label, rightX, ry);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(30, 30, 30);
+        doc.text(value, rightX + 38, ry);
+        ry += 6;
+      };
+
+      detailRow("Make:", s(eq.make));
+      detailRow("Model:", s(eq.model));
+      detailRow("Year:", s(eq.year));
+      detailRow("Serial #:", s(eq.serial_number));
+      detailRow("Asset Tag:", s(eq.asset_tag));
+      detailRow("Fuel Type:", fuelLabels[eq.fuel_type] || s(eq.fuel_type));
+      detailRow("Hours:", eq.current_hours != null ? eq.current_hours + " hrs" : "—");
+      detailRow("Location:", s(eq.location));
+      ry += 2;
+
+      // Status row with colored text
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
       doc.setTextColor(...GRAY_600);
-      const lines = [
-        "Type: " + (typeLabels[eq.equipment_type] || s(eq.equipment_type)),
-        "Make/Model: " + ([eq.make, eq.model].filter(Boolean).join(" ") || "—"),
-        "Year: " + s(eq.year) + "  |  Serial: " + s(eq.serial_number),
-        "Asset Tag: " + s(eq.asset_tag) + "  |  Fuel: " + (fuelLabels[eq.fuel_type] || s(eq.fuel_type)),
-        "Hours: " + (eq.current_hours != null ? eq.current_hours + " hrs" : "—") + "  |  Location: " + s(eq.location),
-        "Status: " + eqStatus + "  |  Condition: " + condLabel,
-      ];
-      lines.forEach((line, i) => { doc.text(line, detailX, y + 5 + i * 4.5); });
-      y = Math.max(y + lines.length * 4.5 + 5, detailStartY + (photo ? 42 : 0));
+      doc.text("Condition:", rightX, ry);
+      doc.setTextColor(...condColor);
+      doc.text(condLabel, rightX + 38, ry);
+      ry += 6;
+
+      doc.setTextColor(...GRAY_600);
+      doc.text("Status:", rightX, ry);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 30, 30);
+      doc.text(eqStatus, rightX + 38, ry);
+      ry += 8;
 
       // Condition notes
       if (eq.condition_notes) {
-        doc.setFont("helvetica", "italic"); doc.setFontSize(8);
-        doc.setTextColor(...GRAY_600);
-        const nl = doc.splitTextToSize("Notes: " + eq.condition_notes, cw - 8);
-        needPage(nl.length * 3.5 + 4);
-        doc.text(nl, m + 4, y);
-        y += nl.length * 3.5 + 2;
-      }
-
-      // Parts needed
-      if (eq.needs_parts_ordered || eq.parts_needed) {
-        needPage(14);
-        doc.setFillColor(255, 247, 237);
-        doc.roundedRect(m, y, cw, 12, 2, 2, "F");
-        doc.setDrawColor(251, 191, 36);
-        doc.roundedRect(m, y, cw, 12, 2, 2, "S");
-        doc.setFont("helvetica", "bold"); doc.setFontSize(8);
-        doc.setTextColor(...ORANGE);
-        doc.text("PARTS NEEDED:", m + 4, y + 5);
-        doc.setFont("helvetica", "normal"); doc.setTextColor(...GRAY_600);
-        doc.text(s(eq.parts_needed, "Unspecified"), m + 35, y + 5);
-        if (eq.estimated_repair_cost != null) {
-          doc.text("Est. Cost: $" + Number(eq.estimated_repair_cost).toLocaleString("en-US", { minimumFractionDigits: 2 }), m + 4, y + 10);
-        }
-        y += 14;
-      }
-
-      // DRMO box
-      if (isDRMO) {
-        needPage(12);
-        doc.setFillColor(254, 242, 242);
-        doc.roundedRect(m, y, cw, 10, 2, 2, "F");
-        doc.setFillColor(...RED);
-        doc.rect(m, y, 2.5, 10, "F");
-        doc.setFont("helvetica", "bold"); doc.setFontSize(8);
-        doc.setTextColor(...RED);
-        doc.text("RECOMMENDED FOR DRMO / DISPOSAL", m + 6, y + 4);
-        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-        doc.setTextColor(...GRAY_600);
-        doc.text(cond === "beyond_repair" ? "Beyond economical repair." : "Currently out of service.", m + 6, y + 8);
-        y += 12;
-      }
-
-      // Notes (truncated)
-      if (eq.notes) {
-        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-        doc.setTextColor(...GRAY_600);
-        const nl = doc.splitTextToSize("Notes: " + eq.notes, cw - 8);
-        const trunc = nl.slice(0, 3);
-        needPage(trunc.length * 3 + 2);
-        doc.text(trunc, m + 4, y + 3);
-        y += trunc.length * 3 + 4;
-      }
-
-      // Separator
-      y += 3;
-      if (idx < items.length - 1) {
         doc.setDrawColor(229, 231, 235);
-        doc.line(m, y, pw - m, y);
-        y += 5;
+        doc.line(rightX, ry - 2, rightX + halfW - 5, ry - 2);
+        ry += 2;
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(...GRAY_600);
+        const noteLines = doc.splitTextToSize(eq.condition_notes, halfW - 10);
+        doc.text(noteLines.slice(0, 4), rightX, ry);
+        ry += Math.min(noteLines.length, 4) * 4 + 4;
       }
+
+      // ── BOTTOM SECTIONS (full width) ──
+      let by = Math.max(contentTop + 118, ry + 5);
+
+      // Parts Needed box
+      if (eq.needs_parts_ordered || eq.parts_needed) {
+        doc.setFillColor(255, 251, 235); // amber-50
+        doc.setDrawColor(251, 191, 36); // amber-400
+        doc.roundedRect(m, by, pw - m * 2, 18, 3, 3, "FD");
+
+        // Orange left accent bar
+        doc.setFillColor(...ORANGE);
+        doc.rect(m, by, 3, 18, "F");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(...ORANGE);
+        doc.text("PARTS NEEDED", m + 8, by + 7);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(60, 60, 60);
+        const partsText = s(eq.parts_needed, "Parts needed — details not specified");
+        doc.text(partsText, m + 8, by + 13);
+
+        if (eq.estimated_repair_cost != null) {
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(...GRAY_600);
+          doc.text(
+            "Estimated Cost: $" + Number(eq.estimated_repair_cost).toLocaleString("en-US", { minimumFractionDigits: 2 }),
+            pw - m - 5, by + 7, { align: "right" }
+          );
+        }
+        by += 22;
+      }
+
+      // DRMO / Disposal recommendation
+      if (isDRMO) {
+        doc.setFillColor(254, 242, 242); // red-50
+        doc.setDrawColor(252, 165, 165); // red-300
+        doc.roundedRect(m, by, pw - m * 2, 18, 3, 3, "FD");
+
+        // Red left accent bar
+        doc.setFillColor(...RED);
+        doc.rect(m, by, 3, 18, "F");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(...RED);
+        doc.text("RECOMMENDED FOR DRMO / DISPOSAL", m + 8, by + 8);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(...GRAY_600);
+        const reason = cond === "beyond_repair"
+          ? "This equipment is beyond economical repair and should be submitted for DRMO processing."
+          : "This equipment is currently out of service and may be a candidate for disposal.";
+        doc.text(reason, m + 8, by + 14);
+        by += 22;
+      }
+
+      // Notes
+      if (eq.notes) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...GRAY_600);
+        const noteLines = doc.splitTextToSize("Notes: " + eq.notes, pw - m * 2 - 10);
+        doc.text(noteLines.slice(0, 3), m + 4, by + 4);
+        by += Math.min(noteLines.length, 3) * 3.5 + 6;
+      }
+
+      // Inspection history from equipment_inspections if we have it
+      // (not queried — keeping it simple for now)
     }
 
-    // ═══ SIGNATURE BLOCK ═══
+    // ══════════════════════════════════════
+    // SIGNATURE PAGE (last page)
+    // ══════════════════════════════════════
     step = "pdf-signatures";
-    needPage(30);
-    y += 5;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(m, y, pw - m, y);
-    y += 10;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    doc.setTextColor(...GRAY_600);
-    doc.text("Superintendent Signature:", m, y);
-    doc.line(m + 42, y + 1, m + 100, y + 1);
-    doc.text("Date:", m + 105, y);
-    doc.line(m + 115, y + 1, m + 150, y + 1);
-    y += 12;
-    doc.text("Director / Approver:", m, y);
-    doc.line(m + 36, y + 1, m + 100, y + 1);
-    doc.text("Date:", m + 105, y);
-    doc.line(m + 115, y + 1, m + 150, y + 1);
+    doc.addPage();
 
-    // ═══ FOOTER ═══
+    // Header
+    doc.setFillColor(...BRAND_DARK);
+    doc.rect(0, 0, pw, 22, "F");
+    doc.setFillColor(...BRAND_GOLD);
+    doc.rect(0, 22, pw, 1.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(...WHITE);
+    doc.text("Signatures & Approval", m + 4, 14);
+
+    y = 35;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...GRAY_600);
+    doc.text(
+      "I certify that the equipment conditions documented in this report are accurate to the best of my knowledge.",
+      m + 4, y
+    );
+    y += 15;
+
+    // Signature lines
+    const sigLine = (label: string, yPos: number) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...GRAY_600);
+      doc.text(label, m + 4, yPos);
+      doc.setDrawColor(180, 180, 180);
+      doc.line(m + 50, yPos + 1, m + 140, yPos + 1);
+      doc.text("Date:", m + 150, yPos);
+      doc.line(m + 165, yPos + 1, m + 220, yPos + 1);
+    };
+
+    sigLine("Superintendent:", y);
+    y += 20;
+    sigLine("Director / Approver:", y);
+    y += 20;
+    sigLine("Additional Approval:", y);
+
+    // Summary reminder at bottom
+    y += 30;
+    doc.setDrawColor(229, 231, 235);
+    doc.line(m, y, pw - m, y);
+    y += 8;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...BRAND_DARK);
+    doc.text("Report Summary", m + 4, y);
+    y += 7;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...GRAY_600);
+    doc.text(`Total Equipment: ${items.length}  |  Good: ${good}  |  Fair: ${fair}  |  Needs Repair: ${repair}  |  Beyond Repair: ${beyond}  |  Parts Needed: ${partsCount}`, m + 4, y);
+
+    // ── FOOTER ON ALL PAGES ──
     step = "pdf-footer";
-    const tp = doc.getNumberOfPages();
-    for (let i = 1; i <= tp; i++) {
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      doc.setFontSize(7); doc.setTextColor(...GRAY_400);
-      doc.text("Page " + i + " of " + tp, pw / 2, ph - 8, { align: "center" });
-      doc.text("VMGC GreenKeeper Pro", m, ph - 8);
-      doc.text(new Date().toLocaleDateString(), pw - m, ph - 8, { align: "right" });
+      doc.setFontSize(7);
+      doc.setTextColor(...GRAY_400);
+      doc.text("Page " + i + " of " + totalPages, pw / 2, ph - 6, { align: "center" });
+      doc.text("VMGC GreenKeeper Pro", m, ph - 6);
+      doc.text(new Date().toLocaleDateString(), pw - m, ph - 6, { align: "right" });
     }
 
-    // ═══ OUTPUT ═══
+    // ── OUTPUT ──
     step = "pdf-output";
     const buf = doc.output("arraybuffer");
     const fname = items.length === 1
