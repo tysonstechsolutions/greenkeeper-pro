@@ -487,7 +487,7 @@ export default function ParkingLotPage() {
                               Estimated Cost
                             </p>
                             <p className="mt-1 text-sm font-semibold text-gray-900">
-                              ${issue.estimated_cost.toFixed(2)}
+                              ${Number(issue.estimated_cost).toFixed(2)}
                             </p>
                           </div>
                         )}
@@ -692,15 +692,19 @@ export default function ParkingLotPage() {
               <Label htmlFor="cost" className="font-medium">
                 Estimated Cost
               </Label>
-              <Input
-                id="cost"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={formData.estimatedCost}
-                onChange={(e) => handleFormChange('estimatedCost', e.target.value)}
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <Input
+                  id="cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  className="pl-7"
+                  value={formData.estimatedCost}
+                  onChange={(e) => handleFormChange('estimatedCost', e.target.value)}
+                />
+              </div>
             </div>
 
             {/* Photo Upload */}

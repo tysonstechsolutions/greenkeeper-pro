@@ -115,7 +115,7 @@ export default function EquipmentDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [logSheetOpen, setLogSheetOpen] = useState(false);
+  // const [logSheetOpen, setLogSheetOpen] = useState(false); // Removed — replaced by Service History
   const [inspectionSheetOpen, setInspectionSheetOpen] = useState(false);
   const [currentInspectionType, setCurrentInspectionType] = useState<
     "pre" | "post" | "cleaning"
@@ -152,17 +152,7 @@ export default function EquipmentDetailPage() {
     service_interval_hours: "",
   });
 
-  // Log form state
-  const [logForm, setLogForm] = useState<CreateLogData>({
-    log_type: "service",
-    description: "",
-    hours_at_service: 0,
-    cost: undefined,
-    parts_used: [],
-    vendor: "",
-    downtime_hours: undefined,
-    photos: [],
-  });
+  // Log form state removed — replaced by Service History
 
   // Inspection form state
   const [inspectionItems, setInspectionItems] = useState<
@@ -206,11 +196,6 @@ export default function EquipmentDetailPage() {
         current_hours: data.current_hours ? String(data.current_hours) : "",
         service_interval_hours: data.service_interval_hours ? String(data.service_interval_hours) : "",
       });
-      setLogForm((prev) => ({
-        ...prev,
-        hours_at_service: data.current_hours ?? 0,
-      }));
-
       // Load latest inspection
       const latest = await fetchLatestInspection(equipmentId, "pre");
       if (latest) {
@@ -338,25 +323,7 @@ export default function EquipmentDetailPage() {
   };
 
   // Handle log submission
-  const handleLogSubmit = async () => {
-    if (!equipment || !logForm.description.trim()) return;
-
-    const newLog = await createLog(equipmentId, logForm);
-    if (newLog) {
-      await loadEquipment();
-      setLogForm({
-        log_type: "service",
-        description: "",
-        hours_at_service: equipment.current_hours ?? 0,
-        cost: undefined,
-        parts_used: [],
-        vendor: "",
-        downtime_hours: undefined,
-        photos: [],
-      });
-      setLogSheetOpen(false);
-    }
-  };
+  // handleLogSubmit removed — replaced by Service History
 
   // Handle inspection submission
   const handleInspectionSubmit = async () => {
@@ -633,7 +600,7 @@ export default function EquipmentDetailPage() {
             <div>
               <Label className="text-sm font-medium">Estimated Repair Cost</Label>
               <p className="text-lg font-semibold mt-1">
-                ${equipment.estimated_repair_cost.toFixed(2)}
+                ${Number(equipment.estimated_repair_cost).toFixed(2)}
               </p>
             </div>
           )}
@@ -684,7 +651,10 @@ export default function EquipmentDetailPage() {
                 </div>
                 <div>
                   <Label htmlFor="part-cost" className="text-xs">Estimated Cost</Label>
-                  <Input id="part-cost" type="number" step="0.01" placeholder="$0.00" value={newPart.estimated_cost} onChange={(e) => setNewPart({ ...newPart, estimated_cost: e.target.value })} />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                    <Input id="part-cost" type="number" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newPart.estimated_cost} onChange={(e) => setNewPart({ ...newPart, estimated_cost: e.target.value })} />
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
@@ -807,7 +777,10 @@ export default function EquipmentDetailPage() {
                 </div>
                 <div>
                   <Label htmlFor="svc-cost" className="text-xs">Cost</Label>
-                  <Input id="svc-cost" type="number" step="0.01" placeholder="$0.00" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                    <Input id="svc-cost" type="number" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
@@ -996,58 +969,7 @@ export default function EquipmentDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Maintenance Logs Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Maintenance Logs</span>
-            {canEdit && (
-              <Button onClick={() => setLogSheetOpen(true)} size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Log
-              </Button>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {equipment.logs && equipment.logs.length > 0 ? (
-            <div className="space-y-3">
-              {equipment.logs.map((log) => (
-                <div key={log.id} className="border rounded p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <Badge style={{ backgroundColor: logTypeColors[log.log_type] }} className="text-white">
-                      {logTypeLabels[log.log_type]}
-                    </Badge>
-                    <span className="text-sm text-gray-500">
-                      {new Date(log.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{log.description}</p>
-                  {log.cost && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      Cost: <span className="font-medium">${log.cost.toFixed(2)}</span>
-                    </p>
-                  )}
-                  {log.parts_used && log.parts_used.length > 0 && (
-                    <div className="text-sm text-gray-600 mt-2">
-                      <p className="font-medium">Parts Used:</p>
-                      <ul className="list-disc list-inside">
-                        {log.parts_used.map((part, idx) => (
-                          <li key={idx}>
-                            {part.name} (qty: {part.quantity})
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500">No maintenance logs yet</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Maintenance Logs removed — replaced by Service History above */}
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -1184,13 +1106,19 @@ export default function EquipmentDetailPage() {
 
             <div>
               <Label htmlFor="estimated_repair_cost">Estimated Repair Cost</Label>
-              <Input
-                id="estimated_repair_cost"
-                type="number"
-                step="0.01"
-                value={editForm.estimated_repair_cost}
-                onChange={(e) => setEditForm({ ...editForm, estimated_repair_cost: e.target.value })}
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <Input
+                  id="estimated_repair_cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  className="pl-7"
+                  value={editForm.estimated_repair_cost}
+                  onChange={(e) => setEditForm({ ...editForm, estimated_repair_cost: e.target.value })}
+                />
+              </div>
             </div>
 
             {/* Operational Details */}
@@ -1410,97 +1338,7 @@ export default function EquipmentDetailPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Log Sheet */}
-      <Sheet open={logSheetOpen} onOpenChange={setLogSheetOpen}>
-        <SheetContent side="right" className="w-full sm:w-[540px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Add Maintenance Log</SheetTitle>
-          </SheetHeader>
-
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label htmlFor="log-type">Log Type</Label>
-              <Select
-                value={logForm.log_type}
-                onValueChange={(value: any) => setLogForm({ ...logForm, log_type: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(logTypeLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="log-description">Description</Label>
-              <Textarea
-                id="log-description"
-                value={logForm.description}
-                onChange={(e) => setLogForm({ ...logForm, description: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="log-hours">Hours at Service</Label>
-              <Input
-                id="log-hours"
-                type="number"
-                step="0.1"
-                value={logForm.hours_at_service || 0}
-                onChange={(e) => setLogForm({ ...logForm, hours_at_service: parseFloat(e.target.value) })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="log-cost">Cost</Label>
-              <Input
-                id="log-cost"
-                type="number"
-                step="0.01"
-                value={logForm.cost || ""}
-                onChange={(e) => setLogForm({ ...logForm, cost: e.target.value ? parseFloat(e.target.value) : undefined })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="log-vendor">Vendor</Label>
-              <Input
-                id="log-vendor"
-                value={logForm.vendor || ""}
-                onChange={(e) => setLogForm({ ...logForm, vendor: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="log-downtime">Downtime Hours</Label>
-              <Input
-                id="log-downtime"
-                type="number"
-                step="0.1"
-                value={logForm.downtime_hours || ""}
-                onChange={(e) =>
-                  setLogForm({ ...logForm, downtime_hours: e.target.value ? parseFloat(e.target.value) : undefined })
-                }
-              />
-            </div>
-          </div>
-
-          <SheetFooter className="mt-6">
-            <Button variant="outline" onClick={() => setLogSheetOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleLogSubmit} disabled={!logForm.description.trim()}>
-              Add Log
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {/* Log Sheet removed — replaced by Service History */}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

@@ -451,7 +451,7 @@ export default function ClubhousePage() {
                     )}
                     {issue.estimated_cost && (
                       <div className="text-gray-700">
-                        <span className="font-semibold">Est. Cost:</span> ${issue.estimated_cost.toFixed(2)}
+                        <span className="font-semibold">Est. Cost:</span> ${Number(issue.estimated_cost).toFixed(2)}
                       </div>
                     )}
                   </div>
@@ -681,17 +681,22 @@ export default function ClubhousePage() {
             {/* Estimated Cost */}
             <div>
               <Label htmlFor="estimatedCost" className="font-semibold mb-2 block">
-                Estimated Cost ($)
+                Estimated Cost
               </Label>
-              <Input
-                id="estimatedCost"
-                name="estimatedCost"
-                type="number"
-                step="0.01"
-                value={formData.estimatedCost}
-                onChange={handleFormChange}
-                placeholder="0.00"
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <Input
+                  id="estimatedCost"
+                  name="estimatedCost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.estimatedCost}
+                  onChange={handleFormChange}
+                  placeholder="0.00"
+                  className="pl-7"
+                />
+              </div>
             </div>
 
             {/* Photo Upload */}
