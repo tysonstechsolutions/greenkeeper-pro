@@ -51,6 +51,7 @@ export async function updateSession(request: NextRequest) {
     "/manifest.json",
     "/sw.js",
     "/icons",
+    "/twa",
   ];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
