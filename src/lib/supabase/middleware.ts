@@ -47,6 +47,10 @@ export async function updateSession(request: NextRequest) {
     "/join",
     "/api/auth/pin-login",
     "/api/auth/pin-signup",
+    "/.well-known",
+    "/manifest.json",
+    "/sw.js",
+    "/icons",
   ];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)

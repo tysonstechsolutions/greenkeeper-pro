@@ -32,8 +32,15 @@ describe('Button component', () => {
   })
 
   it('renders different sizes', () => {
-    render(<Button size="sm">Small</Button>)
-    expect(screen.getByRole('button')).toHaveClass('h-8')
+    // Button sizes were enlarged from shadcn defaults for better touch targets
+    const { rerender } = render(<Button size="sm">Small</Button>)
+    expect(screen.getByRole('button')).toHaveClass('h-10')
+
+    rerender(<Button size="default">Default</Button>)
+    expect(screen.getByRole('button')).toHaveClass('h-11')
+
+    rerender(<Button size="lg">Large</Button>)
+    expect(screen.getByRole('button')).toHaveClass('h-12')
   })
 
   it('renders as child element when asChild is true', () => {
