@@ -17,6 +17,6 @@ export const config = {
      * - .well-known (TWA asset links, etc. — must be publicly accessible)
      * - public folder static asset files
      */
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw\\.js|\\.well-known|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw\\.js|\\.well-known|.*\\.(?:html|svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)",
   ],
 };
