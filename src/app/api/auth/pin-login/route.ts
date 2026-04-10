@@ -80,8 +80,8 @@ export async function POST(request: Request) {
     );
 
     // Look up the PIN in the pin_codes table
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: pinRecord, error: pinError } = await (supabase.from("pin_codes") as any)
+     
+    const { data: pinRecord, error: pinError } = await supabase.from("pin_codes")
       .select("user_id, is_active")
       .eq("pin", pin)
       .eq("is_active", true)
@@ -95,8 +95,8 @@ export async function POST(request: Request) {
     }
 
     // Get the user's email from profiles
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: profile, error: profileError } = await (supabase.from("profiles") as any)
+     
+    const { data: profile, error: profileError } = await supabase.from("profiles")
       .select("email, full_name, role")
       .eq("id", pinRecord.user_id)
       .single();

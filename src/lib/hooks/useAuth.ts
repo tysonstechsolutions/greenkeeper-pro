@@ -150,7 +150,7 @@ export function useAuthInternal(): UseAuthReturn {
 
       // Step 2: Listen for future auth changes (sign in, sign out, token refresh)
       const { data } = supabase.auth.onAuthStateChange(
-        async (event, newSession) => {
+        async (event: string, newSession: Session | null) => {
           if (!mountedRef.current) return;
 
           // Skip INITIAL_SESSION since we already handled it above

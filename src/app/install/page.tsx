@@ -40,8 +40,13 @@ export default function InstallPage() {
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    setPlatform(detectPlatform());
-    setInstalled(isStandalone());
+    // Defer to next tick to avoid the cascading-render warning while
+    // still reading window-only APIs on the client after mount.
+    const id = requestAnimationFrame(() => {
+      setPlatform(detectPlatform());
+      setInstalled(isStandalone());
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   if (installed) {

@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
     }
 
     step = "profile";
-    const { data: profile } = await (supabase.from("profiles") as any)
+    const { data: profile } = await supabase.from("profiles")
       .select("full_name, role").eq("id", user.id).single();
 
     // ── FETCH PARKING LOT ISSUES ──
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const filterStatus = url.searchParams.get("status");
 
-    let query = (supabase.from("parking_lot_issues") as any)
+    let query = supabase.from("parking_lot_issues")
       .select("*")
       .order("severity", { ascending: false })
       .order("created_at", { ascending: false });

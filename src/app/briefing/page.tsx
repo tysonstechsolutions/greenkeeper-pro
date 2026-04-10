@@ -109,8 +109,8 @@ export default function BriefingPage() {
       ] = await Promise.all([
         // Today's tasks
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("tasks") as any)
+           
+          supabase.from("tasks")
             .select("*")
             .eq("due_date", todayStr)
             .in("status", ["pending", "in_progress"])
@@ -120,8 +120,8 @@ export default function BriefingPage() {
         ),
         // Overdue tasks
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("tasks") as any)
+           
+          supabase.from("tasks")
             .select("*")
             .lt("due_date", todayStr)
             .in("status", ["pending", "in_progress"])
@@ -132,8 +132,8 @@ export default function BriefingPage() {
         ),
         // Today's schedules
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("schedules") as any)
+           
+          supabase.from("schedules")
             .select("*, profiles:user_id(id, full_name, role)")
             .eq("schedule_date", todayStr)
             .neq("shift_type", "off"),
@@ -142,8 +142,8 @@ export default function BriefingPage() {
         ),
         // Active time-off
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("time_off_requests") as any)
+           
+          supabase.from("time_off_requests")
             .select("*, profiles:user_id(id, full_name)")
             .eq("status", "approved")
             .lte("start_date", todayStr)
@@ -153,8 +153,8 @@ export default function BriefingPage() {
         ),
         // Equipment needing attention
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("equipment") as any)
+           
+          supabase.from("equipment")
             .select("*")
             .in("status", ["needs_service", "in_repair", "out_of_service"]),
           8000,
@@ -162,8 +162,8 @@ export default function BriefingPage() {
         ),
         // Recent chemical applications with active REI
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("chemical_applications") as any)
+           
+          supabase.from("chemical_applications")
             .select("*, chemical_products:product_id(product_name)")
             .gte("rei_expires_at", now.toISOString())
             .order("rei_expires_at", { ascending: true }),
@@ -172,8 +172,8 @@ export default function BriefingPage() {
         ),
         // Low stock chemicals
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("chemical_products") as any)
+           
+          supabase.from("chemical_products")
             .select("*")
             .eq("is_active", true)
             .not("reorder_threshold", "is", null),
@@ -182,8 +182,8 @@ export default function BriefingPage() {
         ),
         // Recent unresolved feedback
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("golfer_feedback") as any)
+           
+          supabase.from("golfer_feedback")
             .select("*")
             .in("status", ["new", "acknowledged", "in_progress"])
             .order("created_at", { ascending: false })
@@ -193,8 +193,8 @@ export default function BriefingPage() {
         ),
         // Active profile count
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("profiles") as any)
+           
+          supabase.from("profiles")
             .select("*", { count: "exact", head: true })
             .eq("is_active", true),
           8000,

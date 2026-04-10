@@ -85,12 +85,12 @@ export async function GET(request: NextRequest) {
     }
 
     step = "profile";
-    const { data: profile } = await (supabase.from("profiles") as any)
+    const { data: profile } = await supabase.from("profiles")
       .select("full_name, role").eq("id", user.id).single();
 
     // ── FETCH CLUBHOUSE ISSUES ──
     step = "fetch-issues";
-    const { data: items, error: fetchErr } = await (supabase.from("clubhouse_issues") as any)
+    const { data: items, error: fetchErr } = await supabase.from("clubhouse_issues")
       .select("*")
       .order("priority", { ascending: true })
       .order("created_at", { ascending: false });

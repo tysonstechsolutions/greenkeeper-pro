@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 export type CourseStatusType =
   | "open"
@@ -130,7 +131,7 @@ export function useCourseStatus() {
           table: "app_settings",
           filter: "key=eq.course_status",
         },
-        (payload) => {
+        (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
           if (payload.new && "value" in payload.new) {
             const newValue = payload.new.value as unknown as CourseStatus;
             setCourseStatus(newValue);

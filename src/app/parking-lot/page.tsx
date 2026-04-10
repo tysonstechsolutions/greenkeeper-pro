@@ -54,7 +54,7 @@ import {
   issueStatusLabels,
   issueStatusColors,
 } from '@/lib/hooks/useParkingLotIssues';
-import type { ParkingLotIssue } from '@/types/database';
+import type { ParkingLotIssue, IssueStatus } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
 
 const ISSUE_TYPES = ['pothole', 'crack', 'drainage', 'erosion', 'marking', 'curbing', 'other'] as const;
@@ -114,7 +114,7 @@ export default function ParkingLotPage() {
   useEffect(() => {
     const fetchStaff = async () => {
       const supabase = createClient();
-      const { data } = await (supabase.from("profiles") as any)
+      const { data } = await supabase.from("profiles")
         .select("id, full_name, role")
         .order("role")
         .order("full_name");
@@ -140,7 +140,7 @@ export default function ParkingLotPage() {
     critical: issues.filter((i) => i.severity === 'critical').length,
   };
 
-  const handleFormChange = (field: keyof FormData, value: any) => {
+  const handleFormChange = <K extends keyof FormData>(field: K, value: FormData[K]) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -241,7 +241,7 @@ export default function ParkingLotPage() {
 
   const handleStatusUpdate = async (issueId: string, newStatus: string) => {
     try {
-      await updateIssue(issueId, { status: newStatus as any });
+      await updateIssue(issueId, { status: newStatus as IssueStatus });
     } catch (error) {
       console.error('Failed to update status:', error);
       showToast('error', 'Failed to update status');
@@ -701,7 +701,7 @@ export default function ParkingLotPage() {
               <Select
                 value={formData.issueType}
                 onValueChange={(value) =>
-                  handleFormChange('issueType', value)
+                  handleFormChange('issueType', value as FormData['issueType'])
                 }
               >
                 <SelectTrigger id="issue-type">
@@ -725,7 +725,7 @@ export default function ParkingLotPage() {
               <Select
                 value={formData.severity}
                 onValueChange={(value) =>
-                  handleFormChange('severity', value)
+                  handleFormChange('severity', value as FormData['severity'])
                 }
               >
                 <SelectTrigger id="severity">

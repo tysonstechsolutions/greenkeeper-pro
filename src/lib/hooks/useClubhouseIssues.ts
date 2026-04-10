@@ -63,7 +63,7 @@ export function useClubhouseIssues() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("clubhouse_issues") as any)
+      const { data, error } = await supabase.from("clubhouse_issues")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -92,7 +92,7 @@ export function useClubhouseIssues() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data, error } = await (supabase.from("clubhouse_issues") as any)
+      const { data, error } = await supabase.from("clubhouse_issues")
         .insert({
           reported_by: user.id,
           title: issue.title,
@@ -118,11 +118,14 @@ export function useClubhouseIssues() {
   const updateIssue = useCallback(async (issueId: string, updates: Partial<ClubhouseIssue>) => {
     try {
       const supabase = createClient();
-      const updateData: any = { ...updates, updated_at: new Date().toISOString() };
+      const updateData: Partial<ClubhouseIssue> = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
       if (updates.status === "completed") {
         updateData.completed_at = new Date().toISOString();
       }
-      const { data, error } = await (supabase.from("clubhouse_issues") as any)
+      const { data, error } = await supabase.from("clubhouse_issues")
         .update(updateData)
         .eq("id", issueId)
         .select()
@@ -139,7 +142,7 @@ export function useClubhouseIssues() {
   const deleteIssue = useCallback(async (issueId: string) => {
     try {
       const supabase = createClient();
-      const { error } = await (supabase.from("clubhouse_issues") as any)
+      const { error } = await supabase.from("clubhouse_issues")
         .delete()
         .eq("id", issueId);
       if (error) throw error;

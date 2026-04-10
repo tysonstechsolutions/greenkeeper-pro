@@ -75,8 +75,8 @@ export default function CourseConditionsPage() {
       const queries = await Promise.all([
         // Fetch course conditions
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("app_settings") as any)
+           
+          supabase.from("app_settings")
             .select("*")
             .eq("key", "course_conditions")
             .single(),
@@ -85,8 +85,8 @@ export default function CourseConditionsPage() {
         ),
         // Fetch latest weather
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("weather_logs") as any)
+           
+          supabase.from("weather_logs")
             .select("*")
             .order("created_at", { ascending: false })
             .limit(1),
@@ -95,8 +95,8 @@ export default function CourseConditionsPage() {
         ),
         // Fetch active chemical applications
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("chemical_applications") as any)
+           
+          supabase.from("chemical_applications")
             .select("*")
             .gt("rei_expires_at", new Date().toISOString()),
           8000,
@@ -104,8 +104,8 @@ export default function CourseConditionsPage() {
         ),
         // Fetch course zones
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("course_zones") as any).select("*"),
+           
+          supabase.from("course_zones").select("*"),
           8000,
           { data: null, error: null }
         ),

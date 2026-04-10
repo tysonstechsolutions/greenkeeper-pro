@@ -10,7 +10,7 @@ import type {
   Profile,
   Database,
 } from "@/types/database";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 // Channel with unread count and last message info
 export interface ChannelWithDetails extends Channel {
@@ -67,8 +67,8 @@ export function useChannels(): UseChannelsReturn {
 
     try {
       // Get channels the user is a member of
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: memberData, error: memberError } = await (supabase.from("channel_members") as any)
+       
+      const { data: memberData, error: memberError } = await supabase.from("channel_members")
         .select("channel_id, last_read_at")
         .eq("user_id", user.id);
 
@@ -91,8 +91,8 @@ export function useChannels(): UseChannelsReturn {
       );
 
       // Get channel details - limit to 20 most recent to prevent loading too many
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: channelsData, error: channelsError } = await (supabase.from("channels") as any)
+       
+      const { data: channelsData, error: channelsError } = await supabase.from("channels")
         .select("*")
         .in("id", channelIds.slice(0, 20)) // Limit to 20 channels
         .eq("is_active", true);
@@ -107,8 +107,8 @@ export function useChannels(): UseChannelsReturn {
       const channelsWithDetails: ChannelWithDetails[] = await Promise.all(
         (channelsData || []).map(async (channel: Channel) => {
           // Get last message (use maybeSingle to avoid 406 when no messages exist)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: lastMessage } = await (supabase.from("messages") as any)
+           
+          const { data: lastMessage } = await supabase.from("messages")
             .select("content, created_at")
             .eq("channel_id", channel.id)
             .order("created_at", { ascending: false })
@@ -120,8 +120,8 @@ export function useChannels(): UseChannelsReturn {
           let unreadCount = 0;
 
           if (lastReadAt) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { count } = await (supabase.from("messages") as any)
+             
+            const { count } = await supabase.from("messages")
               .select("*", { count: "exact", head: true })
               .eq("channel_id", channel.id)
               .gt("created_at", lastReadAt)
@@ -131,8 +131,8 @@ export function useChannels(): UseChannelsReturn {
           }
 
           // Count members
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { count: memberCount } = await (supabase.from("channel_members") as any)
+           
+          const { count: memberCount } = await supabase.from("channel_members")
             .select("*", { count: "exact", head: true })
             .eq("channel_id", channel.id);
 
@@ -197,8 +197,8 @@ export function useChannels(): UseChannelsReturn {
           description: null,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: channel, error: insertError } = await (supabase.from("channels") as any)
+         
+        const { data: channel, error: insertError } = await supabase.from("channels")
           .insert(insertData)
           .select()
           .single();
@@ -217,8 +217,8 @@ export function useChannels(): UseChannelsReturn {
           muted: false,
         }));
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: membersError } = await (supabase.from("channel_members") as any)
+         
+        const { error: membersError } = await supabase.from("channel_members")
           .insert(memberInserts);
 
         if (membersError) {
@@ -249,8 +249,8 @@ export function useChannels(): UseChannelsReturn {
 
       try {
         // Check if DM channel already exists between these users
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existingChannels } = await (supabase.from("channels") as any)
+         
+        const { data: existingChannels } = await supabase.from("channels")
           .select("id")
           .eq("channel_type", "direct")
           .eq("is_active", true);
@@ -258,8 +258,8 @@ export function useChannels(): UseChannelsReturn {
         if (existingChannels) {
           for (const channel of existingChannels as { id: string }[]) {
             // Check if both users are members
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: members } = await (supabase.from("channel_members") as any)
+             
+            const { data: members } = await supabase.from("channel_members")
               .select("user_id")
               .eq("channel_id", channel.id);
 
@@ -278,8 +278,8 @@ export function useChannels(): UseChannelsReturn {
                 }
 
                 // Fetch the channel details
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const { data } = await (supabase.from("channels") as any)
+                 
+                const { data } = await supabase.from("channels")
                   .select("*")
                   .eq("id", channel.id)
                   .single();
@@ -291,8 +291,8 @@ export function useChannels(): UseChannelsReturn {
         }
 
         // Get other user's name for channel name
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: otherProfile } = await (supabase.from("profiles") as any)
+         
+        const { data: otherProfile } = await supabase.from("profiles")
           .select("full_name, display_name")
           .eq("id", otherUserId)
           .single();
@@ -311,8 +311,8 @@ export function useChannels(): UseChannelsReturn {
           description: null,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: channel, error: insertError } = await (supabase.from("channels") as any)
+         
+        const { data: channel, error: insertError } = await supabase.from("channels")
           .insert(insertData)
           .select()
           .single();
@@ -324,8 +324,8 @@ export function useChannels(): UseChannelsReturn {
         }
 
         // Add both users as members
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: membersError } = await (supabase.from("channel_members") as any)
+         
+        const { error: membersError } = await supabase.from("channel_members")
           .insert([
             { channel_id: channel.id, user_id: user.id, muted: false },
             { channel_id: channel.id, user_id: otherUserId, muted: false },
@@ -360,8 +360,8 @@ export function useChannels(): UseChannelsReturn {
       }
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase.from("channels") as any)
+         
+        const { error: updateError } = await supabase.from("channels")
           .update(data)
           .eq("id", id);
 
@@ -396,8 +396,8 @@ export function useChannels(): UseChannelsReturn {
 
       try {
         // Soft delete - just mark as inactive
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: deleteError } = await (supabase.from("channels") as any)
+         
+        const { error: deleteError } = await supabase.from("channels")
           .update({ is_active: false })
           .eq("id", id);
 
@@ -435,8 +435,8 @@ export function useChannels(): UseChannelsReturn {
           muted: false,
         }));
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: insertError } = await (supabase.from("channel_members") as any)
+         
+        const { error: insertError } = await supabase.from("channel_members")
           .upsert(memberInserts, {
             onConflict: "channel_id,user_id",
           });
@@ -469,8 +469,8 @@ export function useChannels(): UseChannelsReturn {
       }
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: deleteError } = await (supabase.from("channel_members") as any)
+         
+        const { error: deleteError } = await supabase.from("channel_members")
           .delete()
           .eq("channel_id", channelId)
           .eq("user_id", userId);
@@ -516,8 +516,8 @@ export function useChannels(): UseChannelsReturn {
       try {
         const now = new Date().toISOString();
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase.from("channel_members") as any)
+         
+        const { error: updateError } = await supabase.from("channel_members")
           .update({ last_read_at: now })
           .eq("channel_id", channelId)
           .eq("user_id", user.id);
@@ -586,7 +586,7 @@ export function useChannels(): UseChannelsReturn {
           schema: "public",
           table: "messages",
         },
-        (payload) => {
+        (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
           const newMessage = payload.new as { channel_id: string; sender_id: string; content: string; created_at: string };
 
           // Update the channel's last message and unread count

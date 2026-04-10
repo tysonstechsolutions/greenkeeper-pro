@@ -4,7 +4,9 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
 import type { Notification, NotificationType, Database } from "@/types/database";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+
+type RealtimePayload = RealtimePostgresChangesPayload<Record<string, unknown>>;
 
 export type NotificationWithDetails = Notification;
 
@@ -273,7 +275,7 @@ export function useNotifications(): UseNotificationsReturn {
           table: "notifications",
           filter: `user_id=eq.${user.id}`,
         },
-        (payload) => {
+        (payload: RealtimePayload) => {
           const newNotification = payload.new as Notification;
 
           // Add to the beginning of the list
@@ -299,7 +301,7 @@ export function useNotifications(): UseNotificationsReturn {
           table: "notifications",
           filter: `user_id=eq.${user.id}`,
         },
-        (payload) => {
+        (payload: RealtimePayload) => {
           const updatedNotification = payload.new as Notification;
 
           setNotifications((prev) =>
@@ -320,7 +322,7 @@ export function useNotifications(): UseNotificationsReturn {
           table: "notifications",
           filter: `user_id=eq.${user.id}`,
         },
-        (payload) => {
+        (payload: RealtimePayload) => {
           const deletedNotification = payload.old as { id: string; is_read: boolean };
 
           setNotifications((prev) =>

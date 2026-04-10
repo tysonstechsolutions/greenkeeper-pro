@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     step = "profile";
-    const { data: profile } = await (supabase.from("profiles") as any)
+    const { data: profile } = await supabase.from("profiles")
       .select("full_name, role").eq("id", user.id).single();
 
     // ── FETCH EQUIPMENT ──
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
     const singleId = url.searchParams.get("id");
     const filterCondition = url.searchParams.get("condition");
 
-    let query = (supabase.from("equipment") as any)
+    let query = supabase.from("equipment")
       .select("*")
       .neq("status", "retired")
       .order("name", { ascending: true });
@@ -96,12 +96,12 @@ export async function GET(request: NextRequest) {
     step = "fetch-parts-services";
     const equipmentIds = items.map((eq: any) => eq.id);
 
-    const { data: allParts } = await (supabase.from("equipment_parts") as any)
+    const { data: allParts } = await supabase.from("equipment_parts")
       .select("*")
       .in("equipment_id", equipmentIds)
       .order("created_at", { ascending: false });
 
-    const { data: allServiceRecords } = await (supabase.from("equipment_service_records") as any)
+    const { data: allServiceRecords } = await supabase.from("equipment_service_records")
       .select("*")
       .in("equipment_id", equipmentIds)
       .order("service_date", { ascending: false });

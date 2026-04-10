@@ -79,8 +79,8 @@ export default function PollsPage() {
     setLoading(true);
     setError(null);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const query = (supabase.from("polls") as any)
+     
+    const query = supabase.from("polls")
       .select(
         `
         id,
@@ -164,8 +164,8 @@ export default function PollsPage() {
       // Delete existing votes for this poll
       const existingVotes = userVotes[pollId] || [];
       if (existingVotes.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from("poll_votes") as any)
+         
+        await supabase.from("poll_votes")
           .delete()
           .in("option_id", existingVotes)
           .eq("user_id", user.id);
@@ -178,8 +178,8 @@ export default function PollsPage() {
         user_id: user.id,
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const insertResult = await (supabase.from("poll_votes") as any).insert(newVotes);
+       
+      const insertResult = await supabase.from("poll_votes").insert(newVotes);
 
       if (!insertResult.error) {
         setUserVotes((prev) => ({ ...prev, [pollId]: selectedOptions }));
@@ -200,8 +200,8 @@ export default function PollsPage() {
     setAddingComment((prev) => ({ ...prev, [pollId]: true }));
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (supabase.from("poll_comments") as any).insert({
+       
+      const result = await supabase.from("poll_comments").insert({
         poll_id: pollId,
         user_id: user.id,
         content: text,

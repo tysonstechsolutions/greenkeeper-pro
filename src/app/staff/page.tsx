@@ -83,8 +83,8 @@ export default function StaffPage() {
       const [profilesResult, tasksResult, timeOffResult, scheduleResult] = await Promise.all([
         // 1. Get all profiles
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("profiles") as any)
+           
+          supabase.from("profiles")
             .select("*")
             .order("role", { ascending: true })
             .order("full_name", { ascending: true }),
@@ -93,8 +93,8 @@ export default function StaffPage() {
         ),
         // 2. Get task counts per user
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("tasks") as any)
+           
+          supabase.from("tasks")
             .select("assigned_to")
             .in("status", ["pending", "in_progress"]),
           8000,
@@ -102,8 +102,8 @@ export default function StaffPage() {
         ),
         // 3. Get pending time-off counts
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("time_off_requests") as any)
+           
+          supabase.from("time_off_requests")
             .select("user_id")
             .eq("status", "pending"),
           8000,
@@ -111,8 +111,8 @@ export default function StaffPage() {
         ),
         // 4. Get today's crew assignments
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("schedules") as any)
+           
+          supabase.from("schedules")
             .select("user_id, crew_assignment")
             .eq("schedule_date", today)
             .not("crew_assignment", "is", null),
@@ -229,8 +229,8 @@ export default function StaffPage() {
         const [tasksResult, timeOffResult, scheduleResult] = await Promise.all([
           // Tasks assigned to this user
           withTimeout(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (supabase.from("tasks") as any)
+             
+            supabase.from("tasks")
               .select("*")
               .eq("assigned_to", staff.id)
               .in("status", ["pending", "in_progress"])
@@ -241,8 +241,8 @@ export default function StaffPage() {
           ),
           // Time-off requests
           withTimeout(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (supabase.from("time_off_requests") as any)
+             
+            supabase.from("time_off_requests")
               .select("*")
               .eq("user_id", staff.id)
               .order("start_date", { ascending: false })
@@ -252,8 +252,8 @@ export default function StaffPage() {
           ),
           // Recent schedule entries
           withTimeout(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (supabase.from("schedules") as any)
+             
+            supabase.from("schedules")
               .select("*")
               .eq("user_id", staff.id)
               .gte("schedule_date", today)

@@ -51,8 +51,8 @@ export default function ChecklistsPage() {
       const queries = [
         // My tasks for today
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("tasks") as any)
+           
+          supabase.from("tasks")
             .select("*")
             .eq("assigned_to", user.id)
             .eq("due_date", today)
@@ -67,8 +67,8 @@ export default function ChecklistsPage() {
       if (isManager) {
         queries.push(
           withTimeout(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (supabase.from("tasks") as any)
+             
+            supabase.from("tasks")
               .select("*, profiles:assigned_to(full_name, role)")
               .eq("due_date", today)
               .in("status", ["pending", "in_progress"])

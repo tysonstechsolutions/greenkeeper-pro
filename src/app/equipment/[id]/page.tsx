@@ -77,7 +77,7 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useEquipmentParts } from "@/lib/hooks/useEquipmentParts";
 import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecords";
 import { createClient } from "@/lib/supabase/client";
-import type { Equipment, EquipmentLog, EquipmentInspection, EquipmentPart, EquipmentServiceRecord } from "@/types/database";
+import type { Equipment, EquipmentLog, EquipmentInspection, EquipmentPart, EquipmentServiceRecord, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
 
 const partStatusLabels: Record<string, string> = {
   needed: "Needed", ordered: "Ordered", received: "Received",
@@ -240,7 +240,7 @@ export default function EquipmentDetailPage() {
   useEffect(() => {
     async function loadStaff() {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("profiles") as any)
+      const { data, error } = await supabase.from("profiles")
         .select("id, full_name, role")
         .order("role")
         .order("full_name");
@@ -324,19 +324,19 @@ export default function EquipmentDetailPage() {
     try {
       const updateData: Partial<Equipment> = {
         name: editForm.name,
-        equipment_type: editForm.equipment_type as any,
+        equipment_type: editForm.equipment_type as EquipmentType,
         make: editForm.make || null,
         model: editForm.model || null,
         year: editForm.year ? parseInt(editForm.year) : null,
         serial_number: editForm.serial_number || null,
         asset_tag: editForm.asset_tag || null,
-        status: editForm.status as any,
-        condition_status: editForm.condition_status as any,
+        status: editForm.status as EquipmentStatus,
+        condition_status: editForm.condition_status as EquipmentCondition,
         condition_notes: editForm.condition_notes || null,
         needs_parts_ordered: editForm.needs_parts_ordered,
         parts_needed: editForm.parts_needed || null,
         estimated_repair_cost: editForm.estimated_repair_cost ? parseFloat(editForm.estimated_repair_cost) : null,
-        fuel_type: editForm.fuel_type as any,
+        fuel_type: editForm.fuel_type as FuelType,
         location: editForm.location || null,
         current_hours: editForm.current_hours ? parseFloat(editForm.current_hours) : null,
         service_interval_hours: editForm.service_interval_hours ? parseFloat(editForm.service_interval_hours) : null,
@@ -372,7 +372,7 @@ export default function EquipmentDetailPage() {
     const inspectionData: CreateInspectionData = {
       equipment_id: equipmentId,
       inspection_type: currentInspectionType,
-      condition_status: editForm.condition_status as any,
+      condition_status: editForm.condition_status as EquipmentCondition,
       notes: inspectionNotes,
       checklist_items: inspectionItems.reduce(
         (acc, item) => {
@@ -782,7 +782,7 @@ export default function EquipmentDetailPage() {
                           disabled={!delayReasonInput[part.id]?.trim()}
                           onClick={async () => {
                             clearPartsError();
-                            const { error: err } = await updatePart(part.id, { delay_reason: delayReasonInput[part.id] } as any);
+                            const { error: err } = await updatePart(part.id, { delay_reason: delayReasonInput[part.id] });
                             if (err) {
                               setSaveError(`Failed to save delay reason: ${err}`);
                               return;
@@ -820,7 +820,7 @@ export default function EquipmentDetailPage() {
                         <>
                           <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={async () => {
                             clearPartsError();
-                            const { error: err } = await updatePart(part.id, { status: "ordered" } as any);
+                            const { error: err } = await updatePart(part.id, { status: "ordered" });
                             if (err) {
                               setSaveError(`Failed to mark Ordered: ${err}`);
                             } else {
@@ -841,7 +841,7 @@ export default function EquipmentDetailPage() {
                       {part.status === "ordered" && (
                         <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={async () => {
                           clearPartsError();
-                          const { error: err } = await updatePart(part.id, { status: "received" } as any);
+                          const { error: err } = await updatePart(part.id, { status: "received" });
                           if (err) {
                             setSaveError(`Failed to mark Received: ${err}`);
                           } else {
@@ -1440,7 +1440,7 @@ export default function EquipmentDetailPage() {
 
             <div>
               <Label htmlFor="fuel-level">Fuel Level</Label>
-              <Select value={fuelLevel} onValueChange={(value: any) => setFuelLevel(value)}>
+              <Select value={fuelLevel} onValueChange={(value: string) => setFuelLevel(value as typeof fuelLevel)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1457,7 +1457,7 @@ export default function EquipmentDetailPage() {
 
             <div>
               <Label htmlFor="oil-level">Oil Level</Label>
-              <Select value={oilLevel} onValueChange={(value: any) => setOilLevel(value)}>
+              <Select value={oilLevel} onValueChange={(value: string) => setOilLevel(value as typeof oilLevel)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1482,7 +1482,7 @@ export default function EquipmentDetailPage() {
 
             <div>
               <Label htmlFor="inspection-overall">Overall Status</Label>
-              <Select value={inspectionOverall} onValueChange={(value: any) => setInspectionOverall(value)}>
+              <Select value={inspectionOverall} onValueChange={(value: string) => setInspectionOverall(value as typeof inspectionOverall)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

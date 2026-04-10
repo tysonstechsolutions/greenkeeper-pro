@@ -19,7 +19,7 @@ export function useEquipmentParts() {
     setError(null);
     try {
       const supabase = createClient();
-      const { data, error: fetchError } = await (supabase.from("equipment_parts") as any)
+      const { data, error: fetchError } = await supabase.from("equipment_parts")
         .select("*")
         .eq("equipment_id", equipmentId)
         .order("created_at", { ascending: false });
@@ -66,7 +66,7 @@ export function useEquipmentParts() {
         return { data: null, error: SESSION_EXPIRED_MSG };
       }
 
-      const { data, error: insertError } = await (supabase.from("equipment_parts") as any)
+      const { data, error: insertError } = await supabase.from("equipment_parts")
         .insert({
           equipment_id: equipmentId,
           name: part.name,
@@ -109,7 +109,7 @@ export function useEquipmentParts() {
         return { data: null, error: SESSION_EXPIRED_MSG };
       }
 
-      const { data, error: updateError } = await (supabase.from("equipment_parts") as any)
+      const { data, error: updateError } = await supabase.from("equipment_parts")
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", partId)
         .select()
@@ -143,7 +143,7 @@ export function useEquipmentParts() {
         return { success: false, error: SESSION_EXPIRED_MSG };
       }
 
-      const { error: deleteError } = await (supabase.from("equipment_parts") as any)
+      const { error: deleteError } = await supabase.from("equipment_parts")
         .delete()
         .eq("id", partId);
 

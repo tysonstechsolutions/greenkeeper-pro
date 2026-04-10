@@ -120,8 +120,8 @@ export default function BriefingSettingsPage() {
   // Fetch current settings
   const fetchSettings = useCallback(async () => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error: fetchError } = await (supabase.from("app_settings") as any)
+       
+      const { data, error: fetchError } = await supabase.from("app_settings")
         .select("value")
         .eq("key", "daily_briefing")
         .single();
@@ -229,8 +229,8 @@ export default function BriefingSettingsPage() {
     setSaved(false);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: upsertError } = await (supabase.from("app_settings") as any)
+       
+      const { error: upsertError } = await supabase.from("app_settings")
         .upsert({
           key: "daily_briefing",
           value: settings,

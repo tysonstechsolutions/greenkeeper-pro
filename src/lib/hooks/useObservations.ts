@@ -54,8 +54,8 @@ export function useObservations(): UseObservationsReturn {
 
     try {
       const result = await withTimeout(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase.from("course_observations") as any)
+         
+        supabase.from("course_observations")
           .select("*")
           .order("created_at", { ascending: false }),
         8000,
@@ -83,8 +83,8 @@ export function useObservations(): UseObservationsReturn {
       // Get current plan and its items in parallel
       const [planResult, itemsResult] = await Promise.all([
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("improvement_plans") as any)
+           
+          supabase.from("improvement_plans")
             .select("*")
             .eq("is_current", true)
             .order("created_at", { ascending: false })
@@ -94,8 +94,8 @@ export function useObservations(): UseObservationsReturn {
           { data: null, error: null }
         ),
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("improvement_plan_items") as any)
+           
+          supabase.from("improvement_plan_items")
             .select("*")
             .order("sort_order", { ascending: true }),
           8000,

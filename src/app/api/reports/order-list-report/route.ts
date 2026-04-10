@@ -60,12 +60,12 @@ export async function GET(request: NextRequest) {
     }
 
     step = "profile";
-    const { data: profile } = await (supabase.from("profiles") as any)
+    const { data: profile } = await supabase.from("profiles")
       .select("full_name, role").eq("id", user.id).single();
 
     // ── FETCH ORDER ITEMS ──
     step = "fetch-order-items";
-    const { data: orderItems, error: orderErr } = await (supabase.from("order_items") as any)
+    const { data: orderItems, error: orderErr } = await supabase.from("order_items")
       .select("*")
       .order("category", { ascending: true })
       .order("priority", { ascending: true });
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     // ── FETCH EQUIPMENT PARTS (needed/ordered) ──
     step = "fetch-parts";
-    const { data: equipmentParts, error: partsErr } = await (supabase.from("equipment_parts") as any)
+    const { data: equipmentParts, error: partsErr } = await supabase.from("equipment_parts")
       .select("*")
       .in("status", ["needed", "ordered"])
       .order("equipment_id", { ascending: true });
@@ -88,10 +88,10 @@ export async function GET(request: NextRequest) {
     // ── FETCH EQUIPMENT NAMES FOR PARTS ──
     step = "fetch-equipment";
     const equipmentIds = (equipmentParts || []).map((p: any) => p.equipment_id);
-    let equipmentMap = new Map<string, string>();
+    const equipmentMap = new Map<string, string>();
 
     if (equipmentIds.length > 0) {
-      const { data: equipment } = await (supabase.from("equipment") as any)
+      const { data: equipment } = await supabase.from("equipment")
         .select("id, name")
         .in("id", equipmentIds);
 

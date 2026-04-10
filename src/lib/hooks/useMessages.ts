@@ -9,7 +9,9 @@ import type {
   Profile,
   Database,
 } from "@/types/database";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+
+type RealtimePayload = RealtimePostgresChangesPayload<Record<string, unknown>>;
 
 // Message with sender profile data
 export interface MessageWithSender extends Message {
@@ -427,7 +429,7 @@ export function useMessages(): UseMessagesReturn {
           table: "messages",
           filter: `channel_id=eq.${currentChannelId}`,
         },
-        async (payload) => {
+        async (payload: RealtimePayload) => {
           const newMessage = payload.new as Message;
 
           // Don't add if it's from the current user (they already saw it via optimistic UI)
@@ -444,7 +446,7 @@ export function useMessages(): UseMessagesReturn {
               .select("id, full_name, display_name, avatar_url, role")
               .eq("id", newMessage.sender_id)
               .single()
-              .then(({ data: sender }) => {
+              .then(({ data: sender }: { data: MessageWithSender["sender"] }) => {
                 setMessages((current) => {
                   // Double-check we haven't added it already
                   if (current.some((m) => m.id === newMessage.id)) {
@@ -466,7 +468,7 @@ export function useMessages(): UseMessagesReturn {
           table: "messages",
           filter: `channel_id=eq.${currentChannelId}`,
         },
-        (payload) => {
+        (payload: RealtimePayload) => {
           const updatedMessage = payload.new as Message;
           setMessages((prev) =>
             prev.map((m) =>
@@ -490,7 +492,7 @@ export function useMessages(): UseMessagesReturn {
           table: "messages",
           filter: `channel_id=eq.${currentChannelId}`,
         },
-        (payload) => {
+        (payload: RealtimePayload) => {
           const deletedMessage = payload.old as { id: string };
           setMessages((prev) => prev.filter((m) => m.id !== deletedMessage.id));
         }

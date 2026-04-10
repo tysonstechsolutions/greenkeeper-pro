@@ -79,8 +79,8 @@ export async function POST(request: Request) {
     );
 
     // 1. Validate invite.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: inviteData, error: inviteError } = await (supabase.from("invites") as any)
+     
+    const { data: inviteData, error: inviteError } = await supabase.from("invites")
       .select("id, token, role, email, expires_at, used_by")
       .eq("token", token)
       .single();
@@ -97,8 +97,8 @@ export async function POST(request: Request) {
     }
 
     // 2. Make sure the chosen PIN isn't already taken.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingPin } = await (supabase.from("pin_codes") as any)
+     
+    const { data: existingPin } = await supabase.from("pin_codes")
       .select("pin")
       .eq("pin", pin)
       .eq("is_active", true)
@@ -143,8 +143,8 @@ export async function POST(request: Request) {
     }
 
     // 5. Upsert profile fields. A trigger may have already inserted the row.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: profileError } = await (supabase.from("profiles") as any)
+     
+    const { error: profileError } = await supabase.from("profiles")
       .upsert(
         {
           id: newUser.id,
@@ -160,8 +160,8 @@ export async function POST(request: Request) {
     }
 
     // 6. Insert pin_codes row.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: pinError } = await (supabase.from("pin_codes") as any).insert({
+     
+    const { error: pinError } = await supabase.from("pin_codes").insert({
       pin,
       user_id: newUser.id,
       is_active: true,
@@ -175,8 +175,8 @@ export async function POST(request: Request) {
     }
 
     // 7. Mark the invite used.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from("invites") as any)
+     
+    await supabase.from("invites")
       .update({ used_by: newUser.id, used_at: new Date().toISOString() })
       .eq("id", invite.id);
 

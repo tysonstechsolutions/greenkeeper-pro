@@ -12,7 +12,7 @@ import type {
   TaskStatus,
   Database,
 } from "@/types/database";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { sendNotification } from "./useNotifications";
 
 // Extended task type with joined data
@@ -562,14 +562,14 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
     // Subscribe to changes on the tasks table
     const channel = supabase
       .channel("tasks-realtime")
-      .on<Task>(
+      .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "tasks",
         },
-        async (payload) => {
+        async (payload: RealtimePostgresChangesPayload<Task>) => {
           if (payload.eventType === "INSERT") {
             // Fetch the full task with relations
             const fullTask = await getTask(payload.new.id);

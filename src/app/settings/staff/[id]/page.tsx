@@ -67,8 +67,8 @@ export default function EditStaffPage() {
     async function fetchStaff() {
       setLoading(true);
       const { data, error: fetchError } = await withTimeout(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase.from("profiles") as any)
+         
+        supabase.from("profiles")
           .select("id, email, full_name, display_name, role, phone, hire_date, is_active")
           .eq("id", staffId)
           .single(),
@@ -102,8 +102,8 @@ export default function EditStaffPage() {
     setSuccess(false);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase.from("profiles") as any)
+       
+      const { error: updateError } = await supabase.from("profiles")
         .update({
           full_name: fullName,
           display_name: displayName || null,

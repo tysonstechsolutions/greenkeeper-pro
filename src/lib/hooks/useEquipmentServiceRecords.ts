@@ -14,7 +14,7 @@ export function useEquipmentServiceRecords() {
     setError(null);
     try {
       const supabase = createClient();
-      const { data, error: fetchError } = await (supabase.from("equipment_service_records") as any)
+      const { data, error: fetchError } = await supabase.from("equipment_service_records")
         .select("*")
         .eq("equipment_id", equipmentId)
         .order("service_date", { ascending: false });
@@ -51,7 +51,7 @@ export function useEquipmentServiceRecords() {
         return { data: null, error: msg };
       }
 
-      const { data, error: insertError } = await (supabase.from("equipment_service_records") as any)
+      const { data, error: insertError } = await supabase.from("equipment_service_records")
         .insert({
           equipment_id: equipmentId,
           service_date: record.service_date,
@@ -85,7 +85,7 @@ export function useEquipmentServiceRecords() {
     setError(null);
     try {
       const supabase = createClient();
-      const { error: deleteError } = await (supabase.from("equipment_service_records") as any)
+      const { error: deleteError } = await supabase.from("equipment_service_records")
         .delete()
         .eq("id", recordId);
       if (deleteError) throw deleteError;

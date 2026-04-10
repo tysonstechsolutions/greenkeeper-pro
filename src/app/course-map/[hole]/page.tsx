@@ -154,17 +154,8 @@ export default function HoleDetailPage() {
 
   const [imgError, setImgError] = useState(false);
 
-  // Validate hole number
-  if (isNaN(holeNumber) || holeNumber < 1 || holeNumber > 18) {
-    return (
-      <div className="p-4 text-center py-12">
-        <p className="text-muted-foreground">Invalid hole number</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.push("/course-map")}>
-          Back to Course Map
-        </Button>
-      </div>
-    );
-  }
+  const isInvalidHole =
+    isNaN(holeNumber) || holeNumber < 1 || holeNumber > 18;
 
   // ── Handle Image Tap (pin drop) → open photo step ──
   const handleImageTap = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
@@ -426,8 +417,8 @@ export default function HoleDetailPage() {
     const supabase = createClient();
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: task, error } = await (supabase.from("tasks") as any)
+       
+      const { data: task, error } = await supabase.from("tasks")
         .insert({
           title: `Hole ${obs.hole_number}: ${obs.title}`,
           description: `${issueTypeLabels[obs.issue_type]} reported on Hole ${obs.hole_number}.\n\n${obs.description || "No additional details."}${obs.fix_instructions ? `\n\n--- How to Fix ---\n${obs.fix_instructions}` : ""}${obs.photo_url ? `\n\nPhoto: ${obs.photo_url}` : ""}`,
@@ -492,6 +483,17 @@ export default function HoleDetailPage() {
   const par = HOLE_PARS[holeNumber] || 4;
   const yards = HOLE_YARDS[holeNumber] || 0;
   const activeCount = holeObs.filter((o) => o.status !== "resolved").length;
+
+  if (isInvalidHole) {
+    return (
+      <div className="p-4 text-center py-12">
+        <p className="text-muted-foreground">Invalid hole number</p>
+        <Button variant="outline" className="mt-4" onClick={() => router.push("/course-map")}>
+          Back to Course Map
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-24">

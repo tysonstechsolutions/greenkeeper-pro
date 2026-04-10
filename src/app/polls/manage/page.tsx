@@ -190,8 +190,8 @@ export default function ManagePollsPage() {
         created_by: profile?.id,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const insertPoll = (supabase.from("polls") as any).insert([pollData]).select().single();
+       
+      const insertPoll = supabase.from("polls").insert([pollData]).select().single();
       const pollResult = await withTimeout(insertPoll, 8000, { data: null, error: null });
 
       if (pollResult.error || !pollResult.data) {
@@ -211,8 +211,8 @@ export default function ManagePollsPage() {
         sort_order: idx,
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const insertOptions = (supabase.from("poll_options") as any).insert(optionsToInsert);
+       
+      const insertOptions = supabase.from("poll_options").insert(optionsToInsert);
       await withTimeout(insertOptions, 8000, { data: null, error: null });
 
       setSuccess(
@@ -250,8 +250,8 @@ export default function ManagePollsPage() {
     setActionLoading(pollId);
     setError(null);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateQuery = (supabase.from("polls") as any).update({ status: newStatus }).eq("id", pollId);
+     
+    const updateQuery = supabase.from("polls").update({ status: newStatus }).eq("id", pollId);
     const result = await withTimeout(updateQuery, 8000, { data: null, error: null });
 
     if (result.error) {

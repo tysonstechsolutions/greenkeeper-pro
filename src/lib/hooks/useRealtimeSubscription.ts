@@ -77,8 +77,8 @@ export function useRealtimeSubscription<T extends { id: string }>({
     // Subscribe
     const channel = supabase
       .channel(channelName)
-      .on<T>("postgres_changes", subscriptionConfig, handleChange)
-      .subscribe((status) => {
+      .on("postgres_changes", subscriptionConfig, handleChange)
+      .subscribe((status: string) => {
         if (status === "SUBSCRIBED") {
           setIsSubscribed(true);
           console.debug(`[Realtime] Subscription active: ${table}`);

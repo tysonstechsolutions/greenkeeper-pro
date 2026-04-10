@@ -28,8 +28,8 @@ export default function ProfileSettingsPage() {
     setSaveSuccess(false);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.from("profiles") as any)
+       
+      const { error } = await supabase.from("profiles")
         .update({
           full_name: fullName,
           display_name: displayName,

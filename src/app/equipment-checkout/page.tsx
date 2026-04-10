@@ -533,8 +533,8 @@ export default function EquipmentCheckoutPage() {
     try {
       const [activeResult, historyResult, allEquipmentResult] = await Promise.all([
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("equipment_checkouts") as any)
+           
+          supabase.from("equipment_checkouts")
             .select(
               "*, equipment:equipment_id(id, name, equipment_type, make, model, status, current_hours, location, photo_url), profile:checked_out_by(full_name, display_name, avatar_url)"
             )
@@ -544,8 +544,8 @@ export default function EquipmentCheckoutPage() {
           { data: null, error: null }
         ),
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("equipment_checkouts") as any)
+           
+          supabase.from("equipment_checkouts")
             .select(
               "*, equipment:equipment_id(id, name, equipment_type, make, model), profile:checked_out_by(full_name, display_name, avatar_url)"
             )
@@ -556,8 +556,8 @@ export default function EquipmentCheckoutPage() {
           { data: null, error: null }
         ),
         withTimeout(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase.from("equipment") as any)
+           
+          supabase.from("equipment")
             .select("id, name, equipment_type, make, model, status, current_hours, location, photo_url")
             .eq("status", "operational"),
           8000,
@@ -614,8 +614,8 @@ export default function EquipmentCheckoutPage() {
 
       setSubmitting(true);
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: insertError } = await (supabase.from("equipment_checkouts") as any).insert({
+         
+        const { error: insertError } = await supabase.from("equipment_checkouts").insert({
           equipment_id: selectedEquipment.id,
           checked_out_by: currentUser.id,
           expected_return: data.expectedReturn,

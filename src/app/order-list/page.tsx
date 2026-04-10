@@ -38,7 +38,7 @@ import {
   orderStatusLabels,
   orderStatusColors,
 } from '@/lib/hooks/useOrderItems';
-import type { OrderItem } from '@/types/database';
+import type { OrderItem, OrderItemStatus, OrderCategory } from '@/types/database';
 
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -104,7 +104,7 @@ export default function OrderListPage() {
     received: filteredItems.filter((i) => i.status === 'received'),
   };
 
-  const handleFormChange = (field: keyof FormData, value: any) => {
+  const handleFormChange = <K extends keyof FormData>(field: K, value: FormData[K]) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -161,9 +161,9 @@ export default function OrderListPage() {
   const handleMarkOrdered = async (itemId: string) => {
     try {
       const result = await updateItem(itemId, {
-        status: 'ordered' as any,
+        status: 'ordered' as OrderItemStatus,
         ordered_date: new Date().toISOString().slice(0, 10),
-      } as any);
+      });
       if (!result) {
         showToast('error', 'Failed to update status. Please try again.');
       }
@@ -176,9 +176,9 @@ export default function OrderListPage() {
   const handleMarkReceived = async (itemId: string) => {
     try {
       const result = await updateItem(itemId, {
-        status: 'received' as any,
+        status: 'received' as OrderItemStatus,
         received_date: new Date().toISOString().slice(0, 10),
-      } as any);
+      });
       if (!result) {
         showToast('error', 'Failed to update status. Please try again.');
       }
@@ -379,7 +379,7 @@ export default function OrderListPage() {
                 </Label>
                 <Select
                   value={categoryFilter}
-                  onValueChange={(value: any) => setCategoryFilter(value)}
+                  onValueChange={(value: string) => setCategoryFilter(value as typeof categoryFilter)}
                 >
                   <SelectTrigger id="category-filter">
                     <SelectValue />
@@ -401,7 +401,7 @@ export default function OrderListPage() {
                 </Label>
                 <Select
                   value={statusFilter}
-                  onValueChange={(value: any) => setStatusFilter(value)}
+                  onValueChange={(value: string) => setStatusFilter(value as typeof statusFilter)}
                 >
                   <SelectTrigger id="status-filter">
                     <SelectValue />
@@ -541,7 +541,7 @@ export default function OrderListPage() {
               </Label>
               <Select
                 value={formData.category}
-                onValueChange={(value) => handleFormChange('category', value)}
+                onValueChange={(value) => handleFormChange('category', value as FormData['category'])}
               >
                 <SelectTrigger id="category">
                   <SelectValue placeholder="Select category" />
@@ -610,7 +610,7 @@ export default function OrderListPage() {
               </Label>
               <Select
                 value={formData.priority}
-                onValueChange={(value) => handleFormChange('priority', value)}
+                onValueChange={(value) => handleFormChange('priority', value as FormData['priority'])}
               >
                 <SelectTrigger id="priority">
                   <SelectValue />

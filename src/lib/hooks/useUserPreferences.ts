@@ -48,7 +48,7 @@ export function useUserPreferences(): UseUserPreferencesReturn {
         .from("profiles")
         .select("user_preferences")
         .eq("id", user.id)
-        .single<{ user_preferences: UserPreferences | null }>();
+        .single();
 
       if (fetchError) {
         console.error("Error loading preferences:", fetchError);
@@ -94,7 +94,6 @@ export function useUserPreferences(): UseUserPreferencesReturn {
       try {
         const { error: updateError } = await supabase
           .from("profiles")
-          // @ts-expect-error - Supabase type inference issue with JSONB columns
           .update({ user_preferences: newPreferences })
           .eq("id", user.id);
 
@@ -134,7 +133,6 @@ export function useUserPreferences(): UseUserPreferencesReturn {
       try {
         const { error: updateError } = await supabase
           .from("profiles")
-          // @ts-expect-error - Supabase type inference issue with JSONB columns
           .update({ user_preferences: newPreferences })
           .eq("id", user.id);
 

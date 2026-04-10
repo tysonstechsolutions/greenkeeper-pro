@@ -52,7 +52,7 @@ export function useOrderItems() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("order_items") as any)
+      const { data, error } = await supabase.from("order_items")
         .select("*")
         .order("priority", { ascending: false })
         .order("created_at", { ascending: false });
@@ -82,7 +82,7 @@ export function useOrderItems() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data, error } = await (supabase.from("order_items") as any)
+      const { data, error } = await supabase.from("order_items")
         .insert({
           item_name: item.name,
           description: item.description || null,
@@ -109,7 +109,7 @@ export function useOrderItems() {
   const updateItem = useCallback(async (itemId: string, updates: Partial<OrderItem>) => {
     try {
       const supabase = createClient();
-      const { data, error } = await (supabase.from("order_items") as any)
+      const { data, error } = await supabase.from("order_items")
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", itemId)
         .select()
@@ -126,7 +126,7 @@ export function useOrderItems() {
   const deleteItem = useCallback(async (itemId: string) => {
     try {
       const supabase = createClient();
-      const { error } = await (supabase.from("order_items") as any)
+      const { error } = await supabase.from("order_items")
         .delete()
         .eq("id", itemId);
       if (error) throw error;

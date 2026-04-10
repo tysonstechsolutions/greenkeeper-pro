@@ -227,13 +227,18 @@ const TOOLS = [
 ];
 
 // Execute a tool call against Supabase or external APIs
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
+// Internal tool dispatcher — input/supabase/return types are intentionally
+// loose because this dynamically dispatches over a variety of tool shapes
+// defined in the OpenAI function schema above.
+/* eslint-disable @typescript-eslint/no-explicit-any */
 async function executeTool(
   toolName: string,
   input: any,
   supabase: any,
   imageData?: string | null
 ): Promise<any> {
+/* eslint-enable @typescript-eslint/no-explicit-any */
   try {
     switch (toolName) {
       case "query_table": {
@@ -537,8 +542,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user profile for context
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: profile } = await (supabase.from("profiles") as any)
+     
+    const { data: profile } = await supabase.from("profiles")
       .select("id, full_name, role, email")
       .eq("id", user.id)
       .single();

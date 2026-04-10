@@ -183,8 +183,8 @@ export default function PhotosPage() {
         .gte("created_at", startOfToday);
 
       // Most documented zone
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: zoneStats } = await (supabase.from("photos") as any)
+       
+      const { data: zoneStats } = await supabase.from("photos")
         .select("zone_id")
         .not("zone_id", "is", null);
 
@@ -206,8 +206,8 @@ export default function PhotosPage() {
       });
 
       // Top contributor
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: uploaderStats } = await (supabase.from("photos") as any)
+       
+      const { data: uploaderStats } = await supabase.from("photos")
         .select("uploaded_by")
         .gte("created_at", startOfMonth);
 

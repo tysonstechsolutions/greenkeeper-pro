@@ -165,8 +165,8 @@ export function useDiagnostics() {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let query = (supabase.from("diagnostics") as any)
+         
+        let query = supabase.from("diagnostics")
           .select(
             `
             *
@@ -224,8 +224,8 @@ export function useDiagnostics() {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: fetchError } = await (supabase.from("diagnostics") as any)
+         
+        const { data, error: fetchError } = await supabase.from("diagnostics")
           .select(
             `
             *
@@ -355,8 +355,8 @@ export function useDiagnostics() {
 
         // 5. Save to diagnostics table (use a short placeholder if photo_url is base64 to avoid DB size issues)
         const dbPhotoUrl = photoUrl.startsWith("data:") ? "pending-upload" : photoUrl;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: record, error: insertError } = await (supabase.from("diagnostics") as any)
+         
+        const { data: record, error: insertError } = await supabase.from("diagnostics")
           .insert({
             course_id: activeCourse.id,
             created_by: user?.id || null,
@@ -401,8 +401,8 @@ export function useDiagnostics() {
 
       try {
         // 1. Fetch current diagnostic
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: diagnostic, error: fetchError } = await (supabase.from("diagnostics") as any)
+         
+        const { data: diagnostic, error: fetchError } = await supabase.from("diagnostics")
           .select("*")
           .eq("id", diagnosticId)
           .single();
@@ -459,8 +459,8 @@ export function useDiagnostics() {
           },
         ];
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase.from("diagnostics") as any)
+         
+        const { error: updateError } = await supabase.from("diagnostics")
           .update({
             conversation: newMessages,
             updated_at: now,
@@ -511,8 +511,8 @@ export function useDiagnostics() {
           updateData.resolution_notes = resolutionNotes;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase.from("diagnostics") as any)
+         
+        const { error: updateError } = await supabase.from("diagnostics")
           .update(updateData)
           .eq("id", id);
 
@@ -553,8 +553,8 @@ export function useDiagnostics() {
 
       try {
         // 1. Fetch the diagnosis
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: diagnostic, error: fetchError } = await (supabase.from("diagnostics") as any)
+         
+        const { data: diagnostic, error: fetchError } = await supabase.from("diagnostics")
           .select("*, zone:course_zones(name)")
           .eq("id", diagnosticId)
           .single();
@@ -605,8 +605,8 @@ export function useDiagnostics() {
         description += `\n\n*Created from Course Doctor diagnosis*`;
 
         // 4. Create the task
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: task, error: taskError } = await (supabase.from("tasks") as any)
+         
+        const { data: task, error: taskError } = await supabase.from("tasks")
           .insert({
             title: `Treat ${condition} - ${zoneName}`,
             description,
@@ -623,8 +623,8 @@ export function useDiagnostics() {
         if (taskError) throw taskError;
 
         // 5. Update diagnostic to link to task and set to treating
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from("diagnostics") as any)
+         
+        await supabase.from("diagnostics")
           .update({
             status: "treating",
             updated_at: new Date().toISOString(),
@@ -656,8 +656,8 @@ export function useDiagnostics() {
     if (!activeCourse?.id) return 0;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { count, error } = await (supabase.from("diagnostics") as any)
+       
+      const { count, error } = await supabase.from("diagnostics")
         .select("*", { count: "exact", head: true })
         .eq("course_id", activeCourse.id)
         .in("status", ["diagnosed", "treating", "monitoring"]);

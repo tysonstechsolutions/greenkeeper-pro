@@ -777,6 +777,7 @@ export interface AppSetting {
 export interface Database {
   public: {
     Tables: {
+
       profiles: {
         Row: Profile;
         Insert: Omit<Profile, "created_at" | "updated_at"> & {

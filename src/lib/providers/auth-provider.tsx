@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthContext, useAuthInternal } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 
 // Routes the user can be on while logged out. Redirects skip these.
 const PUBLIC_ROUTES = ["/login", "/invite"];
@@ -56,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("auth:session-expired", onSessionExpired);
 
     // Supabase itself can also tell us the token refresh died.
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event: string, session: Session | null) => {
       if (event === "SIGNED_OUT") {
         goToLogin();
       } else if (event === "TOKEN_REFRESHED" && !session) {

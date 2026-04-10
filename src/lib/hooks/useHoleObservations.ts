@@ -79,8 +79,8 @@ export function useHoleObservations() {
   const fetchObservations = useCallback(async () => {
     setLoading(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.from("hole_observations") as any)
+       
+      const { data, error } = await supabase.from("hole_observations")
         .select(`
           *,
           reporter:profiles!reported_by(id, full_name, avatar_url, role),
@@ -122,8 +122,8 @@ export function useHoleObservations() {
     async (data: CreateHoleObservationData) => {
       if (!user) return null;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: created, error } = await (supabase.from("hole_observations") as any)
+         
+        const { data: created, error } = await supabase.from("hole_observations")
           .insert({
             ...data,
             reported_by: user.id,
@@ -153,8 +153,8 @@ export function useHoleObservations() {
   const updateObservation = useCallback(
     async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "task_id" | "resolved_at" | "resolved_by">>) => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: updated, error } = await (supabase.from("hole_observations") as any)
+         
+        const { data: updated, error } = await supabase.from("hole_observations")
           .update(updates)
           .eq("id", id)
           .select(`

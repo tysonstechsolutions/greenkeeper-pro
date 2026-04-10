@@ -102,8 +102,8 @@ export default function InvitePage() {
     setCreating(true);
     setError(null);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error: createError } = await (supabase.from("invites") as any)
+     
+    const { data, error: createError } = await supabase.from("invites")
       .insert({
         role: selectedRole,
         email: inviteEmail || null,

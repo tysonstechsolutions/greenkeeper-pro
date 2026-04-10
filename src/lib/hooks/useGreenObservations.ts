@@ -69,8 +69,8 @@ export function useGreenObservations() {
   const fetchObservations = useCallback(async () => {
     setLoading(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.from("green_observations") as any)
+       
+      const { data, error } = await supabase.from("green_observations")
         .select(`
           *,
           reporter:profiles!reported_by(id, full_name, avatar_url, role),
@@ -112,8 +112,8 @@ export function useGreenObservations() {
     async (data: CreateGreenObservationData) => {
       if (!user) return null;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: created, error } = await (supabase.from("green_observations") as any)
+         
+        const { data: created, error } = await supabase.from("green_observations")
           .insert({
             ...data,
             reported_by: user.id,
@@ -143,8 +143,8 @@ export function useGreenObservations() {
   const updateObservation = useCallback(
     async (id: string, updates: Partial<Pick<GreenObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "task_id" | "resolved_at" | "resolved_by">>) => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: updated, error } = await (supabase.from("green_observations") as any)
+         
+        const { data: updated, error } = await supabase.from("green_observations")
           .update(updates)
           .eq("id", id)
           .select(`

@@ -73,7 +73,7 @@ export default function ClubhousePage() {
   useEffect(() => {
     const fetchStaff = async () => {
       const supabase = createClient();
-      const { data } = await (supabase.from("profiles") as any)
+      const { data } = await supabase.from("profiles")
         .select("id, full_name, role")
         .order("role")
         .order("full_name");

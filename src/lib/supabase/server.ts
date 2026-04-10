@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { Database } from "@/types/database";
 
+// NOTE: See `src/lib/supabase/client.ts` for why we don't pass a Database generic.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -11,7 +11,7 @@ export async function createClient() {
   if (!supabaseUrl || !supabaseAnonKey) {
     // During build/prerender, env vars may not be available.
     // Return a stub client so static generation doesn't crash.
-    return createServerClient<Database>(
+    return createServerClient(
       "https://placeholder.supabase.co",
       "placeholder-key",
       {
@@ -27,7 +27,7 @@ export async function createClient() {
     );
   }
 
-  return createServerClient<Database>(
+  return createServerClient(
     supabaseUrl,
     supabaseAnonKey,
     {

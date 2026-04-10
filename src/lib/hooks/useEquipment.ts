@@ -314,8 +314,8 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let query = (supabase.from("equipment") as any)
+         
+        let query = supabase.from("equipment")
           .select("*")
           .neq("status", "retired")
           .order("name", { ascending: true })
@@ -366,8 +366,8 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: fetchError } = await (supabase.from("equipment") as any)
+         
+        const { data, error: fetchError } = await supabase.from("equipment")
           .select("*")
           .eq("id", id)
           .single();
@@ -377,8 +377,8 @@ export function useEquipment(): UseEquipmentReturn {
         }
 
         // Fetch logs separately
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: logsData } = await (supabase.from("equipment_logs") as any)
+         
+        const { data: logsData } = await supabase.from("equipment_logs")
           .select("*")
           .eq("equipment_id", id)
           .order("created_at", { ascending: false });
@@ -421,8 +421,8 @@ export function useEquipment(): UseEquipmentReturn {
           next_service_due_hours: nextServiceHours,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newEquipment, error: insertError } = await (supabase.from("equipment") as any)
+         
+        const { data: newEquipment, error: insertError } = await supabase.from("equipment")
           .insert(insertData)
           .select()
           .single();
@@ -454,12 +454,12 @@ export function useEquipment(): UseEquipmentReturn {
 
       // Strip out read-only fields that shouldn't be sent in updates
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id: _id, created_at: _ca, updated_at: _ua, ...updateFields } = data as any;
+      const { id: _id, created_at: _ca, updated_at: _ua, ...updateFields } = data as Partial<Equipment>;
 
       console.debug("[useEquipment] Updating equipment:", id, "with fields:", Object.keys(updateFields));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: updated, error: updateError } = await (supabase.from("equipment") as any)
+       
+      const { data: updated, error: updateError } = await supabase.from("equipment")
         .update(updateFields)
         .eq("id", id)
         .select()
@@ -492,8 +492,8 @@ export function useEquipment(): UseEquipmentReturn {
 
       try {
         // First get the equipment to calculate new service due
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: currentEquipment, error: fetchError } = await (supabase.from("equipment") as any)
+         
+        const { data: currentEquipment, error: fetchError } = await supabase.from("equipment")
           .select("*")
           .eq("id", id)
           .single();
@@ -522,8 +522,8 @@ export function useEquipment(): UseEquipmentReturn {
           updateData.status = "needs_service";
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: updated, error: updateError } = await (supabase.from("equipment") as any)
+         
+        const { data: updated, error: updateError } = await supabase.from("equipment")
           .update(updateData)
           .eq("id", id)
           .select()
@@ -534,8 +534,8 @@ export function useEquipment(): UseEquipmentReturn {
         }
 
         // Create hours_update log entry
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from("equipment_logs") as any).insert({
+         
+        await supabase.from("equipment_logs").insert({
           equipment_id: id,
           log_type: "hours_update",
           description: `Hours updated from ${current.current_hours ?? 0} to ${newHours}`,
@@ -567,8 +567,8 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: updated, error: updateError } = await (supabase.from("equipment") as any)
+         
+        const { data: updated, error: updateError } = await supabase.from("equipment")
           .update({ status: "retired" })
           .eq("id", id)
           .select()
@@ -597,8 +597,8 @@ export function useEquipment(): UseEquipmentReturn {
   const fetchEquipmentLogs = useCallback(
     async (equipmentId: string): Promise<EquipmentLog[]> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: fetchError } = await (supabase.from("equipment_logs") as any)
+         
+        const { data, error: fetchError } = await supabase.from("equipment_logs")
           .select("*")
           .eq("equipment_id", equipmentId)
           .order("created_at", { ascending: false })
@@ -625,8 +625,8 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newLog, error: insertError } = await (supabase.from("equipment_logs") as any)
+         
+        const { data: newLog, error: insertError } = await supabase.from("equipment_logs")
           .insert({
             equipment_id: equipmentId,
             log_type: logData.log_type,
@@ -647,8 +647,8 @@ export function useEquipment(): UseEquipmentReturn {
 
         // If this is a service log, update next service due hours
         if (logData.log_type === "service") {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: equipmentData } = await (supabase.from("equipment") as any)
+           
+          const { data: equipmentData } = await supabase.from("equipment")
             .select("*")
             .eq("id", equipmentId)
             .single();
@@ -659,8 +659,8 @@ export function useEquipment(): UseEquipmentReturn {
             const interval = eq.service_interval_hours;
 
             if (interval) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await (supabase.from("equipment") as any)
+               
+              await supabase.from("equipment")
                 .update({
                   next_service_due_hours: currentHours + interval,
                   status: "operational",
@@ -668,8 +668,8 @@ export function useEquipment(): UseEquipmentReturn {
                 })
                 .eq("id", equipmentId);
             } else {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await (supabase.from("equipment") as any)
+               
+              await supabase.from("equipment")
                 .update({ status: "operational" })
                 .eq("id", equipmentId);
             }
@@ -695,8 +695,8 @@ export function useEquipment(): UseEquipmentReturn {
       const today = new Date().toISOString().split("T")[0];
 
       // Get equipment where current_hours >= next_service_due_hours
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: hoursDue, error: hoursError } = await (supabase.from("equipment") as any)
+       
+      const { data: hoursDue, error: hoursError } = await supabase.from("equipment")
         .select("*")
         .neq("status", "retired")
         .not("current_hours", "is", null)
@@ -715,8 +715,8 @@ export function useEquipment(): UseEquipmentReturn {
       );
 
       // Get equipment where next_service_due_date <= today
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: dateDue, error: dateError } = await (supabase.from("equipment") as any)
+       
+      const { data: dateDue, error: dateError } = await supabase.from("equipment")
         .select("*")
         .neq("status", "retired")
         .not("next_service_due_date", "is", null)
@@ -743,8 +743,8 @@ export function useEquipment(): UseEquipmentReturn {
    */
   const fetchEquipmentStats = useCallback(async (): Promise<EquipmentStats> => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error: fetchError } = await (supabase.from("equipment") as any)
+       
+      const { data, error: fetchError } = await supabase.from("equipment")
         .select("status")
         .neq("status", "retired");
 
@@ -788,8 +788,8 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: deleteError } = await (supabase.from("equipment") as any)
+         
+        const { error: deleteError } = await supabase.from("equipment")
           .delete()
           .eq("id", id);
 
@@ -872,8 +872,8 @@ export function useEquipment(): UseEquipmentReturn {
         }
 
         // Update equipment record to remove photo from photos array
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: currentData } = await (supabase.from("equipment") as any)
+         
+        const { data: currentData } = await supabase.from("equipment")
           .select("photos")
           .eq("id", equipmentId)
           .single();
@@ -882,8 +882,8 @@ export function useEquipment(): UseEquipmentReturn {
           const photos = (currentData.photos as string[]) || [];
           const updatedPhotos = photos.filter((url) => url !== photoUrl);
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.from("equipment") as any)
+           
+          await supabase.from("equipment")
             .update({ photos: updatedPhotos })
             .eq("id", equipmentId);
         }
@@ -918,8 +918,8 @@ export function useEquipment(): UseEquipmentReturn {
           status: "completed" as InspectionStatus,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newInspection, error: insertError } = await (supabase.from("equipment_inspections") as any)
+         
+        const { data: newInspection, error: insertError } = await supabase.from("equipment_inspections")
           .insert(inspectionData)
           .select()
           .single();
@@ -945,8 +945,8 @@ export function useEquipment(): UseEquipmentReturn {
   const fetchInspections = useCallback(
     async (equipmentId: string): Promise<EquipmentInspection[]> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: fetchError } = await (supabase.from("equipment_inspections") as any)
+         
+        const { data, error: fetchError } = await supabase.from("equipment_inspections")
           .select("*")
           .eq("equipment_id", equipmentId)
           .order("created_at", { ascending: false });
@@ -970,8 +970,8 @@ export function useEquipment(): UseEquipmentReturn {
   const fetchLatestInspection = useCallback(
     async (equipmentId: string, type: InspectionType): Promise<EquipmentInspection | null> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: fetchError } = await (supabase.from("equipment_inspections") as any)
+         
+        const { data, error: fetchError } = await supabase.from("equipment_inspections")
           .select("*")
           .eq("equipment_id", equipmentId)
           .eq("inspection_type", type)

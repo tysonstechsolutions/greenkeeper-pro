@@ -59,16 +59,16 @@ export default function PinManagementPage() {
 
     try {
       // Fetch existing pins with profiles
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: pinData, error: pinError } = await (supabase.from("pin_codes") as any)
+       
+      const { data: pinData, error: pinError } = await supabase.from("pin_codes")
         .select("*, profile:user_id(full_name, role, email)")
         .order("created_at", { ascending: true });
 
       if (pinError) throw pinError;
 
       // Fetch all staff profiles
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: staffData, error: staffError } = await (supabase.from("profiles") as any)
+       
+      const { data: staffData, error: staffError } = await supabase.from("profiles")
         .select("id, full_name, role, email")
         .in("role", ["crew", "seasonal", "mechanic", "foreman", "asst_super"])
         .eq("is_active", true)
@@ -111,8 +111,8 @@ export default function PinManagementPage() {
       // First update the user's password to match the PIN system password
       // This is handled by the setup-pin-password API
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: insertError } = await (supabase.from("pin_codes") as any).insert({
+       
+      const { error: insertError } = await supabase.from("pin_codes").insert({
         user_id: staffMember.id,
         pin: newPin,
         is_active: true,
@@ -144,8 +144,8 @@ export default function PinManagementPage() {
     const newPin = generatePin();
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase.from("pin_codes") as any)
+       
+      const { error: updateError } = await supabase.from("pin_codes")
         .update({ pin: newPin })
         .eq("id", pinEntry.id);
 
@@ -168,8 +168,8 @@ export default function PinManagementPage() {
     setSaving(pinEntry.id);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase.from("pin_codes") as any)
+       
+      const { error: updateError } = await supabase.from("pin_codes")
         .update({ is_active: !pinEntry.is_active })
         .eq("id", pinEntry.id);
 
@@ -195,8 +195,8 @@ export default function PinManagementPage() {
     setSaving(pinEntry.id);
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: deleteError } = await (supabase.from("pin_codes") as any)
+       
+      const { error: deleteError } = await supabase.from("pin_codes")
         .delete()
         .eq("id", pinEntry.id);
 

@@ -70,8 +70,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch profile for the header
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: profile } = await (supabase.from("profiles") as any)
+     
+    const { data: profile } = await supabase.from("profiles")
       .select("full_name, role")
       .eq("id", user.id)
       .single();
@@ -401,6 +401,7 @@ export async function GET(request: NextRequest) {
             },
           });
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           y = (doc as any).lastAutoTable.finalY + 3;
         }
 
@@ -468,6 +469,7 @@ export async function GET(request: NextRequest) {
             alternateRowStyles: { fillColor: [245, 247, 250] },
           });
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           y = (doc as any).lastAutoTable.finalY + 3;
         }
 

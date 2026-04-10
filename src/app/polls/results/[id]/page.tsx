@@ -98,8 +98,8 @@ export default function PollResultsPage() {
         const [pollResult, optionsResult, commentsResult, membersResult] =
           await Promise.all([
             withTimeout(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (supabase.from("polls") as any)
+               
+              supabase.from("polls")
                 .select("*")
                 .eq("id", pollId)
                 .single(),
@@ -107,8 +107,8 @@ export default function PollResultsPage() {
               { data: null, error: null }
             ),
             withTimeout(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (supabase.from("poll_options") as any)
+               
+              supabase.from("poll_options")
                 .select(
                   "*, poll_votes(id, user_id, created_at, profiles:user_id(full_name, role))"
                 )
@@ -118,8 +118,8 @@ export default function PollResultsPage() {
               { data: null, error: null }
             ),
             withTimeout(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (supabase.from("poll_comments") as any)
+               
+              supabase.from("poll_comments")
                 .select("*, profiles:user_id(full_name)")
                 .eq("poll_id", pollId)
                 .order("created_at", { ascending: false }),
@@ -127,8 +127,8 @@ export default function PollResultsPage() {
               { data: null, error: null }
             ),
             withTimeout(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (supabase.from("profiles") as any).select("id", {
+               
+              supabase.from("profiles").select("id", {
                 count: "exact",
                 head: true,
               }),
@@ -216,8 +216,8 @@ export default function PollResultsPage() {
   const handleClosePoll = async () => {
     if (!poll) return;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.from("polls") as any)
+       
+      const { error } = await supabase.from("polls")
         .update({ status: "closed", ends_at: new Date().toISOString() })
         .eq("id", pollId);
 

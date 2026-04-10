@@ -16,7 +16,7 @@ const DEFAULT_TIMEOUT_MS = 8000;
  * instead of hanging forever.
  */
 export async function withTimeout<T>(
-  promise: Promise<T>,
+  promise: PromiseLike<T>,
   ms: number = DEFAULT_TIMEOUT_MS,
   fallback: T
 ): Promise<T> {
@@ -30,7 +30,7 @@ export async function withTimeout<T>(
   });
 
   try {
-    const result = await Promise.race([promise, timeoutPromise]);
+    const result = await Promise.race([Promise.resolve(promise), timeoutPromise]);
     clearTimeout(timeoutId!);
     return result;
   } catch (err) {
