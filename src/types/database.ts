@@ -871,6 +871,15 @@ export interface Database {
         };
         Update: Partial<Omit<EquipmentLog, "id">>;
       };
+      equipment_parts: {
+        Row: EquipmentPart;
+        Insert: Omit<EquipmentPart, "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<EquipmentPart, "id">>;
+      };
       chemical_products: {
         Row: ChemicalProduct;
         Insert: Omit<ChemicalProduct, "id" | "created_at"> & {

@@ -11,7 +11,6 @@ export interface UseAuthReturn {
   profile: Profile | null;
   loading: boolean;
   error: string | null;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   // Role helpers
@@ -39,7 +38,6 @@ const defaultAuthState: UseAuthReturn = {
   profile: null,
   loading: true,
   error: null,
-  signIn: async () => ({ error: "Auth not initialized" }),
   signOut: async () => {},
   refreshProfile: async () => {},
   isSuper: false,
@@ -208,22 +206,6 @@ export function useAuthInternal(): UseAuthReturn {
     }
   }, [loading, user, profile, fetchProfile]);
 
-  const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
-    setError(null);
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-      return { error: signInError.message };
-    }
-
-    return { error: null };
-  };
-
   const signOut = async () => {
     setError(null);
     await supabase.auth.signOut();
@@ -259,7 +241,6 @@ export function useAuthInternal(): UseAuthReturn {
     profile,
     loading,
     error,
-    signIn,
     signOut,
     refreshProfile,
     isSuper,

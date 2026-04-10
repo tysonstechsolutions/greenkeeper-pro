@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { Delete, Loader2, ArrowLeft, KeyRound } from "lucide-react";
+import { Suspense, useCallback, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Delete, Loader2, KeyRound } from "lucide-react";
 
-export default function PinLoginPage() {
+function PinLoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,7 +70,8 @@ export default function PinLoginPage() {
 
       // Brief delay to show welcome message
       setTimeout(() => {
-        router.push(data.redirectPath || "/dashboard");
+        const destination = returnTo || data.redirectPath || "/dashboard";
+        router.push(destination);
         router.refresh();
       }, 800);
     } catch {
@@ -75,7 +79,7 @@ export default function PinLoginPage() {
       setPin("");
       setLoading(false);
     }
-  }, [pin, router]);
+  }, [pin, router, returnTo]);
 
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -87,9 +91,9 @@ export default function PinLoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-3">
             <KeyRound className="w-7 h-7 text-primary-foreground" />
           </div>
-          <h1 className="text-xl font-bold text-foreground">Crew PIN Login</h1>
+          <h1 className="text-xl font-bold text-foreground">VMGC Greenkeeper</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Enter your PIN to clock in
+            Enter your PIN to sign in
           </p>
         </div>
 
@@ -197,22 +201,25 @@ export default function PinLoginPage() {
           )}
         </div>
 
-        {/* Back to email login */}
-        <div className="text-center">
-          <button
-            onClick={() => router.push("/login")}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Sign in with email instead
-          </button>
-        </div>
-
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-4">
           Veterans Memorial Golf Course
         </p>
       </div>
     </div>
+  );
+}
+
+export default function PinLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <PinLoginInner />
+    </Suspense>
   );
 }

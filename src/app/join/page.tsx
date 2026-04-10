@@ -375,7 +375,7 @@ export default function JoinPage() {
             <p className="text-sm text-muted-foreground text-center">
               Already have an account?{" "}
               <Link
-                href="/login"
+                href="/pin-login"
                 className="text-primary font-medium hover:underline"
               >
                 Sign in

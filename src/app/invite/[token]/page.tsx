@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Loader2, User, Mail, Lock, Phone, AlertCircle, CheckCircle } from "lucide-react";
+import { Loader2, User, Phone, AlertCircle, CheckCircle, KeyRound } from "lucide-react";
 import type { Invite, InviteRole } from "@/types/database";
 
 const roleLabels: Record<InviteRole, string> = {
@@ -27,10 +27,9 @@ export default function InvitePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
 
   useEffect(() => {
     async function fetchInvite() {
@@ -50,14 +49,12 @@ export default function InvitePage() {
 
       const inviteData = data as Invite;
 
-      // Check if already used
       if (inviteData.used_by) {
         setError("This invite has already been used.");
         setLoading(false);
         return;
       }
 
-      // Check if expired
       if (new Date(inviteData.expires_at) < new Date()) {
         setError("This invite has expired. Please request a new one.");
         setLoading(false);
@@ -65,9 +62,6 @@ export default function InvitePage() {
       }
 
       setInvite(inviteData);
-      if (inviteData.email) {
-        setEmail(inviteData.email);
-      }
       setLoading(false);
     }
 
@@ -78,87 +72,48 @@ export default function InvitePage() {
     e.preventDefault();
     setError(null);
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-
     if (!invite) return;
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError("PIN must be 4–6 digits.");
+      return;
+    }
+    if (pin !== confirmPin) {
+      setError("PINs don't match.");
+      return;
+    }
+    if (!fullName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
 
     setSubmitting(true);
 
-    const supabase = createClient();
+    try {
+      const res = await fetch("/api/auth/pin-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          fullName: fullName.trim(),
+          phone: phone.trim() || null,
+          pin,
+        }),
+      });
 
-    // 1. Create the auth user with metadata
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: invite.role,
-        },
-      },
-    });
+      const data = await res.json();
 
-    if (signUpError) {
-      setError(signUpError.message);
+      if (!res.ok) {
+        setError(data.error || "Failed to create account.");
+        setSubmitting(false);
+        return;
+      }
+
+      router.push(data.redirectPath || "/dashboard");
+      router.refresh();
+    } catch {
+      setError("Connection error. Please try again.");
       setSubmitting(false);
-      return;
     }
-
-    if (!authData.user) {
-      setError("Failed to create account. Please try again.");
-      setSubmitting(false);
-      return;
-    }
-
-    // 2. Update the profile with additional info (trigger creates basic profile)
-    // Wait a moment for the trigger to create the profile
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: profileError } = await (supabase.from("profiles") as any)
-      .update({
-        full_name: fullName,
-        phone: phone || null,
-        role: invite.role,
-      })
-      .eq("id", authData.user.id);
-
-    if (profileError) {
-      console.error("Profile update error:", profileError);
-      // Don't fail - the trigger should have set the basics
-    }
-
-    // 3. Mark the invite as used
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from("invites") as any)
-      .update({
-        used_by: authData.user.id,
-        used_at: new Date().toISOString(),
-      })
-      .eq("id", invite.id);
-
-    // 4. Sign in and redirect
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      // Account created but sign-in failed - redirect to login
-      router.push("/login");
-      return;
-    }
-
-    router.push("/dashboard");
-    router.refresh();
   };
 
   if (loading) {
@@ -178,8 +133,8 @@ export default function InvitePage() {
           </div>
           <h1 className="text-xl font-semibold mb-2">Invalid Invite</h1>
           <p className="text-muted-foreground mb-6">{error}</p>
-          <Button onClick={() => router.push("/login")} variant="outline">
-            Go to Login
+          <Button onClick={() => router.push("/pin-login")} variant="outline">
+            Go to PIN Login
           </Button>
         </div>
       </div>
@@ -195,7 +150,7 @@ export default function InvitePage() {
             <span className="text-primary-foreground font-bold text-2xl">GK</span>
           </div>
           <h1 className="text-2xl font-bold text-foreground">Welcome to VMGC</h1>
-          <p className="text-muted-foreground mt-1">Complete your registration</p>
+          <p className="text-muted-foreground mt-1">Set up your crew PIN</p>
         </div>
 
         {/* Registration Form */}
@@ -237,25 +192,6 @@ export default function InvitePage() {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-1.5">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  disabled={!!invite?.email}
-                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div>
               <label htmlFor="phone" className="block text-sm font-medium mb-1.5">
                 Phone Number <span className="text-muted-foreground">(optional)</span>
               </label>
@@ -273,38 +209,43 @@ export default function InvitePage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium mb-1.5">
-                Password
+              <label htmlFor="pin" className="block text-sm font-medium mb-1.5">
+                Choose a PIN (4–6 digits)
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
-                  id="password"
+                  id="pin"
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  inputMode="numeric"
+                  pattern="\d{4,6}"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••"
                   required
-                  minLength={6}
-                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base tracking-widest focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium mb-1.5">
-                Confirm Password
+              <label htmlFor="confirmPin" className="block text-sm font-medium mb-1.5">
+                Confirm PIN
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
-                  id="confirmPassword"
+                  id="confirmPin"
                   type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your password"
+                  inputMode="numeric"
+                  pattern="\d{4,6}"
+                  maxLength={6}
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-xl text-base tracking-widest focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
             </div>

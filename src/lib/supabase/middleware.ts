@@ -38,20 +38,29 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Define public routes that don't require authentication
-  const publicRoutes = ["/login", "/pin-login", "/invite", "/auth/callback", "/auth/confirm", "/join", "/api/auth/pin-login"];
+  const publicRoutes = [
+    "/login",
+    "/pin-login",
+    "/invite",
+    "/auth/callback",
+    "/auth/confirm",
+    "/join",
+    "/api/auth/pin-login",
+    "/api/auth/pin-signup",
+  ];
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
 
   // If user is not logged in and trying to access a protected route,
-  // redirect to login page
+  // redirect to the PIN login page (email login has been retired).
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/pin-login";
     return NextResponse.redirect(url);
   }
 
-  // If user is logged in and trying to access login page,
+  // If user is logged in and trying to access the login pages,
   // redirect to appropriate dashboard based on role
   if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/pin-login")) {
     const url = request.nextUrl.clone();

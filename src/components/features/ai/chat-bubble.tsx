@@ -37,7 +37,7 @@ export function ChatBubble() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Don't show bubble on the full assistant page or login
-  if (pathname === "/assistant" || pathname === "/login" || pathname?.startsWith("/join") || pathname?.startsWith("/invite")) {
+  if (pathname === "/assistant" || pathname === "/login" || pathname === "/pin-login" || pathname?.startsWith("/join") || pathname?.startsWith("/invite")) {
     return null;
   }
 

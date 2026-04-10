@@ -4,10 +4,15 @@ import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { EquipmentPart } from "@/types/database";
 
+const SESSION_EXPIRED_MSG =
+  "Your session expired. Please sign in again with your PIN.";
+
 export function useEquipmentParts() {
   const [parts, setParts] = useState<EquipmentPart[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const fetchParts = useCallback(async (equipmentId: string) => {
     setLoading(true);
@@ -31,6 +36,19 @@ export function useEquipmentParts() {
     }
   }, []);
 
+  const requireSession = async () => {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      // Broadcast a global event so an interceptor can redirect to PIN login.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("auth:session-expired"));
+      }
+      return { supabase, session: null as null };
+    }
+    return { supabase, session };
+  };
+
   const addPart = useCallback(async (equipmentId: string, part: {
     name: string;
     part_number?: string;
@@ -42,14 +60,10 @@ export function useEquipmentParts() {
   }): Promise<{ data: EquipmentPart | null; error: string | null }> => {
     setError(null);
     try {
-      const supabase = createClient();
-
-      // Verify auth session before insert
-      const { data: { session } } = await supabase.auth.getSession();
+      const { supabase, session } = await requireSession();
       if (!session) {
-        const msg = "You must be logged in to add parts. Please refresh the page and sign in again.";
-        setError(msg);
-        return { data: null, error: msg };
+        setError(SESSION_EXPIRED_MSG);
+        return { data: null, error: SESSION_EXPIRED_MSG };
       }
 
       const { data, error: insertError } = await (supabase.from("equipment_parts") as any)
@@ -83,10 +97,18 @@ export function useEquipmentParts() {
     }
   }, []);
 
-  const updatePart = useCallback(async (partId: string, updates: Partial<EquipmentPart>): Promise<{ data: EquipmentPart | null; error: string | null }> => {
+  const updatePart = useCallback(async (
+    partId: string,
+    updates: Partial<EquipmentPart>
+  ): Promise<{ data: EquipmentPart | null; error: string | null }> => {
     setError(null);
     try {
-      const supabase = createClient();
+      const { supabase, session } = await requireSession();
+      if (!session) {
+        setError(SESSION_EXPIRED_MSG);
+        return { data: null, error: SESSION_EXPIRED_MSG };
+      }
+
       const { data, error: updateError } = await (supabase.from("equipment_parts") as any)
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", partId)
@@ -94,6 +116,7 @@ export function useEquipmentParts() {
         .single();
 
       if (updateError) {
+        console.error("Supabase update error:", updateError);
         const msg = updateError.message || "Database error while updating part";
         setError(msg);
         return { data: null, error: msg };
@@ -109,21 +132,46 @@ export function useEquipmentParts() {
     }
   }, []);
 
-  const deletePart = useCallback(async (partId: string) => {
+  const deletePart = useCallback(async (
+    partId: string
+  ): Promise<{ success: boolean; error: string | null }> => {
     setError(null);
     try {
-      const supabase = createClient();
+      const { supabase, session } = await requireSession();
+      if (!session) {
+        setError(SESSION_EXPIRED_MSG);
+        return { success: false, error: SESSION_EXPIRED_MSG };
+      }
+
       const { error: deleteError } = await (supabase.from("equipment_parts") as any)
         .delete()
         .eq("id", partId);
-      if (deleteError) throw deleteError;
+
+      if (deleteError) {
+        console.error("Supabase delete error:", deleteError);
+        const msg = deleteError.message || "Database error while deleting part";
+        setError(msg);
+        return { success: false, error: msg };
+      }
+
       setParts((prev) => prev.filter((p) => p.id !== partId));
-      return true;
+      return { success: true, error: null };
     } catch (err) {
       console.error("Error deleting part:", err);
-      return false;
+      const msg = err instanceof Error ? err.message : "Failed to delete part";
+      setError(msg);
+      return { success: false, error: msg };
     }
   }, []);
 
-  return { parts, loading, error, fetchParts, addPart, updatePart, deletePart };
+  return {
+    parts,
+    loading,
+    error,
+    clearError,
+    fetchParts,
+    addPart,
+    updatePart,
+    deletePart,
+  };
 }

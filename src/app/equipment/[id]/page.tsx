@@ -109,7 +109,15 @@ export default function EquipmentDetailPage() {
     error: equipmentError,
   } = useEquipment();
 
-  const { parts, fetchParts, addPart, updatePart, deletePart, error: partsError } = useEquipmentParts();
+  const {
+    parts,
+    fetchParts,
+    addPart,
+    updatePart,
+    deletePart,
+    error: partsError,
+    clearError: clearPartsError,
+  } = useEquipmentParts();
   const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord, error: serviceError } = useEquipmentServiceRecords();
 
   const equipmentId = params.id as string;
@@ -659,6 +667,22 @@ export default function EquipmentDetailPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Parts error banner — surfaces silent updatePart/deletePart failures */}
+          {partsError && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-destructive">
+              <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 text-sm font-medium">{partsError}</div>
+              <button
+                type="button"
+                aria-label="Dismiss parts error"
+                className="text-destructive/70 hover:text-destructive"
+                onClick={() => clearPartsError()}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Add Part Form */}
           {addingPart && (
             <div className="border rounded-lg p-4 mb-4 bg-gray-50 space-y-3">
@@ -757,7 +781,12 @@ export default function EquipmentDetailPage() {
                           className="h-8 text-xs bg-amber-600 hover:bg-amber-700"
                           disabled={!delayReasonInput[part.id]?.trim()}
                           onClick={async () => {
-                            await updatePart(part.id, { delay_reason: delayReasonInput[part.id] } as any);
+                            clearPartsError();
+                            const { error: err } = await updatePart(part.id, { delay_reason: delayReasonInput[part.id] } as any);
+                            if (err) {
+                              setSaveError(`Failed to save delay reason: ${err}`);
+                              return;
+                            }
                             setDelayReasonInput((prev) => {
                               const next = { ...prev };
                               delete next[part.id];
@@ -789,7 +818,17 @@ export default function EquipmentDetailPage() {
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {part.status === "needed" && (
                         <>
-                          <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={() => updatePart(part.id, { status: "ordered" } as any)}>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={async () => {
+                            clearPartsError();
+                            const { error: err } = await updatePart(part.id, { status: "ordered" } as any);
+                            if (err) {
+                              setSaveError(`Failed to mark Ordered: ${err}`);
+                            } else {
+                              setSaveSuccess(true);
+                              setTimeout(() => setSaveSuccess(false), 2000);
+                              await fetchParts(equipmentId);
+                            }
+                          }}>
                             Ordered
                           </Button>
                           <Button variant="ghost" size="sm" className="h-7 text-xs text-amber-700" onClick={() => {
@@ -800,11 +839,31 @@ export default function EquipmentDetailPage() {
                         </>
                       )}
                       {part.status === "ordered" && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={() => updatePart(part.id, { status: "received" } as any)}>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={async () => {
+                          clearPartsError();
+                          const { error: err } = await updatePart(part.id, { status: "received" } as any);
+                          if (err) {
+                            setSaveError(`Failed to mark Received: ${err}`);
+                          } else {
+                            setSaveSuccess(true);
+                            setTimeout(() => setSaveSuccess(false), 2000);
+                            await fetchParts(equipmentId);
+                          }
+                        }}>
                           Received
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => deletePart(part.id)}>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={async () => {
+                        if (!window.confirm(`Delete part "${part.name}"? This cannot be undone.`)) return;
+                        clearPartsError();
+                        const { success, error: err } = await deletePart(part.id);
+                        if (!success) {
+                          setSaveError(`Failed to delete part: ${err || "Unknown error"}`);
+                        } else {
+                          setSaveSuccess(true);
+                          setTimeout(() => setSaveSuccess(false), 2000);
+                        }
+                      }}>
                         <X className="w-3 h-3" />
                       </Button>
                     </div>
