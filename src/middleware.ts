@@ -12,8 +12,11 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder files
+     * - manifest.json (PWA manifest — must be publicly accessible)
+     * - sw.js (service worker — must be publicly accessible)
+     * - .well-known (TWA asset links, etc. — must be publicly accessible)
+     * - public folder static asset files
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?\!_next/static|_next/image|favicon.ico|manifest.json|sw\\.js|\\.well-known|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)",
   ],
 };
