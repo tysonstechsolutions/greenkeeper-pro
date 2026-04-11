@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
-type UserRole = "super" | "asst_super" | "director" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "member";
+type UserRole = "super" | "asst_super" | "director" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro";
 
 // Role hierarchy for permission checking
 const roleHierarchy: Record<UserRole, number> = {
@@ -17,7 +17,6 @@ const roleHierarchy: Record<UserRole, number> = {
   mechanic: 50,
   crew: 30,
   seasonal: 10,
-  member: 5, // External golfer - lowest hierarchy level
 };
 
 // Management roles that can access admin features
@@ -26,10 +25,8 @@ export const ADMIN_ROLES: UserRole[] = ["super", "asst_super", "director"];
 export const SUPER_ONLY: UserRole[] = ["super"];
 // Pro-related roles - superintendent, assistant superintendent, director, and pro
 export const PRO_ROLES: UserRole[] = ["super", "asst_super", "director", "pro"];
-// Staff roles - all internal staff (not members)
+// Staff roles - all internal staff
 export const STAFF_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "mechanic", "crew", "seasonal", "pro"];
-// Member role - external golfers
-export const MEMBER_ROLES: UserRole[] = ["member"];
 
 interface RoleGuardProps {
   children: ReactNode;
@@ -129,7 +126,6 @@ export function useRoleAccess() {
   const isAdmin = () => hasRole(ADMIN_ROLES);
   const isSuperintendent = () => hasRole(SUPER_ONLY);
   const isPro = () => userRole === "pro";
-  const isMember = () => userRole === "member";
   const isStaff = () => hasRole(STAFF_ROLES);
 
   return {
@@ -140,7 +136,6 @@ export function useRoleAccess() {
     isAdmin,
     isSuperintendent,
     isPro,
-    isMember,
     isStaff,
   };
 }

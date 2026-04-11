@@ -11,9 +11,6 @@ import {
   Store,
   Flag,
   Map,
-  Home,
-  Users,
-  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChannels } from "@/lib/hooks/useChannels";
@@ -36,30 +33,22 @@ const proNavItems = [
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
-const memberNavItems = [
-  { href: "/member/home", label: "Home", icon: Home },
-  { href: "/member/tee-times", label: "Book", icon: Calendar },
-  { href: "/member/community", label: "Community", icon: Users },
-  { href: "/member/feedback", label: "Rate", icon: Star },
-  { href: "/more", label: "More", icon: MoreHorizontal },
-];
-
 const moreRoutes = [
   "/more", "/plan", "/course-map", "/weather", "/photos",
   "/equipment", "/chemicals", "/irrigation", "/staff", "/budget", "/reports",
   "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
   "/briefing", "/assistant", "/checklists",
-  "/equipment-checkout", "/member/conditions",
-  "/polls", "/report-issue", "/member-insights", "/install",
+  "/equipment-checkout",
+  "/polls", "/report-issue", "/install",
   "/parking-lot", "/clubhouse", "/order-list",
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const { totalUnread, fetchChannels } = useChannels();
-  const { isPro, isMember } = useAuth();
+  const { isPro } = useAuth();
 
-  const navItems = isMember ? memberNavItems : isPro ? proNavItems : maintenanceNavItems;
+  const navItems = isPro ? proNavItems : maintenanceNavItems;
 
   useEffect(() => {
     fetchChannels();

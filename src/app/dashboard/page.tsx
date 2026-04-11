@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -122,20 +121,12 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { profile, isMember, loading: authLoading } = useAuth();
+  const { profile } = useAuth();
   const { getAlerts } = useWeather();
   const alerts = getAlerts();
   const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
   const { fetchMyTasks } = useTasks();
   const { activities, loading: activitiesLoading } = useRecentActivity();
-
-  // Redirect members to member home
-  useEffect(() => {
-    if (!authLoading && isMember) {
-      router.replace("/member/home");
-    }
-  }, [authLoading, isMember, router]);
 
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
@@ -184,7 +175,7 @@ export default function DashboardPage() {
       const supabase = createClient();
       const [overview, staffResult] = await Promise.all([
         fetchPlanOverview(currentYear),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).neq("role", "member"),
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
       ]);
       setPlanOverview(overview);
       if (staffResult.count !== null) setStaffCount(staffResult.count);

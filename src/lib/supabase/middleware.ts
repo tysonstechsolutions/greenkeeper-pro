@@ -74,29 +74,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Member-only routes - if member tries to access staff routes, redirect to member home
-  const staffOnlyRoutes = [
-    "/dashboard",
-    "/tasks",
-    "/schedule",
-    "/messages",
-    "/equipment",
-    "/chemicals",
-    "/irrigation",
-    "/staff",
-    "/budget",
-    "/reports",
-    "/knowledge",
-    "/plan",
-    "/pro-dashboard",
-    "/report-issue",
-  ];
-
-  // Member routes - staff cannot access these
-  const memberOnlyRoutes = ["/member"];
-
-  // We can't check role in middleware without a database call, so we'll handle
-  // role-based redirects on the client side in a layout component
+  // Role-based redirects are handled on the client side in a layout component.
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:

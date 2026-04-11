@@ -175,7 +175,6 @@ export const roleLabels: Record<UserRole, string> = {
   mechanic: "Mechanic",
   crew: "Crew Member",
   seasonal: "Seasonal",
-  member: "Member",
   director: "Director",
 };
 
@@ -189,7 +188,6 @@ export const roleColors: Record<UserRole, { bg: string; text: string }> = {
   mechanic: { bg: "bg-purple-500/10", text: "text-purple-600" },
   crew: { bg: "bg-green-500/10", text: "text-green-600" },
   seasonal: { bg: "bg-gray-500/10", text: "text-gray-600" },
-  member: { bg: "bg-sky-500/10", text: "text-sky-600" },
 };
 
 // Get display name (prefer display_name, fallback to full_name)

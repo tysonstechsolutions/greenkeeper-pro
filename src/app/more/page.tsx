@@ -47,7 +47,7 @@ interface ListItem {
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // LEADERSHIP (super, asst_super, director)
-// Sees everything: maintenance, operations, members, admin
+// Sees everything: maintenance, operations, feedback, admin
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const leadershipQuickAccess: QuickItem[] = [
@@ -69,8 +69,7 @@ const leadershipOperations: ListItem[] = [
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
 ];
 
-const leadershipMembers: ListItem[] = [
-  { href: "/member-insights", label: "Member Insights", description: "Engagement data", icon: Users, iconColor: "text-indigo-600", bgColor: "bg-indigo-500/10" },
+const leadershipFeedback: ListItem[] = [
   { href: "/polls", label: "Polls", description: "Surveys & votes", icon: Vote, iconColor: "text-pink-600", bgColor: "bg-pink-500/10" },
   { href: "/feedback", label: "Feedback", description: "Golfer comments", icon: Lightbulb, iconColor: "text-amber-600", bgColor: "bg-amber-500/10" },
   { href: "/report-issue", label: "Report Issue", description: "Course problems", icon: Flag, iconColor: "text-red-600", bgColor: "bg-red-500/10" },
@@ -84,7 +83,7 @@ const leadershipAdmin: ListItem[] = [
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // FOREMAN
-// Sees maintenance + operations (staff/scheduling). No members, no admin.
+// Sees maintenance + operations (staff/scheduling). No admin.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const foremanQuickAccess: QuickItem[] = [
@@ -107,7 +106,7 @@ const foremanOperations: ListItem[] = [
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MECHANIC
-// Sees maintenance (heavy on equipment). No ops, no members, no admin.
+// Sees maintenance (heavy on equipment). No ops, no admin.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const mechanicQuickAccess: QuickItem[] = [
@@ -145,15 +144,6 @@ const proQuickAccess: QuickItem[] = [
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
-];
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MEMBER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-const memberQuickAccess: QuickItem[] = [
-  { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/course-map", label: "Map", icon: Map, color: "from-teal-500 to-cyan-600" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -238,28 +228,9 @@ function BottomLinks({ showSettings = true }: { showSettings?: boolean }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function MorePage() {
-  const { isPro, isMember, isForeman, isMechanic, isCrew, profile } = useAuth();
+  const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
-
-  // ── Member ──
-  if (isMember) {
-    return (
-      <div className="p-4 pb-24 max-w-lg mx-auto">
-        <h1 className="text-xl font-bold mb-5">More</h1>
-        <QuickGrid items={memberQuickAccess} />
-        <SectionCard
-          title="Account"
-          accent="bg-primary"
-          items={[
-            { href: "/settings/profile", label: "My Profile", description: "Your info", icon: Settings, iconColor: "text-gray-600", bgColor: "bg-gray-500/10" },
-            { href: "/notifications", label: "Notifications", description: "All alerts", icon: Bell, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
-          ]}
-        />
-        <BottomLinks showSettings={false} />
-      </div>
-    );
-  }
 
   // ── Pro Shop ──
   if (isPro) {
@@ -340,7 +311,7 @@ export default function MorePage() {
       <h1 className="text-xl font-bold mb-5">More</h1>
       <QuickGrid items={leadershipQuickAccess} />
       <SectionCard title="Operations" items={leadershipOperations} accent="bg-blue-500" />
-      <SectionCard title="Members" items={leadershipMembers} accent="bg-pink-500" />
+      <SectionCard title="Feedback" items={leadershipFeedback} accent="bg-pink-500" />
       <SectionCard title="Admin" items={leadershipAdmin} accent="bg-amber-500" />
       <BottomLinks />
     </div>

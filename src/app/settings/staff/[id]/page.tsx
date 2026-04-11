@@ -29,7 +29,6 @@ const ROLES: { value: UserRole; label: string }[] = [
   { value: "crew", label: "Crew" },
   { value: "seasonal", label: "Seasonal" },
   { value: "pro", label: "Pro Shop" },
-  { value: "member", label: "Member" },
   { value: "director", label: "Director" },
 ];
 

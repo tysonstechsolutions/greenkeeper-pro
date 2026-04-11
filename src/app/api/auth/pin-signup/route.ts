@@ -193,8 +193,7 @@ export async function POST(request: Request) {
     // 9. Role-based redirect.
     const profile: ProfileRecord = { id: newUser.id, role: invite.role };
     let redirectPath = "/dashboard";
-    if (profile.role === "member") redirectPath = "/member/home";
-    else if (profile.role === "pro") redirectPath = "/pro-dashboard";
+    if (profile.role === "pro") redirectPath = "/pro-dashboard";
 
     return NextResponse.json({
       success: true,

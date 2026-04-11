@@ -70,7 +70,6 @@ const roleSortOrder: Record<UserRole, number> = {
   mechanic: 5,
   crew: 6,
   seasonal: 7,
-  member: 8,
 };
 
 // Get week dates starting from Monday

@@ -21,9 +21,8 @@ export interface UseAuthReturn {
   isCrew: boolean;
   isSeasonal: boolean;
   isPro: boolean;
-  isMember: boolean;
   isDirector: boolean;
-  isStaff: boolean; // Any internal staff (not member)
+  isStaff: boolean; // Any internal staff
   // Permission helpers
   isManager: boolean; // super or asst_super or pro or director
   canCreateInvites: boolean;
@@ -47,7 +46,6 @@ const defaultAuthState: UseAuthReturn = {
   isCrew: false,
   isSeasonal: false,
   isPro: false,
-  isMember: false,
   isDirector: false,
   isStaff: false,
   isManager: false,
@@ -224,9 +222,8 @@ export function useAuthInternal(): UseAuthReturn {
   const isCrew = role === "crew";
   const isSeasonal = role === "seasonal";
   const isPro = role === "pro";
-  const isMember = role === "member";
   const isDirector = role === "director";
-  const isStaff = role !== "member" && role !== undefined;
+  const isStaff = role !== undefined;
 
   // Permission helpers — director can see everything (read-all oversight)
   const isManager = isSuper || isAsstSuper || isPro || isDirector;
@@ -250,7 +247,6 @@ export function useAuthInternal(): UseAuthReturn {
     isCrew,
     isSeasonal,
     isPro,
-    isMember,
     isDirector,
     isStaff,
     isManager,

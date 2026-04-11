@@ -124,9 +124,7 @@ export async function POST(request: Request) {
 
     // Determine redirect based on role
     let redirectPath = "/dashboard";
-    if (profile.role === "member") {
-      redirectPath = "/member/home";
-    } else if (profile.role === "pro") {
+    if (profile.role === "pro") {
       redirectPath = "/pro-dashboard";
     }
 
