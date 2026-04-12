@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SmartDiagnosis } from "@/components/features/observations/smart-diagnosis";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -954,6 +955,20 @@ export default function HoleDetailPage() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* Smart Diagnosis — on-device-first classifier */}
+                {photoPreview && (
+                  <SmartDiagnosis
+                    imageBase64={photoPreview}
+                    onDiagnosisSelect={(diagnosis) => {
+                      setFormData((p) => ({
+                        ...p,
+                        title: p.title || diagnosis.displayName,
+                        issue_type: (diagnosis.className as HoleIssueType) || p.issue_type,
+                      }));
+                    }}
+                  />
                 )}
 
                 {/* Title (AI-filled) */}

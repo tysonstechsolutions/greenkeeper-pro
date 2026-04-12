@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SmartDiagnosis } from "@/components/features/observations/smart-diagnosis";
 import {
   Select,
   SelectContent,
@@ -855,6 +856,20 @@ export default function GreenDetailPage() {
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* Smart Diagnosis — on-device-first classifier */}
+                {photoPreview && (
+                  <SmartDiagnosis
+                    imageBase64={photoPreview}
+                    onDiagnosisSelect={(diagnosis) => {
+                      setFormData((p) => ({
+                        ...p,
+                        title: p.title || diagnosis.displayName,
+                        issue_type: (diagnosis.className as GreenIssueType) || p.issue_type,
+                      }));
+                    }}
+                  />
                 )}
 
                 {/* Title (AI-filled) */}

@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "classes": [
+    { "id": 0, "name": "dollar_spot", "display": "Dollar Spot", "description": "Small, round bleached spots on turf blades" },
+    { "id": 1, "name": "brown_patch", "display": "Brown Patch", "description": "Circular brown/tan patches with smoke ring border" },
+    { "id": 2, "name": "anthracnose", "display": "Anthracnose", "description": "Yellowing turf with dark lesions on stems" },
+    { "id": 3, "name": "pythium", "display": "Pythium Blight", "description": "Greasy, water-soaked patches that mat down" },
+    { "id": 4, "name": "dry_spot", "display": "Dry Spot / LDS", "description": "Hydrophobic soil causing localized dry areas" },
+    { "id": 5, "name": "insect_damage", "display": "Insect Damage", "description": "Irregular browning from grubs, armyworms, or other pests" },
+    { "id": 6, "name": "chemical_burn", "display": "Chemical Burn", "description": "Uniform browning following spray pattern" },
+    { "id": 7, "name": "traffic_wear", "display": "Traffic Wear", "description": "Compaction and thinning from foot/cart traffic" },
+    { "id": 8, "name": "scalping", "display": "Scalping", "description": "Yellowing from mower cutting too low" },
+    { "id": 9, "name": "healthy", "display": "Healthy Turf", "description": "No significant issues detected" }
+  ],
+  "model_file": "model.onnx",
+  "input_size": [224, 224],
+  "model_status": "placeholder"
+}
