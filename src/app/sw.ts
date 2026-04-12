@@ -108,3 +108,60 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// ---------------------------------------------------------------------------
+// Web Push notifications (VAPID)
+// ---------------------------------------------------------------------------
+// The `push` listener renders a native OS notification when the server fires
+// a push via web-push. The `notificationclick` listener focuses an existing
+// open tab that already has the target URL, or opens a new window otherwise.
+//
+// Payload shape from /api/push/send → sendPushToUsers:
+//   { title: string, body: string, url?: string, icon?: string, badge?: string }
+// ---------------------------------------------------------------------------
+
+self.addEventListener("push", (event: PushEvent) => {
+  if (!event.data) return;
+  try {
+    const data = event.data.json() as {
+      title: string;
+      body: string;
+      url?: string;
+      icon?: string;
+      badge?: string;
+    };
+    const options: NotificationOptions = {
+      body: data.body,
+      icon: data.icon ?? "/icons/icon-192x192.png",
+      badge: data.badge ?? "/icons/icon-96x96.png",
+      data: { url: data.url ?? "/" },
+    };
+    event.waitUntil(self.registration.showNotification(data.title, options));
+  } catch (e) {
+    console.error("Push payload parse failed", e);
+  }
+});
+
+self.addEventListener("notificationclick", (event: NotificationEvent) => {
+  event.notification.close();
+  const url =
+    (event.notification.data && (event.notification.data as { url?: string }).url) ??
+    "/";
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const c of clients) {
+        if (c.url.endsWith(url) && "focus" in c) {
+          await (c as WindowClient).focus();
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(url);
+      }
+    })()
+  );
+});

@@ -210,6 +210,29 @@ export function useNotifications(): UseNotificationsReturn {
           return null;
         }
 
+        // Mirror: fire-and-forget web push so the recipient's phone lights up.
+        // Wrapped in try/catch so a push failure never blocks the DB insert.
+        try {
+          const pushUrl =
+            referenceType && referenceId
+              ? `/${referenceType}/${referenceId}`
+              : "/";
+          void fetch("/api/push/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_ids: [userId],
+              title,
+              body: body ?? "",
+              url: pushUrl,
+            }),
+          }).catch((err) => {
+            console.warn("Push mirror failed (non-fatal):", err);
+          });
+        } catch (pushErr) {
+          console.warn("Push mirror threw (non-fatal):", pushErr);
+        }
+
         return data;
       } catch (err) {
         console.error("Unexpected error creating notification:", err);

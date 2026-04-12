@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
+import { PushOptInCard } from "@/components/features/notifications/push-opt-in-card";
 import { useWeather } from "@/lib/hooks/useWeather";
 import type { WeatherAlert } from "@/lib/hooks/useWeather";
 import {
@@ -261,6 +262,11 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* ===== Push notification opt-in (conditional) ===== */}
+      <div className="mb-4">
+        <PushOptInCard />
+      </div>
 
       {/* ===== Quick Stats Row ===== */}
       <div className="gk-animate-in gk-animate-in-3 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
