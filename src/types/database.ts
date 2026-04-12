@@ -553,6 +553,19 @@ export type OrderCategory = 'clubhouse' | 'cart_paths' | 'turf_course' | 'genera
 export type OrderPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type OrderItemStatus = 'needed' | 'ordered' | 'received';
 
+export interface PinPosition {
+  id: string;
+  date: string;
+  hole_number: number;
+  paces_from_front: number;
+  paces_from_left: number;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
+  notes: string | null;
+  set_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OrderItem {
   id: string;
   created_by: string;
