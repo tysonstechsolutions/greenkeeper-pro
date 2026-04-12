@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout";
 import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync-indicator";
+import { OfflineBanner } from "@/components/features/offline/offline-banner";
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -84,6 +85,7 @@ export default function RootLayout({
       >
         <AuthProvider>
           <AppShell>{children}</AppShell>
+          <OfflineBanner />
           <OfflineSyncIndicator />
         </AuthProvider>
         <Analytics />

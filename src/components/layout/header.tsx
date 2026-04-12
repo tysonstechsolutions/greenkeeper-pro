@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -35,6 +35,7 @@ import {
 import { notificationToUrl } from "@/lib/utils/notification-url";
 import { useScrollDirection } from "@/lib/hooks/useScrollDirection";
 import { APP_CONFIG } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
 import type { NotificationType } from "@/types/database";
 
 const notificationIcons: Record<NotificationType, React.ReactNode> = {
@@ -54,7 +55,7 @@ const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 
 export function Header() {
   const router = useRouter();
-  const { profile, signOut, canCreateInvites, loading } = useAuth();
+  const { profile, signOut, canCreateInvites, loading, refreshProfile } = useAuth();
   const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
   const {
@@ -71,6 +72,7 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [langPending, startLangTransition] = useTransition();
 
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -119,6 +121,21 @@ export function Header() {
     }
     setMarkingAll(false);
   };
+
+  const handleToggleLanguage = () => {
+    if (!profile) return;
+    const newLang = profile.language_preference === "es" ? "en" : "es";
+    startLangTransition(async () => {
+      const supabase = createClient();
+      await supabase
+        .from("profiles")
+        .update({ language_preference: newLang })
+        .eq("id", profile.id);
+      await refreshProfile();
+    });
+  };
+
+  const currentLang = profile?.language_preference ?? "en";
 
   const handleNotificationClick = async (notification: NotificationWithDetails) => {
     if (!notification.is_read) {
@@ -384,6 +401,18 @@ export function Header() {
                   Invite Team Members
                 </Link>
               )}
+
+              <button
+                onClick={handleToggleLanguage}
+                disabled={langPending}
+                className="flex items-center justify-between w-full px-4 py-3 text-sm hover:bg-muted/50 active:bg-muted/70 transition-colors"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="text-base leading-none">{currentLang === "es" ? "\uD83C\uDDF2\uD83C\uDDFD" : "\uD83C\uDDFA\uD83C\uDDF8"}</span>
+                  Language
+                </span>
+                <span className="text-xs font-medium text-muted-foreground uppercase">{currentLang}</span>
+              </button>
 
               <div className="border-t border-border my-1" />
 

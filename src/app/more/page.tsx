@@ -25,6 +25,9 @@ import {
   Car,
   Building,
   ShoppingCart,
+  MapPin,
+  FileText,
+  Scan,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -67,6 +70,9 @@ const leadershipOperations: ListItem[] = [
   { href: "/plan", label: "Annual Plan", description: "Goals & progress", icon: Target, iconColor: "text-emerald-600", bgColor: "bg-emerald-500/10" },
   { href: "/irrigation", label: "Irrigation", description: "Zones & schedules", icon: Droplets, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
+  { href: "/settings/pin-sheet", label: "Pin Sheet", description: "Daily pin positions", icon: MapPin, iconColor: "text-red-600", bgColor: "bg-red-500/10" },
+  { href: "/reports/monthly-board", label: "Board Report", description: "Monthly GM report", icon: FileText, iconColor: "text-slate-600", bgColor: "bg-slate-500/10" },
+  { href: "/drone", label: "Drone Flights", description: "NDVI & aerial data", icon: Scan, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
 ];
 
 const leadershipFeedback: ListItem[] = [
@@ -102,6 +108,8 @@ const foremanQuickAccess: QuickItem[] = [
 const foremanOperations: ListItem[] = [
   { href: "/staff", label: "Staff", description: "Team management", icon: Users, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
+  { href: "/settings/pin-sheet", label: "Pin Sheet", description: "Daily pin positions", icon: MapPin, iconColor: "text-red-600", bgColor: "bg-red-500/10" },
+  { href: "/drone", label: "Drone Flights", description: "NDVI & aerial data", icon: Scan, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
