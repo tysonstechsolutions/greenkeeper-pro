@@ -648,6 +648,7 @@ export interface ChemicalApplication {
   applicator_license: string | null;
   application_date: string;
   application_time: string | null;
+  end_time: string | null;
   zone_ids: string[];
   hole_numbers: number[] | null;
   area_treated_sqft: number | null;

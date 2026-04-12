@@ -28,6 +28,7 @@ import {
   MapPin,
   FileText,
   Scan,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -84,6 +85,7 @@ const leadershipFeedback: ListItem[] = [
 const leadershipAdmin: ListItem[] = [
   { href: "/budget", label: "Budget", description: "Expenses & tracking", icon: DollarSign, iconColor: "text-green-600", bgColor: "bg-green-500/10" },
   { href: "/reports", label: "Reports", description: "Analytics & exports", icon: BarChart3, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
+  { href: "/compliance", label: "IL RUP Records", description: "Pesticide compliance", icon: ShieldCheck, iconColor: "text-teal-600", bgColor: "bg-teal-500/10" },
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen, iconColor: "text-orange-600", bgColor: "bg-orange-500/10" },
 ];
 
