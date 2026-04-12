@@ -2,6 +2,7 @@
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { Serwist, CacheFirst, NetworkFirst, NetworkOnly, ExpirationPlugin } from "serwist";
+import { createSupabaseMutationQueue } from "@/lib/sw/background-sync";
 
 // This declares the value of `injectionPoint` to TypeScript.
 declare global {
@@ -62,14 +63,20 @@ const serwist = new Serwist({
       }),
     },
     // Supabase MUTATION requests (POST, PATCH, PUT, DELETE) - Network Only
-    // CRITICAL: Never cache mutation requests — caching these causes
-    // "failed to fetch" errors when saving equipment, tasks, etc.
+    // wrapped in a BackgroundSyncPlugin queue. Failed mutations (offline,
+    // timeout, etc.) are persisted to IndexedDB by Serwist and replayed
+    // when the browser fires a `sync` event. Retention cap is 24h to limit
+    // auth-token staleness — see src/lib/sw/background-sync.ts for the
+    // known auth-refresh limitation and the client-side escalation path.
+    // CRITICAL: Never cache mutation responses — we only queue the request.
     {
       matcher: ({ url, request }) =>
         url.hostname.includes("supabase") &&
         request.method !== "GET" &&
         request.method !== "HEAD",
-      handler: new NetworkOnly(),
+      handler: new NetworkOnly({
+        plugins: [createSupabaseMutationQueue()],
+      }),
     },
     // Supabase READ requests (GET) - Network First with cache fallback
     {

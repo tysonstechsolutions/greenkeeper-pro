@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout";
+import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -83,6 +84,7 @@ export default function RootLayout({
       >
         <AuthProvider>
           <AppShell>{children}</AppShell>
+          <OfflineSyncIndicator />
         </AuthProvider>
         <Analytics />
         <SpeedInsights />
