@@ -11,7 +11,10 @@ import { createClient } from "@/lib/supabase/server";
 // Haiku via the same fetch pattern as analyze-observation-photo.
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_MODEL = "claude-haiku-4-5";
+// TODO(i18n): Switch to date-versioned Haiku 4.5 model ID once verified
+// against the production Anthropic account. Using Sonnet 4 for now to
+// match the codebase convention and guarantee resolution.
+const ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_INPUT_LENGTH = 2000;
 const REQUEST_TIMEOUT_MS = 20000;
@@ -110,8 +113,9 @@ ${text}`;
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     let translated = "";
+    let response: Response | null = null;
     try {
-      const response = await fetch(ANTHROPIC_API_URL, {
+      response = await fetch(ANTHROPIC_API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -128,7 +132,17 @@ ${text}`;
 
       if (!response.ok) {
         const errBody = await response.text();
-        console.error("Claude translate error:", response.status, errBody);
+        console.error(
+          JSON.stringify({
+            kind: "translate_api_failure",
+            status: response?.status ?? null,
+            from,
+            to,
+            text_len: text.length,
+            error: errBody,
+            timestamp: new Date().toISOString(),
+          })
+        );
         return NextResponse.json(
           { error: "Translation service error" },
           { status: 502 }
@@ -139,6 +153,22 @@ ${text}`;
       const content = data?.content?.[0];
       translated = content?.type === "text" ? (content.text as string) : "";
       translated = (translated || "").trim();
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          kind: "translate_api_failure",
+          status: response?.status ?? null,
+          from,
+          to,
+          text_len: text.length,
+          error: String((err as { message?: unknown })?.message ?? err),
+          timestamp: new Date().toISOString(),
+        })
+      );
+      return NextResponse.json(
+        { error: "Translation service error" },
+        { status: 502 }
+      );
     } finally {
       clearTimeout(timeout);
     }
@@ -151,6 +181,10 @@ ${text}`;
     }
 
     // Cache write (best-effort)
+    // TODO(perf): Switch this insert to an upsert to avoid a thundering-herd
+    // race when multiple requests translate the same string concurrently
+    // and all try to insert the same key_hash. Not urgent — duplicate-key
+    // errors are caught and logged, not returned to the caller.
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any).from("translation_cache").insert({
@@ -172,4 +206,15 @@ ${text}`;
       { status: 500 }
     );
   }
+}
+
+// GET /api/translate returns { healthy: boolean, model: string, last_error?: ... }
+// Used by future admin health dashboard. For now, just confirms the route
+// is reachable and the env is configured.
+export async function GET() {
+  const hasKey = !!process.env.ANTHROPIC_API_KEY;
+  return NextResponse.json({
+    healthy: hasKey,
+    model: ANTHROPIC_MODEL,
+  });
 }

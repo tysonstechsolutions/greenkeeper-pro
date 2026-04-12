@@ -437,8 +437,6 @@ export interface Message {
   edited_at: string | null;
   /** Spanish translation of {@link Message.content} (optional). */
   content_es?: string | null;
-  /** Spanish translation — legacy alias matching plan spec. */
-  body_es?: string | null;
   created_at: string;
 }
 

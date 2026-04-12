@@ -33,12 +33,12 @@ describe("getLocalized", () => {
     expect(getLocalized(row, "title", "en")).toBe("");
   });
 
-  it("works for other fields like description and body", () => {
+  it("works for other fields like description and content", () => {
     const task = { description: "Cut at 0.110\"", description_es: "Cortar a 0.110\"" };
     expect(getLocalized(task, "description", "es")).toBe("Cortar a 0.110\"");
     expect(getLocalized(task, "description", "en")).toBe("Cut at 0.110\"");
 
-    const message = { body: "Hello team", body_es: "Hola equipo" };
-    expect(getLocalized(message, "body", "es")).toBe("Hola equipo");
+    const message = { content: "Hello team", content_es: "Hola equipo" };
+    expect(getLocalized(message, "content", "es")).toBe("Hola equipo");
   });
 });

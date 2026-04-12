@@ -14,13 +14,8 @@ ALTER TABLE tasks
   ADD COLUMN IF NOT EXISTS title_es TEXT,
   ADD COLUMN IF NOT EXISTS description_es TEXT;
 
-ALTER TABLE messages
-  ADD COLUMN IF NOT EXISTS body_es TEXT;
-
 -- NOTE: the `messages` table in this codebase uses `content` as the primary
--- text field. We add `body_es` per the plan spec, but hooks/display code
--- should read/write `content_es` or `body_es` consistently. See migration
--- follow-up in the README if a rename is needed.
+-- text field, so the Spanish translation lives in `content_es`.
 ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS content_es TEXT;
 
@@ -40,6 +35,11 @@ ALTER TABLE green_observations
   ADD COLUMN IF NOT EXISTS notes_es TEXT;
 
 -- ── Translation cache ─────────────────────────────────────────────────────
+-- TODO(privacy): A future task should consider dropping `source_text` and
+-- relying on `key_hash` alone for lookups. Storing raw source text in a
+-- shared cache is a mild privacy leak (super notes may contain names, crew
+-- comments, etc.). Hash-only lookup would keep the cache functional while
+-- removing the plaintext surface area. Deferred for now.
 CREATE TABLE IF NOT EXISTS translation_cache (
   key_hash     TEXT PRIMARY KEY,           -- sha256(source||source_lang||target_lang)
   source_lang  TEXT NOT NULL,

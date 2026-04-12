@@ -22,6 +22,9 @@ interface TranslateArgs {
   to: TranslateLocale;
 }
 
+// TODO(perf): add LRU eviction once cache grows past 500 entries. Currently
+// unbounded — acceptable for now because single-session strings rarely
+// exceed a few hundred and the DB cache is the real source of truth.
 const memCache = new Map<string, string>();
 
 function memKey({ text, from, to }: TranslateArgs): string {
