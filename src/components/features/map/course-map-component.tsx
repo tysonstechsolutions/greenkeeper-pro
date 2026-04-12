@@ -9,13 +9,15 @@ import {
   Popup,
   useMap,
   useMapEvents,
+  ImageOverlay,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { cn } from "@/lib/utils";
-import type { CourseZone, ZoneType, GeoJsonPolygon } from "@/types/database";
+import type { CourseZone, ZoneType, GeoJsonPolygon, DroneFlight } from "@/types/database";
 import type { TaskWithRelations } from "@/lib/hooks/useTasks";
 import type { PhotoWithUploader } from "@/lib/hooks/usePhotos";
+import { createClient } from "@/lib/supabase/client";
 
 // Fix Leaflet default icon issue in Next.js
 delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl;
@@ -49,6 +51,12 @@ const DEFAULT_TILE_LAYER = TILE_LAYERS.osm;
 // Veterans Memorial Golf Course at Naval Station Great Lakes
 const DEFAULT_CENTER: [number, number] = [42.3095, -87.8475];
 const DEFAULT_ZOOM = 16;
+
+// Approximate VMGC course bounding box for NDVI overlay fallback
+const VMGC_BOUNDS: [[number, number], [number, number]] = [
+  [42.2972, -87.8364], // south-west
+  [42.3050, -87.8250], // north-east
+];
 
 // Condition score color mapping
 function getConditionColor(score: number | null): string {
@@ -353,6 +361,49 @@ export function CourseMapComponent({
   const [drawingPoints, setDrawingPoints] = useState<L.LatLng[]>([]);
   const mapRef = useRef<L.Map | null>(null);
 
+  // NDVI overlay state
+  const [ndviEnabled, setNdviEnabled] = useState(false);
+  const [ndviFlight, setNdviFlight] = useState<DroneFlight | null>(null);
+  const [ndviUrl, setNdviUrl] = useState<string | null>(null);
+
+  // Fetch the most recent NDVI flight when toggled on
+  useEffect(() => {
+    if (!ndviEnabled) {
+      setNdviFlight(null);
+      setNdviUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    const supabase = createClient();
+
+    (async () => {
+      const { data } = await supabase
+        .from("drone_flights")
+        .select("*")
+        .eq("band", "ndvi")
+        .not("preview_png_path", "is", null)
+        .order("flight_date", { ascending: false })
+        .limit(1);
+
+      if (cancelled || !data || data.length === 0) return;
+
+      const flight = data[0] as DroneFlight;
+      setNdviFlight(flight);
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (supabaseUrl && flight.preview_png_path) {
+        setNdviUrl(
+          `${supabaseUrl}/storage/v1/object/public/drone-flights/${flight.preview_png_path}`
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ndviEnabled]);
+
   // Filter zones with geojson data
   const zonesWithGeojson = useMemo(
     () => zones.filter((z) => z.geojson !== null),
@@ -503,6 +554,22 @@ export function CourseMapComponent({
             <ProblemMarker key={photo.id} photo={photo} onClick={onPhotoClick} />
           ))}
 
+        {/* NDVI overlay */}
+        {ndviEnabled && ndviUrl && (
+          <ImageOverlay
+            url={ndviUrl}
+            bounds={
+              ndviFlight?.bbox
+                ? [
+                    [ndviFlight.bbox.south, ndviFlight.bbox.west],
+                    [ndviFlight.bbox.north, ndviFlight.bbox.east],
+                  ]
+                : VMGC_BOUNDS
+            }
+            opacity={0.6}
+          />
+        )}
+
         {/* Drawing polygon in edit mode */}
         {editMode && drawingPoints.length > 0 && (
           <>
@@ -537,6 +604,26 @@ export function CourseMapComponent({
           </>
         )}
       </MapContainer>
+
+      {/* NDVI toggle button */}
+      <button
+        onClick={() => setNdviEnabled((prev) => !prev)}
+        className={cn(
+          "absolute top-4 right-4 z-[1000] px-3 py-1.5 text-xs font-medium rounded-lg shadow-lg transition-colors",
+          ndviEnabled
+            ? "bg-green-600 text-white hover:bg-green-700"
+            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 border"
+        )}
+        title={
+          ndviEnabled
+            ? "Hide NDVI overlay"
+            : ndviFlight === null && ndviEnabled
+            ? "No NDVI flights uploaded yet"
+            : "Show NDVI overlay"
+        }
+      >
+        NDVI
+      </button>
 
       {/* Edit mode controls */}
       {editable && editMode && (

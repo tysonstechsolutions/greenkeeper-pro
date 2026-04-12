@@ -794,6 +794,30 @@ export interface AppSetting {
   updated_at: string;
 }
 
+// ── Drone Flights ──
+export type DroneBand = 'ndvi' | 'ndre' | 'thermal' | 'rgb';
+export type DroneSource = 'greensight' | 'pix4d' | 'dji' | 'manual';
+
+export interface DroneBbox {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+export interface DroneFlight {
+  id: string;
+  flight_date: string;
+  geotiff_path: string | null;
+  preview_png_path: string | null;
+  bbox: DroneBbox | null;
+  band: DroneBand | null;
+  source: string | null;
+  notes: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 // Supabase Database type definition
 export interface Database {
   public: {
@@ -1006,6 +1030,14 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Omit<ActivityLog, "id">>;
+      };
+      drone_flights: {
+        Row: DroneFlight;
+        Insert: Omit<DroneFlight, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<DroneFlight, "id">>;
       };
     };
     Views: Record<string, never>;
