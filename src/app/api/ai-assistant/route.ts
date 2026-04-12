@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchWeather, getWeatherRecommendations } from "@/lib/utils/weather";
 import { COURSE, APP_CONFIG } from "@/lib/constants";
+import { HISTORICAL_QUERY_TOOLS, HISTORICAL_QUERY_IMPLEMENTATIONS } from "@/lib/ai/tools/historical-queries";
 
 // =============================================
 // VMGC AI Assistant — API Route
@@ -36,6 +37,14 @@ IMPORTANT RULES:
 - Today's date: ${new Date().toISOString().split("T")[0]}
 - When the user asks about weather, use the get_weather tool — don't query weather_logs unless they ask for historical data
 - When the user shares a photo/image, use the analyze_image tool to diagnose it
+- You have access to historical query tools that let you search the course's past records:
+  * query_chemical_history: Search past chemical/pesticide applications
+  * query_observation_history: Search past course observations and issues
+  * query_weather_history: Look up historical weather data
+  * query_task_history: Search task assignment and completion records
+  * query_equipment_history: Look up equipment service and usage logs
+  * query_budget_expenses: Search expense records and budget data
+  Use these when the user asks about past events, trends, comparisons, or "when did we last..." questions.
 - You are PAGE-AWARE: the current page path is provided. Use it to be contextually helpful.
   For example, if the user is on /equipment/abc-123 and asks "what's the status?", query that specific equipment record.
 
@@ -224,6 +233,7 @@ const TOOLS = [
       required: [],
     },
   },
+  ...HISTORICAL_QUERY_TOOLS,
 ];
 
 // Execute a tool call against Supabase or external APIs
@@ -513,6 +523,21 @@ Be specific with rates and timing — this is for a professional superintendent.
           weather_context: weatherContext,
           inventory_checked: (chemicals || []).length,
         };
+      }
+
+      // Historical query tools
+      case "query_chemical_history":
+      case "query_observation_history":
+      case "query_weather_history":
+      case "query_task_history":
+      case "query_equipment_history":
+      case "query_budget_expenses": {
+        const impl = HISTORICAL_QUERY_IMPLEMENTATIONS[toolName];
+        if (impl) {
+          const result = await impl(input, supabase);
+          return { data: result };
+        }
+        return { error: `Unknown historical tool: ${toolName}` };
       }
 
       default:

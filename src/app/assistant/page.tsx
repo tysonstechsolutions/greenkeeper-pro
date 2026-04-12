@@ -37,8 +37,11 @@ const EXAMPLE_PROMPTS = [
   "How much have we spent this month?",
   "Show me the staff schedule for this week",
   "Add an observation: bunker sand is thin on hole 7",
-  "Give me a summary of recent golfer feedback",
-  "What time-off requests are pending?",
+  "When did we last apply fungicide to the greens?",
+  "Show me the wettest week this year",
+  "What tasks were overdue last month?",
+  "How much did we spend on chemicals this quarter?",
+  "What were the most common turf issues this season?",
 ];
 
 export default function AssistantPage() {
