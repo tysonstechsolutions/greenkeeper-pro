@@ -33,6 +33,7 @@ import {
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
 import { PushOptInCard } from "@/components/features/notifications/push-opt-in-card";
+import { SprayWindowCard } from "@/components/features/spray-window/spray-window-card";
 import { useWeather } from "@/lib/hooks/useWeather";
 import type { WeatherAlert } from "@/lib/hooks/useWeather";
 import {
@@ -266,6 +267,11 @@ export default function DashboardPage() {
       {/* ===== Push notification opt-in (conditional) ===== */}
       <div className="mb-4">
         <PushOptInCard />
+      </div>
+
+      {/* ===== Spray Window Card (shown when disease pressure is moderate+) ===== */}
+      <div className="mb-4">
+        <SprayWindowCard />
       </div>
 
       {/* ===== Quick Stats Row ===== */}
