@@ -24,6 +24,7 @@ import {
   formatTimeAgo,
   type NotificationWithDetails,
 } from "@/lib/hooks/useNotifications";
+import { notificationToUrl } from "@/lib/utils/notification-url";
 import type { NotificationType } from "@/types/database";
 import { cn } from "@/lib/utils";
 
@@ -148,16 +149,9 @@ export default function NotificationsPage() {
       await markAsRead(notification.id);
     }
 
-    // Navigate based on reference
-    if (notification.reference_type === "time_off_request") {
-      router.push("/schedule/time-off");
-    } else if (notification.reference_type === "task" && notification.reference_id) {
-      router.push(`/tasks/${notification.reference_id}`);
-    } else if (notification.reference_type === "channel" && notification.reference_id) {
-      router.push(`/messages?channel=${notification.reference_id}`);
-    } else if (notification.reference_type === "equipment" && notification.reference_id) {
-      router.push(`/equipment/${notification.reference_id}`);
-    }
+    // Navigate based on reference — shared helper keeps this in sync with
+    // the header dropdown and the web push click target.
+    router.push(notificationToUrl(notification));
   };
 
   const groupOrder = ["Today", "Yesterday", "This Week", "Earlier"];

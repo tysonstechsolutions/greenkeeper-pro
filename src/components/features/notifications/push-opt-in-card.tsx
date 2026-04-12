@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePushSubscription } from "@/lib/hooks/usePushSubscription";
 
 const DISMISS_KEY = "vmgc_push_optin_dismissed_at";
@@ -10,21 +10,19 @@ const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export function PushOptInCard() {
   const { isConfigured, isSubscribed, permission, loading, subscribe, error } =
     usePushSubscription();
-  const [dismissedLocal, setDismissedLocal] = useState(false);
+  // null = pre-hydration; we render nothing so the server markup (also nothing)
+  // matches the first client paint, avoiding a React hydration mismatch.
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
 
-  // Hidden in these cases:
-  //  - VAPID not configured
-  //  - already subscribed
-  //  - user previously denied
-  //  - dismissed within last 7 days
-  if (!isConfigured) return null;
-  if (isSubscribed) return null;
-  if (permission === "denied") return null;
-  if (dismissedLocal) return null;
-  if (typeof window !== "undefined") {
-    const ts = window.localStorage.getItem(DISMISS_KEY);
-    if (ts && Date.now() - Number(ts) < DISMISS_TTL_MS) return null;
-  }
+  useEffect(() => {
+    try {
+      const ts = window.localStorage.getItem(DISMISS_KEY);
+      const recent = !!ts && Date.now() - Number(ts) < DISMISS_TTL_MS;
+      setDismissed(recent);
+    } catch {
+      setDismissed(false);
+    }
+  }, []);
 
   const handleEnable = async () => {
     await subscribe();
@@ -36,8 +34,20 @@ export function PushOptInCard() {
     } catch {
       // ignore storage errors
     }
-    setDismissedLocal(true);
+    setDismissed(true);
   };
+
+  // Pre-hydration: render nothing to match SSR output.
+  if (dismissed === null) return null;
+  // Hidden in these cases:
+  //  - VAPID not configured
+  //  - already subscribed
+  //  - user previously denied
+  //  - dismissed within last 7 days
+  if (!isConfigured) return null;
+  if (isSubscribed) return null;
+  if (permission === "denied") return null;
+  if (dismissed) return null;
 
   return (
     <div className="gk-card relative flex items-start gap-3 p-4 border border-emerald-500/20 bg-emerald-500/5">

@@ -32,6 +32,7 @@ import {
   formatTimeAgo,
   type NotificationWithDetails,
 } from "@/lib/hooks/useNotifications";
+import { notificationToUrl } from "@/lib/utils/notification-url";
 import { useScrollDirection } from "@/lib/hooks/useScrollDirection";
 import { APP_CONFIG } from "@/lib/constants";
 import type { NotificationType } from "@/types/database";
@@ -124,13 +125,8 @@ export function Header() {
       // Fire and forget — don't block navigation on this
       markAsRead(notification.id).catch(() => {});
     }
-    if (notification.reference_type === "time_off_request") {
-      router.push("/schedule/time-off");
-      setNotificationsOpen(false);
-    } else if (notification.reference_type === "task" && notification.reference_id) {
-      router.push(`/tasks/${notification.reference_id}`);
-      setNotificationsOpen(false);
-    }
+    router.push(notificationToUrl(notification));
+    setNotificationsOpen(false);
   };
 
   // Determine weather widget state

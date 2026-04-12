@@ -142,6 +142,10 @@ self.addEventListener("push", (event: PushEvent) => {
   }
 });
 
+// TODO(#6): Narrow push subscription key conversions to Uint8Array generic
+// when web-push types settle (currently cast through unknown in push.ts).
+// TODO(#7): Regenerate src/types/database.ts to drop the `as any` casts in
+// useNotifications.ts after push_subscriptions/notifications schema stabilizes.
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
   const url =
@@ -153,10 +157,20 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
         type: "window",
         includeUncontrolled: true,
       });
+      // Compare pathnames exactly — substring matches (endsWith) were
+      // ambiguous for deep paths and could focus an unrelated client.
+      const targetPath = url.startsWith("/")
+        ? url.split("?")[0]
+        : new URL(url, self.location.origin).pathname;
       for (const c of clients) {
-        if (c.url.endsWith(url) && "focus" in c) {
-          await (c as WindowClient).focus();
-          return;
+        try {
+          const cp = new URL(c.url).pathname;
+          if (cp === targetPath && "focus" in c) {
+            await (c as WindowClient).focus();
+            return;
+          }
+        } catch {
+          // skip invalid URL
         }
       }
       if (self.clients.openWindow) {

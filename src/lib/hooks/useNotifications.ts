@@ -3,8 +3,18 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import { notificationToUrl } from "@/lib/utils/notification-url";
 import type { Notification, NotificationType, Database } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+
+// TODO(#4): Batch push-mirror send — currently createNotification fires one
+// /api/push/send per notification. A server action should accept a batch and
+// call sendPushToUsers once to reduce HTTP overhead on multi-recipient flows.
+// TODO(#5): Wire standalone sendNotification/sendNotifications (below) to
+// trigger the push mirror too; right now only the hook's createNotification
+// does so, creating a silent gap for callers that use the standalone utils.
+// TODO(#8): Redact user/push payloads in error log lines — console.warn
+// currently includes raw error objects that may contain endpoint URLs.
 
 type RealtimePayload = RealtimePostgresChangesPayload<Record<string, unknown>>;
 
@@ -213,10 +223,12 @@ export function useNotifications(): UseNotificationsReturn {
         // Mirror: fire-and-forget web push so the recipient's phone lights up.
         // Wrapped in try/catch so a push failure never blocks the DB insert.
         try {
-          const pushUrl =
-            referenceType && referenceId
-              ? `/${referenceType}/${referenceId}`
-              : "/";
+          // Use the shared helper so the push-click target matches the in-app
+          // route (e.g. /tasks/:id, not /task/:id which would 404).
+          const pushUrl = notificationToUrl({
+            reference_type: referenceType ?? null,
+            reference_id: referenceId ?? null,
+          });
           void fetch("/api/push/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
