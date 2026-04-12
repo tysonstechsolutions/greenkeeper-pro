@@ -368,6 +368,10 @@ export const HISTORICAL_QUERY_IMPLEMENTATIONS: Record<
         if (input.hole_number) {
           query = query.eq("hole_number", input.hole_number);
         }
+        if (input.issue_type) {
+          // course_observations uses "category" instead of "issue_type"
+          query = query.eq("category", input.issue_type);
+        }
         if (input.status === "resolved" || input.status === "addressed") {
           query = query.eq("is_addressed", true);
         } else if (input.status === "open") {

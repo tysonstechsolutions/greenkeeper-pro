@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import {
   Bot,
@@ -29,19 +29,21 @@ interface ChatMessage {
 }
 
 const EXAMPLE_PROMPTS = [
-  "What equipment do we have and what needs service?",
+  "When did we last apply fungicide to the greens?",
   "What's the weather look like? Good day to spray?",
-  "Show me all pending tasks for this week",
-  "What's our chemical inventory looking like?",
+  "What tasks were overdue last month?",
   "Create a task to aerate greens on holes 1-9 tomorrow",
+  "Show me the wettest week this year",
+  "What's our chemical inventory looking like?",
+  "What equipment do we have and what needs service?",
+  "Show me all pending tasks for this week",
   "How much have we spent this month?",
   "Show me the staff schedule for this week",
   "Add an observation: bunker sand is thin on hole 7",
-  "When did we last apply fungicide to the greens?",
-  "Show me the wettest week this year",
-  "What tasks were overdue last month?",
   "How much did we spend on chemicals this quarter?",
   "What were the most common turf issues this season?",
+  "Give me a summary of recent golfer feedback",
+  "What time-off requests are pending?",
 ];
 
 export default function AssistantPage() {
@@ -56,6 +58,16 @@ export default function AssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Shuffle prompts once per mount so users see variety
+  const displayedPrompts = useMemo(() => {
+    const shuffled = [...EXAMPLE_PROMPTS];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, 6);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -268,7 +280,7 @@ export default function AssistantPage() {
                 Try asking...
               </p>
               <div className="grid gap-2">
-                {EXAMPLE_PROMPTS.slice(0, 6).map((prompt, i) => (
+                {displayedPrompts.map((prompt, i) => (
                   <button
                     key={i}
                     onClick={() => sendMessage(prompt)}
