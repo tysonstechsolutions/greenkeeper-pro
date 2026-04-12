@@ -4,14 +4,17 @@
  * Listens for service-worker messages posted by the Supabase mutation
  * background-sync queue and surfaces a transient banner when offline
  * changes get replayed. No external toast library dependency — this is a
- * minimal fixed-position banner styled to match the rest of the app.
+ * minimal fixed-position banner styled with project Tailwind conventions.
  */
 
 import { useEffect, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 type Banner =
   | { kind: "replayed"; count: number }
-  | { kind: "auth-expired"; count: number };
+  | { kind: "auth-expired"; count: number }
+  | { kind: "permanent-failure"; count: number };
 
 interface QueueReplayedMessage {
   type: "queue-replayed";
@@ -23,12 +26,24 @@ interface OfflineAuthExpiredMessage {
   urls: string[];
 }
 
-type SWMessage = QueueReplayedMessage | OfflineAuthExpiredMessage;
+interface QueuePermanentFailureMessage {
+  type: "queue-permanent-failure";
+  count: number;
+}
+
+type SWMessage =
+  | QueueReplayedMessage
+  | OfflineAuthExpiredMessage
+  | QueuePermanentFailureMessage;
 
 function isSWMessage(data: unknown): data is SWMessage {
   if (!data || typeof data !== "object") return false;
   const type = (data as { type?: unknown }).type;
-  return type === "queue-replayed" || type === "offline-auth-expired";
+  return (
+    type === "queue-replayed" ||
+    type === "offline-auth-expired" ||
+    type === "queue-permanent-failure"
+  );
 }
 
 export function OfflineSyncIndicator() {
@@ -45,6 +60,8 @@ export function OfflineSyncIndicator() {
         setBanner({ kind: "replayed", count: event.data.count });
       } else if (event.data.type === "offline-auth-expired") {
         setBanner({ kind: "auth-expired", count: event.data.urls.length });
+      } else if (event.data.type === "queue-permanent-failure") {
+        setBanner({ kind: "permanent-failure", count: event.data.count });
       }
     };
 
@@ -55,6 +72,9 @@ export function OfflineSyncIndicator() {
   }, []);
 
   useEffect(() => {
+    // TODO I-5: auth-expired and permanent-failure banners should probably
+    // stay visible until dismissed, since the user needs to take action.
+    // Logged as a follow-up — requires a design-system banner component.
     if (!banner) return;
     const timer = window.setTimeout(() => setBanner(null), 5000);
     return () => window.clearTimeout(timer);
@@ -65,30 +85,25 @@ export function OfflineSyncIndicator() {
   const text =
     banner.kind === "replayed"
       ? `${banner.count} offline ${banner.count === 1 ? "change" : "changes"} synced`
-      : `${banner.count} offline ${banner.count === 1 ? "change" : "changes"} need you to sign in again`;
+      : banner.kind === "auth-expired"
+      ? `${banner.count} offline ${banner.count === 1 ? "change" : "changes"} need you to sign in again`
+      : `${banner.count} offline ${banner.count === 1 ? "change" : "changes"} rejected by server`;
 
-  const bg = banner.kind === "replayed" ? "#1B4332" : "#7f1d1d";
+  const variantClasses =
+    banner.kind === "replayed"
+      ? "bg-primary text-primary-foreground"
+      : banner.kind === "auth-expired"
+      ? "bg-destructive text-destructive-foreground"
+      : "bg-orange-600 text-white";
 
   return (
     <div
       role="status"
       aria-live="polite"
-      style={{
-        position: "fixed",
-        left: "50%",
-        bottom: "calc(env(safe-area-inset-bottom) + 88px)",
-        transform: "translateX(-50%)",
-        background: bg,
-        color: "#ffffff",
-        padding: "10px 16px",
-        borderRadius: 9999,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-        fontSize: 14,
-        fontWeight: 500,
-        zIndex: 9999,
-        maxWidth: "90vw",
-        textAlign: "center",
-      }}
+      className={cn(
+        "fixed left-1/2 -translate-x-1/2 bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] z-50 px-4 py-2 rounded-full shadow-lg text-sm font-medium max-w-[90vw] text-center",
+        variantClasses,
+      )}
     >
       {text}
     </div>
