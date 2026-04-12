@@ -9,6 +9,8 @@ import {
   Image as ImageIcon,
   Trash2,
   ExternalLink,
+  ScanSearch,
+  CheckCircle2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -64,6 +66,8 @@ export default function DronePage() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [analyzingFlightId, setAnalyzingFlightId] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<{ count: number; flightId: string } | null>(null);
 
   useEffect(() => {
     fetchFlights();
@@ -112,6 +116,31 @@ export default function DronePage() {
       await deleteFlight(id);
     },
     [deleteFlight]
+  );
+
+  const handleGenerateScoutTasks = useCallback(
+    async (flightId: string) => {
+      setAnalyzingFlightId(flightId);
+      setAnalysisResult(null);
+      try {
+        const res = await fetch("/api/drone/auto-task", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ flightId }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setUploadError(data.error || "Failed to generate scout tasks");
+          return;
+        }
+        setAnalysisResult({ count: data.tasksCreated, flightId });
+      } catch {
+        setUploadError("Failed to connect to analysis service");
+      } finally {
+        setAnalyzingFlightId(null);
+      }
+    },
+    []
   );
 
   const getPreviewUrl = useCallback((flight: DroneFlight): string | null => {
@@ -239,6 +268,21 @@ export default function DronePage() {
           </div>
         </RoleVisible>
 
+        {/* Analysis Result Banner */}
+        {analysisResult && (
+          <div className="rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30 p-3 flex items-center justify-between">
+            <p className="text-sm text-green-800 dark:text-green-300">
+              Generated {analysisResult.count} scout task{analysisResult.count !== 1 ? "s" : ""} from NDVI analysis.
+            </p>
+            <a
+              href="/tasks"
+              className="text-sm font-medium text-green-700 dark:text-green-400 hover:underline"
+            >
+              View Tasks
+            </a>
+          </div>
+        )}
+
         {/* Flight History */}
         <div className="space-y-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -334,6 +378,31 @@ export default function DronePage() {
                         <ExternalLink className="w-4 h-4 text-muted-foreground" />
                       </a>
                     )}
+                    <RoleVisible visibleToRoles={MANAGEMENT_ROLES}>
+                      {flight.preview_png_path ? (
+                        <button
+                          onClick={() => handleGenerateScoutTasks(flight.id)}
+                          disabled={analyzingFlightId === flight.id}
+                          className="p-2 rounded-md hover:bg-primary/10 transition-colors disabled:opacity-50"
+                          title="Analyze NDVI and generate scout tasks"
+                        >
+                          {analyzingFlightId === flight.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                          ) : analysisResult?.flightId === flight.id ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <ScanSearch className="w-4 h-4 text-primary" />
+                          )}
+                        </button>
+                      ) : (
+                        <span
+                          className="p-2 opacity-30 cursor-not-allowed"
+                          title="Upload a preview PNG first"
+                        >
+                          <ScanSearch className="w-4 h-4 text-muted-foreground" />
+                        </span>
+                      )}
+                    </RoleVisible>
                     <RoleVisible visibleToRoles={["super", "asst_super", "director"]}>
                       <button
                         onClick={() => handleDelete(flight.id)}
