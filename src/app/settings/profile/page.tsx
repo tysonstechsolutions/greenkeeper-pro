@@ -18,6 +18,9 @@ export default function ProfileSettingsPage() {
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [displayName, setDisplayName] = useState(profile?.display_name || "");
   const [phone, setPhone] = useState(profile?.phone || "");
+  const [languagePreference, setLanguagePreference] = useState<"en" | "es">(
+    (profile?.language_preference as "en" | "es" | undefined) || "en"
+  );
 
   const supabase = createClient();
 
@@ -34,6 +37,7 @@ export default function ProfileSettingsPage() {
           full_name: fullName,
           display_name: displayName,
           phone: phone,
+          language_preference: languagePreference,
         })
         .eq("id", profile.id);
 
@@ -127,6 +131,23 @@ export default function ProfileSettingsPage() {
             onChange={(e) => setPhone(e.target.value)}
             placeholder="(555) 555-5555"
           />
+        </div>
+
+        {/* Language Preference */}
+        <div className="space-y-2">
+          <Label htmlFor="languagePreference">Preferred Language / Idioma</Label>
+          <select
+            id="languagePreference"
+            value={languagePreference}
+            onChange={(e) => setLanguagePreference(e.target.value as "en" | "es")}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="en">English</option>
+            <option value="es">Espanol</option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Tasks, messages, and observations will display in this language when a translation is available.
+          </p>
         </div>
 
         {/* Email (read-only) */}

@@ -37,6 +37,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { getLocalized, type SupportedLocale } from "@/lib/utils/localized-text";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { formatZoneName } from "@/lib/hooks/useCourseZones";
 import { getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
@@ -177,6 +178,7 @@ export default function TaskDetailPage() {
   const taskId = params.id as string;
 
   const { user, profile, isManager, isSuper } = useAuth();
+  const locale: SupportedLocale = profile?.language_preference === "es" ? "es" : "en";
   const { getTask, updateTask, updateTaskStatus, completeTask, verifyTask, deleteTask } = useTasks();
 
   const [task, setTask] = useState<TaskWithRelations | null>(null);
@@ -544,7 +546,7 @@ export default function TaskDetailPage() {
         <DetailPageHeader
           backHref="/tasks"
           backLabel="Tasks"
-          title={task.title}
+          title={getLocalized(task as unknown as Record<string, unknown>, "title", locale)}
           subtitle={`${categoryLabels[task.category]} • ${task.zone ? formatZoneName(task.zone as { name: string; zone_type: string; hole_number: number | null }) : "No location"}`}
           actions={
             <div className="flex items-center gap-1">
@@ -689,7 +691,7 @@ export default function TaskDetailPage() {
               {task.description && (
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Description</p>
-                  <p className="text-sm whitespace-pre-wrap">{task.description}</p>
+                  <p className="text-sm whitespace-pre-wrap">{getLocalized(task as unknown as Record<string, unknown>, "description", locale)}</p>
                 </div>
               )}
 

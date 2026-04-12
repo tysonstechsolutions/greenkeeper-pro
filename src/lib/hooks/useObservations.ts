@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
 import { withTimeout } from "@/lib/utils/resilient-fetch";
+import { translateSafe } from "@/lib/utils/translate";
 import type {
   CourseObservation,
   ImprovementPlanItem,
@@ -121,11 +122,24 @@ export function useObservations(): UseObservationsReturn {
       if (!user) return null;
 
       try {
+        // Translate user-provided text fields in parallel. Non-blocking —
+        // if Claude is down, the observation still saves without a translation.
+        const [titleEs, descriptionEs] = await Promise.all([
+          obs.title && obs.title.trim()
+            ? translateSafe({ text: obs.title, from: "en", to: "es" })
+            : Promise.resolve(null),
+          obs.description && obs.description.trim()
+            ? translateSafe({ text: obs.description, from: "en", to: "es" })
+            : Promise.resolve(null),
+        ]);
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error: insertError } = await (supabase as any)
           .from("course_observations")
           .insert({
             ...obs,
+            title_es: titleEs,
+            description_es: descriptionEs,
             created_by: user.id,
             is_addressed: false,
             linked_plan_item_id: null,

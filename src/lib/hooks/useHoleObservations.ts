@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import { translateSafe } from "@/lib/utils/translate";
 import type {
   HoleObservation,
   HoleIssueType,
@@ -122,10 +123,22 @@ export function useHoleObservations() {
     async (data: CreateHoleObservationData) => {
       if (!user) return null;
       try {
-         
+        // Translate user-facing text fields — non-blocking.
+        const [titleEs, descriptionEs] = await Promise.all([
+          data.title && data.title.trim()
+            ? translateSafe({ text: data.title, from: "en", to: "es" })
+            : Promise.resolve(null),
+          data.description && data.description.trim()
+            ? translateSafe({ text: data.description, from: "en", to: "es" })
+            : Promise.resolve(null),
+        ]);
+
+
         const { data: created, error } = await supabase.from("hole_observations")
           .insert({
             ...data,
+            title_es: titleEs,
+            description_es: descriptionEs,
             reported_by: user.id,
             status: "open",
           })

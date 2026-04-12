@@ -14,6 +14,7 @@ import type {
 } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { sendNotification } from "./useNotifications";
+import { translateSafe } from "@/lib/utils/translate";
 
 // Extended task type with joined data
 export interface TaskWithRelations extends Task {
@@ -269,9 +270,24 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
       }
 
       try {
+        // Fire translation in parallel before insert — failure is non-blocking.
+        // We await the result so both columns get populated in a single insert,
+        // but `translateSafe` returns null on any error so the write still
+        // proceeds (just without a translation).
+        const [titleEs, descriptionEs] = await Promise.all([
+          data.title && data.title.trim()
+            ? translateSafe({ text: data.title, from: "en", to: "es" })
+            : Promise.resolve(null),
+          data.description && data.description.trim()
+            ? translateSafe({ text: data.description, from: "en", to: "es" })
+            : Promise.resolve(null),
+        ]);
+
         const insertData = {
           title: data.title,
+          title_es: titleEs,
           description: data.description ?? null,
+          description_es: descriptionEs,
           category: data.category,
           priority: data.priority,
           status: "pending",

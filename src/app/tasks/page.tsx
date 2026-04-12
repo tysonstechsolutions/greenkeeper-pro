@@ -29,6 +29,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useTasks, type TaskWithRelations, type TaskFilters } from "@/lib/hooks/useTasks";
 import { useProfiles, getInitials } from "@/lib/hooks/useProfiles";
 import { formatZoneName } from "@/lib/hooks/useCourseZones";
+import { getLocalized, type SupportedLocale } from "@/lib/utils/localized-text";
 import type { TaskCategory, TaskPriority, TaskStatus, CourseZone } from "@/types/database";
 
 // Tab type
@@ -641,6 +642,9 @@ function TaskCard({
   task: TaskWithRelations;
   onClick: () => void;
 }) {
+  const { profile } = useAuth();
+  const locale: SupportedLocale = profile?.language_preference === "es" ? "es" : "en";
+
   const checklistProgress = useMemo(() => {
     if (!task.checklist || task.checklist.length === 0) return null;
     const completed = task.checklist.filter((item) => item.checked).length;
@@ -663,7 +667,7 @@ function TaskCard({
           {/* Title Row */}
           <div className="flex items-start gap-2 mb-2">
             <h4 className="font-medium text-foreground leading-tight flex-1">
-              {task.title}
+              {getLocalized(task as unknown as Record<string, unknown>, "title", locale)}
             </h4>
             {overdue && (
               <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />

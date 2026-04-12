@@ -286,6 +286,8 @@ export interface Profile {
   emergency_contact: EmergencyContact | null;
   user_preferences: UserPreferences | null;
   is_active: boolean;
+  /** Preferred display locale for bilingual content. Defaults to 'en'. */
+  language_preference?: "en" | "es" | null;
   created_at: string;
   updated_at: string;
 }
@@ -361,6 +363,10 @@ export interface Task {
   completed_by: string | null;
   verified_at: string | null;
   verified_by: string | null;
+  /** Spanish translation of {@link Task.title} (optional). */
+  title_es?: string | null;
+  /** Spanish translation of {@link Task.description} (optional). */
+  description_es?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -429,6 +435,10 @@ export interface Message {
   attachments: string[];
   is_pinned: boolean;
   edited_at: string | null;
+  /** Spanish translation of {@link Message.content} (optional). */
+  content_es?: string | null;
+  /** Spanish translation — legacy alias matching plan spec. */
+  body_es?: string | null;
   created_at: string;
 }
 
@@ -1057,6 +1067,12 @@ export interface CourseObservation {
   tags: string[] | null;
   is_addressed: boolean;
   linked_plan_item_id: string | null;
+  /** Spanish translation of {@link CourseObservation.title} (optional). */
+  title_es?: string | null;
+  /** Spanish translation of {@link CourseObservation.description} (optional). */
+  description_es?: string | null;
+  /** Spanish translation of any free-form notes (optional). */
+  notes_es?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1101,6 +1117,12 @@ export interface HoleObservation {
   task_id: string | null; // linked task when created from observation
   resolved_at: string | null;
   resolved_by: string | null;
+  /** Spanish translation of {@link HoleObservation.title} (optional). */
+  title_es?: string | null;
+  /** Spanish translation of {@link HoleObservation.description} (optional). */
+  description_es?: string | null;
+  /** Spanish translation of notes/fix instructions (optional). */
+  notes_es?: string | null;
   created_at: string;
   updated_at: string;
   // Joined data
@@ -1216,6 +1238,12 @@ export interface GreenObservation {
   task_id: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  /** Spanish translation of {@link GreenObservation.title} (optional). */
+  title_es?: string | null;
+  /** Spanish translation of {@link GreenObservation.description} (optional). */
+  description_es?: string | null;
+  /** Spanish translation of notes/fix instructions (optional). */
+  notes_es?: string | null;
   created_at: string;
   updated_at: string;
   // Joined data

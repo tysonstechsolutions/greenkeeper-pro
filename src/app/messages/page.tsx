@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { getLocalized, type SupportedLocale } from "@/lib/utils/localized-text";
 import { useChannels, type ChannelWithDetails } from "@/lib/hooks/useChannels";
 import { useMessages, type MessageWithSender } from "@/lib/hooks/useMessages";
 import { useProfiles, getDisplayName, getInitials, roleLabels } from "@/lib/hooks/useProfiles";
@@ -106,6 +107,7 @@ function MessagesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, profile, isSuper, loading: authLoading } = useAuth();
+  const locale: SupportedLocale = profile?.language_preference === "es" ? "es" : "en";
 
   // Channel and message state
   const {
@@ -700,7 +702,7 @@ function MessagesPageContent() {
                 <div className="text-sm font-medium">{message.content}</div>
               </Link>
             ) : (
-              <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+              <p className="text-sm whitespace-pre-wrap break-words">{getLocalized(message as unknown as Record<string, unknown>, "content", locale)}</p>
             )}
 
             {message.edited_at && !isEditing && (

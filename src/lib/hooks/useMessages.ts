@@ -10,6 +10,7 @@ import type {
   Database,
 } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { translateSafe } from "@/lib/utils/translate";
 
 type RealtimePayload = RealtimePostgresChangesPayload<Record<string, unknown>>;
 
@@ -165,10 +166,17 @@ export function useMessages(): UseMessagesReturn {
       }
 
       try {
+        // Non-blocking translation: if Claude is down, the message still sends.
+        const contentEs =
+          type === "text" && content && content.trim()
+            ? await translateSafe({ text: content, from: "en", to: "es" })
+            : null;
+
         const insertData = {
           channel_id: channelId,
           sender_id: user.id,
           content,
+          content_es: contentEs,
           message_type: type,
           reference_id: referenceId || null,
           attachments: [],
