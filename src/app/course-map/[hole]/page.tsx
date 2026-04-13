@@ -24,6 +24,7 @@ import {
   Save,
   Edit3,
   Move,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,7 @@ export default function HoleDetailPage() {
     getObservationsForHole,
     createObservation,
     updateObservation,
+    deleteObservation,
     uploadPhoto,
   } = useHoleObservations();
 
@@ -1301,6 +1303,25 @@ export default function HoleDetailPage() {
                       Create Task from This
                     </Button>
                   )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={async () => {
+                      if (!confirm("Delete this observation? This cannot be undone.")) return;
+                      const ok = await deleteObservation(selectedObs.id);
+                      if (ok) {
+                        setSelectedObs(null);
+                        setFeedbackMsg({ type: "success", text: "Observation deleted." });
+                      } else {
+                        setFeedbackMsg({ type: "error", text: "Failed to delete observation." });
+                      }
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Delete
+                  </Button>
                 </div>
               </div>
             </>

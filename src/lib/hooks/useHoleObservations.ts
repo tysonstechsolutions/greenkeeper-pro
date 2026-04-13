@@ -237,6 +237,24 @@ export function useHoleObservations() {
     [supabase, user]
   );
 
+  const deleteObservation = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        const { error } = await supabase.from("hole_observations").delete().eq("id", id);
+        if (error) {
+          console.error("Failed to delete observation:", error);
+          return false;
+        }
+        setObservations((prev) => prev.filter((o) => o.id !== id));
+        return true;
+      } catch (err) {
+        console.error("Delete observation error:", err);
+        return false;
+      }
+    },
+    [supabase]
+  );
+
   // Summary stats
   const stats = {
     total: observations.length,
@@ -257,6 +275,7 @@ export function useHoleObservations() {
     getOpenCountForHole,
     createObservation,
     updateObservation,
+    deleteObservation,
     uploadPhoto,
   };
 }
