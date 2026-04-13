@@ -7,7 +7,7 @@ export function OfflineBanner() {
 
   useEffect(() => {
     // Set initial state
-    setIsOffline(!navigator.onLine);
+    setIsOffline(!navigator.onLine); // eslint-disable-line react-hooks/set-state-in-effect -- hydration-safe browser API read
 
     const handleOffline = () => setIsOffline(true);
     const handleOnline = () => setIsOffline(false);

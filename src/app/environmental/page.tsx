@@ -115,7 +115,7 @@ function LogTab({ userId }: { userId: string }) {
   }, [filterCat]);
 
   useEffect(() => {
-    fetchLogs();
+    fetchLogs(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
   }, [fetchLogs]);
 
   const resetForm = () => {
@@ -391,7 +391,7 @@ function BufferZonesTab({ userId }: { userId: string }) {
   }, []);
 
   useEffect(() => {
-    fetchZones();
+    fetchZones(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
   }, [fetchZones]);
 
   const seedDefaults = async () => {
@@ -622,7 +622,7 @@ function SummaryTab() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    fetchData();
+    fetchData(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
   }, [fetchData]);
 
   const totalEntries = logs.length;

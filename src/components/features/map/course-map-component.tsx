@@ -369,8 +369,8 @@ export function CourseMapComponent({
   // Fetch the most recent NDVI flight when toggled on
   useEffect(() => {
     if (!ndviEnabled) {
-      setNdviFlight(null);
-      setNdviUrl(null);
+      setNdviFlight(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on toggle
+      setNdviUrl(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on toggle
       return;
     }
 

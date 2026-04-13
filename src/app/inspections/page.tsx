@@ -403,7 +403,7 @@ export default function InspectionsPage() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading) fetchChecklist();
+    if (!authLoading) fetchChecklist(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
   }, [authLoading, fetchChecklist]);
 
   // ── Create new inspection ──
