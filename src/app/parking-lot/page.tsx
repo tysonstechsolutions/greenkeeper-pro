@@ -330,7 +330,7 @@ export default function ParkingLotPage() {
                 initialScale={1}
                 panning={{ disabled: isPlacingPin || !!movingIssueId }}
                 doubleClick={{ disabled: true }}
-                onTransformed={(_ref, state) => { setZoomScale(state.scale); }}
+                onTransform={(_ref: unknown, state: { scale: number }) => { setZoomScale(state.scale); }}
               >
                 {({ zoomIn, zoomOut, resetTransform }) => (
                   <>
