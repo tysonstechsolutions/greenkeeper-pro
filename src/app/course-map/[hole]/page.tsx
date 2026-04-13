@@ -112,6 +112,37 @@ export default function HoleDetailPage() {
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  // Persist pin state before camera opens (Android kills background tabs)
+  const STORAGE_KEY = `hole-obs-pending-${holeNumber}`;
+  const savePinState = useCallback(() => {
+    if (pendingPin) {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+          pendingPin,
+          showForm: true,
+          formStep: "photo",
+          formData: { description: "", fix_instructions: "", issue_type: "other", priority: "normal" },
+        }));
+      } catch { /* ignore */ }
+    }
+  }, [pendingPin, STORAGE_KEY]);
+
+  // Restore pin state on mount (after camera returns and page reloads)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.pendingPin) {
+          setPendingPin(state.pendingPin);
+          setShowForm(true);
+          setFormStep("photo");
+        }
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [STORAGE_KEY]);
   const [submitting, setSubmitting] = useState(false);
   const [generatingFix, setGeneratingFix] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
@@ -293,6 +324,7 @@ export default function HoleDetailPage() {
       setPhotoFile(null);
       setPhotoPreview(null);
       setDiagnosisResult(null);
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
       setFeedbackMsg({ type: "success", text: "Observation reported successfully." });
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
@@ -879,7 +911,10 @@ export default function HoleDetailPage() {
                     Attach a photo to help document the problem
                   </p>
 
-                  <label className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md">
+                  <label
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md"
+                    onClick={savePinState}
+                  >
                     <Camera className="w-5 h-5" />
                     Open Camera
                     <input

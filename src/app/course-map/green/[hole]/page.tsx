@@ -112,6 +112,31 @@ export default function GreenDetailPage() {
   // Camera input ref for triggering
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Persist drawn path state before camera opens (Android kills background tabs)
+  const STORAGE_KEY = `green-obs-pending-${holeNumber}`;
+  const saveDrawnState = useCallback(() => {
+    if (drawnPath) {
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ drawnPath, showForm: true, formStep: "photo" }));
+      } catch { /* ignore */ }
+    }
+  }, [drawnPath, STORAGE_KEY]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.drawnPath) {
+          setDrawnPath(state.drawnPath);
+          setShowForm(true);
+          setFormStep("photo");
+        }
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [STORAGE_KEY]);
+
   // View observation detail
   const [selectedObs, setSelectedObs] = useState<GreenObservation | null>(null);
   const [editingObs, setEditingObs] = useState(false);
@@ -256,6 +281,7 @@ export default function GreenDetailPage() {
       setDiagnosisResult(null);
       setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
       setPhotoPreview(null);
       setFeedbackMsg({ type: "success", text: "Observation reported successfully." });
     } else {
@@ -740,7 +766,7 @@ export default function GreenDetailPage() {
                     Attach a photo to help document the problem
                   </p>
 
-                  <label className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md">
+                  <label className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md" onClick={saveDrawnState}>
                     <Camera className="w-5 h-5" />
                     Open Camera
                     <input
