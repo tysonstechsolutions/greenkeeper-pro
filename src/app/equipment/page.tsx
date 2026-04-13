@@ -16,6 +16,8 @@ import {
   Camera,
   FileText,
   Download,
+  ShoppingCart,
+  PackageCheck,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -87,6 +89,7 @@ function calculateConditionStats(equipment: Equipment[]) {
     good: equipment.filter((eq) => eq.condition_status === "good").length,
     needs_repair: equipment.filter((eq) => eq.condition_status === "needs_repair").length,
     beyond_repair: equipment.filter((eq) => eq.condition_status === "beyond_repair").length,
+    parts_needed: equipment.filter((eq) => eq.parts_needed && !eq.needs_parts_ordered).length,
     parts_ordered: equipment.filter((eq) => eq.needs_parts_ordered === true).length,
   };
 }
@@ -210,7 +213,7 @@ export default function EquipmentPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<EquipmentType | "all">("all");
-  const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "parts_ordered" | "all">("all");
+  const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "parts_needed" | "parts_ordered" | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
 
@@ -246,7 +249,7 @@ export default function EquipmentPage() {
   const conditionStats = calculateConditionStats(equipment);
 
   // Handle stat card click — toggle filter on/off
-  const handleConditionClick = (condition: EquipmentCondition | "parts_ordered" | "all") => {
+  const handleConditionClick = (condition: EquipmentCondition | "parts_needed" | "parts_ordered" | "all") => {
     setConditionFilter((prev) => (prev === condition ? "all" : condition));
   };
 
@@ -287,6 +290,7 @@ export default function EquipmentPage() {
   // Filter equipment by condition
   const filteredEquipment = equipment.filter((item) => {
     if (conditionFilter === "all") return true;
+    if (conditionFilter === "parts_needed") return !!item.parts_needed && !item.needs_parts_ordered;
     if (conditionFilter === "parts_ordered") return item.needs_parts_ordered === true;
     return item.condition_status === conditionFilter;
   });
@@ -331,7 +335,7 @@ export default function EquipmentPage() {
       )}
 
       {/* Condition Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <StatCard
           label="Good"
           count={conditionStats.good}
@@ -357,10 +361,18 @@ export default function EquipmentPage() {
           active={conditionFilter === "beyond_repair"}
         />
         <StatCard
+          label="Parts Needed"
+          count={conditionStats.parts_needed}
+          color="#f59e0b"
+          icon={ShoppingCart}
+          onClick={() => handleConditionClick("parts_needed")}
+          active={conditionFilter === "parts_needed"}
+        />
+        <StatCard
           label="Parts Ordered"
           count={conditionStats.parts_ordered}
           color="#3b82f6"
-          icon={Clock}
+          icon={PackageCheck}
           onClick={() => handleConditionClick("parts_ordered")}
           active={conditionFilter === "parts_ordered"}
         />
