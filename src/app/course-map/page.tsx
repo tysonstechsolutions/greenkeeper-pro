@@ -11,6 +11,7 @@ import {
   Search,
   Flag,
   Circle,
+  Download,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,7 @@ export default function CourseMapPage() {
   const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const stats = activeTab === "holes" ? holeStats : greenStats;
   const loading = activeTab === "holes" ? holeLoading : greenLoading;
@@ -224,6 +226,33 @@ export default function CourseMapPage() {
             </p>
           </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={generatingReport}
+          onClick={async () => {
+            setGeneratingReport(true);
+            try {
+              const type = activeTab === "holes" ? "hole" : "green";
+              const res = await fetch(`/api/reports/observation-report?type=${type}`);
+              if (!res.ok) throw new Error("Failed to generate report");
+              const blob = await res.blob();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = `All-Holes-${type === "green" ? "Green" : "Fairway"}-Report-${new Date().toISOString().slice(0, 10)}.pdf`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            } catch (err) {
+              console.error("Report generation failed:", err);
+            } finally {
+              setGeneratingReport(false);
+            }
+          }}
+          className="gap-2"
+        >
+          <Download className="w-4 h-4" />
+          {generatingReport ? "Generating..." : "Download Report"}
+        </Button>
       </div>
 
       {/* Tab Switcher */}
