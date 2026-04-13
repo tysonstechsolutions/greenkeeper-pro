@@ -22,10 +22,11 @@ import {
   Target,
   Cloud,
   Leaf,
-  Bot,
   Car,
   Building,
   ShoppingCart,
+  ClipboardCheck,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -64,6 +65,7 @@ const adminItems = [
   { href: "/budget", label: "Budget", icon: DollarSign },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
+  { href: "/inspections", label: "Inspections", icon: ClipboardCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

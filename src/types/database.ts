@@ -1331,6 +1331,120 @@ export interface ImprovementPlan {
   updated_at: string;
 }
 
+// ── Inspection Readiness ──
+
+export type InspectionCategory =
+  | "course_conditions"
+  | "safety"
+  | "environmental"
+  | "equipment"
+  | "facilities"
+  | "documentation";
+
+export type InspectionItemStatus = "not_started" | "in_progress" | "compliant" | "non_compliant" | "na";
+
+export interface InspectionChecklist {
+  id: string;
+  name: string;
+  inspection_date: string | null;
+  inspector_name: string | null;
+  status: "draft" | "in_progress" | "completed";
+  notes: string | null;
+  created_by: string;
+  score: number | null; // percentage 0-100
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InspectionItem {
+  id: string;
+  checklist_id: string;
+  category: InspectionCategory;
+  title: string;
+  description: string | null;
+  status: InspectionItemStatus;
+  notes: string | null;
+  photo_ids: string[];
+  sort_order: number;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+// ── Environmental Compliance ──
+
+export type ComplianceLogCategory =
+  | "stormwater"
+  | "discharge"
+  | "buffer_zone"
+  | "spill"
+  | "waste_disposal"
+  | "fuel_storage"
+  | "wildlife";
+
+export type ComplianceSeverity = "routine" | "minor" | "major" | "critical";
+
+export interface EnvironmentalLog {
+  id: string;
+  category: ComplianceLogCategory;
+  title: string;
+  description: string | null;
+  severity: ComplianceSeverity;
+  date_observed: string;
+  location: string | null;
+  hole_numbers: number[];
+  corrective_action: string | null;
+  corrective_deadline: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  photo_ids: string[];
+  reported_by: string;
+  npdes_reportable: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BufferZoneRecord {
+  id: string;
+  zone_name: string;
+  water_feature: string;
+  buffer_distance_ft: number;
+  last_inspected: string | null;
+  inspected_by: string | null;
+  status: "compliant" | "non_compliant" | "needs_review";
+  vegetation_condition: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Water Usage Types ──
+
+export type WaterSource = "municipal" | "well" | "reclaimed" | "pond" | "mixed";
+
+export interface WaterMeterReading {
+  id: string;
+  meter_id: string;
+  reading_date: string;
+  reading_value: number; // gallons
+  previous_reading: number | null;
+  usage_gallons: number; // calculated: reading - previous
+  source: WaterSource;
+  notes: string | null;
+  recorded_by: string;
+  created_at: string;
+}
+
+export interface WaterUsageTarget {
+  id: string;
+  year: number;
+  month: number;
+  target_gallons: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Helper types for common operations
 export type Tables<T extends keyof Database["public"]["Tables"]> =
   Database["public"]["Tables"][T]["Row"];

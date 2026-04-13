@@ -64,7 +64,7 @@ export function AppShell({ children }: AppShellProps) {
       {/* Mobile Bottom Nav */}
       <BottomNav />
 
-      {/* AI Chat Bubble */}
+      {/* Floating AI Chat Bubble */}
       {user && <ChatBubble />}
 
       {/* PWA Install Prompt */}

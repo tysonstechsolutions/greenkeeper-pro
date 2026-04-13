@@ -18,7 +18,6 @@ import {
   Flag,
   Lightbulb,
   Coffee,
-  Bot,
   Vote,
   ChevronRight,
   Smartphone,
@@ -29,6 +28,9 @@ import {
   FileText,
   Scan,
   ShieldCheck,
+  Leaf,
+  ClipboardCheck,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -74,6 +76,7 @@ const leadershipOperations: ListItem[] = [
   { href: "/settings/pin-sheet", label: "Pin Sheet", description: "Daily pin positions", icon: MapPin, iconColor: "text-red-600", bgColor: "bg-red-500/10" },
   { href: "/reports/monthly-board", label: "Board Report", description: "Monthly GM report", icon: FileText, iconColor: "text-slate-600", bgColor: "bg-slate-500/10" },
   { href: "/drone", label: "Drone Flights", description: "NDVI & aerial data", icon: Scan, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
+  { href: "/water-usage", label: "Water Usage", description: "Metering & base reporting", icon: Droplets, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
 ];
 
 const leadershipFeedback: ListItem[] = [
@@ -86,7 +89,9 @@ const leadershipAdmin: ListItem[] = [
   { href: "/budget", label: "Budget", description: "Expenses & tracking", icon: DollarSign, iconColor: "text-green-600", bgColor: "bg-green-500/10" },
   { href: "/reports", label: "Reports", description: "Analytics & exports", icon: BarChart3, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
   { href: "/compliance", label: "IL RUP Records", description: "Pesticide compliance", icon: ShieldCheck, iconColor: "text-teal-600", bgColor: "bg-teal-500/10" },
+  { href: "/environmental", label: "Environmental", description: "EPA/NPDES compliance", icon: Leaf, iconColor: "text-green-600", bgColor: "bg-green-500/10" },
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen, iconColor: "text-orange-600", bgColor: "bg-orange-500/10" },
+  { href: "/inspections", label: "Inspections", description: "Command readiness", icon: ClipboardCheck, iconColor: "text-indigo-600", bgColor: "bg-indigo-500/10" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -112,6 +117,7 @@ const foremanOperations: ListItem[] = [
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
   { href: "/settings/pin-sheet", label: "Pin Sheet", description: "Daily pin positions", icon: MapPin, iconColor: "text-red-600", bgColor: "bg-red-500/10" },
   { href: "/drone", label: "Drone Flights", description: "NDVI & aerial data", icon: Scan, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
+  { href: "/water-usage", label: "Water Usage", description: "Metering & reports", icon: Droplets, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

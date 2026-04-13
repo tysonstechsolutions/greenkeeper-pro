@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { SmartDiagnosis } from "@/components/features/observations/smart-diagnosis";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -75,7 +74,7 @@ import type {
   TaskPriority,
 } from "@/types/database";
 
-type FormStep = "photo" | "analyzing" | "review";
+type FormStep = "photo" | "review";
 
 export default function HoleDetailPage() {
   const params = useParams();
@@ -192,51 +191,16 @@ export default function HoleDetailPage() {
     setPhotoPreview(null);
   };
 
-  // ── Handle Photo Capture & Auto-Analyze + Diagnose ──
+  // ── Handle Photo Capture ──
   const handlePhotoCaptured = useCallback(async (file: File) => {
     setPhotoFile(file);
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64 = reader.result as string;
       setPhotoPreview(base64);
-      setFormStep("analyzing");
       setAnalyzeError(null);
       setDiagnosisResult(null);
-
-      try {
-        const res = await fetch("/api/analyze-and-diagnose", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image_base64: base64,
-            context: "hole",
-            hole_number: holeNumber,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setFormData((prev) => ({
-            ...prev,
-            title: data.title || prev.title,
-            description: data.description || prev.description,
-            issue_type: (data.issue_type as HoleIssueType) || prev.issue_type,
-            fix_instructions: data.fix_instructions || prev.fix_instructions,
-          }));
-          if (data.diagnosis_result) {
-            setDiagnosisResult(data.diagnosis_result as DiagnosisResult);
-          }
-          setFormStep("review");
-        } else {
-          console.error("Photo analysis failed:", res.status);
-          setAnalyzeError("AI analysis failed. You can fill in the details manually.");
-          setFormStep("review");
-        }
-      } catch (err) {
-        console.error("Photo analysis error:", err);
-        setAnalyzeError("AI analysis failed. You can fill in the details manually.");
-        setFormStep("review");
-      }
+      setFormStep("review");
     };
     reader.readAsDataURL(file);
   }, [holeNumber]);
@@ -847,7 +811,6 @@ export default function HoleDetailPage() {
             <SheetTitle className="flex items-center gap-2">
               <MapPin className="w-5 h-5 text-[#B68D40]" />
               {formStep === "photo" && "Take a Photo"}
-              {formStep === "analyzing" && "Analyzing Photo..."}
               {formStep === "review" && "Review & Submit"}
               <span className="text-muted-foreground font-normal text-sm">— Hole {holeNumber}</span>
             </SheetTitle>
@@ -867,10 +830,10 @@ export default function HoleDetailPage() {
                 <div className="text-center py-4">
                   <Camera className="w-16 h-16 text-[#B68D40]/40 mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground mb-1">
-                    Take a photo of the issue so AI can identify it
+                    Take a photo of the issue
                   </p>
                   <p className="text-xs text-muted-foreground mb-6">
-                    The photo will be analyzed to auto-fill the issue details
+                    Attach a photo to help document the problem
                   </p>
 
                   <label className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md">
@@ -906,25 +869,7 @@ export default function HoleDetailPage() {
               </div>
             )}
 
-            {/* ── STEP 2: Analyzing ── */}
-            {formStep === "analyzing" && (
-              <div className="space-y-4">
-                {photoPreview && (
-                  <div className="relative w-full h-48 rounded-xl overflow-hidden border border-border">
-                    <img src={photoPreview} alt="Captured" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <div className="text-center text-white">
-                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
-                        <p className="text-sm font-medium">AI is analyzing your photo...</p>
-                        <p className="text-xs opacity-80 mt-1">Identifying issue type and details</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── STEP 3: Review & Submit ── */}
+            {/* ── STEP 2: Review & Submit ── */}
             {formStep === "review" && (
               <div className="space-y-4">
                 {analyzeError && (
@@ -948,30 +893,10 @@ export default function HoleDetailPage() {
                     >
                       <X className="w-4 h-4 text-white" />
                     </button>
-                    {!analyzeError && (
-                      <div className="absolute bottom-2 left-2 px-2 py-1 bg-[#1B4332]/90 text-white text-[10px] font-medium rounded-md flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" />
-                        AI analyzed
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Smart Diagnosis — on-device-first classifier */}
-                {photoPreview && (
-                  <SmartDiagnosis
-                    imageBase64={photoPreview}
-                    onDiagnosisSelect={(diagnosis) => {
-                      setFormData((p) => ({
-                        ...p,
-                        title: p.title || diagnosis.displayName,
-                        issue_type: (diagnosis.className as HoleIssueType) || p.issue_type,
-                      }));
-                    }}
-                  />
-                )}
-
-                {/* Title (AI-filled) */}
+                {/* Title */}
                 <div className="space-y-2">
                   <Label htmlFor="obs-title">Issue Title *</Label>
                   <Input

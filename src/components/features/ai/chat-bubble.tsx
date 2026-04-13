@@ -1,341 +1,37 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { Bot } from "lucide-react";
 import Link from "next/link";
-import {
-  Bot,
-  Send,
-  Loader2,
-  X,
-  Maximize2,
-  Sparkles,
-  AlertCircle,
-  Camera,
-  ImageIcon,
-} from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/hooks/useAuth";
 
-interface BubbleMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  error?: boolean;
-  rawContent?: unknown;
-  imagePreview?: string; // base64 thumbnail for display
-}
-
+/**
+ * Floating chat bubble that links to the AI assistant page.
+ * Hidden on the assistant page itself, public routes, and for non-staff roles.
+ */
 export function ChatBubble() {
   const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<BubbleMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [pendingImage, setPendingImage] = useState<string | null>(null);
-  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { profile } = useAuth();
 
-  // Don't show bubble on the full assistant page or login
-  if (pathname === "/assistant" || pathname === "/login" || pathname === "/pin-login" || pathname?.startsWith("/join") || pathname?.startsWith("/invite")) {
-    return null;
-  }
+  // Hide on assistant page (already there)
+  if (pathname === "/assistant") return null;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // Only show for roles that can access the assistant
+  const allowed =
+    profile?.role === "super" ||
+    profile?.role === "asst_super" ||
+    profile?.role === "foreman" ||
+    profile?.role === "director";
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type and size
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 10 * 1024 * 1024) return; // 10MB max
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setPendingImage(base64);
-      setPendingImagePreview(base64);
-    };
-    reader.readAsDataURL(file);
-
-    // Reset file input
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const clearPendingImage = () => {
-    setPendingImage(null);
-    setPendingImagePreview(null);
-  };
-
-  const sendMessage = async (text?: string) => {
-    const msg = text || input.trim();
-    if ((!msg && !pendingImage) || isLoading) return;
-
-    const messageText = msg || (pendingImage ? "Analyze this photo" : "");
-    setInput("");
-
-    const userMsg: BubbleMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: messageText,
-      imagePreview: pendingImagePreview || undefined,
-    };
-
-    const imageToSend = pendingImage;
-    clearPendingImage();
-
-    setMessages((prev) => [...prev, userMsg]);
-    setIsLoading(true);
-
-    try {
-      const apiMessages = [...messages, userMsg].map((m) => {
-        if (m.role === "assistant" && m.rawContent) {
-          return { role: "assistant" as const, content: m.rawContent };
-        }
-        return { role: m.role as "user" | "assistant", content: m.content };
-      });
-
-      // 90-second timeout — AI tool-use loops can take a while
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90_000);
-
-      let res: Response;
-      try {
-        res = await fetch("/api/ai-assistant", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: apiMessages,
-            currentPage: pathname,
-            imageData: imageToSend || undefined,
-          }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(errData.error || `Error ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: data.response,
-          rawContent: data.rawContent,
-        },
-      ]);
-    } catch (err) {
-      const isTimeout = err instanceof DOMException && err.name === "AbortError";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: isTimeout
-            ? "Request timed out. Try a shorter question or use the full assistant page."
-            : "Sorry, something went wrong. Try again or use the full assistant page.",
-          error: true,
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-      setTimeout(scrollToBottom, 100);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
+  if (!allowed) return null;
 
   return (
-    <>
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleImageSelect}
-      />
-
-      {/* Floating bubble button — above bottom nav on mobile, bottom-right on desktop */}
-      {!isOpen && (
-        <button
-          onClick={() => {
-            setIsOpen(true);
-            setTimeout(() => inputRef.current?.focus(), 200);
-          }}
-          className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] md:bottom-6 right-4 md:right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-green-600 text-white shadow-lg shadow-primary/25 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-          aria-label="Open AI assistant"
-        >
-          <Sparkles className="w-6 h-6" />
-        </button>
-      )}
-
-      {/* Chat panel — full width on small mobile, fixed width on larger */}
-      {isOpen && (
-        <div className="fixed bottom-[calc(80px+env(safe-area-inset-bottom,0px))] md:bottom-6 right-3 md:right-6 z-40 w-[calc(100vw-1.5rem)] sm:w-[400px] max-h-[calc(100dvh-10rem)] md:max-h-[500px] bg-card rounded-2xl border border-border shadow-2xl shadow-black/10 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gradient-to-r from-primary/5 to-green-500/5 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-green-600 flex items-center justify-center">
-                <Bot className="w-4.5 h-4.5 text-white" />
-              </div>
-              <span className="font-semibold text-sm">VMGC AI</span>
-            </div>
-            <div className="flex items-center gap-0.5">
-              <Link
-                href="/assistant"
-                onClick={() => setIsOpen(false)}
-                className="p-2.5 rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                title="Open full page"
-              >
-                <Maximize2 className="w-4.5 h-4.5" />
-              </Link>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-2.5 rounded-lg hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Close chat"
-              >
-                <X className="w-4.5 h-4.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-3 py-3 min-h-0">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <Sparkles className="w-8 h-8 text-primary/40 mb-3" />
-                <p className="text-sm text-muted-foreground">
-                  Ask me anything about the course, or tell me to do something.
-                </p>
-                <div className="mt-4 space-y-2 w-full">
-                  {["What tasks are due today?", "What's the weather look like?", "Show equipment status"].map(
-                    (prompt, i) => (
-                      <button
-                        key={i}
-                        onClick={() => sendMessage(prompt)}
-                        className="w-full text-left text-sm px-4 py-3 rounded-xl border border-border hover:bg-muted/50 hover:border-primary/20 active:bg-muted/70 transition-colors text-muted-foreground"
-                      >
-                        {prompt}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : msg.error
-                          ? "bg-destructive/10 border border-destructive/20 rounded-bl-md"
-                          : "bg-muted/60 border border-border/50 rounded-bl-md"
-                      }`}
-                    >
-                      {/* Image thumbnail if user sent one */}
-                      {msg.imagePreview && (
-                        <div className="mb-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={msg.imagePreview}
-                            alt="Attached photo"
-                            className="w-full max-w-[200px] rounded-lg"
-                          />
-                        </div>
-                      )}
-                      <div className="whitespace-pre-wrap break-words">{msg.content}</div>
-                    </div>
-                  </div>
-                ))}
-
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-muted/60 border border-border/50 rounded-2xl rounded-bl-md px-3.5 py-2.5">
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </div>
-
-          {/* Pending image preview */}
-          {pendingImagePreview && (
-            <div className="px-3 py-2 border-t border-border/50 shrink-0">
-              <div className="relative inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={pendingImagePreview}
-                  alt="Pending upload"
-                  className="h-16 rounded-lg border border-border"
-                />
-                <button
-                  onClick={clearPendingImage}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center text-xs"
-                  aria-label="Remove image"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Input */}
-          <div className="border-t border-border px-3 py-3 shrink-0">
-            <div className="flex items-center gap-2 bg-muted/40 rounded-xl px-3 py-1">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-colors disabled:opacity-30 shrink-0"
-                aria-label="Attach photo"
-                title="Attach a photo for diagnosis"
-              >
-                <Camera className="w-5 h-5" />
-              </button>
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={pendingImage ? "Describe what you see..." : "Ask or command..."}
-                disabled={isLoading}
-                className="flex-1 text-base bg-transparent border-none outline-none placeholder:text-muted-foreground/50 disabled:opacity-50 py-2 min-h-[40px]"
-              />
-              <button
-                onClick={() => sendMessage()}
-                disabled={(!input.trim() && !pendingImage) || isLoading}
-                className="p-2.5 rounded-lg text-primary hover:bg-primary/10 active:bg-primary/15 transition-colors disabled:opacity-30 shrink-0"
-                aria-label="Send message"
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    <Link
+      href="/assistant"
+      className="fixed bottom-24 right-4 md:bottom-6 md:right-6 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+      aria-label="Open AI Assistant"
+    >
+      <Bot className="w-5 h-5" />
+    </Link>
   );
 }

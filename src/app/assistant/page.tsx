@@ -1,456 +1,497 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot,
   Send,
   Loader2,
-  User,
-  Sparkles,
-  Trash2,
-  RotateCcw,
+  ArrowLeft,
   AlertCircle,
+  Sparkles,
+  RotateCcw,
   Camera,
   X,
-  ImageIcon,
+  Image as ImageIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { uploadPhoto } from "@/lib/supabase/storage";
+import ReactMarkdown from "react-markdown";
 
-interface ChatMessage {
+// ── Types ───────────────────────────────────────────────────────────────────
+
+interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  timestamp: Date;
+  imageUrl?: string;
   error?: boolean;
-  rawContent?: unknown;
-  imagePreview?: string;
+  timestamp: Date;
 }
 
+// ── Example prompts ─────────────────────────────────────────────────────────
+
 const EXAMPLE_PROMPTS = [
-  "When did we last apply fungicide to the greens?",
-  "What's the weather look like? Good day to spray?",
-  "What tasks were overdue last month?",
-  "Create a task to aerate greens on holes 1-9 tomorrow",
-  "Show me the wettest week this year",
-  "What's our chemical inventory looking like?",
-  "What equipment do we have and what needs service?",
-  "Show me all pending tasks for this week",
-  "How much have we spent this month?",
-  "Show me the staff schedule for this week",
-  "Add an observation: bunker sand is thin on hole 7",
-  "How much did we spend on chemicals this quarter?",
-  "What were the most common turf issues this season?",
-  "Give me a summary of recent golfer feedback",
-  "What time-off requests are pending?",
+  "Sprinkler head broken on #7 green, get that fixed",
+  "We need to order more bunker sand",
+  "What tasks are due today?",
+  "Pothole on the cart path between 3 and 4",
+  "Mark the mowing on #1-9 as done",
+  "Show me equipment that needs service",
+  "Add reel blades for triplex #2 to the order list",
+  "The triplex is making a weird noise, flag it for service",
+  "What chemicals did we apply this week?",
+  "Who is working today?",
+  "Bathroom in the clubhouse needs cleaning",
+  "What's on the order list right now?",
 ];
 
+function getRandomPrompts(count: number): string[] {
+  const shuffled = [...EXAMPLE_PROMPTS];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled.slice(0, count);
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+
 export default function AssistantPage() {
-  const pathname = usePathname();
-  const { profile, loading: authLoading } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { profile, user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingImage, setPendingImage] = useState<string | null>(null);
-  const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [examples] = useState(() => getRandomPrompts(4));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Shuffle prompts once per mount so users see variety
-  const displayedPrompts = useMemo(() => {
-    const shuffled = [...EXAMPLE_PROMPTS];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled.slice(0, 6);
-  }, []);
+  // Photo attachment state
+  const [pendingPhoto, setPendingPhoto] = useState<{
+    file: File;
+    previewUrl: string;
+  } | null>(null);
+  const [uploading, setUploading] = useState(false);
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingPhoto?.previewUrl) {
+        URL.revokeObjectURL(pendingPhoto.previewUrl);
+      }
+    };
+  }, [pendingPhoto]);
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
     e.target.style.height = "auto";
-    e.target.style.height = Math.min(e.target.scrollHeight, 150) + "px";
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle photo selection
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 10 * 1024 * 1024) return; // 10MB max
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setPendingImage(base64);
-      setPendingImagePreview(base64);
-    };
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 20 * 1024 * 1024) return; // 20MB max
+
+    // Clean up previous preview
+    if (pendingPhoto?.previewUrl) {
+      URL.revokeObjectURL(pendingPhoto.previewUrl);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setPendingPhoto({ file, previewUrl });
+
+    // Reset file input so same file can be re-selected
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const clearPendingImage = () => {
-    setPendingImage(null);
-    setPendingImagePreview(null);
+  const clearPendingPhoto = () => {
+    if (pendingPhoto?.previewUrl) {
+      URL.revokeObjectURL(pendingPhoto.previewUrl);
+    }
+    setPendingPhoto(null);
   };
 
-  const sendMessage = async (messageText?: string) => {
-    const text = messageText || input.trim();
-    if ((!text && !pendingImage) || isLoading) return;
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if ((!trimmed && !pendingPhoto) || loading) return;
 
-    const finalText = text || (pendingImage ? "Analyze this photo" : "");
-    setInput("");
-    setError(null);
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-    }
+      let photoStoragePath: string | undefined;
+      let photoPublicUrl: string | undefined;
 
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: finalText,
-      timestamp: new Date(),
-      imagePreview: pendingImagePreview || undefined,
-    };
-
-    const imageToSend = pendingImage;
-    clearPendingImage();
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      const apiMessages = [...messages, userMessage].map((msg) => {
-        if (msg.role === "assistant" && msg.rawContent) {
-          return { role: "assistant" as const, content: msg.rawContent };
+      // Upload photo first if attached
+      if (pendingPhoto && user?.id) {
+        setUploading(true);
+        try {
+          const result = await uploadPhoto(pendingPhoto.file, user.id);
+          photoStoragePath = result.storagePath;
+          photoPublicUrl = result.publicUrl;
+        } catch (err) {
+          console.error("Photo upload failed:", err);
+          // Continue without photo — don't block the message
         }
-        return { role: msg.role as "user" | "assistant", content: msg.content };
-      });
+        setUploading(false);
+      }
 
-      // 90-second timeout — AI tool-use loops can take a while
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90_000);
+      const displayText = trimmed || "(Photo attached)";
+      const userMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: displayText,
+        imageUrl: pendingPhoto?.previewUrl,
+        timestamp: new Date(),
+      };
 
-      let res: Response;
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setPendingPhoto(null);
+      setLoading(true);
+
+      // Reset textarea height
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto";
+      }
+
       try {
-        res = await fetch("/api/ai-assistant", {
+        // Build history from previous messages (skip error messages)
+        const history = messages
+          .filter((m) => !m.error)
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        // Build the message with photo context
+        let messageForApi = trimmed;
+        if (photoStoragePath) {
+          messageForApi = trimmed
+            ? `${trimmed}\n\n[Photo attached: ${photoStoragePath}]`
+            : `[Photo attached: ${photoStoragePath}]`;
+        }
+
+        const res = await fetch("/api/ai-assistant", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: apiMessages,
-            currentPage: pathname,
-            imageData: imageToSend || undefined,
+            message: messageForApi,
+            history,
+            photoStoragePath: photoStoragePath || undefined,
+            photoPublicUrl: photoPublicUrl || undefined,
           }),
-          signal: controller.signal,
         });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: data.error || "Something went wrong. Please try again.",
+              error: true,
+              timestamp: new Date(),
+            },
+          ]);
+          return;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: data.reply,
+            timestamp: new Date(),
+          },
+        ]);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "Network error — check your connection and try again.",
+            error: true,
+            timestamp: new Date(),
+          },
+        ]);
       } finally {
-        clearTimeout(timeoutId);
+        setLoading(false);
       }
+    },
+    [loading, messages, pendingPhoto, user?.id]
+  );
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(errData.error || `Error ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: data.response,
-        timestamp: new Date(),
-        rawContent: data.rawContent,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      const isTimeout = err instanceof DOMException && err.name === "AbortError";
-      const errMsg = isTimeout
-        ? "The request timed out. Try a simpler question or try again."
-        : err instanceof Error ? err.message : "Something went wrong";
-      setError(errMsg);
-
-      const errorMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `Sorry, I ran into an issue: ${errMsg}`,
-        timestamp: new Date(),
-        error: true,
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      inputRef.current?.focus();
-    }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage(input);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      sendMessage(input);
     }
   };
 
   const clearChat = () => {
     setMessages([]);
-    setError(null);
-    clearPendingImage();
+    clearPendingPhoto();
   };
 
-  const retryLast = () => {
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (lastUserMsg) {
-      setMessages((prev) => {
-        const newMsgs = [...prev];
-        if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === "assistant") {
-          newMsgs.pop();
-        }
-        if (newMsgs.length > 0 && newMsgs[newMsgs.length - 1].role === "user") {
-          newMsgs.pop();
-        }
-        return newMsgs;
-      });
-      sendMessage(lastUserMsg.content);
-    }
-  };
+  const isAllowed =
+    profile?.role === "super" ||
+    profile?.role === "asst_super" ||
+    profile?.role === "foreman" ||
+    profile?.role === "director";
+
+  if (!isAllowed) {
+    return (
+      <div className="p-4 pb-24 max-w-2xl mx-auto text-center">
+        <Bot className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+        <h1 className="text-xl font-bold mb-2">Access Restricted</h1>
+        <p className="text-muted-foreground">
+          The AI assistant is available to superintendents, assistant
+          superintendents, foremen, and directors.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem)] max-w-4xl mx-auto">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleImageSelect}
-      />
-
+    <div className="flex flex-col h-full max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-green-600 flex items-center justify-center">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-sm">VMGC AI</h1>
-            <p className="text-xs text-muted-foreground">
-              Ask me anything, attach photos for diagnosis
-            </p>
-          </div>
+      <div className="flex items-center gap-3 p-4 border-b border-border/50">
+        <Link
+          href="/more"
+          className="w-10 h-10 flex items-center justify-center rounded-xl bg-muted/50 hover:bg-muted transition-colors md:hidden"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+          <Bot className="w-5 h-5 text-white" />
         </div>
-
+        <div className="flex-1">
+          <h1 className="font-semibold">GreenKeeper AI</h1>
+          <p className="text-xs text-muted-foreground">
+            Tell me what needs to happen and I&apos;ll do it
+          </p>
+        </div>
         {messages.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearChat} className="gap-1.5 text-xs">
-            <Trash2 className="w-3.5 h-3.5" />
+          <button
+            onClick={clearChat}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
             Clear
-          </Button>
+          </button>
         )}
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <Sparkles className="w-8 h-8 text-primary" />
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Empty state */}
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-600/20 flex items-center justify-center mb-4">
+              <Sparkles className="w-8 h-8 text-violet-500" />
             </div>
-            <h2 className="text-lg font-semibold mb-1">VMGC AI Assistant</h2>
-            <p className="text-sm text-muted-foreground text-center mb-2">
-              I can manage equipment, tasks, staff, expenses, chemicals, and more. I know the current weather and can analyze photos of turf problems.
-            </p>
-            <p className="text-xs text-muted-foreground text-center mb-6">
-              Tap the camera icon to snap a photo for instant diagnosis.
+            <h2 className="text-lg font-semibold mb-1">
+              Hi{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}!
+            </h2>
+            <p className="text-sm text-muted-foreground text-center mb-6 max-w-sm">
+              Tell me what needs to happen — I can create tasks, add to the
+              order list, report issues, update equipment, and look up anything.
+              Attach a photo with the 📷 button.
             </p>
 
-            <div className="w-full space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                Try asking...
-              </p>
-              <div className="grid gap-2">
-                {displayedPrompts.map((prompt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => sendMessage(prompt)}
-                    className="text-left px-3 py-2.5 rounded-lg border border-border bg-card hover:bg-muted/50 hover:border-primary/30 transition-colors text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
-              >
-                {msg.role === "assistant" && (
-                  <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center ${
-                    msg.error
-                      ? "bg-destructive/10"
-                      : "bg-gradient-to-br from-primary to-green-600"
-                  }`}>
-                    {msg.error ? (
-                      <AlertCircle className="w-4 h-4 text-destructive" />
-                    ) : (
-                      <Bot className="w-4 h-4 text-white" />
-                    )}
-                  </div>
-                )}
-
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : msg.error
-                      ? "bg-destructive/10 border border-destructive/20 rounded-bl-md"
-                      : "bg-muted/60 border border-border/50 rounded-bl-md"
-                  }`}
+            {/* Example prompts */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md">
+              {examples.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => sendMessage(prompt)}
+                  className="text-left p-3 rounded-xl border border-border bg-card hover:bg-muted/50 hover:border-primary/20 active:scale-[0.98] transition-all text-sm"
                 >
-                  {/* Image thumbnail */}
-                  {msg.imagePreview && (
-                    <div className="mb-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={msg.imagePreview}
-                        alt="Attached photo"
-                        className="max-w-[240px] rounded-lg"
-                      />
-                    </div>
-                  )}
-                  <div className="whitespace-pre-wrap break-words">{msg.content}</div>
-                  <div
-                    className={`text-[10px] mt-1.5 ${
-                      msg.role === "user"
-                        ? "text-primary-foreground/60"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {msg.timestamp.toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </div>
-                </div>
-
-                {msg.role === "user" && (
-                  <div className="w-8 h-8 rounded-full shrink-0 bg-foreground/10 flex items-center justify-center">
-                    <User className="w-4 h-4 text-foreground/70" />
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full shrink-0 bg-gradient-to-br from-primary to-green-600 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-white" />
-                </div>
-                <div className="bg-muted/60 border border-border/50 rounded-2xl rounded-bl-md px-4 py-3">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Thinking...
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!isLoading && messages.length > 0 && messages[messages.length - 1].error && (
-              <div className="flex justify-center">
-                <Button variant="outline" size="sm" onClick={retryLast} className="gap-1.5">
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Retry
-                </Button>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
+        {/* Chat messages */}
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            {msg.role === "assistant" && (
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  msg.error
+                    ? "bg-red-500/10"
+                    : "bg-gradient-to-br from-violet-500 to-purple-600"
+                }`}
+              >
+                {msg.error ? (
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                ) : (
+                  <Bot className="w-4 h-4 text-white" />
+                )}
+              </div>
+            )}
+
+            <div
+              className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground"
+                  : msg.error
+                    ? "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400"
+                    : "bg-card border border-border"
+              }`}
+            >
+              {/* User photo attachment */}
+              {msg.imageUrl && (
+                <div className="mb-2 rounded-lg overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={msg.imageUrl}
+                    alt="Attached photo"
+                    className="max-h-48 w-auto rounded-lg"
+                  />
+                </div>
+              )}
+
+              {msg.role === "assistant" && !msg.error ? (
+                <div className="text-sm prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mb-2 [&>ul]:pl-4 [&>ol]:mb-2 [&>ol]:pl-4 [&>li]:mb-0.5">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+              )}
+              <p
+                className={`text-[10px] mt-1.5 ${
+                  msg.role === "user"
+                    ? "text-primary-foreground/60"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {msg.timestamp.toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+          </div>
+        ))}
+
+        {/* Typing indicator */}
+        {loading && (
+          <div className="flex gap-3 items-start">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+              <Bot className="w-4 h-4 text-white" />
+            </div>
+            <div className="bg-card border border-border rounded-2xl px-4 py-3">
+              <div className="flex items-center gap-1.5">
+                <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                <span className="text-sm text-muted-foreground">
+                  {uploading ? "Uploading photo..." : "Working on it..."}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Pending image preview */}
-      {pendingImagePreview && (
-        <div className="px-4 py-2 border-t border-border/50">
-          <div className="relative inline-block">
+      {/* Photo preview strip */}
+      {pendingPhoto && (
+        <div className="border-t border-border/50 px-4 pt-3">
+          <div className="flex items-center gap-3 p-2 rounded-xl bg-muted/50 border border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={pendingImagePreview}
-              alt="Pending upload"
-              className="h-20 rounded-lg border border-border"
+              src={pendingPhoto.previewUrl}
+              alt="Photo to attach"
+              className="w-14 h-14 rounded-lg object-cover"
             />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                Photo attached
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {pendingPhoto.file.name}
+              </p>
+            </div>
             <button
-              onClick={clearPendingImage}
-              className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-white rounded-full flex items-center justify-center"
-              aria-label="Remove image"
+              onClick={clearPendingPhoto}
+              className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center shrink-0 transition-colors"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Photo attached — add details or just hit send
-          </p>
         </div>
       )}
 
       {/* Input area */}
-      <div className="border-t border-border bg-background/80 backdrop-blur-sm px-4 py-3">
-        <div className="flex items-end gap-2 max-w-4xl mx-auto">
-          {/* Camera button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
-            className="h-11 w-11 rounded-xl shrink-0"
-            title="Attach a photo for diagnosis"
-          >
-            <Camera className="w-5 h-5" />
-          </Button>
+      <div className="border-t border-border/50 p-4 pb-24 md:pb-4">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoSelect}
+          className="hidden"
+        />
 
-          <div className="flex-1 relative">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={pendingImage ? "Describe what you see (optional)..." : "Ask anything or tell me what to do..."}
-              rows={1}
-              disabled={isLoading}
-              className="w-full resize-none rounded-xl border border-input bg-background px-4 py-3 pr-12 text-base focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 placeholder:text-muted-foreground/60"
-              style={{ maxHeight: "150px" }}
-            />
-          </div>
-          <Button
-            onClick={() => sendMessage()}
-            disabled={(!input.trim() && !pendingImage) || isLoading}
-            size="icon"
-            className="h-11 w-11 rounded-xl shrink-0"
+        <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          {/* Camera button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="w-11 h-11 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-muted/50 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+            aria-label="Attach photo"
           >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+            <Camera className="w-5 h-5 text-muted-foreground" />
+          </button>
+
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={pendingPhoto ? "Add a note about the photo..." : "Tell me what needs to happen..."}
+            rows={1}
+            disabled={loading}
+            className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 placeholder:text-muted-foreground/50"
+          />
+          <button
+            type="submit"
+            disabled={loading || (!input.trim() && !pendingPhoto)}
+            className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 shrink-0"
+          >
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-5 h-5" />
             )}
-          </Button>
-        </div>
-        <p className="text-[10px] text-muted-foreground text-center mt-2">
-          AI can make mistakes. Verify important information.
+          </button>
+        </form>
+        <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+          Tap 📷 to attach a photo — it&apos;ll be saved with any task or issue I create
         </p>
       </div>
     </div>
