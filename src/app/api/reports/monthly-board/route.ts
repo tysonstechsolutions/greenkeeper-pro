@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
       doc.setPage(p);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
-      doc.setTextColor(...GRAY_400);
+      doc.setTextColor(...GRAY_600);
       doc.text(`Generated ${timestamp} by ${preparedBy}`, m, ph - 6);
       doc.text("VMGC GreenKeeper Pro", pw - m, ph - 6, { align: "right" });
       doc.text(`Page ${p} of ${doc.getNumberOfPages()}`, pw / 2, ph - 6, {

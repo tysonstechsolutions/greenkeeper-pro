@@ -503,7 +503,7 @@ export interface EquipmentServiceRecord {
 }
 
 // ── Parking Lot / Cart Path Issues ──
-export type ParkingLotIssueType = 'pothole' | 'crack' | 'drainage' | 'erosion' | 'marking' | 'curbing' | 'other';
+export type ParkingLotIssueType = 'pothole' | 'low_area' | 'badly_cracked' | 'crack' | 'drainage' | 'erosion' | 'marking' | 'curbing' | 'other';
 export type IssueSeverity = 'minor' | 'moderate' | 'severe' | 'critical';
 export type IssueStatus = 'open' | 'in_progress' | 'scheduled' | 'completed';
 
@@ -513,6 +513,8 @@ export interface ParkingLotIssue {
   title: string;
   description: string | null;
   location: string | null;
+  pin_x: number | null;
+  pin_y: number | null;
   issue_type: ParkingLotIssueType;
   severity: IssueSeverity;
   status: IssueStatus;

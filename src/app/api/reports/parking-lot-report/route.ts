@@ -224,8 +224,8 @@ export async function GET(request: NextRequest) {
       head: [["Title", "Location", "Type", "Severity", "Status", "Est. Cost", "Date"]],
       body: rows,
       margin: { left: m + 3, right: m + 3 },
-      styles: { fontSize: 7, cellPadding: 1.5 },
-      headStyles: { fillColor: BRAND_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: BRAND_DARK, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
         0: { fontStyle: "bold", cellWidth: 50 },
@@ -374,8 +374,9 @@ export async function GET(request: NextRequest) {
         doc.setFontSize(9);
         doc.setTextColor(60, 60, 60);
         const noteLines = doc.splitTextToSize(s(issue.repair_notes), pw - m * 2 - 16);
-        doc.text(noteLines.slice(0, 1), m + 8, by + 14);
-        by += 22;
+        const shownNotes = noteLines.slice(0, 3);
+        doc.text(shownNotes, m + 8, by + 14);
+        by += 18 + shownNotes.length * 4;
       }
 
       // Notes
