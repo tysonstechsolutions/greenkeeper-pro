@@ -76,6 +76,8 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useEquipmentParts } from "@/lib/hooks/useEquipmentParts";
 import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecords";
+import { useAssetDisposal } from "@/lib/hooks/useAssetDisposal";
+import type { DisposalStatus } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentLog, EquipmentInspection, EquipmentPart, EquipmentServiceRecord, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
 
@@ -119,6 +121,7 @@ export default function EquipmentDetailPage() {
     clearError: clearPartsError,
   } = useEquipmentParts();
   const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord, error: serviceError } = useEquipmentServiceRecords();
+  const { disposal, fetchDisposal, createDisposal, advanceStep, loading: disposalLoading } = useAssetDisposal();
 
   const equipmentId = params.id as string;
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);
@@ -145,6 +148,16 @@ export default function EquipmentDetailPage() {
   // Service record form state
   const [addingService, setAddingService] = useState(false);
   const [newService, setNewService] = useState({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
+
+  // Disposal workflow state
+  const [disposalReason, setDisposalReason] = useState("");
+  const [disposalApprover, setDisposalApprover] = useState("");
+  const [disposalNotes, setDisposalNotes] = useState("");
+  const [witness1Name, setWitness1Name] = useState("");
+  const [witness2Name, setWitness2Name] = useState("");
+  const [disposalRouteBy, setDisposalRouteBy] = useState("");
+  const [startingDisposal, setStartingDisposal] = useState(false);
+  const [advancingStep, setAdvancingStep] = useState(false);
 
   // Staff members for dropdown
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -223,14 +236,15 @@ export default function EquipmentDetailPage() {
         setLatestInspection(latest);
       }
 
-      // Load parts and service records
+      // Load parts, service records, and disposal status
       await Promise.all([
         fetchParts(equipmentId),
         fetchServiceRecords(equipmentId),
+        fetchDisposal(equipmentId),
       ]);
     }
     setIsLoading(false);
-  }, [equipmentId, fetchEquipmentItem, fetchLatestInspection, fetchParts, fetchServiceRecords]);
+  }, [equipmentId, fetchEquipmentItem, fetchLatestInspection, fetchParts, fetchServiceRecords, fetchDisposal]);
 
   useEffect(() => {
     void loadEquipment();
@@ -528,6 +542,231 @@ export default function EquipmentDetailPage() {
           <AlertTriangle className="w-5 h-5" />
           <span>This equipment has been marked as beyond repair and should not be used.</span>
         </div>
+      )}
+
+      {/* Asset Disposal Workflow Card */}
+      {equipment.condition_status === "beyond_repair" && (
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-red-600" />
+                Asset Disposal (NAVCOMPT 2212)
+              </span>
+              {disposal && disposal.status !== 'completed' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const res = await fetch(`/api/reports/navcompt-2212?equipment_id=${equipmentId}`);
+                    if (res.ok) {
+                      const blob = await res.blob();
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `NAVCOMPT-2212-${equipment.name}-${new Date().toISOString().slice(0, 10)}.pdf`;
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Generate 2212
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!disposal ? (
+              /* No active disposal — Start Process */
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Start the disposal process by providing a reason. This will initiate the NAVCOMPT 2212 workflow.</p>
+                <Textarea
+                  placeholder="Reason for disposition (e.g., motor seized, frame cracked beyond repair)"
+                  value={disposalReason}
+                  onChange={(e) => setDisposalReason(e.target.value)}
+                  className="h-20"
+                />
+                <Button
+                  disabled={!disposalReason.trim() || startingDisposal}
+                  onClick={async () => {
+                    setStartingDisposal(true);
+                    await createDisposal(equipmentId, disposalReason);
+                    await fetchDisposal(equipmentId);
+                    setDisposalReason("");
+                    setStartingDisposal(false);
+                  }}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {startingDisposal ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <AlertTriangle className="w-4 h-4 mr-2" />}
+                  Start Disposal Process
+                </Button>
+              </div>
+            ) : disposal.status === 'completed' ? (
+              <div className="text-center py-4">
+                <Check className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                <p className="font-medium text-green-700">Disposal Complete</p>
+                <p className="text-sm text-muted-foreground">This asset has been fully processed and disposed of.</p>
+              </div>
+            ) : (
+              /* Active disposal — Step tracker */
+              <div className="space-y-4">
+                {/* Step Progress */}
+                {(() => {
+                  const steps: { key: DisposalStatus; label: string; description: string }[] = [
+                    { key: 'pending_request', label: 'Step 1: Request Sent', description: 'Asset list sent to region, awaiting 2212 form' },
+                    { key: 'pending_approval', label: 'Step 2: Awaiting Approval', description: '2212 received, needs Division Head + MWRD signatures' },
+                    { key: 'approved', label: 'Step 3: Approved', description: 'Signatures obtained, ready to render useless' },
+                    { key: 'rendering_useless', label: 'Step 4: Render Useless', description: 'Asset being rendered useless before disposal' },
+                    { key: 'pending_witness', label: 'Step 5: Witness & Dispose', description: 'Two witnesses needed (one non-golf team), take photo' },
+                    { key: 'disposed', label: 'Step 6: Route to Business', description: 'Send completed 2212 to Business Office' },
+                    { key: 'routed_to_business', label: 'Step 7: Processing', description: '2212 sent, awaiting final processing' },
+                  ];
+                  const currentIdx = steps.findIndex(s => s.key === disposal.status);
+
+                  return (
+                    <>
+                      {/* Step indicators */}
+                      <div className="flex gap-1 mb-4">
+                        {steps.map((step, i) => (
+                          <div
+                            key={step.key}
+                            className={`h-2 flex-1 rounded-full ${
+                              i < currentIdx ? 'bg-green-500' : i === currentIdx ? 'bg-blue-500' : 'bg-gray-200'
+                            }`}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Current step info */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="font-medium text-blue-800">{steps[currentIdx]?.label}</p>
+                        <p className="text-sm text-blue-600">{steps[currentIdx]?.description}</p>
+                      </div>
+
+                      {/* Reason */}
+                      <div className="text-sm">
+                        <span className="font-medium">Reason:</span> {disposal.reason}
+                      </div>
+
+                      {/* Step-specific actions */}
+                      {disposal.status === 'pending_request' && (
+                        <Button size="sm" disabled={advancingStep} onClick={async () => {
+                          setAdvancingStep(true);
+                          await advanceStep(disposal.id, 'pending_approval');
+                          await fetchDisposal(equipmentId);
+                          setAdvancingStep(false);
+                        }}>
+                          {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                          Mark 2212 Received from Region
+                        </Button>
+                      )}
+
+                      {disposal.status === 'pending_approval' && (
+                        <div className="space-y-2">
+                          <Input placeholder="Approved by (name)" value={disposalApprover} onChange={(e) => setDisposalApprover(e.target.value)} />
+                          <Button size="sm" disabled={!disposalApprover.trim() || advancingStep} onClick={async () => {
+                            setAdvancingStep(true);
+                            await advanceStep(disposal.id, 'approved', { approved_by: disposalApprover, approved_at: new Date().toISOString() });
+                            await fetchDisposal(equipmentId);
+                            setDisposalApprover("");
+                            setAdvancingStep(false);
+                          }}>
+                            {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            Mark Approved (Signatures Obtained)
+                          </Button>
+                        </div>
+                      )}
+
+                      {disposal.status === 'approved' && (
+                        <div className="space-y-2">
+                          <Textarea placeholder="Notes on how asset was rendered useless (optional)" value={disposalNotes} onChange={(e) => setDisposalNotes(e.target.value)} className="h-16" />
+                          <Button size="sm" disabled={advancingStep} onClick={async () => {
+                            setAdvancingStep(true);
+                            await advanceStep(disposal.id, 'rendering_useless', { rendered_useless_at: new Date().toISOString(), rendered_useless_notes: disposalNotes || null });
+                            await fetchDisposal(equipmentId);
+                            setDisposalNotes("");
+                            setAdvancingStep(false);
+                          }}>
+                            {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            Mark Rendered Useless
+                          </Button>
+                        </div>
+                      )}
+
+                      {disposal.status === 'rendering_useless' && (
+                        <Button size="sm" disabled={advancingStep} onClick={async () => {
+                          setAdvancingStep(true);
+                          await advanceStep(disposal.id, 'pending_witness');
+                          await fetchDisposal(equipmentId);
+                          setAdvancingStep(false);
+                        }}>
+                          {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                          Ready for Witness Signatures
+                        </Button>
+                      )}
+
+                      {disposal.status === 'pending_witness' && (
+                        <div className="space-y-2">
+                          <Input placeholder="Witness 1 name" value={witness1Name} onChange={(e) => setWitness1Name(e.target.value)} />
+                          <Input placeholder="Witness 2 name (non-golf team member)" value={witness2Name} onChange={(e) => setWitness2Name(e.target.value)} />
+                          <Button size="sm" disabled={!witness1Name.trim() || !witness2Name.trim() || advancingStep} onClick={async () => {
+                            setAdvancingStep(true);
+                            const now = new Date().toISOString();
+                            await advanceStep(disposal.id, 'disposed', {
+                              witness_1_name: witness1Name,
+                              witness_1_signed_at: now,
+                              witness_2_name: witness2Name,
+                              witness_2_signed_at: now,
+                              disposal_date: now,
+                            });
+                            await fetchDisposal(equipmentId);
+                            setWitness1Name("");
+                            setWitness2Name("");
+                            setAdvancingStep(false);
+                          }}>
+                            {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            Confirm Disposal Witnessed
+                          </Button>
+                        </div>
+                      )}
+
+                      {disposal.status === 'disposed' && (
+                        <div className="space-y-2">
+                          <Input placeholder="Routed by (your name)" value={disposalRouteBy} onChange={(e) => setDisposalRouteBy(e.target.value)} />
+                          <Button size="sm" disabled={!disposalRouteBy.trim() || advancingStep} onClick={async () => {
+                            setAdvancingStep(true);
+                            await advanceStep(disposal.id, 'routed_to_business', { routed_to_business_at: new Date().toISOString(), routed_to_business_by: disposalRouteBy });
+                            await fetchDisposal(equipmentId);
+                            setDisposalRouteBy("");
+                            setAdvancingStep(false);
+                          }}>
+                            {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                            Mark Routed to Business Office
+                          </Button>
+                        </div>
+                      )}
+
+                      {disposal.status === 'routed_to_business' && (
+                        <Button size="sm" disabled={advancingStep} className="bg-green-600 hover:bg-green-700" onClick={async () => {
+                          setAdvancingStep(true);
+                          await advanceStep(disposal.id, 'completed');
+                          await fetchDisposal(equipmentId);
+                          // Retire the equipment
+                          await updateEquipment(equipmentId, { status: 'retired' as EquipmentStatus });
+                          setAdvancingStep(false);
+                        }}>
+                          {advancingStep ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                          <Check className="w-4 h-4 mr-2" />
+                          Mark Disposal Complete
+                        </Button>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Photo Gallery Section */}
