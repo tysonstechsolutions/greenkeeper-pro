@@ -150,7 +150,7 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/80">
         <button onClick={handleClose} className="text-white p-2">
@@ -195,41 +195,42 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
       </div>
 
       {/* Controls */}
-      <div className="bg-black/80 px-6 py-6 safe-area-bottom">
+      <div className="bg-black px-6 py-8 pb-12 safe-area-bottom">
         {preview ? (
-          <div className="flex items-center justify-center gap-8">
+          <div className="flex items-center justify-center gap-12">
             <button
               onClick={handleRetake}
-              className="flex flex-col items-center gap-1 text-white"
+              className="flex flex-col items-center gap-2 text-white active:scale-95 transition-transform"
             >
-              <div className="w-14 h-14 rounded-full border-2 border-white/50 flex items-center justify-center">
-                <RotateCcw className="w-6 h-6" />
+              <div className="w-16 h-16 rounded-full border-2 border-white/50 flex items-center justify-center">
+                <RotateCcw className="w-7 h-7" />
               </div>
-              <span className="text-xs">Retake</span>
+              <span className="text-sm font-medium">Retake</span>
             </button>
             <button
               onClick={handleConfirm}
-              className="flex flex-col items-center gap-1 text-white"
+              className="flex flex-col items-center gap-2 text-white active:scale-95 transition-transform"
             >
-              <div className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center">
-                <Check className="w-7 h-7" />
+              <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center">
+                <Check className="w-8 h-8" />
               </div>
-              <span className="text-xs">Use Photo</span>
+              <span className="text-sm font-medium">Use Photo</span>
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
             <button
               onClick={handleCapture}
               disabled={!cameraReady}
-              className="w-18 h-18 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-30"
-              style={{ width: 72, height: 72 }}
+              className="rounded-full border-4 border-white flex items-center justify-center disabled:opacity-30 active:scale-95 transition-transform"
+              style={{ width: 80, height: 80 }}
             >
               <div
                 className="rounded-full bg-white"
-                style={{ width: 60, height: 60 }}
+                style={{ width: 66, height: 66 }}
               />
             </button>
+            <span className="text-white/70 text-sm">Tap to capture</span>
           </div>
         )}
       </div>

@@ -884,7 +884,7 @@ export default function HoleDetailPage() {
       {/* ══════════════════════════════════════════════════════════
           NEW OBSERVATION SHEET — 3 Steps: Photo → Analyzing → Review
          ══════════════════════════════════════════════════════════ */}
-      <Sheet open={showForm} onOpenChange={handleFormSheetClose}>
+      <Sheet open={showForm && !showInlineCamera} onOpenChange={handleFormSheetClose}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
