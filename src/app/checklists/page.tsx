@@ -297,7 +297,7 @@ export default function ChecklistsPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

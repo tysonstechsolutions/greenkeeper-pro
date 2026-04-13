@@ -447,7 +447,7 @@ export default function EquipmentDetailPage() {
   const conditionColor = conditionStatusColors[equipment.condition_status];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 pb-24 md:pb-6">
       {/* Success toast */}
       {saveSuccess && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-xl shadow-lg animate-in fade-in slide-in-from-top-2 text-base font-medium">

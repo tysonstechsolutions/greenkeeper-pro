@@ -329,7 +329,7 @@ export default function BriefingPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-5xl mx-auto">
       {/* Hero header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">

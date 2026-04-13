@@ -1161,7 +1161,7 @@ export default function TaskDetailPage() {
       </div>
 
       {/* Fixed Action Bar */}
-      <div className="fixed bottom-[72px] md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4 flex gap-3 safe-area-inset-bottom">
+      <div className="fixed bottom-20 md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4 flex gap-3">
         {getActionButton()}
 
         {task.status !== "blocked" &&

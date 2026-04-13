@@ -1193,7 +1193,7 @@ export default function EditTaskPage() {
       </form>
 
       {/* Fixed Submit Button */}
-      <div className="fixed bottom-[72px] md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4 safe-area-inset-bottom">
+      <div className="fixed bottom-20 md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4">
         <Button
           onClick={handleSubmit}
           disabled={submitting}

@@ -625,7 +625,7 @@ export default function TasksPage() {
       {canCreateTasks && (
         <Link
           href="/tasks/new"
-          className="fixed bottom-[100px] right-4 md:hidden w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+          className="fixed bottom-24 right-4 md:hidden w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
         >
           <Plus className="w-6 h-6" />
         </Link>

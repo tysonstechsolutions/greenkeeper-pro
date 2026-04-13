@@ -111,7 +111,7 @@ export default function MorningRoutePage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-24 md:pb-6">
       <PageHeader
         title="Morning Crew Routing"
         description="AI-planned crew schedule with frost, dew, and tee-time awareness"

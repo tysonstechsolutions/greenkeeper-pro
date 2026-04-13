@@ -163,7 +163,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col h-screen transition-all duration-300 relative overflow-hidden",
+        "hidden md:flex flex-col h-dvh transition-all duration-300 relative overflow-hidden",
         isCollapsed ? "w-[68px]" : "w-[260px]"
       )}
       style={{

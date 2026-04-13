@@ -108,7 +108,7 @@ export default function ArticlePage({ params }: ArticlePageProps) {
   }
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="p-4 md:p-6 pb-24 md:pb-6">
       {/* Header */}
       <DetailPageHeader
         backHref="/knowledge"

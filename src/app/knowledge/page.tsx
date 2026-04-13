@@ -140,7 +140,7 @@ export default function KnowledgePage() {
   const unreadCount = articles.filter((a) => !a.is_read).length;
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="p-4 md:p-6 pb-24 md:pb-6">
       <PageHeader
         title="Knowledge Base"
         description="SOPs, guides, and training materials"

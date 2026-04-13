@@ -448,7 +448,7 @@ export default function EquipmentPage() {
       {canAddEquipment && (
         <button
           onClick={handleAddClick}
-          className="fixed bottom-[100px] right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center md:hidden hover:bg-primary/90 active:scale-95 transition-all"
+          className="fixed bottom-24 right-4 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center md:hidden hover:bg-primary/90 active:scale-95 transition-all"
           aria-label="Add equipment"
         >
           <Plus className="w-6 h-6" />
