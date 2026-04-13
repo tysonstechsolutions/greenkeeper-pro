@@ -95,6 +95,17 @@ function loadHoleImage(holeNumber: number): string | null {
   }
 }
 
+/** Load pre-rotated landscape version of hole image for reports */
+function loadHoleImageLandscape(holeNumber: number): string | null {
+  try {
+    const filePath = join(process.cwd(), "public", "holes", `hole-${holeNumber}-landscape.png`);
+    const buffer = readFileSync(filePath);
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 function loadGreenImage(holeNumber: number): string | null {
   try {
     const filePath = join(process.cwd(), "public", "greens", `green-${holeNumber}.png`);
@@ -181,14 +192,33 @@ function renderHolePage(
   doc.setFillColor(20, 30, 25);
   doc.rect(0, imgAreaY, pageWidth, imgAreaH, "F");
 
-  // Center hole image within the dark area
-  const holeImage = type === "hole" ? loadHoleImage(holeNumber) : loadGreenImage(holeNumber);
+  // Hole image — use landscape (rotated) version for reports, fill the dark area
+  const holeImage = type === "hole"
+    ? (loadHoleImageLandscape(holeNumber) || loadHoleImage(holeNumber))
+    : loadGreenImage(holeNumber);
+
+  // Calculate aspect-fit dimensions for the image within the dark area
+  const imgPad = 4;
+  const maxImgW = pageWidth - margin * 2;
+  const maxImgH = imgAreaH - imgPad * 2;
+  let imgW = maxImgW;
+  let imgH = maxImgH;
+
+  // For landscape hole images, maintain aspect ratio
+  if (holeImage) {
+    // We know landscape images are wider than tall, fit to width then check height
+    // Default: fill width, scale height proportionally
+    // Since we can't read actual dimensions from base64, use the maxImgH as constraint
+    imgW = maxImgW;
+    imgH = maxImgH;
+  }
+
+  const imgX = margin;
+  const imgY = imgAreaY + imgPad;
+
   if (holeImage) {
     try {
-      // Calculate aspect-fit dimensions
-      const maxImgH = imgAreaH - 6;
-      const maxImgW = 80;
-      doc.addImage(holeImage, "PNG", pageWidth / 2 - maxImgW / 2, imgAreaY + 3, maxImgW, maxImgH);
+      doc.addImage(holeImage, "PNG", imgX, imgY, imgW, imgH);
     } catch {
       doc.setFontSize(20);
       doc.setTextColor(...BRAND_GREEN);
@@ -200,16 +230,21 @@ function renderHolePage(
     doc.text(`Hole ${holeNumber}`, pageWidth / 2, imgAreaY + imgAreaH / 2, { align: "center" });
   }
 
-  // Draw pin markers on the image
+  // Draw pin markers on the image (pins use original coordinates, need to transform for rotated image)
   if (holeImage) {
-    const maxImgH = imgAreaH - 6;
-    const maxImgW = 80;
-    const imgX = pageWidth / 2 - maxImgW / 2;
-    const imgY = imgAreaY + 3;
     obs.forEach((observation: { pin_x: number; pin_y: number; priority: string }, idx: number) => {
       if (observation.pin_x == null || observation.pin_y == null) return;
-      const pinX = imgX + observation.pin_x * maxImgW;
-      const pinY = imgY + observation.pin_y * maxImgH;
+      // For landscape-rotated images: original pin_x maps to (1 - pin_y) on x-axis, pin_x maps to y-axis
+      const isLandscape = type === "hole"; // hole images are rotated, greens are not
+      let pinX: number, pinY: number;
+      if (isLandscape) {
+        // 90-degree CCW rotation: (origX, origY) -> (origY, 1-origX)
+        pinX = imgX + observation.pin_y * imgW;
+        pinY = imgY + (1 - observation.pin_x) * imgH;
+      } else {
+        pinX = imgX + observation.pin_x * imgW;
+        pinY = imgY + observation.pin_y * imgH;
+      }
       const pColor = priorityColors[observation.priority] || GRAY_600;
       doc.setFillColor(...pColor);
       doc.circle(pinX, pinY, 3, "F");
