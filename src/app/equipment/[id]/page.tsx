@@ -719,7 +719,7 @@ export default function EquipmentDetailPage() {
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => { setAddingPart(false); setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" }); }}>Cancel</Button>
+                <Button variant="outline" size="sm" onClick={() => { setAddingPart(false); setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" }); }}>Done</Button>
                 <Button size="sm" disabled={!newPart.name.trim()} onClick={async () => {
                   const { data: partResult, error: partErr } = await addPart(equipmentId, {
                     name: newPart.name,
@@ -730,15 +730,14 @@ export default function EquipmentDetailPage() {
                   });
                   if (partResult) {
                     setNewPart({ name: "", part_number: "", description: "", quantity: "1", estimated_cost: "" });
-                    setAddingPart(false);
+                    // Keep form open so user can add more parts quickly
                     setSaveSuccess(true);
                     setTimeout(() => setSaveSuccess(false), 2000);
-                    // Re-fetch to ensure sync
                     await fetchParts(equipmentId);
                   } else {
                     setSaveError(`Failed to save part: ${partErr || "Unknown error"}`);
                   }
-                }}>Add Part</Button>
+                }}>Add &amp; Add Another</Button>
               </div>
             </div>
           )}
