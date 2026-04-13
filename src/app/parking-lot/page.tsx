@@ -85,6 +85,7 @@ export default function ParkingLotPage() {
   const [pendingPin, setPendingPin] = useState<{ x: number; y: number } | null>(null);
   const [movingIssueId, setMovingIssueId] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<ParkingLotIssue | null>(null);
+  const [zoomScale, setZoomScale] = useState(1);
 
   // Form state
   const [showFormSheet, setShowFormSheet] = useState(false);
@@ -329,6 +330,7 @@ export default function ParkingLotPage() {
                 initialScale={1}
                 panning={{ disabled: isPlacingPin || !!movingIssueId }}
                 doubleClick={{ disabled: true }}
+                onTransformed={(_ref, state) => { setZoomScale(state.scale); }}
               >
                 {({ zoomIn, zoomOut, resetTransform }) => (
                   <>
@@ -350,14 +352,16 @@ export default function ParkingLotPage() {
                           draggable={false}
                         />
 
-                        {/* Existing issue pins */}
+                        {/* Existing issue pins — counter-scaled so they stay fixed size */}
                         {mapIssues.map((issue) => (
                           <button
                             key={issue.id}
-                            className="absolute z-10 -translate-x-1/2 -translate-y-full group"
+                            className="absolute z-10 group"
                             style={{
                               left: `${(issue.pin_x ?? 0) * 100}%`,
                               top: `${(issue.pin_y ?? 0) * 100}%`,
+                              transform: `translate(-50%, -100%) scale(${1 / zoomScale})`,
+                              transformOrigin: 'bottom center',
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -365,14 +369,14 @@ export default function ParkingLotPage() {
                             }}
                           >
                             <div className="relative">
-                              <svg width="28" height="36" viewBox="0 0 28 36" fill="none" className="drop-shadow-lg">
+                              <svg width="16" height="20" viewBox="0 0 28 36" fill="none" className="drop-shadow-md">
                                 <path
                                   d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z"
                                   fill={severityColors[issue.severity] || '#6B7280'}
                                 />
                                 <circle cx="14" cy="13" r="6" fill="white" fillOpacity="0.9" />
                               </svg>
-                              <span className="absolute top-[6px] left-1/2 -translate-x-1/2 text-[10px]">
+                              <span className="absolute top-[2px] left-1/2 -translate-x-1/2 text-[7px]">
                                 {issueTypeIcons[issue.issue_type] || '📍'}
                               </span>
                             </div>
@@ -382,13 +386,18 @@ export default function ParkingLotPage() {
                           </button>
                         ))}
 
-                        {/* Pending pin (gold) */}
+                        {/* Pending pin (gold) — counter-scaled */}
                         {pendingPin && (
                           <div
-                            className="absolute z-20 -translate-x-1/2 -translate-y-full animate-bounce"
-                            style={{ left: `${pendingPin.x * 100}%`, top: `${pendingPin.y * 100}%` }}
+                            className="absolute z-20 animate-bounce"
+                            style={{
+                              left: `${pendingPin.x * 100}%`,
+                              top: `${pendingPin.y * 100}%`,
+                              transform: `translate(-50%, -100%) scale(${1 / zoomScale})`,
+                              transformOrigin: 'bottom center',
+                            }}
                           >
-                            <svg width="32" height="40" viewBox="0 0 28 36" fill="none">
+                            <svg width="18" height="22" viewBox="0 0 28 36" fill="none">
                               <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.268 21.732 0 14 0z" fill="#D4A853" />
                               <circle cx="14" cy="13" r="6" fill="white" fillOpacity="0.9" />
                               <circle cx="14" cy="13" r="3" fill="#D4A853" />
