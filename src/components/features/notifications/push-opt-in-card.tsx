@@ -18,9 +18,9 @@ export function PushOptInCard() {
     try {
       const ts = window.localStorage.getItem(DISMISS_KEY);
       const recent = !!ts && Date.now() - Number(ts) < DISMISS_TTL_MS;
-      setDismissed(recent);
+      setDismissed(recent); // eslint-disable-line react-hooks/set-state-in-effect -- hydration-safe localStorage read
     } catch {
-      setDismissed(false);
+      setDismissed(false); // eslint-disable-line react-hooks/set-state-in-effect -- hydration-safe fallback
     }
   }, []);
 

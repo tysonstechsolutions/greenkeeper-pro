@@ -70,12 +70,12 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
   // Start/stop camera when open changes
   useEffect(() => {
     if (open) {
-      startCamera();
+      startCamera(); // eslint-disable-line react-hooks/set-state-in-effect -- camera lifecycle
     } else {
       stopCamera();
-      setPreview(null);
-      setCapturedBlob(null);
-      setError(null);
+      setPreview(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on close
+      setCapturedBlob(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on close
+      setError(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on close
     }
     return () => stopCamera();
   }, [open, startCamera, stopCamera]);
