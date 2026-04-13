@@ -170,7 +170,7 @@ export function useHoleObservations() {
   );
 
   const updateObservation = useCallback(
-    async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by">>) => {
+    async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by" | "pin_x" | "pin_y">>) => {
       try {
          
         const { data: updated, error } = await supabase.from("hole_observations")
@@ -207,7 +207,7 @@ export function useHoleObservations() {
       const path = `${user.id}/${Date.now()}.${ext}`;
 
       const { error } = await supabase.storage
-        .from("hole-observations")
+        .from("photos")
         .upload(path, file, { upsert: true });
 
       if (error) {
@@ -216,7 +216,7 @@ export function useHoleObservations() {
       }
 
       const { data: urlData } = supabase.storage
-        .from("hole-observations")
+        .from("photos")
         .getPublicUrl(path);
 
       return urlData.publicUrl;

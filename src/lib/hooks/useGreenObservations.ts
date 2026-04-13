@@ -196,7 +196,7 @@ export function useGreenObservations() {
       const path = `${user.id}/${Date.now()}.${ext}`;
 
       const { error } = await supabase.storage
-        .from("green-observations")
+        .from("photos")
         .upload(path, file, { upsert: true });
 
       if (error) {
@@ -205,7 +205,7 @@ export function useGreenObservations() {
       }
 
       const { data: urlData } = supabase.storage
-        .from("green-observations")
+        .from("photos")
         .getPublicUrl(path);
 
       return urlData.publicUrl;

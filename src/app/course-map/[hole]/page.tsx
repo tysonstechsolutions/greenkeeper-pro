@@ -23,6 +23,7 @@ import {
   Wrench,
   Save,
   Edit3,
+  Move,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +98,9 @@ export default function HoleDetailPage() {
   const [pendingPin, setPendingPin] = useState<{ x: number; y: number } | null>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
+  // Pin move mode — tap new location to reposition an existing observation
+  const [movingObsId, setMovingObsId] = useState<string | null>(null);
+
   // Multi-step form: photo → analyzing → review
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState<FormStep>("photo");
@@ -158,9 +162,9 @@ export default function HoleDetailPage() {
   const isInvalidHole =
     isNaN(holeNumber) || holeNumber < 1 || holeNumber > 18;
 
-  // ── Handle Image Tap (pin drop) → open photo step ──
+  // ── Handle Image Tap (pin drop or pin move) ──
   const handleImageTap = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (!isPlacingPin) return;
+    if (!isPlacingPin && !movingObsId) return;
     e.preventDefault();
 
     const container = imageContainerRef.current;
@@ -180,6 +184,20 @@ export default function HoleDetailPage() {
     const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
 
+    // Moving an existing pin
+    if (movingObsId) {
+      updateObservation(movingObsId, { pin_x: x, pin_y: y }).then((result) => {
+        if (result) {
+          setFeedbackMsg({ type: "success", text: "Pin moved successfully." });
+        } else {
+          setFeedbackMsg({ type: "error", text: "Failed to move pin." });
+        }
+      });
+      setMovingObsId(null);
+      return;
+    }
+
+    // Placing a new pin
     setPendingPin({ x, y });
     setIsPlacingPin(false);
     setFormStep("photo");
@@ -679,11 +697,30 @@ export default function HoleDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Pin move mode overlay */}
+          {movingObsId && (
+            <div className="absolute inset-0 bg-blue-500/5 flex items-end justify-center pb-4 pointer-events-none">
+              <div className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg flex items-center gap-2">
+                <Move className="w-4 h-4" />
+                Tap new location for pin
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action buttons below image */}
         <div className="flex gap-2 mt-3">
-          {isPlacingPin ? (
+          {movingObsId ? (
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setMovingObsId(null)}
+            >
+              <X className="w-4 h-4 mr-2" />
+              Cancel Move
+            </Button>
+          ) : isPlacingPin ? (
             <Button
               variant="outline"
               className="flex-1"
@@ -1057,15 +1094,29 @@ export default function HoleDetailPage() {
                   <span className="text-lg">{issueTypeIcons[selectedObs.issue_type]}</span>
                   <span className="flex-1 truncate">{selectedObs.title}</span>
                   {selectedObs.status !== "resolved" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-xs shrink-0"
-                      onClick={() => handleStartEdit(selectedObs)}
-                    >
-                      <Edit3 className="w-3.5 h-3.5 mr-1" />
-                      Edit
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => {
+                          setMovingObsId(selectedObs.id);
+                          setSelectedObs(null);
+                        }}
+                      >
+                        <Move className="w-3.5 h-3.5 mr-1" />
+                        Move
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => handleStartEdit(selectedObs)}
+                      >
+                        <Edit3 className="w-3.5 h-3.5 mr-1" />
+                        Edit
+                      </Button>
+                    </div>
                   )}
                 </SheetTitle>
               </SheetHeader>
