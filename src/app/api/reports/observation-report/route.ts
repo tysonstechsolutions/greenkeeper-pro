@@ -157,10 +157,9 @@ function renderHeader(
 }
 
 /**
- * Professional report layout:
- * - Centered hole image at top with dark surround
- * - Stats bar below image
- * - Full-width observation cards with photos
+ * Slide-deck report format:
+ * - SLIDE 1: Hole overview — landscape image + issue summary list
+ * - SLIDE 2..N: One detail slide per issue — full page with photo, description, fix
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderHolePage(
@@ -175,44 +174,29 @@ function renderHolePage(
   isFirstPage: boolean
 ) {
   const pageWidth = doc.internal.pageSize.getWidth(); // 297
-  const pageHeight = doc.internal.pageSize.getHeight(); // 210
   const margin = 14;
   const headerHeight = 25;
-  const footerHeight = 10;
-  const contentBottom = pageHeight - footerHeight;
 
   if (!isFirstPage) doc.addPage();
 
-  // ── PAGE 1: Hole overview ──
+  // ══════════════════════════════════════════════
+  // OVERVIEW SLIDE: Hole image + issue summary
+  // ══════════════════════════════════════════════
   renderHeader(doc, holeNumber, type, profileName);
 
-  // Dark background for image area
+  // Dark background for image
   const imgAreaY = headerHeight + 2;
   const imgAreaH = 95;
   doc.setFillColor(20, 30, 25);
   doc.rect(0, imgAreaY, pageWidth, imgAreaH, "F");
 
-  // Hole image — use landscape (rotated) version for reports, fill the dark area
   const holeImage = type === "hole"
     ? (loadHoleImageLandscape(holeNumber) || loadHoleImage(holeNumber))
     : loadGreenImage(holeNumber);
 
-  // Calculate aspect-fit dimensions for the image within the dark area
   const imgPad = 4;
-  const maxImgW = pageWidth - margin * 2;
-  const maxImgH = imgAreaH - imgPad * 2;
-  let imgW = maxImgW;
-  let imgH = maxImgH;
-
-  // For landscape hole images, maintain aspect ratio
-  if (holeImage) {
-    // We know landscape images are wider than tall, fit to width then check height
-    // Default: fill width, scale height proportionally
-    // Since we can't read actual dimensions from base64, use the maxImgH as constraint
-    imgW = maxImgW;
-    imgH = maxImgH;
-  }
-
+  const imgW = pageWidth - margin * 2;
+  const imgH = imgAreaH - imgPad * 2;
   const imgX = margin;
   const imgY = imgAreaY + imgPad;
 
@@ -230,21 +214,13 @@ function renderHolePage(
     doc.text(`Hole ${holeNumber}`, pageWidth / 2, imgAreaY + imgAreaH / 2, { align: "center" });
   }
 
-  // Draw pin markers on the image (pins use original coordinates, need to transform for rotated image)
+  // Pin markers
   if (holeImage) {
     obs.forEach((observation: { pin_x: number; pin_y: number; priority: string }, idx: number) => {
       if (observation.pin_x == null || observation.pin_y == null) return;
-      // For landscape-rotated images: original pin_x maps to (1 - pin_y) on x-axis, pin_x maps to y-axis
-      const isLandscape = type === "hole"; // hole images are rotated, greens are not
-      let pinX: number, pinY: number;
-      if (isLandscape) {
-        // 90-degree CCW rotation: (origX, origY) -> (origY, 1-origX)
-        pinX = imgX + observation.pin_y * imgW;
-        pinY = imgY + (1 - observation.pin_x) * imgH;
-      } else {
-        pinX = imgX + observation.pin_x * imgW;
-        pinY = imgY + observation.pin_y * imgH;
-      }
+      const isRotated = type === "hole";
+      const pinX = isRotated ? imgX + observation.pin_y * imgW : imgX + observation.pin_x * imgW;
+      const pinY = isRotated ? imgY + (1 - observation.pin_x) * imgH : imgY + observation.pin_y * imgH;
       const pColor = priorityColors[observation.priority] || GRAY_600;
       doc.setFillColor(...pColor);
       doc.circle(pinX, pinY, 3, "F");
@@ -258,9 +234,9 @@ function renderHolePage(
     });
   }
 
-  // ── Stats bar ──
+  // Stats bar
   const statsY = imgAreaY + imgAreaH + 2;
-  const statsH = 14;
+  const statsH = 12;
   doc.setFillColor(245, 247, 250);
   doc.setDrawColor(229, 231, 235);
   doc.roundedRect(margin, statsY, pageWidth - margin * 2, statsH, 2, 2, "FD");
@@ -271,7 +247,7 @@ function renderHolePage(
   const resolvedCount = obs.filter((o: { status: string }) => o.status === "resolved").length;
 
   const statItems = [
-    { label: "Total Issues", value: obs.length.toString(), color: BRAND_DARK },
+    { label: "Total", value: obs.length.toString(), color: BRAND_DARK },
     { label: "Open", value: openCount.toString(), color: [220, 38, 38] as [number, number, number] },
     { label: "Critical", value: criticalCount.toString(), color: [185, 28, 28] as [number, number, number] },
     { label: "High", value: highCount.toString(), color: [234, 88, 12] as [number, number, number] },
@@ -282,151 +258,166 @@ function renderHolePage(
   statItems.forEach((stat, i) => {
     const sx = margin + statColW * i + statColW / 2;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setTextColor(...stat.color);
-    doc.text(stat.value, sx, statsY + 6, { align: "center" });
+    doc.text(stat.value, sx, statsY + 5.5, { align: "center" });
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
+    doc.setFontSize(5.5);
     doc.setTextColor(...GRAY_600);
-    doc.text(stat.label, sx, statsY + 10.5, { align: "center" });
+    doc.text(stat.label, sx, statsY + 9.5, { align: "center" });
   });
 
-  // ── Observation cards (full width below stats) ──
-  let cy = statsY + statsH + 4;
-  const cardW = pageWidth - margin * 2;
-  const photoW = 40;
-  const photoH = 30;
-  let continuationCount = 0;
+  // Issue summary list below stats — deduplicated by title
+  let sy = statsY + statsH + 5;
 
   if (obs.length === 0) {
     doc.setFont("helvetica", "italic");
     doc.setFontSize(10);
     doc.setTextColor(...GRAY_400);
-    doc.text("No observations recorded for this hole.", pageWidth / 2, cy + 10, { align: "center" });
-    return;
-  }
-
-  for (let i = 0; i < obs.length; i++) {
-    const observation = obs[i];
-    const photo = photos[i];
-    const cardMinH = photo ? Math.max(photoH + 4, 18) : 14;
-
-    // Check if we need a new page
-    if (cy + cardMinH > contentBottom) {
-      doc.addPage();
-      continuationCount++;
-      renderHeader(doc, holeNumber, type, profileName, `(cont. ${continuationCount})`);
-      cy = headerHeight + 4;
-    }
-
-    // ── Priority accent bar (thin left border) ──
-    const pColor = priorityColors[observation.priority] || GRAY_600;
-    doc.setFillColor(...pColor);
-    doc.rect(margin, cy, 2, cardMinH, "F");
-
-    // Light card background
-    doc.setFillColor(252, 252, 253);
-    doc.setDrawColor(235, 235, 240);
-    doc.rect(margin + 2, cy, cardW - 2, cardMinH, "FD");
-
-    // ── Card content ──
-    const cx = margin + 5;
-    let ty = cy + 4;
-
-    // Title row
+    doc.text("No observations recorded for this hole.", pageWidth / 2, sy + 8, { align: "center" });
+  } else {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(...BRAND_DARK);
-    const titleText = `#${i + 1}  ${observation.title || "Untitled"}`;
-    doc.text(titleText.substring(0, 60), cx, ty);
+    doc.text("Issues:", margin, sy);
+    sy += 5;
 
-    // Priority + Status badges on right
+    // List each issue (dedup by title for the summary)
+    const seen = new Set<string>();
+    for (let i = 0; i < obs.length; i++) {
+      const o = obs[i];
+      const title = o.title || "Untitled";
+      if (seen.has(title)) continue;
+      seen.add(title);
+      const pColor = priorityColors[o.priority] || GRAY_600;
+
+      // Priority dot
+      doc.setFillColor(...pColor);
+      doc.circle(margin + 3, sy - 1, 1.5, "F");
+
+      // Issue title
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(50, 50, 60);
+      const issueLabel = (labels[o.issue_type] || o.issue_type);
+      doc.text(`${title}  —  ${issueLabel}`, margin + 7, sy);
+
+      // Priority on right
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...pColor);
+      doc.text(o.priority.toUpperCase(), pageWidth - margin, sy, { align: "right" });
+
+      sy += 5;
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  // DETAIL SLIDES: One full page per issue
+  // ══════════════════════════════════════════════
+  for (let i = 0; i < obs.length; i++) {
+    const observation = obs[i];
+    const photo = photos[i];
+
+    doc.addPage();
+    renderHeader(doc, holeNumber, type, profileName, `— Issue ${i + 1} of ${obs.length}`);
+
+    const cy = headerHeight + 6;
+    const pColor = priorityColors[observation.priority] || GRAY_600;
+
+    // ── Title bar ──
+    doc.setFillColor(...pColor);
+    doc.roundedRect(margin, cy, pageWidth - margin * 2, 10, 2, 2, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.setTextColor(...pColor);
-    const badgeText = `${observation.priority.toUpperCase()}`;
-    doc.text(badgeText, margin + cardW - 4, ty, { align: "right" });
+    doc.setFontSize(12);
+    doc.setTextColor(...WHITE);
+    doc.text(`#${i + 1}  ${observation.title || "Untitled"}`, margin + 4, cy + 7);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.setTextColor(...GRAY_400);
-    const statusText = statusLabels[observation.status] || observation.status;
-    doc.text(statusText, margin + cardW - 4, ty + 3.5, { align: "right" });
+    doc.setFontSize(7);
+    const statusText = `${observation.priority.toUpperCase()}  |  ${statusLabels[observation.status] || observation.status}`;
+    doc.text(statusText, pageWidth - margin - 4, cy + 7, { align: "right" });
 
-    ty += 4;
-
-    // Meta line: type | date | reporter
-    doc.setFontSize(6.5);
+    // ── Meta row ──
+    const metaY = cy + 14;
+    doc.setFontSize(8);
     doc.setTextColor(...GRAY_600);
     const issueLabel = labels[observation.issue_type] || observation.issue_type;
     const reportDate = new Date(observation.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const reporterName = observation.reporter?.full_name || "Unknown";
-    doc.text(`${issueLabel}  \u00B7  ${reportDate}  \u00B7  ${reporterName}`, cx, ty);
-    ty += 3.5;
+    doc.text(`Type: ${issueLabel}    |    Reported: ${reportDate}    |    By: ${reporterName}`, margin, metaY);
 
-    // Photo + description side by side
+    // ── Two-column layout: Photo left, text right ──
+    const contentY = metaY + 8;
+    const photoW = 110;
+    const photoH = 82;
+
     if (photo) {
-      const photoX = cx;
-      const photoY = ty;
       try {
-        const imgFormat = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
-        doc.addImage(photo, imgFormat, photoX, photoY, photoW, photoH);
+        const fmt = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
+        // Photo with rounded gray background
+        doc.setFillColor(240, 240, 242);
+        doc.roundedRect(margin, contentY, photoW, photoH, 3, 3, "F");
+        doc.addImage(photo, fmt, margin + 2, contentY + 2, photoW - 4, photoH - 4);
       } catch {
-        doc.setFillColor(240, 240, 240);
-        doc.rect(photoX, photoY, photoW, photoH, "F");
+        doc.setFillColor(240, 240, 242);
+        doc.roundedRect(margin, contentY, photoW, photoH, 3, 3, "F");
+        doc.setFontSize(9);
+        doc.setTextColor(...GRAY_400);
+        doc.text("Photo unavailable", margin + photoW / 2, contentY + photoH / 2, { align: "center" });
       }
-
-      // Text next to photo
-      const textX = photoX + photoW + 4;
-      const textW = cardW - photoW - 12;
-      let textY = photoY + 1;
-
-      if (observation.description) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
-        doc.setTextColor(60, 60, 70);
-        const descLines = doc.splitTextToSize(observation.description, textW);
-        doc.text(descLines.slice(0, 5), textX, textY);
-        textY += Math.min(descLines.length, 5) * 3;
-      }
-
-      if (observation.fix_instructions) {
-        textY += 1;
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(6.5);
-        doc.setTextColor(180, 83, 9);
-        doc.text("Recommended Action:", textX, textY);
-        textY += 3;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.5);
-        doc.setTextColor(100, 80, 50);
-        const fixLines = doc.splitTextToSize(observation.fix_instructions, textW);
-        doc.text(fixLines.slice(0, 4), textX, textY);
-      }
-
-      cy += Math.max(photoH + 4, cardMinH) + 3;
-    } else {
-      // No photo — description only
-      if (observation.description) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7);
-        doc.setTextColor(60, 60, 70);
-        const descLines = doc.splitTextToSize(observation.description, cardW - 10);
-        doc.text(descLines.slice(0, 3), cx, ty);
-        ty += Math.min(descLines.length, 3) * 3;
-      }
-      if (observation.fix_instructions) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(6.5);
-        doc.setTextColor(180, 83, 9);
-        doc.text("Fix: ", cx, ty);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(100, 80, 50);
-        const fixLines = doc.splitTextToSize(observation.fix_instructions, cardW - 18);
-        doc.text(fixLines.slice(0, 2), cx + 8, ty);
-      }
-      cy += cardMinH + 3;
     }
+
+    // Text column (right of photo or full width if no photo)
+    const textX = photo ? margin + photoW + 8 : margin;
+    const textW = photo ? pageWidth - margin * 2 - photoW - 8 : pageWidth - margin * 2;
+    let ty = contentY + 2;
+
+    // What it is (Description)
+    if (observation.description) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...BRAND_DARK);
+      doc.text("What It Is", textX, ty);
+      ty += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(50, 50, 60);
+      const descLines = doc.splitTextToSize(observation.description, textW);
+      doc.text(descLines.slice(0, 8), textX, ty);
+      ty += Math.min(descLines.length, 8) * 3.5 + 4;
+    }
+
+    // How to fix (Fix instructions)
+    if (observation.fix_instructions) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(180, 83, 9);
+      doc.text("Recommended Action", textX, ty);
+      ty += 5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(80, 65, 40);
+      const fixLines = doc.splitTextToSize(observation.fix_instructions, textW);
+      doc.text(fixLines.slice(0, 8), textX, ty);
+      ty += Math.min(fixLines.length, 8) * 3.5 + 4;
+    }
+
+    // Status badge at bottom
+    const badgeY = Math.max(ty + 4, contentY + photoH + 6);
+    doc.setFillColor(...pColor);
+    doc.roundedRect(margin, badgeY, 30, 6, 1, 1, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...WHITE);
+    doc.text(observation.priority.toUpperCase(), margin + 15, badgeY + 4.2, { align: "center" });
+
+    doc.setFillColor(229, 231, 235);
+    doc.roundedRect(margin + 33, badgeY, 25, 6, 1, 1, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...GRAY_600);
+    doc.text(statusLabels[observation.status] || observation.status, margin + 45.5, badgeY + 4.2, { align: "center" });
   }
 }
 
