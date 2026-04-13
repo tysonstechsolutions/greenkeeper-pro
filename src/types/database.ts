@@ -490,6 +490,40 @@ export interface EquipmentPart {
   updated_at: string;
 }
 
+export type DisposalStatus =
+  | 'pending_request'
+  | 'pending_approval'
+  | 'approved'
+  | 'rendering_useless'
+  | 'pending_witness'
+  | 'disposed'
+  | 'routed_to_business'
+  | 'completed';
+
+export interface AssetDisposal {
+  id: string;
+  equipment_id: string;
+  status: DisposalStatus;
+  reason: string;
+  requested_by: string | null;
+  requested_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  rendered_useless_at: string | null;
+  rendered_useless_notes: string | null;
+  witness_1_name: string | null;
+  witness_1_signed_at: string | null;
+  witness_2_name: string | null;
+  witness_2_signed_at: string | null;
+  disposal_date: string | null;
+  disposal_photo_url: string | null;
+  routed_to_business_at: string | null;
+  routed_to_business_by: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EquipmentServiceRecord {
   id: string;
   equipment_id: string;

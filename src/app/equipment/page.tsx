@@ -18,6 +18,7 @@ import {
   Download,
   ShoppingCart,
   PackageCheck,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -335,7 +336,7 @@ export default function EquipmentPage() {
       )}
 
       {/* Condition Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <StatCard
           label="Good"
           count={conditionStats.good}
@@ -375,6 +376,14 @@ export default function EquipmentPage() {
           icon={PackageCheck}
           onClick={() => handleConditionClick("parts_ordered")}
           active={conditionFilter === "parts_ordered"}
+        />
+        <StatCard
+          label="Pending Disposal"
+          count={conditionStats.beyond_repair}
+          color="#991b1b"
+          icon={Trash2}
+          onClick={() => handleConditionClick("beyond_repair")}
+          active={conditionFilter === "beyond_repair"}
         />
       </div>
 
