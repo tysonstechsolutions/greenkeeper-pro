@@ -527,6 +527,118 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // ── PARTS TO ORDER SUMMARY PAGE ──
+    // Fetch all equipment parts with status "needed" across all equipment
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: neededParts } = await (supabase.from("equipment_parts") as any)
+      .select("*, equipment:equipment!equipment_id(id, name, equipment_type)")
+      .eq("status", "needed")
+      .order("created_at", { ascending: false });
+
+    if (neededParts && neededParts.length > 0) {
+      doc.addPage();
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const m = 12;
+      const hh = 28;
+
+      // Header
+      doc.setFillColor(...BRAND_DARK);
+      doc.rect(0, 0, pw, hh, "F");
+      doc.setFillColor(...BRAND_GOLD);
+      doc.rect(0, hh, pw, 1.2, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(...WHITE);
+      doc.text("Parts To Order", m, 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...BRAND_GOLD);
+      doc.text("Purchase Request Summary", m, 19);
+
+      doc.setFontSize(8);
+      doc.setTextColor(...WHITE);
+      const partsDateStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      doc.text(partsDateStr, pw - m, 12, { align: "right" });
+      if (profile?.full_name) {
+        doc.text(`Prepared by: ${profile.full_name}`, pw - m, 19, { align: "right" });
+      }
+
+      // Table header
+      let py = hh + 6;
+      const colX = [m, m + 75, m + 140, m + 190, m + 215, m + 245];
+      const colLabels = ["Equipment", "Part Name", "Part #", "Qty", "Est. Cost", "Notes"];
+
+      doc.setFillColor(245, 247, 250);
+      doc.rect(m, py - 1, pw - m * 2, 7, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(...BRAND_DARK);
+      colLabels.forEach((label, i) => {
+        doc.text(label, colX[i], py + 3.5);
+      });
+      py += 8;
+
+      // Table rows
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      let totalCost = 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const part of neededParts as any[]) {
+        if (py > ph - 20) {
+          // Overflow to new page
+          doc.addPage();
+          py = m + 5;
+          // Re-draw table header
+          doc.setFillColor(245, 247, 250);
+          doc.rect(m, py - 1, pw - m * 2, 7, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7);
+          doc.setTextColor(...BRAND_DARK);
+          colLabels.forEach((label, i) => {
+            doc.text(label, colX[i], py + 3.5);
+          });
+          py += 8;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6.5);
+        }
+
+        doc.setTextColor(...GRAY_600);
+        const equipName = part.equipment?.name || "Unknown";
+        doc.text(equipName.substring(0, 35), colX[0], py);
+        doc.text(part.name.substring(0, 30), colX[1], py);
+        doc.text(part.part_number || "-", colX[2], py);
+        doc.text(String(part.quantity || 1), colX[3], py);
+        const cost = part.estimated_cost != null ? `$${Number(part.estimated_cost).toFixed(2)}` : "-";
+        doc.text(cost, colX[4], py);
+        if (part.estimated_cost != null) totalCost += Number(part.estimated_cost) * (part.quantity || 1);
+        const notes = part.delay_reason || part.description || "";
+        doc.text(notes.substring(0, 25), colX[5], py);
+
+        py += 5;
+
+        // Light divider
+        doc.setDrawColor(230, 230, 230);
+        doc.setLineWidth(0.15);
+        doc.line(m, py - 1.5, pw - m, py - 1.5);
+      }
+
+      // Total row
+      py += 3;
+      doc.setDrawColor(...BRAND_DARK);
+      doc.setLineWidth(0.5);
+      doc.line(m, py - 1, pw - m, py - 1);
+      py += 3;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(...BRAND_DARK);
+      doc.text(`Total Parts: ${neededParts.length}`, m, py);
+      doc.text(`Estimated Total: $${totalCost.toFixed(2)}`, colX[4] - 20, py);
+    }
+
     // ── FOOTER on all pages ──
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
