@@ -542,10 +542,12 @@ export default function EquipmentDetailPage() {
             <>
               {/* Main Photo */}
               <div className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={displayPhotos[selectedPhotoIndex]}
                   alt={`${equipment.name} photo ${selectedPhotoIndex + 1}`}
                   className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
                 {canEdit && (
                   <button
@@ -567,7 +569,8 @@ export default function EquipmentDetailPage() {
                       selectedPhotoIndex === index ? "border-blue-500" : "border-gray-300"
                     }`}
                   >
-                    <img src={photo} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo} alt={`Thumbnail ${index + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = ""; (e.target as HTMLImageElement).style.display = "none"; }} />
                   </button>
                 ))}
               </div>

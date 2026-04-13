@@ -92,6 +92,30 @@ function calculateConditionStats(equipment: Equipment[]) {
 }
 
 // Equipment card component
+function EquipmentThumbnail({ photoUrl, name }: { photoUrl: string | null; name: string }) {
+  const [broken, setBroken] = useState(false);
+
+  if (!photoUrl || broken) {
+    return (
+      <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+        <Camera className="w-8 h-8 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photoUrl}
+        alt={name}
+        className="w-full h-full object-cover"
+        onError={() => setBroken(true)}
+      />
+    </div>
+  );
+}
+
 function EquipmentCard({
   item,
   onClick,
@@ -110,18 +134,7 @@ function EquipmentCard({
       <CardContent className="p-4">
         <div className="flex gap-4">
           {/* Photo */}
-          <div className="w-20 h-20 rounded-xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-            {item.photo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.photo_url}
-                alt={item.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <Camera className="w-8 h-8 text-muted-foreground" />
-            )}
-          </div>
+          <EquipmentThumbnail photoUrl={item.photos?.[0] || item.photo_url} name={item.name} />
 
           {/* Details */}
           <div className="flex-1 min-w-0">

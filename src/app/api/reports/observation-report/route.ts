@@ -29,15 +29,60 @@ const statusLabels: Record<string, string> = {
 
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
+    // Try fetching the public URL directly first
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
     const buffer = await res.arrayBuffer();
+    if (buffer.byteLength === 0) return null;
     const base64 = Buffer.from(buffer).toString("base64");
     const contentType = res.headers.get("content-type") || "image/jpeg";
     return `data:${contentType};base64,${base64}`;
   } catch {
     return null;
   }
+}
+
+/**
+ * Extract the storage path from a Supabase public URL.
+ * URL format: https://<project>.supabase.co/storage/v1/object/public/photos/<path>
+ */
+function extractStoragePath(publicUrl: string): string | null {
+  const marker = "/storage/v1/object/public/photos/";
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return publicUrl.substring(idx + marker.length);
+}
+
+/**
+ * Download a photo using the authenticated Supabase server client.
+ * Falls back to direct public URL fetch if storage download fails.
+ */
+async function fetchPhotoViaSupabase(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  photoUrl: string
+): Promise<string | null> {
+  // First try: download via Supabase storage API (authenticated)
+  const storagePath = extractStoragePath(photoUrl);
+  if (storagePath) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("photos")
+        .download(storagePath);
+      if (!error && data) {
+        const buffer = await data.arrayBuffer();
+        if (buffer.byteLength > 0) {
+          const base64 = Buffer.from(buffer).toString("base64");
+          const contentType = data.type || "image/jpeg";
+          return `data:${contentType};base64,${base64}`;
+        }
+      }
+    } catch {
+      // Fall through to public URL fetch
+    }
+  }
+
+  // Second try: direct public URL fetch
+  return fetchImageAsBase64(photoUrl);
 }
 
 function loadHoleImage(holeNumber: number): string | null {
@@ -421,11 +466,11 @@ export async function GET(request: NextRequest) {
       obsByHole[h] = allObs.filter((o: { hole_number: number }) => o.hole_number === h);
     }
 
-    // Pre-fetch ALL photos in parallel
+    // Pre-fetch ALL photos in parallel using authenticated Supabase client
     const allPhotoUrls = allObs.map((o: { photo_url: string | null }) => o.photo_url);
     const allPhotoResults = await Promise.all(
       allPhotoUrls.map((photoUrl: string | null) =>
-        photoUrl ? fetchImageAsBase64(photoUrl) : Promise.resolve(null)
+        photoUrl ? fetchPhotoViaSupabase(supabase, photoUrl) : Promise.resolve(null)
       )
     );
 
