@@ -158,6 +158,7 @@ export function BeforeAfterSlider({
           alt={afterLabel}
           className="w-full h-full object-cover"
           onLoad={() => setImagesLoaded((prev) => ({ ...prev, after: true }))}
+          onError={() => setImagesLoaded((prev) => ({ ...prev, after: true }))}
           draggable={false}
         />
       </div>
@@ -177,6 +178,7 @@ export function BeforeAfterSlider({
             maxWidth: "none",
           }}
           onLoad={() => setImagesLoaded((prev) => ({ ...prev, before: true }))}
+          onError={() => setImagesLoaded((prev) => ({ ...prev, before: true }))}
           draggable={false}
         />
       </div>

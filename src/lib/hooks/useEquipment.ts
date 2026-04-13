@@ -452,33 +452,39 @@ export function useEquipment(): UseEquipmentReturn {
     async (id: string, data: Partial<Equipment>): Promise<Equipment | null> => {
       setError(null);
 
-      // Strip out read-only fields that shouldn't be sent in updates
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id: _id, created_at: _ca, updated_at: _ua, ...updateFields } = data as Partial<Equipment>;
+      try {
+        // Strip out read-only fields that shouldn't be sent in updates
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id: _id, created_at: _ca, updated_at: _ua, ...updateFields } = data as Partial<Equipment>;
 
-      console.debug("[useEquipment] Updating equipment:", id, "with fields:", Object.keys(updateFields));
+        console.debug("[useEquipment] Updating equipment:", id, "with fields:", Object.keys(updateFields));
 
-       
-      const { data: updated, error: updateError } = await supabase.from("equipment")
-        .update(updateFields)
-        .eq("id", id)
-        .select()
-        .single();
 
-      if (updateError) {
-        console.error("[useEquipment] Supabase update error:", updateError);
-        const message = updateError.message || "Database update failed";
-        setError(message);
-        throw new Error(message);
+        const { data: updated, error: updateError } = await supabase.from("equipment")
+          .update(updateFields)
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error("[useEquipment] Supabase update error:", updateError);
+          const message = updateError.message || "Database update failed";
+          setError(message);
+          return null;
+        }
+
+        console.debug("[useEquipment] Update successful:", updated?.id);
+
+        // Update local state
+        setEquipment((prev) =>
+          prev.map((item) => (item.id === id ? (updated as Equipment) : item))
+        );
+        return updated as Equipment;
+      } catch (err) {
+        console.error("[useEquipment] Unexpected update error:", err);
+        setError(err instanceof Error ? err.message : "Update failed");
+        return null;
       }
-
-      console.debug("[useEquipment] Update successful:", updated?.id);
-
-      // Update local state
-      setEquipment((prev) =>
-        prev.map((item) => (item.id === id ? (updated as Equipment) : item))
-      );
-      return updated as Equipment;
     },
     [supabase]
   );

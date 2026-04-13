@@ -46,12 +46,16 @@ export function InstallPrompt() {
     if (isInstalled) return;
 
     // Check if dismissed recently
-    const dismissedAt = localStorage.getItem(DISMISS_KEY);
-    if (dismissedAt) {
-      const dismissedTime = parseInt(dismissedAt, 10);
-      if (Date.now() - dismissedTime < DISMISS_DURATION) {
-        return;
+    try {
+      const dismissedAt = localStorage.getItem(DISMISS_KEY);
+      if (dismissedAt) {
+        const dismissedTime = parseInt(dismissedAt, 10);
+        if (Date.now() - dismissedTime < DISMISS_DURATION) {
+          return;
+        }
       }
+    } catch {
+      // localStorage unavailable (private browsing, etc.) — show prompt anyway
     }
 
     // iOS: Show custom prompt since beforeinstallprompt doesn't fire

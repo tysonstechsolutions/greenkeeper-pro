@@ -48,29 +48,40 @@ export function useCourseStatus() {
 
   // Fetch current course status
   const fetchCourseStatus = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "course_status")
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "course_status")
+        .single();
 
-    if (error && error.code !== "PGRST116") {
-      console.error("Error fetching course status:", error);
-    }
+      if (error && error.code !== "PGRST116") {
+        console.error("Error fetching course status:", error);
+      }
 
-    if (data && (data as { value?: unknown }).value) {
-      const statusData = (data as { value: unknown }).value as CourseStatus;
-      setCourseStatus(statusData);
-    } else {
-      // Default status
+      if (data && (data as { value?: unknown }).value) {
+        const statusData = (data as { value: unknown }).value as CourseStatus;
+        setCourseStatus(statusData);
+      } else {
+        // Default status
+        setCourseStatus({
+          status: "open",
+          message: "",
+          updated_at: new Date().toISOString(),
+          updated_by: "",
+        });
+      }
+    } catch (err) {
+      console.error("Unexpected error fetching course status:", err);
       setCourseStatus({
         status: "open",
         message: "",
         updated_at: new Date().toISOString(),
         updated_by: "",
       });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [supabase]);
 
   // Update course status (superintendent only)

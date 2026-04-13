@@ -310,6 +310,7 @@ export function useDiagnostics() {
             category,
             zoneId,
           }),
+          signal: AbortSignal.timeout(45000),
         });
 
         if (!response.ok) {
@@ -418,7 +419,9 @@ export function useDiagnostics() {
 
         // 3. Get image from storage for context
         // We need to refetch to include in API call
-        const imageResponse = await fetch(diagnostic.photo_url);
+        const imageResponse = await fetch(diagnostic.photo_url, {
+          signal: AbortSignal.timeout(15000),
+        });
         const imageBlob = await imageResponse.blob();
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -438,6 +441,7 @@ export function useDiagnostics() {
             followUpQuestion: question,
             originalDiagnosis: diagnostic.full_response,
           }),
+          signal: AbortSignal.timeout(45000),
         });
 
         if (!response.ok) {

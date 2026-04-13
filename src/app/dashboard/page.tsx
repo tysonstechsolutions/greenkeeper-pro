@@ -168,26 +168,33 @@ export default function DashboardPage() {
     const today = new Date().toISOString().split("T")[0];
 
     async function loadCriticalData() {
-      const tasks = await fetchMyTasks(today);
-      setTodayTasks(tasks.slice(0, 10));
+      try {
+        const tasks = await fetchMyTasks(today);
+        setTodayTasks(tasks.slice(0, 10));
+      } catch (err) {
+        console.error("Failed to load tasks:", err);
+      }
     }
     void loadCriticalData();
 
     const secondaryTimer = setTimeout(async () => {
-      const supabase = createClient();
-      const [overview, staffResult] = await Promise.all([
-        fetchPlanOverview(currentYear),
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-      ]);
-      setPlanOverview(overview);
-      if (staffResult.count !== null) setStaffCount(staffResult.count);
+      try {
+        const supabase = createClient();
+        const [overview, staffResult] = await Promise.all([
+          fetchPlanOverview(currentYear),
+          supabase.from("profiles").select("id", { count: "exact", head: true }),
+        ]);
+        setPlanOverview(overview);
+        if (staffResult.count !== null) setStaffCount(staffResult.count);
 
-      await fetchGoals({
-        planLevel: "monthly",
-        year: currentYear,
-        month: currentMonth,
-      });
-
+        await fetchGoals({
+          planLevel: "monthly",
+          year: currentYear,
+          month: currentMonth,
+        });
+      } catch (err) {
+        console.error("Failed to load secondary data:", err);
+      }
       setSecondaryLoaded(true);
     }, 300);
 

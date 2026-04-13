@@ -133,6 +133,7 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
           user_agent:
             typeof navigator !== "undefined" ? navigator.userAgent : null,
         }),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!res.ok) {
@@ -181,6 +182,7 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint }),
+        signal: AbortSignal.timeout(15000),
       }).catch(() => {
         // DB cleanup is best-effort
       });

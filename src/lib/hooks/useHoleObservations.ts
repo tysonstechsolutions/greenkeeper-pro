@@ -123,22 +123,10 @@ export function useHoleObservations() {
     async (data: CreateHoleObservationData) => {
       if (!user) return null;
       try {
-        // Translate user-facing text fields — non-blocking.
-        const [titleEs, descriptionEs] = await Promise.all([
-          data.title && data.title.trim()
-            ? translateSafe({ text: data.title, from: "en", to: "es" })
-            : Promise.resolve(null),
-          data.description && data.description.trim()
-            ? translateSafe({ text: data.description, from: "en", to: "es" })
-            : Promise.resolve(null),
-        ]);
-
-
+        // Insert immediately — don't block on translation.
         const { data: created, error } = await supabase.from("hole_observations")
           .insert({
             ...data,
-            title_es: titleEs,
-            description_es: descriptionEs,
             reported_by: user.id,
             status: "open",
           })
@@ -154,6 +142,24 @@ export function useHoleObservations() {
         }
 
         setObservations((prev) => [created, ...prev]);
+
+        // Fire-and-forget: translate and patch in background.
+        // This never blocks the UI or the returned result.
+        Promise.all([
+          data.title && data.title.trim()
+            ? translateSafe({ text: data.title, from: "en", to: "es" })
+            : Promise.resolve(null),
+          data.description && data.description.trim()
+            ? translateSafe({ text: data.description, from: "en", to: "es" })
+            : Promise.resolve(null),
+        ]).then(async ([titleEs, descriptionEs]) => {
+          if (!titleEs && !descriptionEs) return;
+          const patch: Record<string, string> = {};
+          if (titleEs) patch.title_es = titleEs;
+          if (descriptionEs) patch.description_es = descriptionEs;
+          await supabase.from("hole_observations").update(patch).eq("id", created.id);
+        }).catch((err) => console.error("Background translation failed:", err));
+
         return created as HoleObservation;
       } catch (err) {
         console.error("Create observation error:", err);
@@ -164,7 +170,7 @@ export function useHoleObservations() {
   );
 
   const updateObservation = useCallback(
-    async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "task_id" | "resolved_at" | "resolved_by">>) => {
+    async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by">>) => {
       try {
          
         const { data: updated, error } = await supabase.from("hole_observations")

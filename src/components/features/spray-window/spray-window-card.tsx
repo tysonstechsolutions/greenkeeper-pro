@@ -47,7 +47,9 @@ export function SprayWindowCard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/spray-window");
+        const res = await fetch("/api/spray-window", {
+          signal: AbortSignal.timeout(10000),
+        });
         if (!res.ok) return;
         const json: SprayWindowData = await res.json();
         // Only show card when disease pressure is moderate+

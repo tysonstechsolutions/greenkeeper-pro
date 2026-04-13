@@ -37,13 +37,15 @@ export function OnlineStatus() {
     // Online/offline event handlers
     const handleOnline = async () => {
       setStatus("syncing");
-      const result = await syncQueue();
-
-      if (result.synced > 0) {
-        setShowSyncedMessage(true);
-        setTimeout(() => setShowSyncedMessage(false), 3000);
+      try {
+        const result = await syncQueue();
+        if (result.synced > 0) {
+          setShowSyncedMessage(true);
+          setTimeout(() => setShowSyncedMessage(false), 3000);
+        }
+      } catch (err) {
+        console.error("Sync failed after coming online:", err);
       }
-
       setStatus("online");
       updateQueueCount();
     };

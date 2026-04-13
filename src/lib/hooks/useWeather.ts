@@ -124,7 +124,8 @@ export function useWeather(): UseWeatherReturn {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=1&aqi=no&alerts=no`
+        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=1&aqi=no&alerts=no`,
+        { signal: AbortSignal.timeout(10000) }
       );
 
       if (!response.ok) {
@@ -187,7 +188,8 @@ export function useWeather(): UseWeatherReturn {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=7&aqi=no&alerts=no`
+        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=7&aqi=no&alerts=no`,
+        { signal: AbortSignal.timeout(10000) }
       );
 
       if (!response.ok) {
@@ -295,7 +297,8 @@ export function useWeather(): UseWeatherReturn {
     try {
       // Fetch current conditions and today's forecast
       const response = await fetch(
-        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=1&aqi=no&alerts=no`
+        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=1&aqi=no&alerts=no`,
+        { signal: AbortSignal.timeout(10000) }
       );
 
       if (!response.ok) {

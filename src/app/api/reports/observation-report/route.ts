@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { issueTypeLabels } from "@/lib/hole-constants";
 import { greenIssueTypeLabels } from "@/lib/green-constants";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-const BRAND_DARK: [number, number, number] = [27, 67, 50]; // #1B4332
-const BRAND_GREEN: [number, number, number] = [45, 106, 79]; // #2D6A4F
-const BRAND_GOLD = [182, 141, 64]; // #B68D40
-const GRAY_600 = [75, 85, 99];
-const GRAY_400 = [156, 163, 175];
+const BRAND_DARK: [number, number, number] = [27, 67, 50];
+const BRAND_GREEN: [number, number, number] = [45, 106, 79];
+const BRAND_GOLD: [number, number, number] = [182, 141, 64];
+const GRAY_600: [number, number, number] = [75, 85, 99];
+const GRAY_400: [number, number, number] = [156, 163, 175];
+const WHITE: [number, number, number] = [255, 255, 255];
 
-const priorityColors: Record<string, number[]> = {
+const priorityColors: Record<string, [number, number, number]> = {
   critical: [220, 38, 38],
   high: [234, 88, 12],
   normal: [37, 99, 235],
@@ -38,6 +40,16 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
   }
 }
 
+function loadHoleImage(holeNumber: number): string | null {
+  try {
+    const filePath = join(process.cwd(), "public", "holes", `hole-${holeNumber}.png`);
+    const buffer = readFileSync(filePath);
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -48,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     const url = new URL(request.url);
     const holeNumber = parseInt(url.searchParams.get("hole") || "0");
-    const type = url.searchParams.get("type") || "hole"; // "hole" or "green"
+    const type = url.searchParams.get("type") || "hole";
 
     if (!holeNumber || holeNumber < 1 || holeNumber > 18) {
       return NextResponse.json({ error: "Invalid hole number" }, { status: 400 });
@@ -69,457 +81,327 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch observations" }, { status: 500 });
     }
 
-    // Fetch profile for the header
-     
+    // Fetch profile for header
     const { data: profile } = await supabase.from("profiles")
       .select("full_name, role")
       .eq("id", user.id)
       .single();
 
     const labels = type === "green" ? greenIssueTypeLabels : issueTypeLabels;
+    const obs = observations || [];
 
-    // Pre-fetch all photos in parallel
-    const photoPromises = (observations || []).map((obs: { photo_url: string | null }) =>
-      obs.photo_url ? fetchImageAsBase64(obs.photo_url) : Promise.resolve(null)
+    // Pre-fetch all observation photos in parallel
+    const photoPromises = obs.map((o: { photo_url: string | null }) =>
+      o.photo_url ? fetchImageAsBase64(o.photo_url) : Promise.resolve(null)
     );
     const photos = await Promise.all(photoPromises);
 
-    // Generate PDF
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 15;
-    const contentWidth = pageWidth - margin * 2;
-    let y = margin;
+    // Load hole/green base image
+    const holeImage = type === "hole" ? loadHoleImage(holeNumber) : null;
 
-    // ── Helper functions ──
-    const addPage = () => {
-      doc.addPage();
-      y = margin;
-    };
+    // ── PDF Setup — Landscape A4 ──
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth(); // 297
+    const pageHeight = doc.internal.pageSize.getHeight(); // 210
+    const margin = 12;
+    const headerHeight = 28;
+    const footerHeight = 12;
 
-    const checkPageSpace = (needed: number) => {
-      if (y + needed > pageHeight - 20) {
-        addPage();
-      }
-    };
-
-    const truncateText = (text: string, maxWidth: number, fontSize: number) => {
-      doc.setFontSize(fontSize);
-      if (doc.getTextWidth(text) <= maxWidth) return text;
-      let truncated = text;
-      while (doc.getTextWidth(truncated + "…") > maxWidth && truncated.length > 0) {
-        truncated = truncated.slice(0, -1);
-      }
-      return truncated + "…";
-    };
+    // Layout columns
+    const leftColWidth = 115; // hole image column
+    const gutter = 6;
+    const rightColX = margin + leftColWidth + gutter;
+    const rightColWidth = pageWidth - rightColX - margin;
 
     // ── HEADER ──
-    // Brand bar
-    doc.setFillColor(...BRAND_DARK as [number, number, number]);
-    doc.rect(0, 0, pageWidth, 32, "F");
+    doc.setFillColor(...BRAND_DARK);
+    doc.rect(0, 0, pageWidth, headerHeight, "F");
+    doc.setFillColor(...BRAND_GOLD);
+    doc.rect(0, headerHeight, pageWidth, 1.2, "F");
 
-    // Gold accent line
-    doc.setFillColor(...BRAND_GOLD as [number, number, number]);
-    doc.rect(0, 32, pageWidth, 1.5, "F");
-
-    // Title
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(255, 255, 255);
-    doc.text(`Hole ${holeNumber} ${type === "green" ? "Green" : "Fairway"} Report`, margin, 15);
+    doc.setFontSize(18);
+    doc.setTextColor(...WHITE);
+    doc.text(`Hole ${holeNumber} ${type === "green" ? "Green" : "Fairway"} Report`, margin, 12);
 
-    // Subtitle
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...BRAND_GOLD as [number, number, number]);
-    doc.text("Observation & Treatment Report", margin, 22);
-
-    // Report meta - right side
     doc.setFontSize(9);
-    doc.setTextColor(255, 255, 255);
-    const dateStr = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-    doc.text(dateStr, pageWidth - margin, 15, { align: "right" });
+    doc.setTextColor(...BRAND_GOLD);
+    doc.text("Observation & Treatment Report", margin, 19);
+
+    // Date + author on right
+    doc.setFontSize(8);
+    doc.setTextColor(...WHITE);
+    const dateStr = new Date().toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+    });
+    doc.text(dateStr, pageWidth - margin, 12, { align: "right" });
     if (profile?.full_name) {
-      doc.text(`Prepared by: ${profile.full_name}`, pageWidth - margin, 22, { align: "right" });
+      doc.text(`Prepared by: ${profile.full_name}`, pageWidth - margin, 19, { align: "right" });
     }
 
-    y = 40;
+    const contentTop = headerHeight + 4;
+    const contentBottom = pageHeight - footerHeight;
 
-    // ── SUMMARY BOX ──
-    const obs = observations || [];
+    // ── LEFT COLUMN: Hole image with pins ──
+    const imgX = margin;
+    const imgY = contentTop;
+    const imgW = leftColWidth;
+    const imgH = Math.min(imgW * 0.75, contentBottom - contentTop - 30); // maintain aspect ratio, leave room for stats
+
+    if (holeImage) {
+      try {
+        doc.addImage(holeImage, "PNG", imgX, imgY, imgW, imgH);
+      } catch {
+        // Fallback: draw placeholder
+        doc.setFillColor(230, 240, 230);
+        doc.roundedRect(imgX, imgY, imgW, imgH, 3, 3, "F");
+        doc.setFontSize(14);
+        doc.setTextColor(...BRAND_GREEN);
+        doc.text(`Hole ${holeNumber}`, imgX + imgW / 2, imgY + imgH / 2, { align: "center" });
+      }
+    } else if (type === "green") {
+      // Green placeholder — draw a green-colored shape
+      doc.setFillColor(45, 90, 63);
+      doc.roundedRect(imgX, imgY, imgW, imgH, 8, 8, "F");
+      // Inner green surface
+      const inset = 8;
+      doc.setFillColor(106, 191, 94);
+      doc.ellipse(imgX + imgW / 2, imgY + imgH / 2, imgW / 2 - inset, imgH / 2 - inset, "F");
+      doc.setFontSize(11);
+      doc.setTextColor(...WHITE);
+      doc.text(`Green ${holeNumber}`, imgX + imgW / 2, imgY + imgH / 2 + 1, { align: "center" });
+    } else {
+      // Hole image not found — placeholder
+      doc.setFillColor(230, 240, 230);
+      doc.roundedRect(imgX, imgY, imgW, imgH, 3, 3, "F");
+      doc.setFontSize(14);
+      doc.setTextColor(...BRAND_GREEN);
+      doc.text(`Hole ${holeNumber}`, imgX + imgW / 2, imgY + imgH / 2, { align: "center" });
+    }
+
+    // ── Draw pin markers on the image ──
+    obs.forEach((observation: { pin_x: number; pin_y: number; priority: string }, idx: number) => {
+      if (observation.pin_x == null || observation.pin_y == null) return;
+      const pinX = imgX + observation.pin_x * imgW;
+      const pinY = imgY + observation.pin_y * imgH;
+      const pColor = priorityColors[observation.priority] || GRAY_600;
+      const radius = 3.5;
+
+      // Circle background
+      doc.setFillColor(...pColor);
+      doc.circle(pinX, pinY, radius, "F");
+      // White border
+      doc.setDrawColor(...WHITE);
+      doc.setLineWidth(0.6);
+      doc.circle(pinX, pinY, radius, "S");
+      // Number
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6);
+      doc.setTextColor(...WHITE);
+      doc.text(`${idx + 1}`, pinX, pinY + 1, { align: "center" });
+    });
+
+    // ── Stats below the image ──
+    const statsY = imgY + imgH + 3;
     const openCount = obs.filter((o: { status: string }) => o.status !== "resolved").length;
     const criticalCount = obs.filter((o: { priority: string; status: string }) => o.priority === "critical" && o.status !== "resolved").length;
     const highCount = obs.filter((o: { priority: string; status: string }) => o.priority === "high" && o.status !== "resolved").length;
 
     doc.setFillColor(245, 247, 250);
-    doc.roundedRect(margin, y, contentWidth, 22, 3, 3, "F");
     doc.setDrawColor(229, 231, 235);
-    doc.roundedRect(margin, y, contentWidth, 22, 3, 3, "S");
+    doc.roundedRect(imgX, statsY, imgW, 16, 2, 2, "FD");
 
-    const statsY = y + 9;
-    const colW = contentWidth / 4;
-
-    // Stat boxes
-    const stats = [
-      { label: "Total Issues", value: obs.length.toString(), color: BRAND_GREEN },
-      { label: "Open", value: openCount.toString(), color: [220, 38, 38] },
-      { label: "Critical", value: criticalCount.toString(), color: [220, 38, 38] },
-      { label: "High Priority", value: highCount.toString(), color: [234, 88, 12] },
+    const statItems = [
+      { label: "Total", value: obs.length.toString(), color: BRAND_GREEN },
+      { label: "Open", value: openCount.toString(), color: [220, 38, 38] as [number, number, number] },
+      { label: "Critical", value: criticalCount.toString(), color: [220, 38, 38] as [number, number, number] },
+      { label: "High", value: highCount.toString(), color: [234, 88, 12] as [number, number, number] },
     ];
-
-    stats.forEach((stat, i) => {
-      const x = margin + colW * i + colW / 2;
+    const statColW = imgW / 4;
+    statItems.forEach((stat, i) => {
+      const sx = imgX + statColW * i + statColW / 2;
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.setTextColor(...stat.color as [number, number, number]);
-      doc.text(stat.value, x, statsY, { align: "center" });
+      doc.setFontSize(12);
+      doc.setTextColor(...stat.color);
+      doc.text(stat.value, sx, statsY + 7, { align: "center" });
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(...GRAY_600 as [number, number, number]);
-      doc.text(stat.label, x, statsY + 7, { align: "center" });
+      doc.setFontSize(6);
+      doc.setTextColor(...GRAY_600);
+      doc.text(stat.label, sx, statsY + 12, { align: "center" });
     });
 
-    y += 28;
+    // ── RIGHT COLUMN: Observation cards ──
+    // Adaptive sizing based on number of observations
+    let photoW: number, photoH: number;
+    if (obs.length <= 2) {
+      photoW = 50; photoH = 38;
+    } else if (obs.length <= 4) {
+      photoW = 35; photoH = 26;
+    } else {
+      photoW = 25; photoH = 19;
+    }
 
-    // ── OBSERVATIONS ──
+    let ry = contentTop; // right column Y cursor
+
+    const checkRightSpace = (needed: number) => {
+      if (ry + needed > contentBottom) {
+        doc.addPage();
+        ry = margin;
+      }
+    };
+
     if (obs.length === 0) {
-      checkPageSpace(20);
       doc.setFont("helvetica", "italic");
       doc.setFontSize(11);
-      doc.setTextColor(...GRAY_400 as [number, number, number]);
-      doc.text("No observations recorded for this hole.", margin, y + 10);
+      doc.setTextColor(...GRAY_400);
+      doc.text("No observations recorded for this hole.", rightColX, ry + 15);
     }
 
     for (let i = 0; i < obs.length; i++) {
       const observation = obs[i];
       const photo = photos[i];
-      const diag = observation.diagnosis_result;
 
-      // Estimate space needed for this observation
-      const estimatedHeight = photo ? 100 : 50;
-      checkPageSpace(estimatedHeight);
+      // Estimate card height
+      const cardMinH = photo ? Math.max(photoH + 6, 20) : 18;
+      checkRightSpace(cardMinH + 4);
 
-      // ── Observation header bar ──
+      // ── Card header bar ──
       const pColor = priorityColors[observation.priority] || GRAY_600;
-      doc.setFillColor(...pColor as [number, number, number]);
-      doc.rect(margin, y, contentWidth, 8, "F");
+      doc.setFillColor(...pColor);
+      doc.roundedRect(rightColX, ry, rightColWidth, 6, 1, 1, "F");
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(255, 255, 255);
-
-      // Measure status text first to know how much space the title has
-      doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
+      doc.setTextColor(...WHITE);
+      const titleText = `#${i + 1}  ${observation.title || "Untitled"}`;
+      const maxTitleW = rightColWidth - 45;
+      const displayTitle = doc.getTextWidth(titleText) > maxTitleW
+        ? titleText.substring(0, 30) + "..."
+        : titleText;
+      doc.text(displayTitle, rightColX + 2, ry + 4.2);
+
+      // Status badge on right
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
       const statusText = `${observation.priority.toUpperCase()} | ${statusLabels[observation.status] || observation.status}`;
-      const statusWidth = doc.getTextWidth(statusText) + 8;
+      doc.text(statusText, rightColX + rightColWidth - 2, ry + 4.2, { align: "right" });
 
-      // Truncate title to fit
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      const titlePrefix = `#${i + 1}  `;
-      const maxTitleWidth = contentWidth - statusWidth - 8;
-      const truncatedTitle = truncateText(observation.title, maxTitleWidth - doc.getTextWidth(titlePrefix), 10);
-      doc.text(`${titlePrefix}${truncatedTitle}`, margin + 3, y + 5.5);
-
-      // Priority + status on right
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.text(statusText, pageWidth - margin - 3, y + 5.5, { align: "right" });
-
-      y += 10;
+      ry += 7;
 
       // ── Issue type + date row ──
-      doc.setFontSize(8);
-      doc.setTextColor(...GRAY_600 as [number, number, number]);
+      doc.setFontSize(6.5);
+      doc.setTextColor(...GRAY_600);
       const issueLabel = (labels as Record<string, string>)[observation.issue_type] || observation.issue_type;
       const reportDate = new Date(observation.created_at).toLocaleDateString("en-US", {
-        month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+        month: "short", day: "numeric", year: "numeric",
       });
       const reporterName = observation.reporter?.full_name || "Unknown";
-      doc.text(`Type: ${issueLabel}  |  Reported: ${reportDate}  |  By: ${reporterName}`, margin + 2, y + 3);
-      y += 6;
+      doc.text(`${issueLabel}  |  ${reportDate}  |  ${reporterName}`, rightColX + 1, ry + 2.5);
+      ry += 4;
 
-      // ── Photo ──
+      // ── Photo + text side by side ──
       if (photo) {
-        checkPageSpace(65);
+        const textStartX = rightColX + photoW + 4;
+        const textW = rightColWidth - photoW - 5;
+        let textY = ry + 1;
+
         try {
-          const imgWidth = 60;
-          const imgHeight = 45;
-          // Auto-detect format from data URL (supports JPEG, PNG, WebP)
           const imgFormat = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
-          doc.addImage(photo, imgFormat, margin + 2, y, imgWidth, imgHeight);
-
-          // Description next to photo
-          const textX = margin + imgWidth + 6;
-          const textWidth = contentWidth - imgWidth - 8;
-          let textY = y + 2;
-
-          if (observation.description) {
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(8);
-            doc.setTextColor(...BRAND_DARK as [number, number, number]);
-            doc.text("Description:", textX, textY);
-            textY += 4;
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(8);
-            doc.setTextColor(...GRAY_600 as [number, number, number]);
-            const descLines = doc.splitTextToSize(observation.description, textWidth);
-            doc.text(descLines.slice(0, 6), textX, textY);
-            textY += Math.min(descLines.length, 6) * 3.5;
-          }
-
-          if (observation.fix_instructions) {
-            textY += 2;
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(8);
-            doc.setTextColor(180, 83, 9); // amber-700
-            doc.text("Fix Instructions:", textX, textY);
-            textY += 4;
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(8);
-            doc.setTextColor(...GRAY_600 as [number, number, number]);
-            const fixLines = doc.splitTextToSize(observation.fix_instructions, textWidth);
-            doc.text(fixLines.slice(0, 5), textX, textY);
-            textY += Math.min(fixLines.length, 5) * 3.5;
-          }
-
-          // Use whichever is taller: the image or the text beside it
-          const textHeight = textY - y;
-          y += Math.max(imgHeight, textHeight) + 3;
+          doc.addImage(photo, imgFormat, rightColX + 1, ry, photoW, photoH);
         } catch {
-          // Photo failed to embed, skip it
-          y += 2;
+          // Photo failed, draw placeholder
+          doc.setFillColor(240, 240, 240);
+          doc.rect(rightColX + 1, ry, photoW, photoH, "F");
+          doc.setFontSize(7);
+          doc.setTextColor(...GRAY_400);
+          doc.text("No image", rightColX + 1 + photoW / 2, ry + photoH / 2, { align: "center" });
         }
-      } else {
-        // No photo — show description inline
+
+        // Description
         if (observation.description) {
-          checkPageSpace(15);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7);
+          doc.setTextColor(...BRAND_DARK);
+          doc.text("Description:", textStartX, textY);
+          textY += 3;
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.setTextColor(...GRAY_600 as [number, number, number]);
-          const descLines = doc.splitTextToSize(observation.description, contentWidth - 4);
-          doc.text(descLines.slice(0, 4), margin + 2, y + 3);
-          y += Math.min(descLines.length, 4) * 3.5 + 3;
+          doc.setFontSize(6.5);
+          doc.setTextColor(...GRAY_600);
+          const maxDescLines = obs.length <= 2 ? 6 : obs.length <= 4 ? 4 : 3;
+          const descLines = doc.splitTextToSize(observation.description, textW);
+          doc.text(descLines.slice(0, maxDescLines), textStartX, textY);
+          textY += Math.min(descLines.length, maxDescLines) * 2.8;
+        }
+
+        // Fix instructions
+        if (observation.fix_instructions) {
+          textY += 1.5;
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7);
+          doc.setTextColor(180, 83, 9);
+          doc.text("How to Fix:", textStartX, textY);
+          textY += 3;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6.5);
+          doc.setTextColor(...GRAY_600);
+          const maxFixLines = obs.length <= 2 ? 5 : obs.length <= 4 ? 3 : 2;
+          const fixLines = doc.splitTextToSize(observation.fix_instructions, textW);
+          doc.text(fixLines.slice(0, maxFixLines), textStartX, textY);
+          textY += Math.min(fixLines.length, maxFixLines) * 2.8;
+        }
+
+        const textHeight = textY - ry;
+        ry += Math.max(photoH, textHeight) + 2;
+      } else {
+        // No photo — text only, compact
+        if (observation.description) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6.5);
+          doc.setTextColor(...GRAY_600);
+          const descLines = doc.splitTextToSize(observation.description, rightColWidth - 4);
+          doc.text(descLines.slice(0, 3), rightColX + 1, ry + 2.5);
+          ry += Math.min(descLines.length, 3) * 2.8 + 2;
         }
 
         if (observation.fix_instructions) {
-          checkPageSpace(15);
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(8);
+          doc.setFontSize(6.5);
           doc.setTextColor(180, 83, 9);
-          doc.text("Fix Instructions:", margin + 2, y + 2);
-          y += 5;
+          doc.text("Fix:", rightColX + 1, ry + 1.5);
           doc.setFont("helvetica", "normal");
-          doc.setTextColor(...GRAY_600 as [number, number, number]);
-          const fixLines = doc.splitTextToSize(observation.fix_instructions, contentWidth - 4);
-          doc.text(fixLines.slice(0, 4), margin + 2, y);
-          y += Math.min(fixLines.length, 4) * 3.5 + 2;
+          doc.setTextColor(...GRAY_600);
+          const fixLines = doc.splitTextToSize(observation.fix_instructions, rightColWidth - 12);
+          doc.text(fixLines.slice(0, 2), rightColX + 9, ry + 1.5);
+          ry += Math.min(fixLines.length, 2) * 2.8 + 2;
         }
+
+        ry += 1;
       }
 
-      // ── Diagnosis & Treatment Plan ──
-      if (diag?.diagnosis) {
-        checkPageSpace(30);
-
-        // Diagnosis box — measure condition text to size box dynamically
-        const conditionText = `${diag.diagnosis.condition || "Unknown Condition"}${diag.diagnosis.scientific_name ? ` (${diag.diagnosis.scientific_name})` : ""}`;
-        doc.setFontSize(8);
-        const conditionLines = doc.splitTextToSize(conditionText, contentWidth - 14);
-        const conditionHeight = conditionLines.length * 3.5;
-        const diagBoxHeight = Math.max(18, 8 + conditionHeight + 6);
-
-        doc.setFillColor(240, 253, 244); // green-50
-        doc.setDrawColor(187, 247, 208); // green-200
-        doc.roundedRect(margin + 2, y, contentWidth - 4, diagBoxHeight, 2, 2, "FD");
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.setTextColor(...BRAND_DARK as [number, number, number]);
-        doc.text("AI Diagnosis", margin + 5, y + 5);
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(...BRAND_GREEN as [number, number, number]);
-        doc.text(conditionLines, margin + 5, y + 10);
-
-        const severityY = y + 10 + conditionHeight + 1;
-        doc.setFontSize(7);
-        doc.setTextColor(...GRAY_600 as [number, number, number]);
-        const severityDisplay = diag.diagnosis.severity_label
-          ? `${diag.diagnosis.severity_label} (${diag.diagnosis.severity}/5)`
-          : `${diag.diagnosis.severity}/5`;
-        doc.text(
-          `Severity: ${severityDisplay}  |  Confidence: ${diag.diagnosis.confidence || "N/A"}  |  Category: ${diag.diagnosis.category || "N/A"}`,
-          margin + 5, severityY
-        );
-
-        y += diagBoxHeight + 3;
-
-        // Treatment products table
-        if (diag.treatment?.products?.length > 0) {
-          checkPageSpace(25);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(8);
-          doc.setTextColor(...BRAND_DARK as [number, number, number]);
-          doc.text("Recommended Products:", margin + 2, y + 3);
-          y += 5;
-
-          const tableData = diag.treatment.products.map((p: {
-            name?: string;
-            active_ingredient?: string;
-            application_rate?: string;
-            method?: string;
-            in_inventory?: boolean;
-            timing?: string;
-          }) => [
-            p.name || "Unknown Product",
-            p.active_ingredient || "—",
-            p.application_rate || "—",
-            p.method || "—",
-            p.in_inventory ? "In Stock" : "Not in Stock",
-            p.timing || "—",
-          ]);
-
-          autoTable(doc, {
-            startY: y,
-            margin: { left: margin + 2, right: margin + 2 },
-            head: [["Product", "Active Ingredient", "Rate", "Method", "Inventory", "Timing"]],
-            body: tableData,
-            styles: { fontSize: 7, cellPadding: 1.5 },
-            headStyles: {
-              fillColor: BRAND_DARK,
-              textColor: [255, 255, 255],
-              fontSize: 7,
-              fontStyle: "bold",
-            },
-            alternateRowStyles: { fillColor: [245, 247, 250] },
-            columnStyles: {
-              0: { fontStyle: "bold", cellWidth: 28 },
-              4: { cellWidth: 18 },
-            },
-          });
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          y = (doc as any).lastAutoTable.finalY + 3;
-        }
-
-        // Application window
-        if (diag.treatment?.application_window) {
-          checkPageSpace(18);
-          const aw = diag.treatment.application_window;
-          doc.setFillColor(239, 246, 255); // blue-50
-          doc.setDrawColor(191, 219, 254); // blue-200
-          doc.roundedRect(margin + 2, y, contentWidth - 4, 14, 2, 2, "FD");
-
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(7);
-          doc.setTextColor(30, 64, 175); // blue-800
-          doc.text("Application Window", margin + 5, y + 4);
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(7);
-          doc.setTextColor(...GRAY_600 as [number, number, number]);
-          doc.text(
-            `Best Date: ${aw.best_date || "TBD"}  |  Time: ${aw.best_time || "TBD"}  |  Temp: ${aw.ideal_temp_range || "N/A"}`,
-            margin + 5, y + 8.5
-          );
-          doc.text(
-            `Max Wind: ${aw.max_wind || "N/A"}  |  Rain Buffer: ${aw.rain_buffer || "N/A"}`,
-            margin + 5, y + 12
-          );
-
-          y += 17;
-        }
-
-        // Follow-up schedule
-        if (diag.treatment?.follow_up?.length > 0) {
-          checkPageSpace(20);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(8);
-          doc.setTextColor(...BRAND_DARK as [number, number, number]);
-          doc.text("Follow-up Schedule:", margin + 2, y + 3);
-          y += 5;
-
-          const followData = diag.treatment.follow_up.map((fu: {
-            days_after: number;
-            action: string;
-            what_to_look_for: string;
-            if_no_improvement: string;
-          }) => [
-            `Day ${fu.days_after}`,
-            fu.action,
-            fu.what_to_look_for,
-            fu.if_no_improvement || "—",
-          ]);
-
-          autoTable(doc, {
-            startY: y,
-            margin: { left: margin + 2, right: margin + 2 },
-            head: [["When", "Action", "Look For", "If No Improvement"]],
-            body: followData,
-            styles: { fontSize: 7, cellPadding: 1.5 },
-            headStyles: {
-              fillColor: BRAND_GREEN,
-              textColor: [255, 255, 255],
-              fontSize: 7,
-              fontStyle: "bold",
-            },
-            alternateRowStyles: { fillColor: [245, 247, 250] },
-          });
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          y = (doc as any).lastAutoTable.finalY + 3;
-        }
-
-        // Prevention tips
-        if (diag.prevention?.length > 0) {
-          checkPageSpace(15);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(8);
-          doc.setTextColor(...BRAND_DARK as [number, number, number]);
-          doc.text("Prevention:", margin + 2, y + 3);
-          y += 5;
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(7);
-          doc.setTextColor(...GRAY_600 as [number, number, number]);
-          diag.prevention.forEach((tip: string) => {
-            checkPageSpace(5);
-            const lines = doc.splitTextToSize(`- ${tip}`, contentWidth - 6);
-            doc.text(lines, margin + 4, y + 2);
-            y += lines.length * 3 + 1;
-          });
-          y += 2;
-        }
-      }
-
-      // Divider between observations
+      // Thin divider between cards
       if (i < obs.length - 1) {
-        y += 3;
-        checkPageSpace(5);
-        doc.setDrawColor(...GRAY_400 as [number, number, number]);
-        doc.setLineDashPattern([1, 1], 0);
-        doc.line(margin + 10, y, pageWidth - margin - 10, y);
-        doc.setLineDashPattern([], 0);
-        y += 5;
+        ry += 1;
+        doc.setDrawColor(220, 220, 220);
+        doc.setLineWidth(0.2);
+        doc.line(rightColX, ry, rightColX + rightColWidth, ry);
+        ry += 2;
       }
     }
 
-    // Add footer to all pages
+    // ── FOOTER on all pages ──
     const totalPages = doc.getNumberOfPages();
     for (let p = 1; p <= totalPages; p++) {
       doc.setPage(p);
-      doc.setFontSize(8);
-      doc.setTextColor(...GRAY_400 as [number, number, number]);
+      doc.setFontSize(7);
+      doc.setTextColor(...GRAY_400);
       doc.text(
         `VMGC GreenKeeper Pro | Generated ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
         pageWidth / 2,
-        pageHeight - 8,
+        pageHeight - 5,
         { align: "center" }
       );
-      doc.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: "right" });
+      doc.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: "right" });
     }
 
     // Output

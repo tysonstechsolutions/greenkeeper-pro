@@ -77,6 +77,7 @@ export function useDroneFlights(): UseDroneFlightsReturn {
         const res = await fetch("/api/drone/upload", {
           method: "POST",
           body: formData,
+          signal: AbortSignal.timeout(120000), // 2 min for large uploads
         });
 
         if (!res.ok) {

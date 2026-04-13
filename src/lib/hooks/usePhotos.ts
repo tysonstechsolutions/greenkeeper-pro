@@ -283,10 +283,15 @@ export function usePhotos(): UsePhotosReturn {
     ): Promise<Photo> => {
       // Upload main photo
       let uploadResult;
-      if (file instanceof File) {
-        uploadResult = await uploadPhoto(file, userId);
-      } else {
-        uploadResult = await uploadPhotoFromBlob(file, userId, "jpg");
+      try {
+        if (file instanceof File) {
+          uploadResult = await uploadPhoto(file, userId);
+        } else {
+          uploadResult = await uploadPhotoFromBlob(file, userId, "jpg");
+        }
+      } catch (uploadErr) {
+        console.error("Photo upload failed:", uploadErr);
+        throw new Error(`Photo upload failed: ${uploadErr instanceof Error ? uploadErr.message : "Unknown error"}`);
       }
 
       // Generate and upload thumbnail
@@ -304,28 +309,37 @@ export function usePhotos(): UsePhotosReturn {
       let gpsLat: number | null = null;
       let gpsLng: number | null = null;
 
-      if (file instanceof File) {
-        const gps = await getGPSWithFallback(file);
-        if (gps) {
-          gpsLat = gps.lat;
-          gpsLng = gps.lng;
+      try {
+        if (file instanceof File) {
+          const gps = await getGPSWithFallback(file);
+          if (gps) {
+            gpsLat = gps.lat;
+            gpsLng = gps.lng;
+          }
+        } else {
+          // For blobs (camera captures), try browser geolocation
+          const { getBrowserGeolocation } = await import("@/lib/utils/exif");
+          const gps = await getBrowserGeolocation();
+          if (gps) {
+            gpsLat = gps.lat;
+            gpsLng = gps.lng;
+          }
         }
-      } else {
-        // For blobs (camera captures), try browser geolocation
-        const { getBrowserGeolocation } = await import("@/lib/utils/exif");
-        const gps = await getBrowserGeolocation();
-        if (gps) {
-          gpsLat = gps.lat;
-          gpsLng = gps.lng;
-        }
+      } catch (gpsErr) {
+        console.warn("GPS extraction failed:", gpsErr);
+        // Continue without GPS
       }
 
       // Try to extract datetime from EXIF
       const exifMetadata: Record<string, unknown> = {};
       if (file instanceof File) {
-        const dateTime = await extractDateTime(file);
-        if (dateTime) {
-          exifMetadata.originalDateTime = dateTime.toISOString();
+        try {
+          const dateTime = await extractDateTime(file);
+          if (dateTime) {
+            exifMetadata.originalDateTime = dateTime.toISOString();
+          }
+        } catch {
+          // Continue without EXIF datetime
         }
       }
 

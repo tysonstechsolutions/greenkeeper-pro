@@ -122,24 +122,12 @@ export function useObservations(): UseObservationsReturn {
       if (!user) return null;
 
       try {
-        // Translate user-provided text fields in parallel. Non-blocking —
-        // if Claude is down, the observation still saves without a translation.
-        const [titleEs, descriptionEs] = await Promise.all([
-          obs.title && obs.title.trim()
-            ? translateSafe({ text: obs.title, from: "en", to: "es" })
-            : Promise.resolve(null),
-          obs.description && obs.description.trim()
-            ? translateSafe({ text: obs.description, from: "en", to: "es" })
-            : Promise.resolve(null),
-        ]);
-
+        // Insert immediately — don't block on translation.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error: insertError } = await (supabase as any)
           .from("course_observations")
           .insert({
             ...obs,
-            title_es: titleEs,
-            description_es: descriptionEs,
             created_by: user.id,
             is_addressed: false,
             linked_plan_item_id: null,
@@ -155,6 +143,24 @@ export function useObservations(): UseObservationsReturn {
 
         const newObs = data as CourseObservation;
         setObservations((prev) => [newObs, ...prev]);
+
+        // Fire-and-forget: translate and patch in background.
+        Promise.all([
+          obs.title && obs.title.trim()
+            ? translateSafe({ text: obs.title, from: "en", to: "es" })
+            : Promise.resolve(null),
+          obs.description && obs.description.trim()
+            ? translateSafe({ text: obs.description, from: "en", to: "es" })
+            : Promise.resolve(null),
+        ]).then(async ([titleEs, descriptionEs]) => {
+          if (!titleEs && !descriptionEs) return;
+          const patch: Record<string, string> = {};
+          if (titleEs) patch.title_es = titleEs;
+          if (descriptionEs) patch.description_es = descriptionEs;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("course_observations").update(patch).eq("id", newObs.id);
+        }).catch((err) => console.error("Background translation failed:", err));
+
         return newObs;
       } catch (err) {
         console.error("Error adding observation:", err);

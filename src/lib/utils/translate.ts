@@ -27,6 +27,9 @@ interface TranslateArgs {
 // exceed a few hundred and the DB cache is the real source of truth.
 const memCache = new Map<string, string>();
 
+/** Client-side timeout — fail fast so the observation insert isn't blocked. */
+const CLIENT_TIMEOUT_MS = 8000;
+
 function memKey({ text, from, to }: TranslateArgs): string {
   return `${from}|${to}|${text}`;
 }
@@ -40,23 +43,31 @@ export async function translate(args: TranslateArgs): Promise<string> {
   const hit = memCache.get(cacheKey);
   if (hit !== undefined) return hit;
 
-  const res = await fetch("/api/translate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, from, to }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Translate failed (${res.status}): ${body}`);
-  }
+  try {
+    const res = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, from, to }),
+      signal: controller.signal,
+    });
 
-  const data = (await res.json()) as { translated?: string };
-  const translated = data.translated || "";
-  if (translated) {
-    memCache.set(cacheKey, translated);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Translate failed (${res.status}): ${body}`);
+    }
+
+    const data = (await res.json()) as { translated?: string };
+    const translated = data.translated || "";
+    if (translated) {
+      memCache.set(cacheKey, translated);
+    }
+    return translated;
+  } finally {
+    clearTimeout(timeout);
   }
-  return translated;
 }
 
 /**

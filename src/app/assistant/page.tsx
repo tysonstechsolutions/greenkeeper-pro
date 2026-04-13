@@ -186,6 +186,7 @@ export default function AssistantPage() {
             photoStoragePath: photoStoragePath || undefined,
             photoPublicUrl: photoPublicUrl || undefined,
           }),
+          signal: AbortSignal.timeout(120000), // 2 min for AI responses with tool use
         });
 
         const data = await res.json();

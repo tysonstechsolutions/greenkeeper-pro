@@ -278,6 +278,9 @@ async function processQueueItem(item: QueuedItem): Promise<boolean> {
   }
 }
 
+// Guard against concurrent sync runs (network flap protection)
+let isSyncing = false;
+
 /**
  * Sync all queued items when back online
  */
@@ -290,59 +293,70 @@ export async function syncQueue(): Promise<{
     return { synced: 0, failed: 0, total: 0 };
   }
 
-  const items = await getQueuedItems();
-  const total = items.length;
-  let synced = 0;
-  let failed = 0;
-
-  // Dispatch sync start event
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent("offlineSyncStart", { detail: { total } })
-    );
+  // Prevent concurrent sync runs (e.g. rapid online/offline flapping)
+  if (isSyncing) {
+    console.info("[OfflineQueue] Sync already in progress, skipping");
+    return { synced: 0, failed: 0, total: 0 };
   }
+  isSyncing = true;
 
-  // Process items in order
-  for (const item of items) {
-    const success = await processQueueItem(item);
+  try {
+    const items = await getQueuedItems();
+    const total = items.length;
+    let synced = 0;
+    let failed = 0;
 
-    if (success) {
-      await removeFromQueue(item.id);
-      synced++;
-    } else {
-      // Update retry count
-      const database = await getDB();
-      item.retryCount++;
+    // Dispatch sync start event
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("offlineSyncStart", { detail: { total } })
+      );
+    }
 
-      // Remove after 3 failed attempts
-      if (item.retryCount >= 3) {
+    // Process items in order
+    for (const item of items) {
+      const success = await processQueueItem(item);
+
+      if (success) {
         await removeFromQueue(item.id);
-        failed++;
+        synced++;
       } else {
-        await database.put("queue", item);
+        // Update retry count
+        const database = await getDB();
+        item.retryCount++;
+
+        // Remove after 3 failed attempts
+        if (item.retryCount >= 3) {
+          await removeFromQueue(item.id);
+          failed++;
+        } else {
+          await database.put("queue", item);
+        }
+      }
+
+      // Dispatch progress event
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("offlineSyncProgress", {
+            detail: { synced, failed, total },
+          })
+        );
       }
     }
 
-    // Dispatch progress event
+    // Dispatch sync complete event
     if (typeof window !== "undefined") {
       window.dispatchEvent(
-        new CustomEvent("offlineSyncProgress", {
+        new CustomEvent("offlineSyncComplete", {
           detail: { synced, failed, total },
         })
       );
     }
-  }
 
-  // Dispatch sync complete event
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent("offlineSyncComplete", {
-        detail: { synced, failed, total },
-      })
-    );
+    return { synced, failed, total };
+  } finally {
+    isSyncing = false;
   }
-
-  return { synced, failed, total };
 }
 
 /**

@@ -276,8 +276,8 @@ export default function ChemicalsPage() {
 
   // Load initial data
   useEffect(() => {
-    fetchInventoryStats().then(setStats);
-    getActiveREIs().then(setActiveREIs);
+    fetchInventoryStats().then(setStats).catch((err) => console.error("Failed to load inventory stats:", err));
+    getActiveREIs().then(setActiveREIs).catch((err) => console.error("Failed to load active REIs:", err));
   }, [fetchInventoryStats, getActiveREIs]);
 
   // Apply filters with debounce

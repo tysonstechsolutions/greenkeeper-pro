@@ -58,6 +58,7 @@ import {
   greenPriorityLabels,
   greenPriorityColors,
 } from "@/lib/hooks/useGreenObservations";
+import { greenIssueTypeDescriptions, greenIssueTypeFixTemplates } from "@/lib/green-constants";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import GreenDrawingCanvas, { computeCentroid } from "@/components/green-drawing-canvas";
@@ -126,6 +127,8 @@ export default function GreenDetailPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editPhotoUploading, setEditPhotoUploading] = useState(false);
+  const editPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Feedback messages
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error" | "loading"; text: string } | null>(null);
@@ -814,7 +817,21 @@ export default function GreenDetailPage() {
                     <Label>Issue Type</Label>
                     <Select
                       value={formData.issue_type}
-                      onValueChange={(v) => setFormData((p) => ({ ...p, issue_type: v as GreenIssueType }))}
+                      onValueChange={(v) => {
+                        const issueType = v as GreenIssueType;
+                        setFormData((p) => {
+                          const updated = { ...p, issue_type: issueType };
+                          const prevDesc = greenIssueTypeDescriptions[p.issue_type] || "";
+                          if (!p.description.trim() || p.description === prevDesc) {
+                            updated.description = greenIssueTypeDescriptions[issueType] || "";
+                          }
+                          const prevFix = greenIssueTypeFixTemplates[p.issue_type] || "";
+                          if (!p.fix_instructions.trim() || p.fix_instructions === prevFix) {
+                            updated.fix_instructions = greenIssueTypeFixTemplates[issueType] || "";
+                          }
+                          return updated;
+                        });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -1143,14 +1160,73 @@ export default function GreenDetailPage() {
               </SheetHeader>
 
               <div className="space-y-4 mt-4 pb-6">
-                {/* Photo (read-only) */}
-                {selectedObs.photo_url && (
-                  <img
-                    src={selectedObs.photo_url}
-                    alt="Issue photo"
-                    className="w-full h-36 object-cover rounded-xl border border-border"
+                {/* Photo — add/replace in edit mode */}
+                <div className="space-y-2">
+                  {selectedObs.photo_url ? (
+                    <div className="relative">
+                      <img
+                        src={selectedObs.photo_url}
+                        alt="Issue photo"
+                        className="w-full h-36 object-cover rounded-xl border border-border"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="absolute bottom-2 right-2 h-8 text-xs gap-1.5 bg-white/90 hover:bg-white"
+                        disabled={editPhotoUploading}
+                        onClick={() => editPhotoInputRef.current?.click()}
+                      >
+                        {editPhotoUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+                        {editPhotoUploading ? "Uploading..." : "Replace Photo"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-24 border-dashed flex flex-col gap-1"
+                      disabled={editPhotoUploading}
+                      onClick={() => editPhotoInputRef.current?.click()}
+                    >
+                      {editPhotoUploading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Camera className="w-5 h-5 text-muted-foreground" />
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {editPhotoUploading ? "Uploading photo..." : "Add Photo"}
+                      </span>
+                    </Button>
+                  )}
+                  <input
+                    ref={editPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !selectedObs) return;
+                      e.target.value = "";
+                      setEditPhotoUploading(true);
+                      try {
+                        const url = await uploadPhoto(file);
+                        if (url) {
+                          await updateObservation(selectedObs.id, { photo_url: url });
+                          setSelectedObs((prev) => prev ? { ...prev, photo_url: url } : prev);
+                          setAutoSaveStatus("saved");
+                          setTimeout(() => setAutoSaveStatus("idle"), 1500);
+                        }
+                      } catch (err) {
+                        console.error("Photo upload failed:", err);
+                        setFeedbackMsg({ type: "error", text: "Failed to upload photo." });
+                      } finally {
+                        setEditPhotoUploading(false);
+                      }
+                    }}
                   />
-                )}
+                </div>
 
                 {/* Title */}
                 <div className="space-y-2">
@@ -1168,7 +1244,18 @@ export default function GreenDetailPage() {
                     <Label>Issue Type</Label>
                     <Select
                       value={editFormData.issue_type}
-                      onValueChange={(v) => updateEditField("issue_type", v)}
+                      onValueChange={(v) => {
+                        const issueType = v as GreenIssueType;
+                        const prevDesc = greenIssueTypeDescriptions[editFormData.issue_type] || "";
+                        if (!editFormData.description.trim() || editFormData.description === prevDesc) {
+                          updateEditField("description", greenIssueTypeDescriptions[issueType] || "");
+                        }
+                        const prevFix = greenIssueTypeFixTemplates[editFormData.issue_type] || "";
+                        if (!editFormData.fix_instructions.trim() || editFormData.fix_instructions === prevFix) {
+                          updateEditField("fix_instructions", greenIssueTypeFixTemplates[issueType] || "");
+                        }
+                        updateEditField("issue_type", v);
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />

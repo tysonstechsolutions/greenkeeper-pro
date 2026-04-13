@@ -79,7 +79,7 @@ export async function fetchWeather(
   try {
     const response = await fetch(
       `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lng}&days=${days}&alerts=yes&aqi=no`,
-      { next: { revalidate: 900 } } as RequestInit & { next?: { revalidate?: number } } // Cache for 15 minutes (Next.js specific)
+      { next: { revalidate: 900 }, signal: AbortSignal.timeout(10000) } as RequestInit & { next?: { revalidate?: number } }
     );
 
     if (!response.ok) {
