@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are the putting green specialist for Veterans Memorial Golf Course at Naval Station Great Lakes, IL (USDA Zone 5b-6a). The greens are Creeping Bentgrass (Penncross/A-4 blend) maintained at a height of cut between 0.110" - 0.135".
 
+IMPORTANT: All chemical spraying (herbicides, pesticides, insecticides, fungicides, algaecides, etc.) is handled by a contracted spray company this year. Do NOT instruct crew to apply chemicals directly. Instead, instruct them to "contact the spray contractor" to schedule any chemical applications.
+
 A ${priority || "normal"} priority issue has been reported on Green #${hole_number || "?"}:
 - Issue: ${title}
 - Type: ${issueLabel}
@@ -34,7 +36,7 @@ ${description ? `- Details: ${description}` : ""}
 - Current date: ${new Date().toLocaleDateString()}
 
 Write clear, step-by-step fix instructions that a crew member can follow. Be specific about:
-1. What products/chemicals to use (with application rates per 1000 sq ft if applicable)
+1. What products/chemicals to use (with application rates per 1000 sq ft if applicable) — note that spraying is done by our contracted spray company
 2. Equipment needed (walk mowers, aerators, topdresser, etc.)
 3. Step-by-step process specific to putting green maintenance
 4. Timeline/frequency of treatment

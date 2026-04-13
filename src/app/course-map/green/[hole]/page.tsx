@@ -97,7 +97,6 @@ export default function GreenDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState<FormStep>("photo");
   const [formData, setFormData] = useState({
-    title: "",
     description: "",
     fix_instructions: "",
     issue_type: "other" as GreenIssueType,
@@ -117,7 +116,6 @@ export default function GreenDetailPage() {
   const [selectedObs, setSelectedObs] = useState<GreenObservation | null>(null);
   const [editingObs, setEditingObs] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    title: "",
     description: "",
     fix_instructions: "",
     issue_type: "other" as GreenIssueType,
@@ -168,7 +166,7 @@ export default function GreenDetailPage() {
     setAnalyzeError(null);
     setDiagnosisResult(null);
     // Reset form data for new observation
-    setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+    setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
     setPhotoFile(null);
     setPhotoPreview(null);
   }, []);
@@ -194,14 +192,15 @@ export default function GreenDetailPage() {
 
   // ── AI Generate Fix Instructions ──
   const handleGenerateFix = useCallback(async () => {
-    if (!formData.title.trim()) return;
+    if (formData.issue_type === "other") return;
     setGeneratingFix(true);
+    const title = greenIssueTypeLabels[formData.issue_type] || formData.issue_type;
     try {
       const res = await fetch("/api/green-fix-instructions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: formData.title,
+          title,
           issue_type: formData.issue_type,
           priority: formData.priority,
           description: formData.description || undefined,
@@ -220,11 +219,11 @@ export default function GreenDetailPage() {
     } finally {
       setGeneratingFix(false);
     }
-  }, [formData.title, formData.issue_type, formData.priority, formData.description, holeNumber]);
+  }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
 
   // ── Submit Observation ──
   const handleSubmit = useCallback(async () => {
-    if (!drawnPath || drawnPath.length < 3 || !formData.title.trim()) return;
+    if (!drawnPath || drawnPath.length < 3 || formData.issue_type === "other") return;
     setSubmitting(true);
 
     const centroid = computeCentroid(drawnPath);
@@ -241,7 +240,7 @@ export default function GreenDetailPage() {
       area_path: drawnPath,
       issue_type: formData.issue_type,
       priority: formData.priority,
-      title: formData.title.trim(),
+      title: greenIssueTypeLabels[formData.issue_type] || formData.issue_type,
       description: formData.description.trim() || null,
       fix_instructions: formData.fix_instructions.trim() || null,
       photo_url: photoUrl,
@@ -252,7 +251,7 @@ export default function GreenDetailPage() {
       setShowForm(false);
       setDrawnPath(null);
       setDiagnosisResult(null);
-      setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+      setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
       setFeedbackMsg({ type: "success", text: "Observation reported successfully." });
@@ -265,7 +264,6 @@ export default function GreenDetailPage() {
   // ── Edit saved observation ──
   const handleStartEdit = useCallback((obs: GreenObservation) => {
     setEditFormData({
-      title: obs.title,
       description: obs.description || "",
       fix_instructions: obs.fix_instructions || "",
       issue_type: obs.issue_type,
@@ -298,7 +296,7 @@ export default function GreenDetailPage() {
     setEditFormData((prev) => {
       const updated = { ...prev, [field]: value };
       const updates: Partial<GreenObservation> = {
-        title: updated.title.trim(),
+        title: greenIssueTypeLabels[updated.issue_type as GreenIssueType] || updated.issue_type,
         description: updated.description.trim() || null,
         fix_instructions: updated.fix_instructions.trim() || null,
         issue_type: updated.issue_type,
@@ -315,7 +313,7 @@ export default function GreenDetailPage() {
     setSavingEdit(true);
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     const updates: Partial<GreenObservation> = {
-      title: editFormData.title.trim(),
+      title: greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type,
       description: editFormData.description.trim() || null,
       fix_instructions: editFormData.fix_instructions.trim() || null,
       issue_type: editFormData.issue_type,
@@ -334,12 +332,13 @@ export default function GreenDetailPage() {
 
   const handleGenerateFixForEdit = useCallback(async () => {
     setGeneratingFixForObs(true);
+    const title = greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type;
     try {
       const res = await fetch("/api/green-fix-instructions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: editFormData.title,
+          title,
           issue_type: editFormData.issue_type,
           priority: editFormData.priority,
           description: editFormData.description || undefined,
@@ -358,7 +357,7 @@ export default function GreenDetailPage() {
     } finally {
       setGeneratingFixForObs(false);
     }
-  }, [editFormData.title, editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber, triggerAutoSave]);
+  }, [editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber, triggerAutoSave]);
 
   // ── Create Task from Observation ──
   const handleCreateTask = useCallback(async (obs: GreenObservation) => {
@@ -799,18 +798,6 @@ export default function GreenDetailPage() {
                   </div>
                 )}
 
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label htmlFor="obs-title">Issue Title *</Label>
-                  <Input
-                    id="obs-title"
-                    placeholder="e.g., Ball mark cluster front-right"
-                    value={formData.title}
-                    onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
-                    autoFocus
-                  />
-                </div>
-
                 {/* Issue Type & Priority */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -899,7 +886,7 @@ export default function GreenDetailPage() {
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs gap-1.5"
-                        disabled={!formData.title.trim() || generatingFix}
+                        disabled={formData.issue_type === "other" || generatingFix}
                         onClick={handleGenerateFix}
                       >
                         {generatingFix ? (
@@ -923,7 +910,7 @@ export default function GreenDetailPage() {
                 {/* Submit */}
                 <Button
                   className="w-full bg-emerald-700 hover:bg-emerald-600"
-                  disabled={!drawnPath || drawnPath.length < 3 || !formData.title.trim() || submitting}
+                  disabled={!drawnPath || drawnPath.length < 3 || formData.issue_type === "other" || submitting}
                   onClick={handleSubmit}
                 >
                   {submitting ? (
@@ -949,7 +936,7 @@ export default function GreenDetailPage() {
             clearTimeout(autoSaveTimerRef.current);
             if (selectedObs) {
               const updates: Partial<GreenObservation> = {
-                title: editFormData.title.trim(),
+                title: greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type,
                 description: editFormData.description.trim() || null,
                 fix_instructions: editFormData.fix_instructions.trim() || null,
                 issue_type: editFormData.issue_type,
@@ -1228,16 +1215,6 @@ export default function GreenDetailPage() {
                   />
                 </div>
 
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label>Issue Title *</Label>
-                  <Input
-                    value={editFormData.title}
-                    onChange={(e) => updateEditField("title", e.target.value)}
-                    autoFocus
-                  />
-                </div>
-
                 {/* Issue Type & Priority */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -1320,7 +1297,7 @@ export default function GreenDetailPage() {
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs gap-1.5"
-                      disabled={!editFormData.title.trim() || generatingFixForObs}
+                      disabled={editFormData.issue_type === "other" || generatingFixForObs}
                       onClick={handleGenerateFixForEdit}
                     >
                       {generatingFixForObs ? (

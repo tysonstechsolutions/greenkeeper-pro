@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
 
     const prompt = `You are the turf management expert for Veterans Memorial Golf Course at Naval Station Great Lakes, IL (USDA Zone 5b-6a). The course has Creeping Bentgrass greens and Kentucky Bluegrass/Perennial Ryegrass fairways.
 
+IMPORTANT: All chemical spraying (herbicides, pesticides, insecticides, fungicides, algaecides, etc.) is handled by a contracted spray company this year. Do NOT instruct crew to apply chemicals directly. Instead, instruct them to "contact the spray contractor" to schedule any chemical applications.
+
 A ${priority || "normal"} priority issue has been reported on Hole ${hole_number || "?"}:
 - Issue: ${title}
 - Type: ${issueLabel}
@@ -34,7 +36,7 @@ ${description ? `- Details: ${description}` : ""}
 - Current date: ${new Date().toLocaleDateString()}
 
 Write clear, step-by-step fix instructions that a crew member can follow. Be specific about:
-1. What products/chemicals to use (with application rates if applicable)
+1. What products/chemicals to use (with application rates if applicable) — note that spraying is done by our contracted spray company
 2. Equipment needed
 3. Step-by-step process
 4. Timeline/frequency of treatment

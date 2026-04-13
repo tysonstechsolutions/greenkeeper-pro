@@ -101,7 +101,6 @@ export default function HoleDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState<FormStep>("photo");
   const [formData, setFormData] = useState({
-    title: "",
     description: "",
     fix_instructions: "",
     issue_type: "other" as HoleIssueType,
@@ -118,7 +117,6 @@ export default function HoleDetailPage() {
   const [selectedObs, setSelectedObs] = useState<HoleObservation | null>(null);
   const [editingObs, setEditingObs] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    title: "",
     description: "",
     fix_instructions: "",
     issue_type: "other" as HoleIssueType,
@@ -189,7 +187,7 @@ export default function HoleDetailPage() {
     setAnalyzeError(null);
     setDiagnosisResult(null);
     // Reset form data for new observation
-    setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+    setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
     setPhotoFile(null);
     setPhotoPreview(null);
   };
@@ -215,14 +213,15 @@ export default function HoleDetailPage() {
 
   // ── AI Generate Fix Instructions ──
   const handleGenerateFix = useCallback(async () => {
-    if (!formData.title.trim()) return;
+    if (formData.issue_type === "other") return;
     setGeneratingFix(true);
+    const title = issueTypeLabels[formData.issue_type] || formData.issue_type;
     try {
       const res = await fetch("/api/fix-instructions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: formData.title,
+          title,
           issue_type: formData.issue_type,
           priority: formData.priority,
           description: formData.description || undefined,
@@ -241,11 +240,11 @@ export default function HoleDetailPage() {
     } finally {
       setGeneratingFix(false);
     }
-  }, [formData.title, formData.issue_type, formData.priority, formData.description, holeNumber]);
+  }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
 
   // ── Submit Observation ──
   const handleSubmit = useCallback(async () => {
-    if (!pendingPin || !formData.title.trim()) return;
+    if (!pendingPin || formData.issue_type === "other") return;
     setSubmitting(true);
 
     let photoUrl: string | null = null;
@@ -259,7 +258,7 @@ export default function HoleDetailPage() {
       pin_y: pendingPin.y,
       issue_type: formData.issue_type,
       priority: formData.priority,
-      title: formData.title.trim(),
+      title: issueTypeLabels[formData.issue_type] || formData.issue_type,
       description: formData.description.trim() || null,
       fix_instructions: formData.fix_instructions.trim() || null,
       photo_url: photoUrl,
@@ -269,7 +268,7 @@ export default function HoleDetailPage() {
     if (result) {
       setShowForm(false);
       setPendingPin(null);
-      setFormData({ title: "", description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+      setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
       setPhotoFile(null);
       setPhotoPreview(null);
       setDiagnosisResult(null);
@@ -283,7 +282,6 @@ export default function HoleDetailPage() {
   // ── Edit saved observation ──
   const handleStartEdit = useCallback((obs: HoleObservation) => {
     setEditFormData({
-      title: obs.title,
       description: obs.description || "",
       fix_instructions: obs.fix_instructions || "",
       issue_type: obs.issue_type,
@@ -316,7 +314,7 @@ export default function HoleDetailPage() {
     setEditFormData((prev) => {
       const updated = { ...prev, [field]: value };
       const updates: Partial<HoleObservation> = {
-        title: updated.title.trim(),
+        title: issueTypeLabels[updated.issue_type as HoleIssueType] || updated.issue_type,
         description: updated.description.trim() || null,
         fix_instructions: updated.fix_instructions.trim() || null,
         issue_type: updated.issue_type,
@@ -333,7 +331,7 @@ export default function HoleDetailPage() {
     setSavingEdit(true);
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     const updates: Partial<HoleObservation> = {
-      title: editFormData.title.trim(),
+      title: issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type,
       description: editFormData.description.trim() || null,
       fix_instructions: editFormData.fix_instructions.trim() || null,
       issue_type: editFormData.issue_type,
@@ -352,12 +350,13 @@ export default function HoleDetailPage() {
 
   const handleGenerateFixForEdit = useCallback(async () => {
     setGeneratingFixForObs(true);
+    const title = issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type;
     try {
       const res = await fetch("/api/fix-instructions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: editFormData.title,
+          title,
           issue_type: editFormData.issue_type,
           priority: editFormData.priority,
           description: editFormData.description || undefined,
@@ -377,7 +376,7 @@ export default function HoleDetailPage() {
     } finally {
       setGeneratingFixForObs(false);
     }
-  }, [editFormData.title, editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber]);
+  }, [editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber]);
 
   // ── Create Task from Observation ──
   const handleCreateTask = useCallback(async (obs: HoleObservation) => {
@@ -899,18 +898,6 @@ export default function HoleDetailPage() {
                   </div>
                 )}
 
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label htmlFor="obs-title">Issue Title *</Label>
-                  <Input
-                    id="obs-title"
-                    placeholder="e.g., Brown patch near bunker"
-                    value={formData.title}
-                    onChange={(e) => setFormData((p) => ({ ...p, title: e.target.value }))}
-                    autoFocus
-                  />
-                </div>
-
                 {/* Issue Type & Priority */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -999,7 +986,7 @@ export default function HoleDetailPage() {
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs gap-1.5"
-                        disabled={!formData.title.trim() || generatingFix}
+                        disabled={formData.issue_type === "other" || generatingFix}
                         onClick={handleGenerateFix}
                       >
                         {generatingFix ? (
@@ -1023,7 +1010,7 @@ export default function HoleDetailPage() {
                 {/* Submit */}
                 <Button
                   className="w-full bg-[#1B4332] hover:bg-[#2D6A4F]"
-                  disabled={!formData.title.trim() || submitting}
+                  disabled={formData.issue_type === "other" || submitting}
                   onClick={handleSubmit}
                 >
                   {submitting ? (
@@ -1049,7 +1036,7 @@ export default function HoleDetailPage() {
             clearTimeout(autoSaveTimerRef.current);
             if (selectedObs) {
               const updates: Partial<HoleObservation> = {
-                title: editFormData.title.trim(),
+                title: issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type,
                 description: editFormData.description.trim() || null,
                 fix_instructions: editFormData.fix_instructions.trim() || null,
                 issue_type: editFormData.issue_type,
@@ -1322,16 +1309,6 @@ export default function HoleDetailPage() {
                   />
                 </div>
 
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label>Issue Title *</Label>
-                  <Input
-                    value={editFormData.title}
-                    onChange={(e) => updateEditField("title", e.target.value)}
-                    autoFocus
-                  />
-                </div>
-
                 {/* Issue Type & Priority */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -1416,7 +1393,7 @@ export default function HoleDetailPage() {
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs gap-1.5"
-                      disabled={!editFormData.title.trim() || generatingFixForObs}
+                      disabled={editFormData.issue_type === "other" || generatingFixForObs}
                       onClick={handleGenerateFixForEdit}
                     >
                       {generatingFixForObs ? (
