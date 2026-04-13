@@ -196,7 +196,7 @@ export default function EquipmentPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<EquipmentType | "all">("all");
-  const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "all">("all");
+  const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "parts_ordered" | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
 
@@ -231,8 +231,8 @@ export default function EquipmentPage() {
   // Calculate condition stats from current equipment array
   const conditionStats = calculateConditionStats(equipment);
 
-  // Handle stat card click
-  const handleConditionClick = (condition: EquipmentCondition | "all") => {
+  // Handle stat card click — toggle filter on/off
+  const handleConditionClick = (condition: EquipmentCondition | "parts_ordered" | "all") => {
     setConditionFilter((prev) => (prev === condition ? "all" : condition));
   };
 
@@ -273,6 +273,7 @@ export default function EquipmentPage() {
   // Filter equipment by condition
   const filteredEquipment = equipment.filter((item) => {
     if (conditionFilter === "all") return true;
+    if (conditionFilter === "parts_ordered") return item.needs_parts_ordered === true;
     return item.condition_status === conditionFilter;
   });
 
@@ -346,8 +347,8 @@ export default function EquipmentPage() {
           count={conditionStats.parts_ordered}
           color="#3b82f6"
           icon={Clock}
-          onClick={() => setConditionFilter("all")}
-          active={false}
+          onClick={() => handleConditionClick("parts_ordered")}
+          active={conditionFilter === "parts_ordered"}
         />
       </div>
 
