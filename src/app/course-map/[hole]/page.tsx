@@ -268,6 +268,9 @@ export default function HoleDetailPage() {
     let photoUrl: string | null = null;
     if (photoFile) {
       photoUrl = await uploadPhoto(photoFile);
+      if (!photoUrl) {
+        setFeedbackMsg({ type: "error", text: "Photo upload failed — saving observation without photo." });
+      }
     }
 
     const result = await createObservation({
@@ -604,7 +607,7 @@ export default function HoleDetailPage() {
               : "border-border"
           }`}
           onClick={handleImageTap}
-          onTouchEnd={isPlacingPin ? handleImageTap : undefined}
+          onTouchEnd={(isPlacingPin || movingObsId) ? handleImageTap : undefined}
         >
           {/* The hole image */}
           <div className="relative aspect-[4/5] sm:aspect-[3/4] md:aspect-[4/3] lg:aspect-[16/9] bg-gradient-to-b from-green-50 to-green-100/50">
@@ -832,6 +835,7 @@ export default function HoleDetailPage() {
                       src={obs.photo_url}
                       alt=""
                       className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
                   )}
                 </div>
@@ -1145,6 +1149,7 @@ export default function HoleDetailPage() {
                     src={selectedObs.photo_url}
                     alt="Issue photo"
                     className="w-full h-48 object-cover rounded-xl border border-border"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 )}
 

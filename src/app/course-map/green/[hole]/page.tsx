@@ -231,6 +231,9 @@ export default function GreenDetailPage() {
     let photoUrl: string | null = null;
     if (photoFile) {
       photoUrl = await uploadPhoto(photoFile);
+      if (!photoUrl) {
+        setFeedbackMsg({ type: "error", text: "Photo upload failed — saving observation without photo." });
+      }
     }
 
     const result = await createObservation({
@@ -692,6 +695,7 @@ export default function GreenDetailPage() {
                       src={obs.photo_url}
                       alt=""
                       className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
                   )}
                 </div>
@@ -1000,6 +1004,7 @@ export default function GreenDetailPage() {
                     src={selectedObs.photo_url}
                     alt="Issue photo"
                     className="w-full h-48 object-cover rounded-xl border border-border"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 )}
 

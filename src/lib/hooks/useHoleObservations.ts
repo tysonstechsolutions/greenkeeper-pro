@@ -203,12 +203,25 @@ export function useHoleObservations() {
   const uploadPhoto = useCallback(
     async (file: File): Promise<string | null> => {
       if (!user) return null;
-      const ext = file.name.split(".").pop();
+
+      // Derive extension from MIME type (camera captures often lack a proper filename)
+      const mimeToExt: Record<string, string> = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/heic": "heic",
+        "image/heif": "heif",
+      };
+      const ext = mimeToExt[file.type] || file.name.split(".").pop() || "jpg";
       const path = `${user.id}/${Date.now()}.${ext}`;
 
       const { error } = await supabase.storage
         .from("photos")
-        .upload(path, file, { upsert: true });
+        .upload(path, file, {
+          upsert: true,
+          contentType: file.type || "image/jpeg",
+        });
 
       if (error) {
         console.error("Photo upload error:", error);
