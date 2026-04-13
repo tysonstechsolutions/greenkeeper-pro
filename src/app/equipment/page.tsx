@@ -174,6 +174,20 @@ function EquipmentCard({
               )}
             </div>
 
+            {/* Parts needed detail */}
+            {item.needs_parts_ordered && item.parts_needed && (
+              <p className="text-sm text-orange-600 dark:text-orange-400 mt-1.5 line-clamp-2">
+                <span className="font-semibold">Parts:</span> {item.parts_needed}
+              </p>
+            )}
+
+            {/* Estimated repair cost */}
+            {item.needs_parts_ordered && item.estimated_repair_cost != null && item.estimated_repair_cost > 0 && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Est. cost: ${item.estimated_repair_cost.toLocaleString()}
+              </p>
+            )}
+
             {/* Hours */}
             {item.current_hours !== null && (
               <p className="text-sm text-muted-foreground mt-1.5">
