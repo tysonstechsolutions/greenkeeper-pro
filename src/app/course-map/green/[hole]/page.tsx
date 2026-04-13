@@ -982,21 +982,23 @@ export default function GreenDetailPage() {
           {selectedObs && !editingObs && (
             <>
               <SheetHeader>
-                <SheetTitle className="flex items-center gap-2">
+                <SheetTitle className="flex items-center gap-2 pr-8">
                   <span className="text-lg">{greenIssueTypeIcons[selectedObs.issue_type]}</span>
                   <span className="flex-1 truncate">{selectedObs.title}</span>
-                  {selectedObs.status !== "resolved" && (
+                </SheetTitle>
+                {selectedObs.status !== "resolved" && (
+                  <div className="flex items-center gap-2 mt-1">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-8 text-xs shrink-0"
+                      className="h-8 text-xs"
                       onClick={() => handleStartEdit(selectedObs)}
                     >
                       <Edit3 className="w-3.5 h-3.5 mr-1" />
                       Edit
                     </Button>
-                  )}
-                </SheetTitle>
+                  </div>
+                )}
               </SheetHeader>
 
               <div className="space-y-4 mt-4 pb-6">
