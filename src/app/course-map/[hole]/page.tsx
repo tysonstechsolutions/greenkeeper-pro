@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InlineCamera } from "@/components/ui/inline-camera";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -114,6 +115,7 @@ export default function HoleDetailPage() {
   });
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [showInlineCamera, setShowInlineCamera] = useState(false);
 
   // Persist pin state before camera opens (Android kills background tabs)
   const STORAGE_KEY = `hole-obs-pending-${holeNumber}`;
@@ -913,20 +915,13 @@ export default function HoleDetailPage() {
                     Attach a photo to help document the problem
                   </p>
 
-                  <label
+                  <button
                     className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md"
-                    onClick={savePinState}
+                    onClick={() => setShowInlineCamera(true)}
                   >
                     <Camera className="w-5 h-5" />
                     Open Camera
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={handlePhotoInputChange}
-                    />
-                  </label>
+                  </button>
 
                   <div className="mt-3 flex flex-col items-center gap-2">
                     <label className="text-xs text-muted-foreground underline cursor-pointer hover:text-foreground">
@@ -1587,6 +1582,16 @@ export default function HoleDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Inline Camera (getUserMedia — stays in-browser, no tab kill on Android) */}
+      <InlineCamera
+        open={showInlineCamera}
+        onCapture={(file) => {
+          setShowInlineCamera(false);
+          handlePhotoCaptured(file);
+        }}
+        onClose={() => setShowInlineCamera(false)}
+      />
     </div>
   );
 }

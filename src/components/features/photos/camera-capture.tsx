@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InlineCamera } from "@/components/ui/inline-camera";
 import {
   Select,
   SelectContent,
@@ -68,6 +69,7 @@ export function CameraCapture({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | Blob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showInlineCamera, setShowInlineCamera] = useState(false);
 
   // Form state
   const [photoType, setPhotoType] = useState<PhotoType>(defaultPhotoType);
@@ -253,12 +255,11 @@ export function CameraCapture({
 
       {/* Content */}
       <div className="p-4">
-        {/* Hidden file input */}
+        {/* Hidden file input (gallery only — camera uses InlineCamera) */}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture={isMobile ? "environment" : undefined}
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -273,18 +274,34 @@ export function CameraCapture({
         {/* Idle state - capture button */}
         {mode === "idle" && (
           <div className="flex flex-col items-center py-8">
-            <button
-              onClick={openCapture}
-              className="w-32 h-32 rounded-full bg-primary/10 hover:bg-primary/20 border-2 border-dashed border-primary/50 hover:border-primary flex flex-col items-center justify-center gap-2 transition-colors"
-            >
-              <ImagePlus className="w-10 h-10 text-primary" />
-              <span className="text-sm text-primary font-medium">
-                {isMobile ? "Take Photo" : "Select Photo"}
-              </span>
-            </button>
+            {isMobile ? (
+              <>
+                <button
+                  onClick={() => setShowInlineCamera(true)}
+                  className="w-32 h-32 rounded-full bg-primary/10 hover:bg-primary/20 border-2 border-dashed border-primary/50 hover:border-primary flex flex-col items-center justify-center gap-2 transition-colors"
+                >
+                  <Camera className="w-10 h-10 text-primary" />
+                  <span className="text-sm text-primary font-medium">Take Photo</span>
+                </button>
+                <button
+                  onClick={openCapture}
+                  className="mt-3 text-sm text-muted-foreground underline"
+                >
+                  Or choose from gallery
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={openCapture}
+                className="w-32 h-32 rounded-full bg-primary/10 hover:bg-primary/20 border-2 border-dashed border-primary/50 hover:border-primary flex flex-col items-center justify-center gap-2 transition-colors"
+              >
+                <ImagePlus className="w-10 h-10 text-primary" />
+                <span className="text-sm text-primary font-medium">Select Photo</span>
+              </button>
+            )}
             <p className="mt-4 text-sm text-muted-foreground text-center">
               {isMobile
-                ? "Tap to open camera or select from gallery"
+                ? "Take a photo or select from gallery"
                 : "Click to select an image from your computer"}
             </p>
           </div>
@@ -397,6 +414,17 @@ export function CameraCapture({
           </div>
         )}
       </div>
+
+      {/* Inline Camera (getUserMedia — stays in-browser on Android) */}
+      <InlineCamera
+        open={showInlineCamera}
+        onCapture={(file) => {
+          setShowInlineCamera(false);
+          const event = { target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>;
+          handleFileSelect(event);
+        }}
+        onClose={() => setShowInlineCamera(false)}
+      />
     </div>
   );
 }

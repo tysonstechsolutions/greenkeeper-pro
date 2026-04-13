@@ -349,6 +349,8 @@ export default function EquipmentDetailPage() {
         setEditDialogOpen(false);
         // Show success briefly then clear
         setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        setSaveError(equipmentError || "Failed to save equipment. Please try again.");
       }
     } catch (err) {
       console.error("Error in handleEditSubmit:", err);
