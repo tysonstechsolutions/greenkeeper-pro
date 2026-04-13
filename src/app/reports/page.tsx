@@ -378,7 +378,7 @@ export default function ReportsPage() {
 
   return (
     <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
-    <div className="p-4 md:p-6 pb-24">
+    <div className="p-4 md:p-6 pb-24 print:p-0 print:pb-0">
       {/* Toast Message */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
@@ -649,7 +649,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Report Content */}
-              <div ref={reportRef} className="bg-white p-6 rounded-lg border print:border-0">
+              <div ref={reportRef} className="bg-white p-6 rounded-lg border print:border-0 print:rounded-none print:shadow-none print:p-0">
                 {/* Daily Report View */}
                 {activeReport === "daily" && dailyReport && (
                   <DailyReportView report={dailyReport} />
@@ -790,7 +790,7 @@ function DailyReportView({ report }: { report: DailyReportData }) {
           <CardTitle className="text-lg">Tasks</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto print:overflow-visible">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
@@ -1003,7 +1003,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
           <CardTitle className="text-lg">Recent Maintenance Log</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto print:overflow-visible">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
@@ -1121,7 +1121,7 @@ function ChemicalReportView({ report }: { report: ChemicalReportData }) {
           <CardTitle className="text-lg">Application Log</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto print:overflow-visible">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">

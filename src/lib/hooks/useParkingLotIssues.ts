@@ -6,6 +6,8 @@ import type { ParkingLotIssue } from "@/types/database";
 
 export const issueTypeLabels: Record<string, string> = {
   pothole: "Pothole",
+  low_area: "Low Area",
+  badly_cracked: "Badly Cracked",
   crack: "Crack",
   drainage: "Drainage",
   erosion: "Erosion",
@@ -14,8 +16,22 @@ export const issueTypeLabels: Record<string, string> = {
   other: "Other",
 };
 
+export const issueTypeIcons: Record<string, string> = {
+  pothole: "🕳️",
+  low_area: "⬇️",
+  badly_cracked: "💥",
+  crack: "↗️",
+  drainage: "💧",
+  erosion: "🏜️",
+  marking: "🅿️",
+  curbing: "🧱",
+  other: "📍",
+};
+
 export const issueTypeColors: Record<string, string> = {
   pothole: "#DC2626",
+  low_area: "#854D0E",
+  badly_cracked: "#991B1B",
   crack: "#EA580C",
   drainage: "#2563EB",
   erosion: "#CA8A04",
@@ -78,6 +94,8 @@ export function useParkingLotIssues() {
     title: string;
     description?: string;
     location?: string;
+    pin_x?: number;
+    pin_y?: number;
     issue_type: string;
     severity: string;
     photos?: string[];
@@ -95,6 +113,8 @@ export function useParkingLotIssues() {
           title: issue.title,
           description: issue.description || null,
           location: issue.location || null,
+          pin_x: issue.pin_x ?? null,
+          pin_y: issue.pin_y ?? null,
           issue_type: issue.issue_type,
           severity: issue.severity,
           photos: issue.photos || [],

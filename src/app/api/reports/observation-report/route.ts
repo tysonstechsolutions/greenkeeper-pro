@@ -276,9 +276,15 @@ export async function GET(request: NextRequest) {
       doc.setTextColor(...WHITE);
       const titleText = `#${i + 1}  ${observation.title || "Untitled"}`;
       const maxTitleW = rightColWidth - 45;
-      const displayTitle = doc.getTextWidth(titleText) > maxTitleW
-        ? titleText.substring(0, 30) + "..."
-        : titleText;
+      let displayTitle = titleText;
+      if (doc.getTextWidth(titleText) > maxTitleW) {
+        // Progressively trim until it fits
+        let trimmed = titleText;
+        while (doc.getTextWidth(trimmed + "...") > maxTitleW && trimmed.length > 10) {
+          trimmed = trimmed.substring(0, trimmed.lastIndexOf(" ", trimmed.length - 2) || trimmed.length - 3);
+        }
+        displayTitle = trimmed + "...";
+      }
       doc.text(displayTitle, rightColX + 2, ry + 4.2);
 
       // Status badge on right

@@ -86,7 +86,7 @@ function MonthlyBoardReportContent() {
     MONTH_OPTIONS.find((m) => m.value === month)?.label ?? month;
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-6 pb-24 md:pb-6 space-y-6">
+    <div className="container mx-auto max-w-4xl px-4 py-6 pb-24 md:pb-6 space-y-6 print:p-0 print:pb-0 print:max-w-full">
       <div className="flex items-center gap-2 mb-2">
         <Link
           href="/reports"
