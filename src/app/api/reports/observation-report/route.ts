@@ -105,33 +105,25 @@ function loadGreenImage(holeNumber: number): string | null {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function renderHolePage(
+/**
+ * Renders the full page layout: header bar, left column (hole image + pins + stats).
+ * Called for the first page of each hole and again on any continuation pages.
+ */
+function renderPageLayout(
   doc: jsPDF,
   holeNumber: number,
   type: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   obs: any[],
-  photos: (string | null)[],
-  labels: Record<string, string>,
   profileName: string | null,
-  isFirstPage: boolean
+  pageLabel?: string
 ) {
-  const pageWidth = doc.internal.pageSize.getWidth(); // 297
-  const pageHeight = doc.internal.pageSize.getHeight(); // 210
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 12;
   const headerHeight = 28;
   const footerHeight = 12;
-
-  // Layout columns
   const leftColWidth = 115;
-  const gutter = 6;
-  const rightColX = margin + leftColWidth + gutter;
-  const rightColWidth = pageWidth - rightColX - margin;
-
-  if (!isFirstPage) {
-    doc.addPage();
-  }
 
   // ── HEADER ──
   doc.setFillColor(...BRAND_DARK);
@@ -142,14 +134,14 @@ function renderHolePage(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(...WHITE);
-  doc.text(`Hole ${holeNumber} ${type === "green" ? "Green" : "Fairway"} Report`, margin, 12);
+  const title = `Hole ${holeNumber} ${type === "green" ? "Green" : "Fairway"} Report`;
+  doc.text(pageLabel ? `${title} ${pageLabel}` : title, margin, 12);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND_GOLD);
   doc.text("Observation & Treatment Report", margin, 19);
 
-  // Date + author on right
   doc.setFontSize(8);
   doc.setTextColor(...WHITE);
   const dateStr = new Date().toLocaleDateString("en-US", {
@@ -169,10 +161,8 @@ function renderHolePage(
   const imgW = leftColWidth;
   const statsBoxH = 16;
   const statsGap = 3;
-  // Fill the entire left column: image stretches down to just above the stats box
   const imgH = contentBottom - contentTop - statsBoxH - statsGap;
 
-  // Load image
   const holeImage = type === "hole" ? loadHoleImage(holeNumber) : loadGreenImage(holeNumber);
 
   if (holeImage) {
@@ -249,6 +239,40 @@ function renderHolePage(
     doc.setTextColor(...GRAY_600);
     doc.text(stat.label, sx, statsY + 12, { align: "center" });
   });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderHolePage(
+  doc: jsPDF,
+  holeNumber: number,
+  type: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  obs: any[],
+  photos: (string | null)[],
+  labels: Record<string, string>,
+  profileName: string | null,
+  isFirstPage: boolean
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const headerHeight = 28;
+  const footerHeight = 12;
+
+  const leftColWidth = 115;
+  const gutter = 6;
+  const rightColX = margin + leftColWidth + gutter;
+  const rightColWidth = pageWidth - rightColX - margin;
+
+  const contentTop = headerHeight + 4;
+  const contentBottom = pageHeight - footerHeight;
+
+  // Render first page layout
+  if (!isFirstPage) {
+    doc.addPage();
+  }
+  let continuationCount = 0;
+  renderPageLayout(doc, holeNumber, type, obs, profileName);
 
   // ── RIGHT COLUMN: Observation cards ──
   let photoW: number, photoH: number;
@@ -276,9 +300,11 @@ function renderHolePage(
     // Estimate card height
     const cardMinH = photo ? Math.max(photoH + 14, 20) : 18;
     if (ry + cardMinH > contentBottom) {
-      // Overflow to new page (continuation) — no header/image, just cards
+      // Overflow: add a new page with the same header + hole image + stats
       doc.addPage();
-      ry = margin;
+      continuationCount++;
+      renderPageLayout(doc, holeNumber, type, obs, profileName, `(cont. ${continuationCount})`);
+      ry = contentTop;
     }
 
     // ── Card header bar ──
