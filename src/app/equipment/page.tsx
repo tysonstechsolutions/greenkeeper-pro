@@ -42,7 +42,11 @@ import {
   type EquipmentFilters,
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/database";
+
+// Per-equipment summary of rows from the `equipment_parts` table.
+type PartsSummary = { needed: number; ordered: number };
 
 // Equipment type icons (simplified)
 function getEquipmentIcon(_type: EquipmentType) {
@@ -84,14 +88,35 @@ function StatCard({
   );
 }
 
-// Calculate condition stats from equipment array
-function calculateConditionStats(equipment: Equipment[]) {
+// Returns true if this equipment has at least one part row with status "needed",
+// or uses the legacy `parts_needed`/`needs_parts_ordered` columns to indicate
+// parts are required but not yet ordered.
+function hasPartsNeeded(eq: Equipment, parts: Map<string, PartsSummary>): boolean {
+  const summary = parts.get(eq.id);
+  if (summary && summary.needed > 0) return true;
+  // Legacy data (before equipment_parts table existed)
+  return !!eq.parts_needed && !eq.needs_parts_ordered;
+}
+
+// Returns true if this equipment has at least one part row with status "ordered",
+// or the legacy `needs_parts_ordered` flag is set.
+function hasPartsOrdered(eq: Equipment, parts: Map<string, PartsSummary>): boolean {
+  const summary = parts.get(eq.id);
+  if (summary && summary.ordered > 0) return true;
+  return eq.needs_parts_ordered === true;
+}
+
+// Calculate condition stats from equipment array + equipment_parts rollup.
+function calculateConditionStats(
+  equipment: Equipment[],
+  parts: Map<string, PartsSummary>
+) {
   return {
     good: equipment.filter((eq) => eq.condition_status === "good").length,
     needs_repair: equipment.filter((eq) => eq.condition_status === "needs_repair").length,
     beyond_repair: equipment.filter((eq) => eq.condition_status === "beyond_repair").length,
-    parts_needed: equipment.filter((eq) => eq.parts_needed && !eq.needs_parts_ordered).length,
-    parts_ordered: equipment.filter((eq) => eq.needs_parts_ordered === true).length,
+    parts_needed: equipment.filter((eq) => hasPartsNeeded(eq, parts)).length,
+    parts_ordered: equipment.filter((eq) => hasPartsOrdered(eq, parts)).length,
   };
 }
 
@@ -217,6 +242,37 @@ export default function EquipmentPage() {
   const [conditionFilter, setConditionFilter] = useState<EquipmentCondition | "parts_needed" | "parts_ordered" | "all">("all");
   const [showFilters, setShowFilters] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [partsByEquipment, setPartsByEquipment] = useState<Map<string, PartsSummary>>(() => new Map());
+
+  // Fetch equipment_parts rollup (needed/ordered counts per equipment).
+  // This is the source of truth for Parts Needed / Parts Ordered stats.
+  const fetchPartsSummary = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data, error: partsErr } = await supabase
+        .from("equipment_parts")
+        .select("equipment_id, status")
+        .in("status", ["needed", "ordered"]);
+      if (partsErr) throw partsErr;
+      const map = new Map<string, PartsSummary>();
+      for (const row of (data || []) as { equipment_id: string; status: string }[]) {
+        const summary = map.get(row.equipment_id) || { needed: 0, ordered: 0 };
+        if (row.status === "needed") summary.needed += 1;
+        else if (row.status === "ordered") summary.ordered += 1;
+        map.set(row.equipment_id, summary);
+      }
+      setPartsByEquipment(map);
+    } catch (err) {
+      console.error("Failed to fetch equipment_parts summary:", err);
+      // Non-fatal — dashboard still works, counts just fall back to legacy fields.
+    }
+  }, []);
+
+  // Refresh parts summary whenever the page loads and whenever the equipment
+  // list refreshes (e.g., after user edits a row and comes back).
+  useEffect(() => {
+    fetchPartsSummary();
+  }, [fetchPartsSummary, equipment.length]);
 
   // Check if user can add equipment — uses profile.role from profiles table
   const equipmentRoles = ["super", "asst_super", "foreman", "mechanic", "director"];
@@ -246,8 +302,8 @@ export default function EquipmentPage() {
     return () => clearTimeout(timeout);
   }, [applyFilters]);
 
-  // Calculate condition stats from current equipment array
-  const conditionStats = calculateConditionStats(equipment);
+  // Calculate condition stats from current equipment array + live parts data
+  const conditionStats = calculateConditionStats(equipment, partsByEquipment);
 
   // Handle stat card click — toggle filter on/off
   const handleConditionClick = (condition: EquipmentCondition | "parts_needed" | "parts_ordered" | "all") => {
@@ -291,8 +347,8 @@ export default function EquipmentPage() {
   // Filter equipment by condition
   const filteredEquipment = equipment.filter((item) => {
     if (conditionFilter === "all") return true;
-    if (conditionFilter === "parts_needed") return !!item.parts_needed && !item.needs_parts_ordered;
-    if (conditionFilter === "parts_ordered") return item.needs_parts_ordered === true;
+    if (conditionFilter === "parts_needed") return hasPartsNeeded(item, partsByEquipment);
+    if (conditionFilter === "parts_ordered") return hasPartsOrdered(item, partsByEquipment);
     return item.condition_status === conditionFilter;
   });
 
