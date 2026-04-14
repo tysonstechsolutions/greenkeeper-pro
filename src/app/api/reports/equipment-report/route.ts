@@ -45,15 +45,55 @@ function s(val: unknown, fallback = "—"): string {
   return String(val);
 }
 
-async function fetchPhoto(url: string): Promise<string | null> {
+async function fetchPhotoDirect(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
+    if (buf.byteLength === 0) return null;
     const b64 = Buffer.from(buf).toString("base64");
     const ct = res.headers.get("content-type") || "image/jpeg";
     return `data:${ct};base64,${b64}`;
   } catch { return null; }
+}
+
+/** Extract storage path from a Supabase public URL. */
+function extractStoragePath(publicUrl: string): string | null {
+  const marker = "/storage/v1/object/public/photos/";
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return publicUrl.substring(idx + marker.length);
+}
+
+/**
+ * Download a photo through the authenticated Supabase client, falling back
+ * to a direct public-URL fetch. Mirrors the pattern in observation-report —
+ * required because the "photos" bucket may require auth even when served as
+ * a public URL.
+ */
+async function fetchPhoto(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  photoUrl: string
+): Promise<string | null> {
+  const storagePath = extractStoragePath(photoUrl);
+  if (storagePath) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("photos")
+        .download(storagePath);
+      if (!error && data) {
+        const buf = await data.arrayBuffer();
+        if (buf.byteLength > 0) {
+          const b64 = Buffer.from(buf).toString("base64");
+          const ct = data.type || "image/jpeg";
+          return `data:${ct};base64,${b64}`;
+        }
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return fetchPhotoDirect(photoUrl);
 }
 
 export async function GET(request: NextRequest) {
@@ -124,7 +164,7 @@ export async function GET(request: NextRequest) {
     const fetches = items.map(async (eq: any) => {
       const photoUrl = (eq.photos && eq.photos.length > 0) ? eq.photos[0] : eq.photo_url;
       if (photoUrl) {
-        const data = await fetchPhoto(photoUrl);
+        const data = await fetchPhoto(supabase, photoUrl);
         photoMap.set(eq.id, data);
       }
     });
