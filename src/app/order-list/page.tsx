@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Trash2, Check } from 'lucide-react';
+import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Trash2, Check, Wrench } from 'lucide-react';
+import Link from 'next/link';
 
 import {
   Card,
@@ -37,8 +38,9 @@ import {
   orderPriorityColors,
   orderStatusLabels,
   orderStatusColors,
+  type DisplayOrderItem,
 } from '@/lib/hooks/useOrderItems';
-import type { OrderItem, OrderItemStatus, OrderCategory } from '@/types/database';
+import type { OrderItemStatus, OrderCategory } from '@/types/database';
 
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -687,7 +689,7 @@ export default function OrderListPage() {
 }
 
 interface OrderItemCardProps {
-  item: OrderItem;
+  item: DisplayOrderItem;
   onMarkOrdered?: () => void;
   onMarkReceived?: () => void;
   onDelete: () => void;
@@ -699,32 +701,53 @@ function OrderItemCard({
   onMarkReceived,
   onDelete,
 }: OrderItemCardProps) {
+  const isEquipmentPart = item.source === 'equipment_part';
   return (
     <Card className="flex flex-col overflow-hidden transition-shadow hover:shadow-lg">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <CardTitle className="text-base">{item.item_name}</CardTitle>
+            {/* Show source link for equipment-part items */}
+            {isEquipmentPart && item.equipment_id && (
+              <Link
+                href={`/equipment/${item.equipment_id}`}
+                className="mt-1 inline-flex items-center gap-1 text-xs text-[#1B4332] hover:underline"
+              >
+                <Wrench className="h-3 w-3" />
+                {item.equipment_name || 'Equipment'}
+              </Link>
+            )}
           </div>
-          <button
-            onClick={onDelete}
-            className="text-gray-400 hover:text-red-600 transition-colors"
-            title="Delete item"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {/* Equipment parts must be deleted from the equipment page — hide the trash icon */}
+          {!isEquipmentPart && (
+            <button
+              onClick={onDelete}
+              className="text-gray-400 hover:text-red-600 transition-colors"
+              title="Delete item"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Badges */}
         <div className="mt-3 flex flex-wrap gap-2">
-          <Badge
-            style={{
-              backgroundColor: orderCategoryColors[item.category],
-              color: '#fff',
-            }}
-          >
-            {orderCategoryLabels[item.category]}
-          </Badge>
+          {isEquipmentPart ? (
+            <Badge className="bg-[#1B4332] text-white">
+              <Wrench className="mr-1 h-3 w-3" />
+              Equipment Part
+            </Badge>
+          ) : (
+            <Badge
+              style={{
+                backgroundColor: orderCategoryColors[item.category],
+                color: '#fff',
+              }}
+            >
+              {orderCategoryLabels[item.category]}
+            </Badge>
+          )}
           <Badge
             style={{
               backgroundColor: orderPriorityColors[item.priority],
