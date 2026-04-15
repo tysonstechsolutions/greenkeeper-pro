@@ -29,21 +29,51 @@ interface Message {
   timestamp: Date;
 }
 
+// ── Tool-name → user-friendly activity label ────────────────────────────────
+
+const TOOL_LABELS: Record<string, string> = {
+  get_daily_snapshot: "Checking today's snapshot",
+  get_recent_observations: "Reviewing recent observations",
+  get_fy26_assets_summary: "Looking up inventory",
+  search_tasks: "Searching tasks",
+  search_equipment: "Searching equipment",
+  search_chemicals: "Searching chemicals",
+  get_weather_history: "Checking weather history",
+  search_budget: "Checking budget",
+  search_staff: "Looking up staff",
+  get_schedule: "Checking schedule",
+  search_order_items: "Checking the order list",
+  create_task: "Creating a task",
+  update_task: "Updating the task",
+  add_order_item: "Adding to the order list",
+  update_order_item: "Updating the order item",
+  report_course_issue: "Reporting the issue",
+  update_equipment_status: "Updating equipment status",
+};
+
+function toolLabel(name: string): string {
+  return TOOL_LABELS[name] || `Running ${name.replace(/_/g, " ")}`;
+}
+
 // ── Example prompts ─────────────────────────────────────────────────────────
 
 const EXAMPLE_PROMPTS = [
+  "What's going on today?",
+  "Give me a morning briefing",
   "Sprinkler head broken on #7 green, get that fixed",
   "We need to order more bunker sand",
   "What tasks are due today?",
+  "Any fungus or disease we're tracking on the course?",
+  "How many FY26 assets are MIA?",
   "Pothole on the cart path between 3 and 4",
   "Mark the mowing on #1-9 as done",
   "Show me equipment that needs service",
   "Add reel blades for triplex #2 to the order list",
   "The triplex is making a weird noise, flag it for service",
-  "What chemicals did we apply this week?",
   "Who is working today?",
   "Bathroom in the clubhouse needs cleaning",
   "What's on the order list right now?",
+  "Any dry spots reported this week?",
 ];
 
 function getRandomPrompts(count: number): string[] {
@@ -73,6 +103,7 @@ export default function AssistantPage() {
     previewUrl: string;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [toolActivity, setToolActivity] = useState<string | null>(null);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -163,8 +194,40 @@ export default function AssistantPage() {
         inputRef.current.style.height = "auto";
       }
 
+      // Create a placeholder assistant message that we'll stream into.
+      const assistantId = crypto.randomUUID();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+        },
+      ]);
+
+      // Helper: append text to the streaming assistant message.
+      const appendToAssistant = (delta: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: m.content + delta } : m
+          )
+        );
+      };
+
+      // Helper: replace the assistant message with an error body.
+      const replaceAssistantWithError = (content: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content, error: true, timestamp: new Date() }
+              : m
+          )
+        );
+      };
+
       try {
-        // Build history from previous messages (skip error messages)
+        // Build history from PRIOR messages only (skip the empty placeholder + errors).
         const history = messages
           .filter((m) => !m.error)
           .map((m) => ({ role: m.role, content: m.content }));
@@ -186,45 +249,93 @@ export default function AssistantPage() {
             photoStoragePath: photoStoragePath || undefined,
             photoPublicUrl: photoPublicUrl || undefined,
           }),
-          signal: AbortSignal.timeout(120000), // 2 min for AI responses with tool use
+          signal: AbortSignal.timeout(120000),
         });
 
-        const data = await res.json();
-
+        // If the server errored out before streaming began, it returns JSON.
         if (!res.ok) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: data.error || "Something went wrong. Please try again.",
-              error: true,
-              timestamp: new Date(),
-            },
-          ]);
+          let errMsg = "Something went wrong. Please try again.";
+          try {
+            const data = await res.json();
+            if (data?.error) errMsg = data.error;
+          } catch {
+            // response was not JSON
+          }
+          replaceAssistantWithError(errMsg);
           return;
         }
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: data.reply,
-            timestamp: new Date(),
-          },
-        ]);
-      } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: "Network error — check your connection and try again.",
-            error: true,
-            timestamp: new Date(),
-          },
-        ]);
+        if (!res.body) {
+          replaceAssistantWithError("Empty response from the assistant.");
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamError: string | null = null;
+        let gotAnyText = false;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events separated by blank lines.
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || "";
+
+          for (const rawEvent of events) {
+            if (!rawEvent.trim()) continue;
+            let eventType = "";
+            let dataStr = "";
+            for (const line of rawEvent.split("\n")) {
+              if (line.startsWith(":")) continue; // SSE comment (heartbeat)
+              if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+              else if (line.startsWith("data: ")) dataStr += line.slice(6);
+            }
+            if (!eventType || !dataStr) continue;
+
+            let data: { delta?: string; name?: string; status?: string; message?: string };
+            try {
+              data = JSON.parse(dataStr);
+            } catch {
+              continue;
+            }
+
+            if (eventType === "text" && typeof data.delta === "string") {
+              setToolActivity(null);
+              appendToAssistant(data.delta);
+              gotAnyText = true;
+            } else if (eventType === "tool" && data.name) {
+              if (data.status === "start") {
+                setToolActivity(toolLabel(data.name));
+              } else if (data.status === "done") {
+                // Keep the label visible briefly so fast tools still show.
+                // It'll clear on the next text delta.
+              }
+            } else if (eventType === "error") {
+              streamError = data.message || "AI service error.";
+            } else if (eventType === "done") {
+              // No-op; stream will end naturally.
+            }
+          }
+        }
+
+        setToolActivity(null);
+
+        if (streamError && !gotAnyText) {
+          replaceAssistantWithError(streamError);
+        } else if (!gotAnyText) {
+          replaceAssistantWithError("I wasn't able to generate a response. Please try again.");
+        } else if (streamError) {
+          // We got partial text, then an error. Append a note.
+          appendToAssistant(`\n\n_(Note: ${streamError})_`);
+        }
+      } catch (err) {
+        console.error("Assistant stream error:", err);
+        setToolActivity(null);
+        replaceAssistantWithError("Network error — check your connection and try again.");
       } finally {
         setLoading(false);
       }
@@ -396,22 +507,40 @@ export default function AssistantPage() {
           </div>
         ))}
 
-        {/* Typing indicator */}
-        {loading && (
-          <div className="flex gap-3 items-start">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
-              <Bot className="w-4 h-4 text-white" />
-            </div>
-            <div className="bg-card border border-border rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-1.5">
-                <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
-                <span className="text-sm text-muted-foreground">
-                  {uploading ? "Uploading photo..." : "Working on it..."}
-                </span>
+        {/*
+         * Activity indicator — shown only before the first token has streamed,
+         * or while a tool is actively running. Once text is flowing the
+         * streaming message bubble itself is the visual signal.
+         */}
+        {(() => {
+          if (!loading && !uploading) return null;
+          const last = messages[messages.length - 1];
+          const streamingHasText =
+            last?.role === "assistant" && !last.error && last.content.length > 0;
+
+          // If pure text is streaming and no tool is running, the bubble shows progress.
+          if (streamingHasText && !toolActivity && !uploading) return null;
+
+          const label = uploading
+            ? "Uploading photo..."
+            : toolActivity
+              ? `${toolActivity}...`
+              : "Thinking...";
+
+          return (
+            <div className="flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+                <Bot className="w-4 h-4 text-white" />
+              </div>
+              <div className="bg-card border border-border rounded-2xl px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                  <span className="text-sm text-muted-foreground">{label}</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <div ref={messagesEndRef} />
       </div>

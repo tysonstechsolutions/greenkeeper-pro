@@ -3,7 +3,6 @@
 import Link from "next/link";
 import {
   Wrench,
-  FlaskConical,
   Camera,
   Droplets,
   Map,
@@ -31,6 +30,7 @@ import {
   Leaf,
   ClipboardCheck,
   Bot,
+  Archive,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -62,7 +62,6 @@ const leadershipQuickAccess: QuickItem[] = [
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
-  { href: "/chemicals", label: "Chemicals", icon: FlaskConical, color: "from-violet-500 to-purple-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/briefing", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
@@ -92,6 +91,7 @@ const leadershipAdmin: ListItem[] = [
   { href: "/environmental", label: "Environmental", description: "EPA/NPDES compliance", icon: Leaf, iconColor: "text-green-600", bgColor: "bg-green-500/10" },
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen, iconColor: "text-orange-600", bgColor: "bg-orange-500/10" },
   { href: "/inspections", label: "Inspections", description: "Command readiness", icon: ClipboardCheck, iconColor: "text-indigo-600", bgColor: "bg-indigo-500/10" },
+  { href: "/assets", label: "FY26 Assets", description: "Annual inventory (AI)", icon: Archive, iconColor: "text-amber-700", bgColor: "bg-amber-500/10" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -105,7 +105,6 @@ const foremanQuickAccess: QuickItem[] = [
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
-  { href: "/chemicals", label: "Chemicals", icon: FlaskConical, color: "from-violet-500 to-purple-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/briefing", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },

@@ -288,6 +288,59 @@ const TOOLS = [
       required: ["equipment_id"],
     },
   },
+  {
+    name: "get_recent_observations",
+    description:
+      "Get recent turf/course observations logged by crew — fungus/disease, dry/wet spots, bare spots, weed pressure, pest damage, irrigation issues, etc. Use this to assess course health, spot disease patterns, or answer questions like 'what issues are we tracking?' or 'any fungus problems lately?'. Returns title, hole, issue type, priority, status, and date reported.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        days_back: { type: "number", description: "How many days of history to include (default 7, max 30)" },
+        issue_type: {
+          type: "string",
+          enum: ["fungus_disease","dry_spot","wet_area","bare_spot","weed_pressure","pest_damage","mechanical_damage","drainage","bunker_issue","tree_issue","irrigation_issue","turf_thin","algae","frost_damage","other"],
+          description: "Filter to one type of observation",
+        },
+        status: {
+          type: "string",
+          enum: ["open","in_progress","resolved","monitoring"],
+          description: "Filter by status (default: all non-resolved)",
+        },
+        hole_number: { type: "number", description: "Specific hole 1-18" },
+        limit: { type: "number", description: "Max results (default 25, max 50)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_daily_snapshot",
+    description:
+      "One-shot situational awareness: returns a compact summary of TODAY's pending tasks, equipment needing service, open course/parking/clubhouse issues, and MIA assets. Use this when the user asks 'what's going on today?', 'give me a briefing', 'what needs attention?', or at the start of a conversation to orient yourself. Much faster than calling 4 separate search tools.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_fy26_assets_summary",
+    description:
+      "Summary of FY26 annual inventory assets by status (Present / MIA / Unverified / Disposed) and site (7009 Golf Course, 7010 Maintenance). Use when the user asks about inventory status, MIA counts, missing equipment, or annual inventory progress. Also supports searching specific assets by description or serial.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        search: { type: "string", description: "Search description / asset # / serial to list matching assets" },
+        status: {
+          type: "string",
+          enum: ["verified_present","mia","unverified","disposed"],
+          description: "Filter asset list to one status",
+        },
+        site: { type: "string", enum: ["7009","7010"], description: "Filter to one site" },
+        limit: { type: "number", description: "Max results when listing (default 20, max 50)" },
+      },
+      required: [],
+    },
+  },
 ];
 
 // ── Tool execution ──────────────────────────────────────────────────────────
@@ -769,6 +822,214 @@ async function executeTool(
         return `✅ Equipment updated!\n• ${data.name}\n• Status: ${data.status}\n• Condition: ${data.condition_status}`;
       }
 
+      case "get_recent_observations": {
+        const daysBack = Math.min(Math.max(input.days_back || 7, 1), 30);
+        const since = new Date(Date.now() - daysBack * 86400000).toISOString();
+        const limit = Math.min(input.limit || 25, 50);
+
+        let query = supabase
+          .from("hole_observations")
+          .select("id, hole_number, issue_type, priority, status, title, description, created_at")
+          .gte("created_at", since)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (input.issue_type) query = query.eq("issue_type", input.issue_type);
+        if (input.hole_number) query = query.eq("hole_number", input.hole_number);
+        if (input.status) {
+          query = query.eq("status", input.status);
+        } else {
+          query = query.neq("status", "resolved");
+        }
+
+        const { data, error } = await query;
+        if (error) return `Error fetching observations: ${error.message}`;
+        if (!data || data.length === 0) {
+          return `No observations in the last ${daysBack} days${input.issue_type ? ` for ${input.issue_type}` : ""}.`;
+        }
+
+        // Summarize by issue_type for pattern recognition
+        const counts: Record<string, number> = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data.forEach((o: any) => {
+          counts[o.issue_type] = (counts[o.issue_type] || 0) + 1;
+        });
+        const summary = Object.entries(counts)
+          .sort(([, a], [, b]) => b - a)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ");
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lines = data.map((o: any) => {
+          const date = new Date(o.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          return `• [${date}] Hole ${o.hole_number} — ${o.issue_type} (${o.priority}, ${o.status}): ${o.title}${o.description ? ` — ${o.description.substring(0, 80)}` : ""}`;
+        });
+        return `Observations in last ${daysBack} days (${data.length} total — ${summary}):\n${lines.join("\n")}`;
+      }
+
+      case "get_daily_snapshot": {
+        const today = new Date().toISOString().slice(0, 10);
+        const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+
+        const [tasksRes, equipRes, courseIssuesRes, parkingRes, clubhouseRes, miaRes] = await Promise.all([
+          supabase
+            .from("tasks")
+            .select("id, title, priority, category, due_date, status")
+            .in("status", ["pending", "in_progress"])
+            .lte("due_date", tomorrow)
+            .order("priority", { ascending: false })
+            .limit(15),
+          supabase
+            .from("equipment")
+            .select("id, name, status, condition_status")
+            .in("status", ["needs_service", "in_repair", "out_of_service"])
+            .limit(15),
+          supabase
+            .from("hole_observations")
+            .select("id, hole_number, issue_type, priority, title")
+            .neq("status", "resolved")
+            .gte("created_at", sevenDaysAgo)
+            .order("priority", { ascending: false })
+            .limit(10),
+          supabase
+            .from("parking_lot_issues")
+            .select("id, title, severity")
+            .eq("status", "open")
+            .limit(10),
+          supabase
+            .from("clubhouse_issues")
+            .select("id, title, priority")
+            .eq("status", "open")
+            .limit(10),
+          supabase
+            .from("fy26_assets")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "mia"),
+        ]);
+
+        const sections: string[] = [];
+        sections.push(`📅 SNAPSHOT for ${today}`);
+
+        const tasks = tasksRes.data || [];
+        if (tasks.length > 0) {
+          sections.push(`\n🗒️  Pending tasks due by tomorrow (${tasks.length}):`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          tasks.slice(0, 8).forEach((t: any) =>
+            sections.push(`  • [${t.priority}] ${t.title} (${t.category}, due ${t.due_date})`)
+          );
+          if (tasks.length > 8) sections.push(`  ...and ${tasks.length - 8} more`);
+        } else {
+          sections.push(`\n🗒️  No pending tasks due today/tomorrow.`);
+        }
+
+        const equip = equipRes.data || [];
+        if (equip.length > 0) {
+          sections.push(`\n🔧 Equipment needing attention (${equip.length}):`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          equip.slice(0, 6).forEach((e: any) =>
+            sections.push(`  • ${e.name} — ${e.status}${e.condition_status ? `, ${e.condition_status}` : ""}`)
+          );
+          if (equip.length > 6) sections.push(`  ...and ${equip.length - 6} more`);
+        }
+
+        const obs = courseIssuesRes.data || [];
+        if (obs.length > 0) {
+          sections.push(`\n🌱 Open course observations (last 7 days, ${obs.length}):`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          obs.slice(0, 6).forEach((o: any) =>
+            sections.push(`  • [${o.priority}] Hole ${o.hole_number}: ${o.title} (${o.issue_type})`)
+          );
+        }
+
+        const parking = parkingRes.data || [];
+        const clubhouse = clubhouseRes.data || [];
+        if (parking.length > 0 || clubhouse.length > 0) {
+          sections.push(`\n🏗️  Open facility issues:`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          parking.forEach((p: any) => sections.push(`  • Parking — [${p.severity}] ${p.title}`));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          clubhouse.forEach((c: any) => sections.push(`  • Clubhouse — [${c.priority}] ${c.title}`));
+        }
+
+        const miaCount = miaRes.count || 0;
+        if (miaCount > 0) {
+          sections.push(`\n📦 FY26 inventory: ${miaCount} asset${miaCount === 1 ? "" : "s"} currently flagged MIA.`);
+        }
+
+        if (tasks.length === 0 && equip.length === 0 && obs.length === 0 && parking.length === 0 && clubhouse.length === 0) {
+          sections.push(`\n✅ All quiet. No open tasks, equipment issues, or facility issues.`);
+        }
+
+        return sections.join("\n");
+      }
+
+      case "get_fy26_assets_summary": {
+        // If caller provides filters, return a list. Otherwise return counts by status & site.
+        const hasFilters = !!(input.search || input.status || input.site);
+
+        if (hasFilters) {
+          const limit = Math.min(input.limit || 20, 50);
+          let query = supabase
+            .from("fy26_assets")
+            .select("id, site, asset_number, description, manufacturer, model_text, serial_number, status, original_value")
+            .order("site", { ascending: true })
+            .order("asset_number", { ascending: true })
+            .limit(limit);
+
+          if (input.status) query = query.eq("status", input.status);
+          if (input.site) query = query.eq("site", input.site);
+          if (input.search) {
+            const term = `%${input.search}%`;
+            query = query.or(
+              `description.ilike.${term},asset_number.ilike.${term},serial_number.ilike.${term},model_text.ilike.${term},manufacturer.ilike.${term}`
+            );
+          }
+
+          const { data, error } = await query;
+          if (error) return `Error searching assets: ${error.message}`;
+          if (!data || data.length === 0) return `No assets matched the filters.`;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return data.map((a: any) =>
+            `• [${a.status}] Site ${a.site} #${a.asset_number} — ${a.description}${a.manufacturer ? ` (${a.manufacturer})` : ""}${a.serial_number ? `, SN ${a.serial_number}` : ""}`
+          ).join("\n");
+        }
+
+        // No filters: return rollup.
+        const { data, error } = await supabase
+          .from("fy26_assets")
+          .select("site, status");
+        if (error) return `Error fetching assets summary: ${error.message}`;
+        if (!data) return `No asset inventory records found.`;
+
+        const totals = { verified_present: 0, mia: 0, unverified: 0, disposed: 0 };
+        const bySite: Record<string, typeof totals> = {
+          "7009": { verified_present: 0, mia: 0, unverified: 0, disposed: 0 },
+          "7010": { verified_present: 0, mia: 0, unverified: 0, disposed: 0 },
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data.forEach((a: any) => {
+          if (a.status in totals) totals[a.status as keyof typeof totals]++;
+          if (a.site in bySite && a.status in bySite[a.site]) {
+            bySite[a.site][a.status as keyof typeof totals]++;
+          }
+        });
+
+        const lines = [
+          `📦 FY26 Inventory Summary (${data.length} total assets):`,
+          `  • Present (located): ${totals.verified_present}`,
+          `  • MIA (missing):     ${totals.mia}`,
+          `  • Unverified:        ${totals.unverified}`,
+          `  • Disposed:          ${totals.disposed}`,
+          ``,
+          `By site:`,
+          `  • Site 7009 (Golf Course):   Present ${bySite["7009"].verified_present}, MIA ${bySite["7009"].mia}`,
+          `  • Site 7010 (Maintenance):   Present ${bySite["7010"].verified_present}, MIA ${bySite["7010"].mia}`,
+        ];
+        return lines.join("\n");
+      }
+
       default:
         return `Unknown tool: ${toolName}`;
     }
@@ -783,30 +1044,83 @@ async function executeTool(
 
 const SYSTEM_PROMPT = `You are the AI assistant for GreenKeeper Pro, a golf course management app used at Veterans Memorial Golf Course, Naval Station Great Lakes, Illinois.
 
-You are the superintendent's right-hand tool. When they tell you something needs to happen, DO IT — don't tell them to go to another page. You have full read and write access.
+You are the superintendent's right-hand tool. When they tell you something needs to happen, DO IT — don't tell them to go to another page. You have full read and write access via tools.
 
-CAPABILITIES:
-- Search and look up: tasks, equipment, chemicals, weather, budget, staff, schedules, order items
-- Create: tasks, order items, course/parking/clubhouse issues
-- Update: tasks (status, priority, notes), order items (status, vendor), equipment (status, condition)
+═══════════════════════════════════════════════
+CAPABILITIES
+═══════════════════════════════════════════════
+Read: tasks, equipment, chemicals, weather, budget, staff, schedules, order items, course observations (turf issues), facility issues (parking/clubhouse), FY26 inventory assets.
+Create: tasks, order items, course / parking / clubhouse issues.
+Update: tasks (status, priority, notes), order items (status, vendor), equipment (status, condition).
 
-HOW TO HANDLE REQUESTS:
-1. When someone says something needs to be done (e.g., "we need to fix the sprinkler on 7"), CREATE A TASK for it immediately.
-2. When someone says they need something ordered (e.g., "we need more bunker sand"), ADD IT TO THE ORDER LIST immediately.
-3. When someone reports a problem (e.g., "there's a pothole by the cart barn"), REPORT THE ISSUE immediately.
-4. When someone says to mark something done, UPDATE THE TASK STATUS to completed.
-5. When they ask about data, LOOK IT UP with the search tools first. Don't guess.
+═══════════════════════════════════════════════
+TOOL-USE STRATEGY — pick the right tool
+═══════════════════════════════════════════════
+• "What's going on today?" / "Give me a briefing" / "What needs attention?"
+  → Use get_daily_snapshot FIRST. It's one call, returns tasks+equipment+issues+MIA inventory in one shot. Then synthesize the answer. Don't call 4 separate search tools when this exists.
 
-IMPORTANT RULES:
-1. Always use tools to look up or write real data. Never make up information.
-2. Keep answers concise — this is used on a phone.
-3. When you create or update something, confirm what you did with the details.
-4. If you need to find a task/item before updating it, search first, then update.
-5. For chemical/pesticide questions, mention Illinois RUP compliance requirements when relevant.
-8. IMPORTANT: All chemical spraying (herbicides, pesticides, insecticides, fungicides, algaecides, etc.) is handled by a contracted spray company this year. Do NOT recommend that crew apply chemicals directly. Any spraying needs should reference "contacting the spray contractor" to schedule the application.
-6. When the user says "today", use the current date.
-7. Use the report_course_issue tool for problems on the course — it automatically routes to the right table (parking_lot_issues, clubhouse_issues, or tasks).
+• "Any disease / fungus / dry spots / weed pressure lately?" / "What issues are we tracking on the course?"
+  → Use get_recent_observations. Look for patterns (same issue on multiple holes, recent uptick) and call that out.
 
+• "How many assets are MIA?" / "Did we find the [X]?" / "Annual inventory status"
+  → Use get_fy26_assets_summary (no filters for overview, with filters to find a specific asset).
+
+• Direct action request ("fix sprinkler on 7", "order bunker sand", "mark task done")
+  → Go straight to the write tool. Don't search if the user already told you what to do.
+
+• Ambiguous reference ("update that task", "order more of the stuff from yesterday")
+  → Search first to resolve, confirm the match with the user if uncertain, then act.
+
+═══════════════════════════════════════════════
+ACTION RULES (DO, don't deflect)
+═══════════════════════════════════════════════
+1. "We need to fix X" → CREATE A TASK immediately with create_task.
+2. "We need more X / out of X" → ADD TO ORDER LIST immediately with add_order_item.
+3. "There's a problem at X" → REPORT THE ISSUE with report_course_issue.
+4. "Mark X done" / "X is finished" → UPDATE TASK STATUS to completed with update_task.
+5. Data questions → LOOK IT UP. Never invent data.
+
+═══════════════════════════════════════════════
+PROACTIVE SYNTHESIS (what separates good from great)
+═══════════════════════════════════════════════
+When you pull observation or snapshot data, don't just recite it — analyze:
+• Multiple fungus_disease observations within a week → flag disease pressure, recommend contacting the spray contractor.
+• Equipment overdue for service + heavy use season → suggest scheduling the service.
+• Critical/high priority tasks bunching on one date → flag potential crew overload.
+• MIA assets that match a recently-added equipment record → suggest verifying it.
+Do this briefly in 1–2 sentences after the data, not as a lecture.
+
+═══════════════════════════════════════════════
+STYLE
+═══════════════════════════════════════════════
+• Phone-first: concise, actionable. Use bullets. Avoid preamble.
+• Confirm writes with what you did ("✅ Task created: Fix sprinkler on 7, due today, normal priority").
+• If a tool errors, say what failed in one line, then suggest the next step.
+• For dates: "today" = current date. "tomorrow" = current+1.
+
+═══════════════════════════════════════════════
+DOMAIN RULES (Illinois / Veterans Memorial)
+═══════════════════════════════════════════════
+• ALL chemical spraying (herbicides, pesticides, insecticides, fungicides, algaecides) is handled by a CONTRACTED SPRAY COMPANY this year. Never recommend crew apply chemicals. For anything spray-related: "contact the spray contractor to schedule."
+• For chemical / pesticide questions, mention Illinois RUP compliance when relevant.
+• The report_course_issue tool routes automatically: parking → parking_lot_issues, clubhouse → clubhouse_issues, course → tasks.
+
+═══════════════════════════════════════════════
+EXAMPLE INTERACTIONS
+═══════════════════════════════════════════════
+User: "What's the state of the course this morning?"
+You → call get_daily_snapshot → respond:
+  "5 open tasks for today, 2 high priority (irrigation leak H4, bunker drainage H12). Triplex mower #2 needs service. 3 open course observations — dollar spot concern on greens 7 and 14. No parking/clubhouse issues. Want me to schedule the spray contractor for the dollar spot?"
+
+User: "What fungus have we seen lately?"
+You → call get_recent_observations with issue_type=fungus_disease, days_back=14 → respond:
+  "5 fungus observations in the last 14 days, concentrated on greens 7, 11, and 14. Looks like dollar spot pattern — humidity has been up. Recommend contacting the spray contractor for a curative fungicide application."
+
+User: "Mark the hole 7 sprinkler task done"
+You → call search_tasks with category=irrigation to find it → call update_task with status=completed → respond:
+  "✅ Marked done: 'Repair broken sprinkler hole 7'. Logged you as completer at ${new Date().toLocaleDateString()}."
+
+═══════════════════════════════════════════════
 Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
 
 The user's role and name will be provided with each message.`;
@@ -818,147 +1132,15 @@ interface ChatMessage {
   content: string;
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    // Auth check
-    const supabase = await createClient();
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user profile for context
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, role")
-      .eq("id", user.id)
-      .single();
-
-    const userName = profile?.full_name || "User";
-    const userRole = profile?.role || "crew";
-
-    // Parse request
-    const body = await request.json();
-    const { message, history, photoStoragePath } = body as {
-      message: string;
-      history?: ChatMessage[];
-      photoStoragePath?: string;
-    };
-
-    if (!message || typeof message !== "string" || message.trim().length === 0) {
-      return NextResponse.json({ error: "Message is required" }, { status: 400 });
-    }
-
-    if (message.length > 2000) {
-      return NextResponse.json({ error: "Message too long (max 2000 characters)" }, { status: 400 });
-    }
-
-    // Check API key
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "AI assistant is not configured. Please set the ANTHROPIC_API_KEY environment variable." },
-        { status: 503 }
-      );
-    }
-
-    // Build messages array — include recent history for context
-    const recentHistory = (history || []).slice(-10);
-    const messages = [
-      ...recentHistory.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-      {
-        role: "user" as const,
-        content: `[${userName}, ${userRole}]: ${message}`,
-      },
-    ];
-
-    // ── First Claude call (may return tool_use) ───────────────────────────
-
-    let claudeResponse = await callClaude(apiKey, messages);
-    if (!claudeResponse.ok) {
-      const errText = await claudeResponse.text();
-      console.error(`Claude API error ${claudeResponse.status}:`, errText);
-      return NextResponse.json(
-        { error: "AI service is temporarily unavailable. Please try again in a moment." },
-        { status: 502 }
-      );
-    }
-
-    let responseData = await claudeResponse.json();
-
-    // ── Tool use loop (max 5 rounds for multi-step operations) ────────────
-
-    let rounds = 0;
-    while (responseData.stop_reason === "tool_use" && rounds < 5) {
-      rounds++;
-
-      const toolUseBlocks = (responseData.content || []).filter(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (b: any) => b.type === "tool_use"
-      );
-
-      if (toolUseBlocks.length === 0) break;
-
-      // Execute each tool call
-      const toolResults = [];
-      for (const toolBlock of toolUseBlocks) {
-        const result = await executeTool(toolBlock.name, toolBlock.input, supabase, user.id, photoStoragePath);
-        toolResults.push({
-          type: "tool_result" as const,
-          tool_use_id: toolBlock.id,
-          content: result,
-        });
-      }
-
-      // Send results back to Claude
-      messages.push({
-        role: "assistant" as const,
-        content: responseData.content,
-      });
-      messages.push({
-        role: "user" as const,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        content: toolResults as any,
-      });
-
-      claudeResponse = await callClaude(apiKey, messages);
-      if (!claudeResponse.ok) {
-        console.error(`Claude API error on tool round ${rounds}:`, claudeResponse.status);
-        return NextResponse.json(
-          { error: "AI service error during tool processing." },
-          { status: 502 }
-        );
-      }
-      responseData = await claudeResponse.json();
-    }
-
-    // ── Extract final text response ───────────────────────────────────────
-
-    const textBlocks = (responseData.content || [])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((b: any) => b.type === "text")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((b: any) => b.text);
-
-    const reply = textBlocks.join("\n\n") || "I wasn't able to generate a response. Please try again.";
-
-    return NextResponse.json({ reply });
-  } catch (err) {
-    console.error("AI assistant error:", err);
-    return NextResponse.json(
-      { error: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
-  }
-}
-
-// ── Claude API call helper ──────────────────────────────────────────────────
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function callClaude(apiKey: string, messages: any[]): Promise<Response> {
+type ContentBlock = any;
+
+/** Call Anthropic with stream=true and return the raw fetch Response. */
+async function streamClaudeRaw(
+  apiKey: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  messages: any[]
+): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -976,10 +1158,263 @@ async function callClaude(apiKey: string, messages: any[]): Promise<Response> {
         system: SYSTEM_PROMPT,
         tools: TOOLS,
         messages,
+        stream: true,
       }),
       signal: controller.signal,
     });
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Parse Anthropic's SSE stream. Invokes onTextDelta for incremental text and
+ * onToolStart when a tool_use block begins. Returns the final assembled content
+ * blocks and stop_reason so the caller can decide whether to continue the loop.
+ */
+async function consumeClaudeStream(
+  response: Response,
+  onTextDelta: (delta: string) => Promise<void>,
+  onToolStart: (name: string) => Promise<void>
+): Promise<{ stopReason: string | null; contentBlocks: ContentBlock[] }> {
+  if (!response.body) {
+    throw new Error("No response body from Claude");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const contentBlocks: ContentBlock[] = [];
+  const toolInputBuffers: Record<number, string> = {};
+  let stopReason: string | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE events are separated by blank lines.
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    for (const rawEvent of events) {
+      if (!rawEvent.trim()) continue;
+      let eventType = "";
+      let dataStr = "";
+      for (const line of rawEvent.split("\n")) {
+        if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+        else if (line.startsWith("data: ")) dataStr += line.slice(6);
+      }
+      if (!dataStr) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      try {
+        data = JSON.parse(dataStr);
+      } catch {
+        continue;
+      }
+
+      if (eventType === "content_block_start") {
+        const idx = data.index as number;
+        const block = data.content_block;
+        if (block.type === "text") {
+          contentBlocks[idx] = { type: "text", text: "" };
+        } else if (block.type === "tool_use") {
+          contentBlocks[idx] = { type: "tool_use", id: block.id, name: block.name, input: {} };
+          toolInputBuffers[idx] = "";
+          await onToolStart(block.name);
+        }
+      } else if (eventType === "content_block_delta") {
+        const idx = data.index as number;
+        const delta = data.delta;
+        if (!contentBlocks[idx]) continue;
+        if (delta.type === "text_delta") {
+          contentBlocks[idx].text = (contentBlocks[idx].text || "") + delta.text;
+          await onTextDelta(delta.text);
+        } else if (delta.type === "input_json_delta") {
+          toolInputBuffers[idx] = (toolInputBuffers[idx] || "") + delta.partial_json;
+        }
+      } else if (eventType === "content_block_stop") {
+        const idx = data.index as number;
+        const block = contentBlocks[idx];
+        if (block?.type === "tool_use") {
+          const buf = toolInputBuffers[idx] || "{}";
+          try {
+            block.input = JSON.parse(buf);
+          } catch {
+            block.input = {};
+          }
+          delete toolInputBuffers[idx];
+        }
+      } else if (eventType === "message_delta") {
+        if (data.delta?.stop_reason) stopReason = data.delta.stop_reason;
+      } else if (eventType === "error") {
+        throw new Error(data.error?.message || "Claude stream error");
+      }
+    }
+  }
+
+  return { stopReason, contentBlocks };
+}
+
+export async function POST(request: NextRequest) {
+  // Auth check (non-streaming — errors here are returned as JSON)
+  const supabase = await createClient();
+  const { data: { user }, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, role")
+    .eq("id", user.id)
+    .single();
+
+  const userName = profile?.full_name || "User";
+  const userRole = profile?.role || "crew";
+
+  let body: { message?: string; history?: ChatMessage[]; photoStoragePath?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { message, history, photoStoragePath } = body;
+  if (!message || typeof message !== "string" || message.trim().length === 0) {
+    return NextResponse.json({ error: "Message is required" }, { status: 400 });
+  }
+  if (message.length > 2000) {
+    return NextResponse.json({ error: "Message too long (max 2000 characters)" }, { status: 400 });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "AI assistant is not configured. Please set the ANTHROPIC_API_KEY environment variable." },
+      { status: 503 }
+    );
+  }
+
+  const recentHistory = (history || []).slice(-10);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: any[] = [
+    ...recentHistory.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    {
+      role: "user" as const,
+      content: `[${userName}, ${userRole}]: ${message}`,
+    },
+  ];
+
+  // ── SSE stream back to client ─────────────────────────────────────────────
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (eventType: string, data: Record<string, unknown>) => {
+        try {
+          controller.enqueue(encoder.encode(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // Stream may have been closed by the client; ignore.
+        }
+      };
+
+      // Heartbeat every 15s so proxies don't kill an idle connection during
+      // long tool executions.
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          // ignore
+        }
+      }, 15_000);
+
+      try {
+        let rounds = 0;
+        const MAX_ROUNDS = 5;
+
+        while (true) {
+          const claudeRes = await streamClaudeRaw(apiKey, messages);
+          if (!claudeRes.ok) {
+            const errText = await claudeRes.text();
+            console.error(`Claude API error ${claudeRes.status}:`, errText);
+            send("error", { message: "AI service is temporarily unavailable. Please try again in a moment." });
+            break;
+          }
+
+          const { stopReason, contentBlocks } = await consumeClaudeStream(
+            claudeRes,
+            async (delta) => send("text", { delta }),
+            async (name) => send("tool", { name, status: "start" })
+          );
+
+          // If the model wants tools, execute them and loop.
+          if (stopReason === "tool_use" && rounds < MAX_ROUNDS) {
+            rounds++;
+
+            const toolUseBlocks = contentBlocks.filter(
+              (b) => b && b.type === "tool_use"
+            );
+            if (toolUseBlocks.length === 0) break;
+
+            const toolResults: Array<{
+              type: "tool_result";
+              tool_use_id: string;
+              content: string;
+            }> = [];
+
+            for (const toolBlock of toolUseBlocks) {
+              const result = await executeTool(
+                toolBlock.name,
+                toolBlock.input,
+                supabase,
+                user.id,
+                photoStoragePath
+              );
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: toolBlock.id,
+                content: result,
+              });
+              send("tool", { name: toolBlock.name, status: "done" });
+            }
+
+            messages.push({ role: "assistant", content: contentBlocks });
+            messages.push({ role: "user", content: toolResults });
+            continue; // next round
+          }
+
+          // Done (end_turn, max_tokens, stop_sequence, etc.)
+          send("done", { stopReason: stopReason || "end_turn" });
+          break;
+        }
+      } catch (err) {
+        console.error("AI assistant streaming error:", err);
+        const msg = err instanceof Error ? err.message : "Something went wrong.";
+        send("error", { message: msg });
+      } finally {
+        clearInterval(heartbeat);
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

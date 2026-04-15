@@ -145,11 +145,27 @@ function EquipmentThumbnail({ photoUrl, name }: { photoUrl: string | null; name:
   );
 }
 
+// Format an ISO date string (or bare date) as a short locale date, or "Never" if missing
+function formatShortDate(d: string | null | undefined): string {
+  if (!d) return "Never";
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return "Never";
+  return parsed.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function EquipmentCard({
   item,
+  lastServicedAt,
+  lastInspectedAt,
   onClick,
 }: {
   item: Equipment;
+  lastServicedAt: string | null;
+  lastInspectedAt: string | null;
   onClick: () => void;
 }) {
   const statusColor = equipmentStatusColors[item.status];
@@ -203,6 +219,30 @@ function EquipmentCard({
               )}
             </div>
 
+            {/* Identifiers + activity dates */}
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+              {item.asset_tag && (
+                <p className="truncate">
+                  <span className="font-semibold text-foreground/80">Asset #:</span>{" "}
+                  <span className="font-mono">{item.asset_tag}</span>
+                </p>
+              )}
+              {item.serial_number && (
+                <p className="truncate">
+                  <span className="font-semibold text-foreground/80">Serial #:</span>{" "}
+                  <span className="font-mono">{item.serial_number}</span>
+                </p>
+              )}
+              <p>
+                <span className="font-semibold text-foreground/80">Last serviced:</span>{" "}
+                {formatShortDate(lastServicedAt)}
+              </p>
+              <p>
+                <span className="font-semibold text-foreground/80">Last inspected:</span>{" "}
+                {formatShortDate(lastInspectedAt)}
+              </p>
+            </div>
+
             {/* Parts needed detail */}
             {item.needs_parts_ordered && item.parts_needed && (
               <p className="text-sm text-orange-600 dark:text-orange-400 mt-1.5 line-clamp-2">
@@ -243,6 +283,46 @@ export default function EquipmentPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [partsByEquipment, setPartsByEquipment] = useState<Map<string, PartsSummary>>(() => new Map());
+  const [lastServicedByEquipment, setLastServicedByEquipment] = useState<Map<string, string>>(() => new Map());
+  const [lastInspectedByEquipment, setLastInspectedByEquipment] = useState<Map<string, string>>(() => new Map());
+
+  // Fetch most-recent service_date and inspection timestamp per equipment so
+  // the list card can show them without opening the detail page.
+  const fetchActivityDates = useCallback(async () => {
+    try {
+      const supabase = createClient();
+
+      // Latest service per equipment. Sort desc so the first row we see per
+      // equipment_id is the newest.
+      const { data: services, error: serviceErr } = await supabase
+        .from("equipment_service_records")
+        .select("equipment_id, service_date")
+        .order("service_date", { ascending: false });
+      if (serviceErr) throw serviceErr;
+
+      const serviceMap = new Map<string, string>();
+      for (const row of (services || []) as { equipment_id: string; service_date: string }[]) {
+        if (!serviceMap.has(row.equipment_id)) serviceMap.set(row.equipment_id, row.service_date);
+      }
+      setLastServicedByEquipment(serviceMap);
+
+      // Latest inspection per equipment.
+      const { data: inspections, error: inspectErr } = await supabase
+        .from("equipment_inspections")
+        .select("equipment_id, created_at")
+        .order("created_at", { ascending: false });
+      if (inspectErr) throw inspectErr;
+
+      const inspectionMap = new Map<string, string>();
+      for (const row of (inspections || []) as { equipment_id: string; created_at: string }[]) {
+        if (!inspectionMap.has(row.equipment_id)) inspectionMap.set(row.equipment_id, row.created_at);
+      }
+      setLastInspectedByEquipment(inspectionMap);
+    } catch (err) {
+      console.error("Failed to fetch equipment activity dates:", err);
+      // Non-fatal: cards fall back to "Never".
+    }
+  }, []);
 
   // Fetch equipment_parts rollup (needed/ordered counts per equipment).
   // This is the source of truth for Parts Needed / Parts Ordered stats.
@@ -272,7 +352,8 @@ export default function EquipmentPage() {
   // list refreshes (e.g., after user edits a row and comes back).
   useEffect(() => {
     fetchPartsSummary();
-  }, [fetchPartsSummary, equipment.length]);
+    fetchActivityDates();
+  }, [fetchPartsSummary, fetchActivityDates, equipment.length]);
 
   // Check if user can add equipment — uses profile.role from profiles table
   const equipmentRoles = ["super", "asst_super", "foreman", "mechanic", "director"];
@@ -543,6 +624,8 @@ export default function EquipmentPage() {
             <EquipmentCard
               key={item.id}
               item={item}
+              lastServicedAt={lastServicedByEquipment.get(item.id) || null}
+              lastInspectedAt={lastInspectedByEquipment.get(item.id) || null}
               onClick={() => handleEquipmentClick(item.id)}
             />
           ))}
