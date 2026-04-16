@@ -1204,6 +1204,10 @@ export default function EquipmentDetailPage() {
                     <Label htmlFor="svc-mfr-name" className="text-xs">Manufacturer / Dealer Name *</Label>
                     <Input id="svc-mfr-name" placeholder="e.g. Toro, John Deere, local dealer..." value={newService.performed_by} onChange={(e) => setNewService({ ...newService, performed_by: e.target.value })} />
                   </div>
+                  <div>
+                    <Label htmlFor="svc-mfr-issue" className="text-xs">Issue / Reason for Service *</Label>
+                    <Textarea id="svc-mfr-issue" placeholder="What's wrong? General issue description..." value={newService.description} onChange={(e) => setNewService({ ...newService, description: e.target.value })} className="h-16" />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="svc-pickup" className="text-xs">Pickup Date *</Label>
@@ -1211,36 +1215,49 @@ export default function EquipmentDetailPage() {
                     </div>
                     <div>
                       <Label htmlFor="svc-return" className="text-xs">Return Date</Label>
-                      <Input id="svc-return" type="date" value={newService.return_date} onChange={(e) => setNewService({ ...newService, return_date: e.target.value })} />
+                      <Input id="svc-return" type="date" value={newService.return_date} onChange={(e) => setNewService({ ...newService, return_date: e.target.value })} placeholder="Fill in when returned" />
                     </div>
                   </div>
                 </div>
               )}
 
-              <div>
-                <Label htmlFor="svc-desc" className="text-xs">What Was Done *</Label>
-                <Textarea id="svc-desc" placeholder="Describe the service performed..." value={newService.description} onChange={(e) => setNewService({ ...newService, description: e.target.value })} className="h-20" />
-              </div>
-              <div>
-                <Label htmlFor="svc-parts" className="text-xs">Parts Used</Label>
-                <Input id="svc-parts" placeholder="e.g. Oil filter, 5qt 10W-30" value={newService.parts_used} onChange={(e) => setNewService({ ...newService, parts_used: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* What Was Done — only shown for in-house service (manufacturer gets the issue field above) */}
+              {!newService.sent_to_manufacturer && (
                 <div>
-                  <Label htmlFor="svc-hours" className="text-xs">Hours at Service</Label>
-                  <Input id="svc-hours" type="number" step="0.1" placeholder="0.0" value={newService.hours_at_service} onChange={(e) => setNewService({ ...newService, hours_at_service: e.target.value })} />
+                  <Label htmlFor="svc-desc" className="text-xs">What Was Done *</Label>
+                  <Textarea id="svc-desc" placeholder="Describe the service performed..." value={newService.description} onChange={(e) => setNewService({ ...newService, description: e.target.value })} className="h-20" />
                 </div>
-                <div>
-                  <Label htmlFor="svc-cost" className="text-xs">Cost</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                    <Input id="svc-cost" type="number" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
+              )}
+
+              {/* Parts / hours / cost — always shown for in-house; collapsed for manufacturer (fill on return) */}
+              {!newService.sent_to_manufacturer && (
+                <>
+                  <div>
+                    <Label htmlFor="svc-parts" className="text-xs">Parts Used</Label>
+                    <Input id="svc-parts" placeholder="e.g. Oil filter, 5qt 10W-30" value={newService.parts_used} onChange={(e) => setNewService({ ...newService, parts_used: e.target.value })} />
                   </div>
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="svc-hours" className="text-xs">Hours at Service</Label>
+                      <Input id="svc-hours" type="number" step="0.1" placeholder="0.0" value={newService.hours_at_service} onChange={(e) => setNewService({ ...newService, hours_at_service: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label htmlFor="svc-cost" className="text-xs">Cost</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                        <Input id="svc-cost" type="number" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" }); }}>Cancel</Button>
-                <Button size="sm" disabled={!newService.description.trim() || !newService.performed_by.trim()} onClick={async () => {
+                <Button size="sm" disabled={
+                  !newService.performed_by.trim() ||
+                  !newService.description.trim() ||
+                  (newService.sent_to_manufacturer && !newService.pickup_date)
+                } onClick={async () => {
                   const { data: svcResult, error: svcErr } = await addServiceRecord(equipmentId, {
                     service_date: newService.service_date,
                     description: newService.description,
