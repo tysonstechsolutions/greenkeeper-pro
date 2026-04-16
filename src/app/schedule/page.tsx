@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calendar,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -466,22 +467,32 @@ export default function SchedulePage() {
           description="Staff scheduling and shifts"
           icon={Calendar}
         >
-          {isSuper && (
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              onClick={handleCopyWeek}
-              disabled={copying}
-              className="hidden md:flex"
+              onClick={() => router.push("/schedule/calendar")}
             >
-              {copying ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Copy className="w-4 h-4 mr-2" />
-              )}
-              Copy to Next Week
+              <CalendarDays className="w-4 h-4 mr-2" />
+              Calendar View
             </Button>
-          )}
+            {isSuper && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCopyWeek}
+                disabled={copying}
+                className="hidden md:flex"
+              >
+                {copying ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Copy className="w-4 h-4 mr-2" />
+                )}
+                Copy to Next Week
+              </Button>
+            )}
+          </div>
         </PageHeader>
 
         {/* Tabs */}

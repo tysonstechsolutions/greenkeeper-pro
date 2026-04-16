@@ -33,6 +33,8 @@ import {
   Archive,
   Mic,
   Phone,
+  CalendarDays,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -72,6 +74,7 @@ const leadershipQuickAccess: QuickItem[] = [
 ];
 
 const leadershipOperations: ListItem[] = [
+  { href: "/schedule/calendar", label: "Maint. Calendar", description: "Visual schedule overview", icon: CalendarDays, iconColor: "text-indigo-600", bgColor: "bg-indigo-500/10" },
   { href: "/plan", label: "Annual Plan", description: "Goals & progress", icon: Target, iconColor: "text-emerald-600", bgColor: "bg-emerald-500/10" },
   { href: "/irrigation", label: "Irrigation", description: "Zones & schedules", icon: Droplets, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
   { href: "/assistant", label: "AI Assistant", description: "Ask anything", icon: Bot, iconColor: "text-violet-600", bgColor: "bg-violet-500/10" },
@@ -79,6 +82,7 @@ const leadershipOperations: ListItem[] = [
   { href: "/reports/monthly-board", label: "Board Report", description: "Monthly GM report", icon: FileText, iconColor: "text-slate-600", bgColor: "bg-slate-500/10" },
   { href: "/drone", label: "Drone Flights", description: "NDVI & aerial data", icon: Scan, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
   { href: "/water-usage", label: "Water Usage", description: "Metering & base reporting", icon: Droplets, iconColor: "text-cyan-600", bgColor: "bg-cyan-500/10" },
+  { href: "/tournaments", label: "Tournaments", description: "Event prep & checklists", icon: Trophy, iconColor: "text-amber-600", bgColor: "bg-amber-500/10" },
 ];
 
 const leadershipFeedback: ListItem[] = [
@@ -88,6 +92,8 @@ const leadershipFeedback: ListItem[] = [
 ];
 
 const leadershipAdmin: ListItem[] = [
+  { href: "/revenue", label: "Revenue", description: "Track daily revenue", icon: DollarSign, iconColor: "text-emerald-600", bgColor: "bg-emerald-500/10" },
+  { href: "/capital-projects", label: "Capital Projects", description: "Major project tracking", icon: Building, iconColor: "text-slate-600", bgColor: "bg-slate-500/10" },
   { href: "/budget", label: "Budget", description: "Expenses & tracking", icon: DollarSign, iconColor: "text-green-600", bgColor: "bg-green-500/10" },
   { href: "/reports", label: "Reports", description: "Analytics & exports", icon: BarChart3, iconColor: "text-blue-600", bgColor: "bg-blue-500/10" },
   { href: "/compliance", label: "IL RUP Records", description: "Pesticide compliance", icon: ShieldCheck, iconColor: "text-teal-600", bgColor: "bg-teal-500/10" },

@@ -359,6 +359,47 @@ const TOOLS = [
       required: [],
     },
   },
+
+  // ── Irrigation tools ──────────────────────────────────────────────────
+  {
+    name: "search_irrigation_zones",
+    description:
+      "Search irrigation zones by name, area type, or zone number. Returns zone details including type, GPM, head count, and active status. Use when the user asks about irrigation zones, sprinkler heads, or watering areas.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        search: { type: "string", description: "Search zone name or zone number" },
+        area: {
+          type: "string",
+          enum: ["green", "tee", "fairway", "rough", "practice", "landscape", "clubhouse"],
+          description: "Filter by area type",
+        },
+        zone_number: { type: "number", description: "Exact zone number" },
+        active_only: { type: "boolean", description: "Only active zones (default true)" },
+        limit: { type: "number", description: "Max results (default 30, max 50)" },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "start_manual_run",
+    description:
+      "Start a manual irrigation run on a specific zone. Creates a run log entry. Use when the user says 'water zone X', 'run irrigation on green 5', 'syringe hole 7', etc. Search zones first if you need to find the zone ID.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        zone_id: { type: "string", description: "The irrigation zone ID (get from search_irrigation_zones)" },
+        run_minutes: { type: "number", description: "How many minutes to run (default 10)" },
+        run_type: {
+          type: "string",
+          enum: ["manual", "syringe"],
+          description: "Type of run — manual for normal watering, syringe for quick cooling (default: manual)",
+        },
+        notes: { type: "string", description: "Optional notes about the run" },
+      },
+      required: ["zone_id"],
+    },
+  },
 ];
 
 // ── Tool execution ──────────────────────────────────────────────────────────
@@ -1074,6 +1115,68 @@ async function executeTool(
         return lines.join("\n");
       }
 
+      // ── Irrigation tools ──────────────────────────────────────────────────
+
+      case "search_irrigation_zones": {
+        const limit = Math.min(input.limit || 30, 50);
+        const activeOnly = input.active_only !== false;
+        let query = supabase
+          .from("irrigation_zones")
+          .select("id, name, zone_number, zone_type, area, hole_numbers, gpm, head_count, active, notes")
+          .order("zone_number", { ascending: true })
+          .limit(limit);
+
+        if (activeOnly) query = query.eq("active", true);
+        if (input.area) query = query.eq("area", input.area);
+        if (input.zone_number) query = query.eq("zone_number", input.zone_number);
+        if (input.search) {
+          const term = `%${input.search}%`;
+          query = query.or(`name.ilike.${term}`);
+        }
+
+        const { data, error } = await query;
+        if (error) return `Error searching irrigation zones: ${error.message}`;
+        if (!data || data.length === 0) return "No irrigation zones found matching your criteria.";
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return data.map((z: any) =>
+          `• [${z.id.substring(0, 8)}] Zone ${z.zone_number ?? "?"}: ${z.name} (${z.zone_type}, ${z.area || "unassigned"}) — ${z.gpm ?? "?"} GPM, ${z.head_count ?? "?"} heads${z.hole_numbers?.length ? `, Holes: ${z.hole_numbers.join(",")}` : ""}${z.active ? "" : " [INACTIVE]"}${z.notes ? ` | ${z.notes.substring(0, 60)}` : ""}`
+        ).join("\n");
+      }
+
+      case "start_manual_run": {
+        // Look up the zone to get GPM for gallons calculation
+        const { data: zone, error: zoneErr } = await supabase
+          .from("irrigation_zones")
+          .select("id, name, gpm, zone_number")
+          .eq("id", input.zone_id)
+          .single();
+
+        if (zoneErr || !zone) return `Irrigation zone not found with ID: ${input.zone_id}`;
+
+        const minutes = input.run_minutes || 10;
+        const gallons = zone.gpm ? zone.gpm * minutes : null;
+        const runType = input.run_type || "manual";
+
+        const { data, error } = await supabase
+          .from("irrigation_runs")
+          .insert({
+            zone_id: input.zone_id,
+            started_at: new Date().toISOString(),
+            ended_at: new Date(Date.now() + minutes * 60000).toISOString(),
+            run_minutes: minutes,
+            gallons_used: gallons,
+            run_type: runType,
+            notes: input.notes || null,
+            created_by: userId,
+          })
+          .select("id")
+          .single();
+
+        if (error) return `Error starting irrigation run: ${error.message}`;
+        return `✅ ${runType === "syringe" ? "Syringe" : "Manual"} run started!\n• Zone: ${zone.name} (#${zone.zone_number})\n• Duration: ${minutes} minutes\n• Est. water: ${gallons ? `${Math.round(gallons).toLocaleString()} gallons` : "N/A"}\n• Run ID: ${data.id.substring(0, 8)}`;
+      }
+
       default:
         return `Unknown tool: ${toolName}`;
     }
@@ -1093,8 +1196,8 @@ You are the superintendent's right-hand tool. When they tell you something needs
 ═══════════════════════════════════════════════
 CAPABILITIES
 ═══════════════════════════════════════════════
-Read: tasks, equipment, chemicals, weather, budget, staff, schedules, order items, course observations (turf issues), facility issues (parking/clubhouse), FY26 inventory assets.
-Create: tasks, order items, course / parking / clubhouse issues.
+Read: tasks, equipment, chemicals, weather, budget, staff, schedules, order items, course observations (turf issues), facility issues (parking/clubhouse), FY26 inventory assets, irrigation zones.
+Create: tasks, order items, course / parking / clubhouse issues, manual irrigation runs.
 Update: tasks (status, priority, notes), order items (status, vendor), equipment (status, condition).
 
 ═══════════════════════════════════════════════
@@ -1108,6 +1211,9 @@ TOOL-USE STRATEGY — pick the right tool
 
 • "How many assets are MIA?" / "Did we find the [X]?" / "Annual inventory status"
   → Use get_fy26_assets_summary (no filters for overview, with filters to find a specific asset).
+
+• "What zones are watering today?" / "Show irrigation for greens" / "Run water on hole 7"
+  → Use search_irrigation_zones to find zones, start_manual_run to trigger a run. Search by area or name to narrow down.
 
 • Direct action request ("fix sprinkler on 7", "order bunker sand", "mark task done")
   → Go straight to the write tool. Don't search if the user already told you what to do.

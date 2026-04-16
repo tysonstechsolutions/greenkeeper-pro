@@ -43,6 +43,8 @@ const moreRoutes = [
   "/parking-lot", "/clubhouse", "/order-list",
   "/assistant", "/inspections", "/environmental", "/water-usage",
   "/voice-log", "/vendors",
+  "/revenue", "/capital-projects",
+  "/tournaments",
 ];
 
 export function BottomNav() {

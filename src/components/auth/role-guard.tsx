@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
-type UserRole = "super" | "asst_super" | "director" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro";
+type UserRole = "super" | "asst_super" | "director" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "gm";
 
 // Role hierarchy for permission checking
 const roleHierarchy: Record<UserRole, number> = {
   super: 100,
+  gm: 95, // General Manager - above director but below super
   asst_super: 80,
   director: 85, // Director of Golf - above asst_super but below super
   pro: 75, // Pro shop manager - above foreman but below asst_super
@@ -20,13 +21,15 @@ const roleHierarchy: Record<UserRole, number> = {
 };
 
 // Management roles that can access admin features
-export const MANAGEMENT_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "pro"];
-export const ADMIN_ROLES: UserRole[] = ["super", "asst_super", "director"];
+export const MANAGEMENT_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "pro", "gm"];
+export const ADMIN_ROLES: UserRole[] = ["super", "asst_super", "director", "gm"];
 export const SUPER_ONLY: UserRole[] = ["super"];
 // Pro-related roles - superintendent, assistant superintendent, director, and pro
-export const PRO_ROLES: UserRole[] = ["super", "asst_super", "director", "pro"];
+export const PRO_ROLES: UserRole[] = ["super", "asst_super", "director", "pro", "gm"];
 // Staff roles - all internal staff
-export const STAFF_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "mechanic", "crew", "seasonal", "pro"];
+export const STAFF_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "mechanic", "crew", "seasonal", "pro", "gm"];
+// GM leadership roles - gm, super, director
+export const GM_ROLES: UserRole[] = ["gm", "super", "director"];
 
 interface RoleGuardProps {
   children: ReactNode;
