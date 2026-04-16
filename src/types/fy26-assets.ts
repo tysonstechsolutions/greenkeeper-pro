@@ -32,6 +32,7 @@ export interface Fy26Asset {
   notes: string | null;
   photo_url: string | null;
   condition_photos: ConditionPhotos;
+  barcode_value: string | null;
   created_at: string;
   updated_at: string;
 }

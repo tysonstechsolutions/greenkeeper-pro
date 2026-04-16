@@ -13,6 +13,9 @@ import {
   Plus,
   Trash2,
   ImageIcon,
+  ScanLine,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +98,13 @@ export default function AssetDetailPage() {
   const [savingDamage, setSavingDamage] = useState(false);
   const damageFileRef = useRef<HTMLInputElement | null>(null);
 
+  // Barcode linking state
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [savingBarcode, setSavingBarcode] = useState(false);
+  const [barcodeManual, setBarcodeManual] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const barcodeScannerRef = useRef<any>(null);
+
   // ── Load ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -138,6 +148,58 @@ export default function AssetDetailPage() {
     if (updated) setAsset(updated);
     setSavingNotes(false);
   };
+
+  const handleLinkBarcode = async (value: string) => {
+    if (!asset || !value.trim()) return;
+    setSavingBarcode(true);
+    const updated = await updateAsset(asset.id, { barcode_value: value.trim() } as Partial<Fy26Asset>);
+    if (updated) {
+      setAsset(updated);
+      setShowBarcodeScanner(false);
+      setBarcodeManual("");
+    }
+    setSavingBarcode(false);
+    // Clean up scanner if running
+    if (barcodeScannerRef.current) {
+      try { await barcodeScannerRef.current.stop(); } catch { /* */ }
+      barcodeScannerRef.current = null;
+    }
+  };
+
+  const handleUnlinkBarcode = async () => {
+    if (!asset) return;
+    setSavingBarcode(true);
+    const updated = await updateAsset(asset.id, { barcode_value: null } as Partial<Fy26Asset>);
+    if (updated) setAsset(updated);
+    setSavingBarcode(false);
+  };
+
+  const startBarcodeScanner = async () => {
+    try {
+      const mod = await import("html5-qrcode");
+      const scanner = new mod.Html5Qrcode("barcode-link-viewport");
+      barcodeScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 260, height: 100 }, aspectRatio: 2.0 },
+        (decodedText) => {
+          scanner.stop().then(() => handleLinkBarcode(decodedText)).catch(() => {});
+        },
+        () => {}
+      );
+    } catch {
+      // Camera error — fall back to manual entry
+    }
+  };
+
+  // Cleanup barcode scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (barcodeScannerRef.current) {
+        barcodeScannerRef.current.stop().catch(() => {});
+      }
+    };
+  }, []);
 
   const handleConditionPhotoUpload = async (angle: ConditionPhotoAngle, file: File) => {
     if (!asset || !user?.id) return;
@@ -271,6 +333,86 @@ export default function AssetDetailPage() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Asset Barcode Link ═══ */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold">
+              <ScanLine className="w-4 h-4 inline mr-1.5" />
+              Asset Barcode
+            </p>
+            {asset.barcode_value && !showBarcodeScanner && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={handleUnlinkBarcode}
+                disabled={savingBarcode}
+              >
+                <Unlink className="w-3 h-3 mr-1" />
+                Unlink
+              </Button>
+            )}
+          </div>
+
+          {asset.barcode_value && !showBarcodeScanner ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+              <Link2 className="w-4 h-4 text-green-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-green-700 dark:text-green-400 font-medium">Barcode linked</p>
+                <p className="text-sm font-mono truncate">{asset.barcode_value}</p>
+              </div>
+            </div>
+          ) : !showBarcodeScanner ? (
+            <div className="text-center py-3">
+              <p className="text-xs text-muted-foreground mb-2">No barcode linked yet. Scan the asset tag to connect it.</p>
+              <Button size="sm" onClick={() => { setShowBarcodeScanner(true); setTimeout(startBarcodeScanner, 100); }}>
+                <ScanLine className="w-4 h-4 mr-1.5" />
+                Link Barcode
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div
+                id="barcode-link-viewport"
+                className="rounded-lg overflow-hidden bg-black min-h-[160px]"
+              />
+              <p className="text-xs text-center text-muted-foreground">Point camera at the asset barcode tag</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Or type barcode manually..."
+                  value={barcodeManual}
+                  onChange={(e) => setBarcodeManual(e.target.value)}
+                  className="flex-1 text-sm"
+                />
+                <Button
+                  size="sm"
+                  disabled={!barcodeManual.trim() || savingBarcode}
+                  onClick={() => handleLinkBarcode(barcodeManual)}
+                >
+                  {savingBarcode ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                </Button>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={async () => {
+                  if (barcodeScannerRef.current) {
+                    try { await barcodeScannerRef.current.stop(); } catch { /* */ }
+                    barcodeScannerRef.current = null;
+                  }
+                  setShowBarcodeScanner(false);
+                  setBarcodeManual("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -61,8 +61,21 @@ export default function AssetScanPage() {
       setMatchError(null);
 
       try {
-        const term = `%${trimmed}%`;
+        // 1. Try exact barcode match first (fastest, most reliable)
+        const { data: barcodeHit } = await supabase
+          .from("fy26_assets")
+          .select("*")
+          .eq("barcode_value", trimmed)
+          .limit(1)
+          .maybeSingle();
 
+        if (barcodeHit) {
+          setMatch(barcodeHit as Fy26Asset);
+          return;
+        }
+
+        // 2. Fall back to fuzzy search on serial / asset # / description / model
+        const term = `%${trimmed}%`;
         const { data, error } = await supabase
           .from("fy26_assets")
           .select("*")
@@ -70,7 +83,7 @@ export default function AssetScanPage() {
             `serial_number.ilike.${term},asset_number.ilike.${term},description.ilike.${term},model_text.ilike.${term}`
           )
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (error || !data) {
           setMatchError(`No asset found matching "${trimmed}"`);
