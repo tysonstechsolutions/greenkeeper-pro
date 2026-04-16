@@ -533,6 +533,9 @@ export interface EquipmentServiceRecord {
   hours_at_service: number | null;
   cost: number | null;
   parts_used: string | null;
+  sent_to_manufacturer: boolean;
+  pickup_date: string | null;
+  return_date: string | null;
   created_at: string;
 }
 

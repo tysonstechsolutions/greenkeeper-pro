@@ -38,6 +38,9 @@ export function useEquipmentServiceRecords() {
     hours_at_service?: number;
     cost?: number;
     parts_used?: string;
+    sent_to_manufacturer?: boolean;
+    pickup_date?: string;
+    return_date?: string;
   }): Promise<{ data: EquipmentServiceRecord | null; error: string | null }> => {
     setError(null);
     try {
@@ -60,6 +63,9 @@ export function useEquipmentServiceRecords() {
           hours_at_service: record.hours_at_service != null ? record.hours_at_service : null,
           cost: record.cost != null ? record.cost : null,
           parts_used: record.parts_used || null,
+          sent_to_manufacturer: record.sent_to_manufacturer || false,
+          pickup_date: record.pickup_date || null,
+          return_date: record.return_date || null,
         })
         .select()
         .single();

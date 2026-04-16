@@ -7,6 +7,10 @@ export type Fy26AssetStatus =
   | "mia"
   | "disposed";
 
+export type ConditionPhotoAngle = "front" | "back" | "left" | "right";
+
+export type ConditionPhotos = Partial<Record<ConditionPhotoAngle, string>>;
+
 export interface Fy26Asset {
   id: string;
   site: string;                     // '7009' | '7010'
@@ -27,9 +31,33 @@ export interface Fy26Asset {
   verified_by: string | null;
   notes: string | null;
   photo_url: string | null;
+  condition_photos: ConditionPhotos;
   created_at: string;
   updated_at: string;
 }
+
+export interface AssetDamageRecord {
+  id: string;
+  asset_id: string;
+  damage_date: string;               // "Prior to April 1 2026" or "2026-04-16"
+  description: string;
+  photos: string[];
+  reported_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const CONDITION_PHOTO_LABELS: Record<ConditionPhotoAngle, string> = {
+  front: "Front",
+  back: "Back",
+  left: "Left Side",
+  right: "Right Side",
+};
+
+export const DAMAGE_DATE_PRESETS = [
+  { label: "Prior to April 1, 2026", value: "Prior to April 1 2026" },
+  { label: "Today", value: new Date().toISOString().slice(0, 10) },
+];
 
 export const fy26AssetStatusLabels: Record<Fy26AssetStatus, string> = {
   unverified: "Unverified",

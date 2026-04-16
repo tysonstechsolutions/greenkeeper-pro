@@ -147,7 +147,7 @@ export default function EquipmentDetailPage() {
 
   // Service record form state
   const [addingService, setAddingService] = useState(false);
-  const [newService, setNewService] = useState({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
+  const [newService, setNewService] = useState({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" });
 
   // Disposal workflow state
   const [disposalReason, setDisposalReason] = useState("");
@@ -1161,11 +1161,24 @@ export default function EquipmentDetailPage() {
                 </div>
                 <div>
                   <Label htmlFor="svc-by" className="text-xs">Performed By *</Label>
-                  <Select value={newService.performed_by} onValueChange={(val) => setNewService({ ...newService, performed_by: val })}>
+                  <Select value={newService.performed_by} onValueChange={(val) => {
+                    const isMfr = val === "__manufacturer__";
+                    setNewService({
+                      ...newService,
+                      performed_by: isMfr ? "" : val,
+                      sent_to_manufacturer: isMfr,
+                      pickup_date: isMfr ? newService.pickup_date || new Date().toISOString().slice(0, 10) : "",
+                      return_date: isMfr ? newService.return_date : "",
+                    });
+                  }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select staff member" />
+                      <SelectValue placeholder="Select who serviced it" />
                     </SelectTrigger>
                     <SelectContent>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">External</div>
+                      <SelectItem value="__manufacturer__">
+                        <span className="flex items-center gap-1.5">Manufacturer / Dealer</span>
+                      </SelectItem>
                       {mechanicStaff.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">Mechanics</div>
@@ -1182,6 +1195,28 @@ export default function EquipmentDetailPage() {
                   </Select>
                 </div>
               </div>
+
+              {/* Manufacturer service fields — shown only when "Manufacturer" is selected */}
+              {newService.sent_to_manufacturer && (
+                <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50 dark:bg-amber-950/30 space-y-3">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Manufacturer / Dealer Service</p>
+                  <div>
+                    <Label htmlFor="svc-mfr-name" className="text-xs">Manufacturer / Dealer Name *</Label>
+                    <Input id="svc-mfr-name" placeholder="e.g. Toro, John Deere, local dealer..." value={newService.performed_by} onChange={(e) => setNewService({ ...newService, performed_by: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="svc-pickup" className="text-xs">Pickup Date *</Label>
+                      <Input id="svc-pickup" type="date" value={newService.pickup_date} onChange={(e) => setNewService({ ...newService, pickup_date: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label htmlFor="svc-return" className="text-xs">Return Date</Label>
+                      <Input id="svc-return" type="date" value={newService.return_date} onChange={(e) => setNewService({ ...newService, return_date: e.target.value })} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="svc-desc" className="text-xs">What Was Done *</Label>
                 <Textarea id="svc-desc" placeholder="Describe the service performed..." value={newService.description} onChange={(e) => setNewService({ ...newService, description: e.target.value })} className="h-20" />
@@ -1204,7 +1239,7 @@ export default function EquipmentDetailPage() {
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" }); }}>Cancel</Button>
+                <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" }); }}>Cancel</Button>
                 <Button size="sm" disabled={!newService.description.trim() || !newService.performed_by.trim()} onClick={async () => {
                   const { data: svcResult, error: svcErr } = await addServiceRecord(equipmentId, {
                     service_date: newService.service_date,
@@ -1213,9 +1248,12 @@ export default function EquipmentDetailPage() {
                     hours_at_service: newService.hours_at_service ? parseFloat(newService.hours_at_service) : undefined,
                     cost: newService.cost ? parseFloat(newService.cost) : undefined,
                     parts_used: newService.parts_used || undefined,
+                    sent_to_manufacturer: newService.sent_to_manufacturer,
+                    pickup_date: newService.sent_to_manufacturer && newService.pickup_date ? newService.pickup_date : undefined,
+                    return_date: newService.sent_to_manufacturer && newService.return_date ? newService.return_date : undefined,
                   });
                   if (svcResult) {
-                    setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "" });
+                    setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" });
                     setAddingService(false);
                     setSaveSuccess(true);
                     setTimeout(() => setSaveSuccess(false), 2000);
@@ -1233,13 +1271,16 @@ export default function EquipmentDetailPage() {
           {serviceRecords.length > 0 ? (
             <div className="space-y-3">
               {serviceRecords.map((record) => (
-                <div key={record.id} className="border rounded-lg p-3">
+                <div key={record.id} className={`border rounded-lg p-3 ${record.sent_to_manufacturer ? "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
                   <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Calendar className="w-3.5 h-3.5 text-gray-400" />
                       <span className="text-sm font-medium">{new Date(record.service_date).toLocaleDateString()}</span>
                       <span className="text-xs text-gray-400">by</span>
                       <span className="text-sm font-medium text-green-800">{record.performed_by}</span>
+                      {record.sent_to_manufacturer && (
+                        <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30">Manufacturer</Badge>
+                      )}
                     </div>
                     {canEdit && (
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => deleteServiceRecord(record.id)}>
@@ -1247,7 +1288,17 @@ export default function EquipmentDetailPage() {
                       </Button>
                     )}
                   </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{record.description}</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{record.description}</p>
+                  {record.sent_to_manufacturer && (
+                    <div className="text-xs mt-1.5 flex gap-3 text-amber-700 dark:text-amber-400">
+                      {record.pickup_date && <span>Picked up: {new Date(record.pickup_date).toLocaleDateString()}</span>}
+                      {record.return_date ? (
+                        <span>Returned: {new Date(record.return_date).toLocaleDateString()}</span>
+                      ) : (
+                        <span className="font-semibold">Awaiting return</span>
+                      )}
+                    </div>
+                  )}
                   {record.parts_used && (
                     <p className="text-xs text-gray-500 mt-1"><span className="font-medium">Parts:</span> {record.parts_used}</p>
                   )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   CheckCircle,
@@ -9,20 +9,39 @@ import {
   XCircle,
   Loader2,
   Save,
+  Camera,
+  Plus,
+  Trash2,
+  ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DetailPageHeader } from "@/components/ui/back-button";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { useFy26Assets } from "@/lib/hooks/useFy26Assets";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
   fy26AssetSiteLabels,
+  CONDITION_PHOTO_LABELS,
   type Fy26Asset,
   type Fy26AssetStatus,
+  type ConditionPhotoAngle,
+  type ConditionPhotos,
+  type AssetDamageRecord,
 } from "@/types/fy26-assets";
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -33,17 +52,50 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
+const ANGLES: ConditionPhotoAngle[] = ["front", "back", "left", "right"];
+
+// ── Component ───────────────────────────────────────────────────────────────
+
 export default function AssetDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id as string;
-  const { fetchAssetItem, updateStatus, updateAsset } = useFy26Assets();
+  const { user } = useAuth();
+  const {
+    fetchAssetItem,
+    updateStatus,
+    updateAsset,
+    uploadConditionPhoto,
+    fetchDamageRecords,
+    addDamageRecord,
+    deleteDamageRecord,
+    uploadDamagePhoto,
+  } = useFy26Assets();
 
+  // Core state
   const [asset, setAsset] = useState<Fy26Asset | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingStatus, setSavingStatus] = useState<Fy26AssetStatus | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Condition photos state
+  const [conditionPhotos, setConditionPhotos] = useState<ConditionPhotos>({});
+  const [uploadingAngle, setUploadingAngle] = useState<ConditionPhotoAngle | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Damage records state
+  const [damageRecords, setDamageRecords] = useState<AssetDamageRecord[]>([]);
+  const [showDamageForm, setShowDamageForm] = useState(false);
+  const [damageDate, setDamageDate] = useState("Prior to April 1 2026");
+  const [damageDateCustom, setDamageDateCustom] = useState(new Date().toISOString().slice(0, 10));
+  const [damageDesc, setDamageDesc] = useState("");
+  const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
+  const [uploadingDamagePhoto, setUploadingDamagePhoto] = useState(false);
+  const [savingDamage, setSavingDamage] = useState(false);
+  const damageFileRef = useRef<HTMLInputElement | null>(null);
+
+  // ── Load ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!id) return;
@@ -54,13 +106,22 @@ export default function AssetDetailPage() {
       if (cancelled) return;
       setAsset(a);
       setNotes(a?.notes ?? "");
+      setConditionPhotos((a?.condition_photos as ConditionPhotos) || {});
       if (!a) setError("Asset not found.");
       setLoading(false);
+
+      // Load damage records
+      if (a) {
+        const records = await fetchDamageRecords(a.id);
+        if (!cancelled) setDamageRecords(records);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [id, fetchAssetItem]);
+  }, [id, fetchAssetItem, fetchDamageRecords]);
+
+  // ── Handlers ────────────────────────────────────────────────────────────
 
   const handleSetStatus = async (s: Fy26AssetStatus) => {
     if (!asset) return;
@@ -77,6 +138,53 @@ export default function AssetDetailPage() {
     if (updated) setAsset(updated);
     setSavingNotes(false);
   };
+
+  const handleConditionPhotoUpload = async (angle: ConditionPhotoAngle, file: File) => {
+    if (!asset || !user?.id) return;
+    setUploadingAngle(angle);
+    const url = await uploadConditionPhoto(asset.id, angle, file, user.id);
+    if (url) {
+      setConditionPhotos((prev) => ({ ...prev, [angle]: url }));
+    }
+    setUploadingAngle(null);
+  };
+
+  const handleDamagePhotoUpload = async (file: File) => {
+    if (!user?.id) return;
+    setUploadingDamagePhoto(true);
+    const url = await uploadDamagePhoto(file, user.id);
+    if (url) {
+      setDamagePhotos((prev) => [...prev, url]);
+    }
+    setUploadingDamagePhoto(false);
+  };
+
+  const handleSaveDamage = async () => {
+    if (!asset || !damageDesc.trim()) return;
+    setSavingDamage(true);
+    const finalDate = damageDate === "__custom__" ? damageDateCustom : damageDate;
+    const record = await addDamageRecord(asset.id, {
+      damage_date: finalDate,
+      description: damageDesc.trim(),
+      photos: damagePhotos,
+      reported_by: user?.id,
+    });
+    if (record) {
+      setDamageRecords((prev) => [record, ...prev]);
+      setShowDamageForm(false);
+      setDamageDesc("");
+      setDamagePhotos([]);
+      setDamageDate("Prior to April 1 2026");
+    }
+    setSavingDamage(false);
+  };
+
+  const handleDeleteDamage = async (recordId: string) => {
+    const ok = await deleteDamageRecord(recordId);
+    if (ok) setDamageRecords((prev) => prev.filter((r) => r.id !== recordId));
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -166,7 +274,250 @@ export default function AssetDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Details */}
+      {/* ═══ Condition Photos (Front / Back / Left / Right) ═══ */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <p className="text-sm font-semibold mb-3">
+            <Camera className="w-4 h-4 inline mr-1.5" />
+            Condition Photos
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {ANGLES.map((angle) => {
+              const url = conditionPhotos[angle];
+              const isUploading = uploadingAngle === angle;
+              return (
+                <div key={angle} className="flex flex-col items-center">
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                    {CONDITION_PHOTO_LABELS[angle]}
+                  </p>
+                  {url ? (
+                    <button
+                      className="relative w-full aspect-[4/3] rounded-lg overflow-hidden border border-border bg-muted group"
+                      onClick={() => fileInputRefs.current[angle]?.click()}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`${CONDITION_PHOTO_LABELS[angle]} view`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Camera className="w-6 h-6 text-white" />
+                      </div>
+                    </button>
+                  ) : (
+                    <button
+                      className="w-full aspect-[4/3] rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1.5 hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                      onClick={() => fileInputRefs.current[angle]?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      ) : (
+                        <>
+                          <Camera className="w-6 h-6 text-muted-foreground/50" />
+                          <span className="text-[10px] text-muted-foreground/50">Tap to add</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    ref={(el) => { fileInputRefs.current[angle] = el; }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleConditionPhotoUpload(angle, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Damage Documentation ═══ */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold">
+              <AlertTriangle className="w-4 h-4 inline mr-1.5 text-red-500" />
+              Damage Documentation
+            </p>
+            {!showDamageForm && (
+              <Button size="sm" variant="outline" onClick={() => setShowDamageForm(true)}>
+                <Plus className="w-4 h-4 mr-1" />
+                Log Damage
+              </Button>
+            )}
+          </div>
+
+          {/* Add damage form */}
+          {showDamageForm && (
+            <div className="border border-red-200 dark:border-red-900 rounded-lg p-4 mb-4 bg-red-50/50 dark:bg-red-950/20 space-y-3">
+              <div>
+                <label className="text-xs font-medium block mb-1">When did the damage occur? *</label>
+                <Select value={damageDate} onValueChange={setDamageDate}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Prior to April 1 2026">Prior to April 1, 2026</SelectItem>
+                    <SelectItem value={new Date().toISOString().slice(0, 10)}>
+                      Today ({new Date().toLocaleDateString()})
+                    </SelectItem>
+                    <SelectItem value="__custom__">Other date...</SelectItem>
+                  </SelectContent>
+                </Select>
+                {damageDate === "__custom__" && (
+                  <Input
+                    type="date"
+                    value={damageDateCustom}
+                    onChange={(e) => setDamageDateCustom(e.target.value)}
+                    className="mt-2"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-medium block mb-1">Describe the damage *</label>
+                <Textarea
+                  value={damageDesc}
+                  onChange={(e) => setDamageDesc(e.target.value)}
+                  placeholder="What happened? Where on the equipment is the damage? How did it happen?"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium block mb-1.5">Damage Photos</label>
+                <div className="flex flex-wrap gap-2">
+                  {damagePhotos.map((url, i) => (
+                    <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Damage ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center"
+                        onClick={() => setDamagePhotos((prev) => prev.filter((_, j) => j !== i))}
+                      >
+                        <XCircle className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    className="w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-red-400 transition-colors"
+                    onClick={() => damageFileRef.current?.click()}
+                    disabled={uploadingDamagePhoto}
+                  >
+                    {uploadingDamagePhoto ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <ImageIcon className="w-5 h-5 text-muted-foreground/50" />
+                    )}
+                  </button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    ref={damageFileRef}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleDamagePhotoUpload(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowDamageForm(false);
+                    setDamageDesc("");
+                    setDamagePhotos([]);
+                    setDamageDate("Prior to April 1 2026");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!damageDesc.trim() || savingDamage}
+                  onClick={handleSaveDamage}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {savingDamage ? (
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 mr-1.5" />
+                  )}
+                  Save Damage Record
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Damage records list */}
+          {damageRecords.length > 0 ? (
+            <div className="space-y-3">
+              {damageRecords.map((record) => (
+                <div
+                  key={record.id}
+                  className="border border-red-200 dark:border-red-900 rounded-lg p-3 bg-red-50/30 dark:bg-red-950/10"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] border-red-300 text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30"
+                      >
+                        {record.damage_date}
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                      onClick={() => handleDeleteDamage(record.id)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-foreground whitespace-pre-wrap mt-1">
+                    {record.description}
+                  </p>
+                  {record.photos && record.photos.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {record.photos.map((url, i) => (
+                        <div key={i} className="w-16 h-16 rounded-lg overflow-hidden border border-border">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt={`Damage photo ${i + 1}`} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-1.5">
+                    Logged {new Date(record.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : !showDamageForm ? (
+            <p className="text-sm text-muted-foreground text-center py-3">
+              No damage documented yet.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* ═══ Asset Details ═══ */}
       <Card className="mb-4">
         <CardContent className="p-4">
           <p className="text-sm font-semibold mb-2">Asset details</p>
@@ -213,7 +564,7 @@ export default function AssetDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Notes */}
+      {/* ═══ Notes ═══ */}
       <Card>
         <CardContent className="p-4">
           <p className="text-sm font-semibold mb-2">Notes</p>

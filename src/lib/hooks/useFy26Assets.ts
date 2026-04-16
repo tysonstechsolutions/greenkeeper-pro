@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Fy26Asset, Fy26AssetStatus } from "@/types/fy26-assets";
+import type { Fy26Asset, Fy26AssetStatus, AssetDamageRecord, ConditionPhotoAngle, ConditionPhotos } from "@/types/fy26-assets";
+import { uploadPhoto } from "@/lib/supabase/storage";
 
 export interface Fy26AssetFilters {
   site?: string;           // '7009' | '7010'
@@ -27,6 +28,11 @@ interface UseFy26AssetsReturn {
   fetchAssetItem: (id: string) => Promise<Fy26Asset | null>;
   updateStatus: (id: string, status: Fy26AssetStatus, notes?: string) => Promise<Fy26Asset | null>;
   updateAsset: (id: string, data: Partial<Fy26Asset>) => Promise<Fy26Asset | null>;
+  uploadConditionPhoto: (assetId: string, angle: ConditionPhotoAngle, file: File, userId: string) => Promise<string | null>;
+  fetchDamageRecords: (assetId: string) => Promise<AssetDamageRecord[]>;
+  addDamageRecord: (assetId: string, record: { damage_date: string; description: string; photos: string[]; reported_by?: string }) => Promise<AssetDamageRecord | null>;
+  deleteDamageRecord: (recordId: string) => Promise<boolean>;
+  uploadDamagePhoto: (file: File, userId: string) => Promise<string | null>;
   stats: Fy26AssetStats;
   refetch: () => Promise<void>;
 }
@@ -166,6 +172,133 @@ export function useFy26Assets(): UseFy26AssetsReturn {
     [supabase]
   );
 
+  // ── Condition photo upload (front/back/left/right) ─────────────────────
+
+  const uploadConditionPhoto = useCallback(
+    async (
+      assetId: string,
+      angle: ConditionPhotoAngle,
+      file: File,
+      userId: string
+    ): Promise<string | null> => {
+      try {
+        const result = await uploadPhoto(file, userId);
+        const url = result.publicUrl;
+
+        // Fetch current photos to merge
+        const { data: current } = await supabase
+          .from("fy26_assets")
+          .select("condition_photos")
+          .eq("id", assetId)
+          .single();
+
+        const existing: ConditionPhotos = (current?.condition_photos as ConditionPhotos) || {};
+        const updated = { ...existing, [angle]: url };
+
+        await supabase
+          .from("fy26_assets")
+          .update({ condition_photos: updated })
+          .eq("id", assetId);
+
+        return url;
+      } catch (err) {
+        console.error("[useFy26Assets] uploadConditionPhoto error:", err);
+        setError(err instanceof Error ? err.message : "Failed to upload photo");
+        return null;
+      }
+    },
+    [supabase]
+  );
+
+  // ── Damage photo upload (goes to photos bucket, returns URL) ──────────
+
+  const uploadDamagePhoto = useCallback(
+    async (file: File, userId: string): Promise<string | null> => {
+      try {
+        const result = await uploadPhoto(file, userId);
+        return result.publicUrl;
+      } catch (err) {
+        console.error("[useFy26Assets] uploadDamagePhoto error:", err);
+        return null;
+      }
+    },
+    []
+  );
+
+  // ── Damage records CRUD ───────────────────────────────────────────────
+
+  const fetchDamageRecords = useCallback(
+    async (assetId: string): Promise<AssetDamageRecord[]> => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("asset_damage_records")
+          .select("*")
+          .eq("asset_id", assetId)
+          .order("created_at", { ascending: false });
+
+        if (fetchError) throw new Error(fetchError.message);
+        return (data as AssetDamageRecord[]) || [];
+      } catch (err) {
+        console.error("[useFy26Assets] fetchDamageRecords error:", err);
+        return [];
+      }
+    },
+    [supabase]
+  );
+
+  const addDamageRecord = useCallback(
+    async (
+      assetId: string,
+      record: {
+        damage_date: string;
+        description: string;
+        photos: string[];
+        reported_by?: string;
+      }
+    ): Promise<AssetDamageRecord | null> => {
+      setError(null);
+      try {
+        const { data, error: insertError } = await supabase
+          .from("asset_damage_records")
+          .insert({
+            asset_id: assetId,
+            damage_date: record.damage_date,
+            description: record.description,
+            photos: record.photos,
+            reported_by: record.reported_by || null,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw new Error(insertError.message);
+        return data as AssetDamageRecord;
+      } catch (err) {
+        console.error("[useFy26Assets] addDamageRecord error:", err);
+        setError(err instanceof Error ? err.message : "Failed to add damage record");
+        return null;
+      }
+    },
+    [supabase]
+  );
+
+  const deleteDamageRecord = useCallback(
+    async (recordId: string): Promise<boolean> => {
+      try {
+        const { error: deleteError } = await supabase
+          .from("asset_damage_records")
+          .delete()
+          .eq("id", recordId);
+
+        if (deleteError) throw new Error(deleteError.message);
+        return true;
+      } catch (err) {
+        console.error("[useFy26Assets] deleteDamageRecord error:", err);
+        return false;
+      }
+    },
+    [supabase]
+  );
+
   const refetch = useCallback(async () => {
     await fetchAssets();
   }, [fetchAssets]);
@@ -193,6 +326,11 @@ export function useFy26Assets(): UseFy26AssetsReturn {
     fetchAssetItem,
     updateStatus,
     updateAsset,
+    uploadConditionPhoto,
+    fetchDamageRecords,
+    addDamageRecord,
+    deleteDamageRecord,
+    uploadDamagePhoto,
     stats,
     refetch,
   };
