@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DetailPageHeader } from "@/components/ui/back-button";
+import { InlineCamera } from "@/components/ui/inline-camera";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useFy26Assets } from "@/lib/hooks/useFy26Assets";
 import {
@@ -85,7 +86,7 @@ export default function AssetDetailPage() {
   // Condition photos state
   const [conditionPhotos, setConditionPhotos] = useState<ConditionPhotos>({});
   const [uploadingAngle, setUploadingAngle] = useState<ConditionPhotoAngle | null>(null);
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [cameraAngle, setCameraAngle] = useState<ConditionPhotoAngle | null>(null);
 
   // Damage records state
   const [damageRecords, setDamageRecords] = useState<AssetDamageRecord[]>([]);
@@ -96,7 +97,7 @@ export default function AssetDetailPage() {
   const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
   const [uploadingDamagePhoto, setUploadingDamagePhoto] = useState(false);
   const [savingDamage, setSavingDamage] = useState(false);
-  const damageFileRef = useRef<HTMLInputElement | null>(null);
+  const [damageCamera, setDamageCamera] = useState(false);
 
   // Barcode linking state
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
@@ -435,7 +436,7 @@ export default function AssetDetailPage() {
                   {url ? (
                     <button
                       className="relative w-full aspect-[4/3] rounded-lg overflow-hidden border border-border bg-muted group"
-                      onClick={() => fileInputRefs.current[angle]?.click()}
+                      onClick={() => setCameraAngle(angle)}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -450,7 +451,7 @@ export default function AssetDetailPage() {
                   ) : (
                     <button
                       className="w-full aspect-[4/3] rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1.5 hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                      onClick={() => fileInputRefs.current[angle]?.click()}
+                      onClick={() => setCameraAngle(angle)}
                       disabled={isUploading}
                     >
                       {isUploading ? (
@@ -463,18 +464,6 @@ export default function AssetDetailPage() {
                       )}
                     </button>
                   )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    ref={(el) => { fileInputRefs.current[angle] = el; }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleConditionPhotoUpload(angle, f);
-                      e.target.value = "";
-                    }}
-                  />
                 </div>
               );
             })}
@@ -552,7 +541,7 @@ export default function AssetDetailPage() {
                   ))}
                   <button
                     className="w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-red-400 transition-colors"
-                    onClick={() => damageFileRef.current?.click()}
+                    onClick={() => setDamageCamera(true)}
                     disabled={uploadingDamagePhoto}
                   >
                     {uploadingDamagePhoto ? (
@@ -561,18 +550,6 @@ export default function AssetDetailPage() {
                       <ImageIcon className="w-5 h-5 text-muted-foreground/50" />
                     )}
                   </button>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    ref={damageFileRef}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleDamagePhotoUpload(f);
-                      e.target.value = "";
-                    }}
-                  />
                 </div>
               </div>
 
@@ -728,6 +705,26 @@ export default function AssetDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Inline Camera for condition photos */}
+      <InlineCamera
+        open={!!cameraAngle}
+        onCapture={(file) => {
+          if (cameraAngle) handleConditionPhotoUpload(cameraAngle, file);
+          setCameraAngle(null);
+        }}
+        onClose={() => setCameraAngle(null)}
+      />
+
+      {/* Inline Camera for damage photos */}
+      <InlineCamera
+        open={damageCamera}
+        onCapture={(file) => {
+          handleDamagePhotoUpload(file);
+          setDamageCamera(false);
+        }}
+        onClose={() => setDamageCamera(false)}
+      />
     </div>
   );
 }

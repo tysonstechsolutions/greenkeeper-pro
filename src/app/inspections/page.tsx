@@ -25,6 +25,7 @@ import {
   Calendar,
   User,
   Trash2,
+  Archive,
 } from "lucide-react";
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -609,6 +610,23 @@ export default function InspectionsPage() {
             Create New Inspection
           </button>
         </div>
+
+        {/* Asset Inventory link */}
+        <Link
+          href="/inspections/asset-inventory"
+          className="mt-4 block rounded-2xl border border-border bg-card p-5 hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Archive className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold">FY26 Asset Inventory</h3>
+              <p className="text-xs text-muted-foreground">Link barcodes, verify assets, document condition</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground/40" />
+          </div>
+        </Link>
       </div>
     );
   }
@@ -680,6 +698,21 @@ export default function InspectionsPage() {
           </div>
         </div>
       </div>
+
+      {/* Asset Inventory link */}
+      <Link
+        href="/inspections/asset-inventory"
+        className="block rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 hover:shadow-md transition-shadow"
+      >
+        <div className="flex items-center gap-3">
+          <Archive className="w-5 h-5 text-amber-600" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">FY26 Asset Inventory</h3>
+            <p className="text-[11px] text-muted-foreground">Link barcodes & verify all assets</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-muted-foreground/40" />
+        </div>
+      </Link>
 
       {/* Status legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">

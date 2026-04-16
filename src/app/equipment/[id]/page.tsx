@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Download,
   FileText,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
@@ -163,6 +164,15 @@ export default function EquipmentDetailPage() {
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [delayReasonInput, setDelayReasonInput] = useState<Record<string, string>>({});
 
+  // FY26 Asset link state
+  const [assetLinkOpen, setAssetLinkOpen] = useState(false);
+  const [assetSearchQuery, setAssetSearchQuery] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [assetSearchResults, setAssetSearchResults] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [linkedAsset, setLinkedAsset] = useState<any | null>(null);
+  const [searchingAssets, setSearchingAssets] = useState(false);
+
   // Edit form state
   const [editForm, setEditForm] = useState({
     name: "",
@@ -265,9 +275,70 @@ export default function EquipmentDetailPage() {
     void loadStaff();
   }, []);
 
+  // Fetch linked FY26 asset on load
+  useEffect(() => {
+    async function loadLinkedAsset() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("fy26_assets")
+        .select("*")
+        .eq("equipment_id", equipmentId)
+        .maybeSingle();
+      if (data) setLinkedAsset(data);
+    }
+    void loadLinkedAsset();
+  }, [equipmentId]);
+
   // Get staff filtered for equipment service (mechanic only) vs all staff
   const mechanicStaff = staffMembers.filter((s) => s.role === "mechanic");
   const allStaff = staffMembers;
+
+  // Search FY26 assets
+  const handleAssetSearch = useCallback(async (query: string) => {
+    setAssetSearchQuery(query);
+    if (!query.trim()) {
+      setAssetSearchResults([]);
+      return;
+    }
+    setSearchingAssets(true);
+    const supabase = createClient();
+    const q = `%${query.trim()}%`;
+    const { data } = await supabase
+      .from("fy26_assets")
+      .select("*")
+      .or(`description.ilike.${q},asset_number.ilike.${q},serial_number.ilike.${q},manufacturer.ilike.${q}`)
+      .limit(20);
+    setAssetSearchResults(data || []);
+    setSearchingAssets(false);
+  }, []);
+
+  // Link an FY26 asset to this equipment
+  const handleLinkAsset = async (assetId: string) => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("fy26_assets")
+      .update({ equipment_id: equipmentId })
+      .eq("id", assetId)
+      .select("*")
+      .single();
+    if (data) {
+      setLinkedAsset(data);
+      setAssetLinkOpen(false);
+      setAssetSearchQuery("");
+      setAssetSearchResults([]);
+    }
+  };
+
+  // Unlink the FY26 asset
+  const handleUnlinkAsset = async () => {
+    if (!linkedAsset) return;
+    const supabase = createClient();
+    await supabase
+      .from("fy26_assets")
+      .update({ equipment_id: null })
+      .eq("id", linkedAsset.id);
+    setLinkedAsset(null);
+  };
 
   // Handle photo upload
   const handlePhotoUpload = async (file: File) => {
@@ -545,6 +616,40 @@ export default function EquipmentDetailPage() {
           <Clock className="w-4 h-4 mr-1" />
           Service History
         </Button>
+
+        {/* Link to FY26 Asset */}
+        {linkedAsset ? (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+            <Link2 className="w-5 h-5 text-green-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-green-700 dark:text-green-400 font-medium mb-0.5">Linked FY26 Asset</p>
+              <p className="text-sm font-medium truncate">{linkedAsset.description}</p>
+              <p className="text-xs text-muted-foreground">
+                Asset# {linkedAsset.asset_number}
+                {linkedAsset.site ? ` · ${linkedAsset.site}` : ""}
+                {linkedAsset.serial_number ? ` · S/N ${linkedAsset.serial_number}` : ""}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground shrink-0"
+              onClick={handleUnlinkAsset}
+            >
+              Unlink
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAssetLinkOpen(true)}
+            className="active:scale-95 transition-all"
+          >
+            <Link2 className="w-4 h-4 mr-1" />
+            Link to FY26 Asset
+          </Button>
+        )}
       </div>
 
       {/* Beyond Repair Banner */}
@@ -1827,6 +1932,60 @@ export default function EquipmentDetailPage() {
       </Sheet>
 
       {/* Log Sheet removed — replaced by Service History */}
+
+      {/* Link to FY26 Asset Dialog */}
+      <Dialog open={assetLinkOpen} onOpenChange={setAssetLinkOpen}>
+        <DialogContent className="max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Link to FY26 Asset</DialogTitle>
+            <DialogDescription>
+              Search for an FY26 asset to link to this equipment record.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="Search by description, asset#, serial#, manufacturer..."
+            value={assetSearchQuery}
+            onChange={(e) => handleAssetSearch(e.target.value)}
+          />
+          <div className="flex-1 overflow-y-auto max-h-[50vh] space-y-2 mt-2">
+            {searchingAssets && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!searchingAssets && assetSearchQuery && assetSearchResults.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No assets found.</p>
+            )}
+            {assetSearchResults.map((a) => {
+              const isLinkedToOther = a.equipment_id && a.equipment_id !== equipmentId;
+              return (
+                <button
+                  key={a.id}
+                  className="w-full text-left p-3 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-50"
+                  onClick={() => handleLinkAsset(a.id)}
+                  disabled={!!isLinkedToOther}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{a.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Asset# {a.asset_number}
+                        {a.manufacturer ? ` · ${a.manufacturer}` : ""}
+                        {a.serial_number ? ` · S/N ${a.serial_number}` : ""}
+                      </p>
+                    </div>
+                    {isLinkedToOther && (
+                      <Badge variant="secondary" className="text-[10px] shrink-0">
+                        Already linked
+                      </Badge>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
