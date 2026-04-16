@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Edit2,
   Trash2,
   Camera,
@@ -13,16 +12,12 @@ import {
   Check,
   Loader2,
   Clock,
-  MapPin,
-  Hash,
-  Tag,
   Calendar,
-  DollarSign,
   Package,
   AlertTriangle,
-  Download,
   FileText,
   Link2,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
@@ -49,12 +44,10 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   useEquipment,
   equipmentTypeLabels,
@@ -62,15 +55,11 @@ import {
   equipmentStatusColors,
   conditionStatusLabels,
   conditionStatusColors,
-  logTypeLabels,
-  logTypeColors,
   fuelTypeLabels,
   preInspectionChecklist,
   postInspectionChecklist,
   cleaningChecklist,
-  getChecklistCategory,
   type EquipmentWithLogs,
-  type CreateLogData,
   type CreateInspectionData,
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -80,7 +69,7 @@ import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecor
 import { useAssetDisposal } from "@/lib/hooks/useAssetDisposal";
 import type { DisposalStatus } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
-import type { Equipment, EquipmentLog, EquipmentInspection, EquipmentPart, EquipmentServiceRecord, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
+import type { Equipment, EquipmentInspection, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
 
 const partStatusLabels: Record<string, string> = {
   needed: "Needed", ordered: "Ordered", received: "Received",
@@ -98,17 +87,16 @@ interface StaffMember {
 export default function EquipmentDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, profile, canManageEquipment, isManager, loading: authLoading } = useAuth();
-  const { createNotification } = useNotifications();
+  const { user, profile, canManageEquipment, loading: authLoading } = useAuth();
+  // useNotifications imported but notification creation deferred to server-side
+  useNotifications();
   const {
     fetchEquipmentItem,
     updateEquipment,
     uploadEquipmentPhoto,
     deleteEquipmentPhoto,
-    createLog,
     createInspection,
     fetchLatestInspection,
-    loading,
     error: equipmentError,
   } = useEquipment();
 
@@ -121,8 +109,8 @@ export default function EquipmentDetailPage() {
     error: partsError,
     clearError: clearPartsError,
   } = useEquipmentParts();
-  const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord, error: serviceError } = useEquipmentServiceRecords();
-  const { disposal, fetchDisposal, createDisposal, advanceStep, loading: disposalLoading } = useAssetDisposal();
+  const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord } = useEquipmentServiceRecords();
+  const { disposal, fetchDisposal, createDisposal, advanceStep } = useAssetDisposal();
 
   const equipmentId = params.id as string;
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);

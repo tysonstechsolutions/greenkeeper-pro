@@ -8,14 +8,12 @@ import {
   Plus,
   AlertTriangle,
   CheckCircle,
-  Clock,
   XCircle,
   Filter,
   ChevronRight,
   Loader2,
   Camera,
   FileText,
-  Download,
   ShoppingCart,
   PackageCheck,
   Trash2,
@@ -48,11 +46,6 @@ import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/datab
 // Per-equipment summary of rows from the `equipment_parts` table.
 type PartsSummary = { needed: number; ordered: number };
 
-// Equipment type icons (simplified)
-function getEquipmentIcon(_type: EquipmentType) {
-  // Using Wrench for all - in production, you'd have specific icons
-  return <Wrench className="w-8 h-8 text-muted-foreground" />;
-}
 
 // Stats card component
 function StatCard({
@@ -274,7 +267,7 @@ function EquipmentCard({
 
 export default function EquipmentPage() {
   const router = useRouter();
-  const { user, profile, canManageEquipment, loading: authLoading } = useAuth();
+  const { profile, canManageEquipment } = useAuth();
   const { equipment, loading, error, fetchEquipment } = useEquipment();
 
   const [searchQuery, setSearchQuery] = useState("");

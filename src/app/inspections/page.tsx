@@ -588,6 +588,23 @@ export default function InspectionsPage() {
           </div>
         </div>
 
+        {/* Asset Inventory — prominent at top */}
+        <Link
+          href="/inspections/asset-inventory"
+          className="block rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-5 hover:shadow-md transition-shadow mb-4"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+              <Archive className="w-6 h-6 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-bold">FY26 Asset Inventory</h3>
+              <p className="text-sm text-muted-foreground">Link barcodes, verify assets, take condition photos</p>
+            </div>
+            <ChevronRight className="w-6 h-6 text-amber-600" />
+          </div>
+        </Link>
+
         <div className="rounded-2xl border border-border bg-card p-8 text-center space-y-4">
           <ClipboardCheck className="w-16 h-16 mx-auto text-indigo-500/40" />
           <div>
@@ -610,23 +627,6 @@ export default function InspectionsPage() {
             Create New Inspection
           </button>
         </div>
-
-        {/* Asset Inventory link */}
-        <Link
-          href="/inspections/asset-inventory"
-          className="mt-4 block rounded-2xl border border-border bg-card p-5 hover:shadow-md transition-shadow"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-              <Archive className="w-5 h-5 text-amber-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold">FY26 Asset Inventory</h3>
-              <p className="text-xs text-muted-foreground">Link barcodes, verify assets, document condition</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-muted-foreground/40" />
-          </div>
-        </Link>
       </div>
     );
   }
@@ -661,6 +661,23 @@ export default function InspectionsPage() {
           )}
         </button>
       </div>
+
+      {/* Asset Inventory — top of page */}
+      <Link
+        href="/inspections/asset-inventory"
+        className="block rounded-2xl border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 hover:shadow-md transition-shadow"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+            <Archive className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold">FY26 Asset Inventory</h3>
+            <p className="text-[11px] text-muted-foreground">Link barcodes & verify all assets</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-amber-600" />
+        </div>
+      </Link>
 
       {/* Score + Meta card */}
       <div className="rounded-2xl border border-border bg-card p-5">
@@ -698,21 +715,6 @@ export default function InspectionsPage() {
           </div>
         </div>
       </div>
-
-      {/* Asset Inventory link */}
-      <Link
-        href="/inspections/asset-inventory"
-        className="block rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 hover:shadow-md transition-shadow"
-      >
-        <div className="flex items-center gap-3">
-          <Archive className="w-5 h-5 text-amber-600" />
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold">FY26 Asset Inventory</h3>
-            <p className="text-[11px] text-muted-foreground">Link barcodes & verify all assets</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground/40" />
-        </div>
-      </Link>
 
       {/* Status legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
