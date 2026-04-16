@@ -22,9 +22,10 @@ export interface UseAuthReturn {
   isSeasonal: boolean;
   isPro: boolean;
   isDirector: boolean;
+  isGM: boolean;
   isStaff: boolean; // Any internal staff
   // Permission helpers
-  isManager: boolean; // super or asst_super or pro or director
+  isManager: boolean; // super or asst_super or pro or director or gm
   canCreateInvites: boolean;
   canManageEquipment: boolean;
   canManageChemicals: boolean;
@@ -47,6 +48,7 @@ const defaultAuthState: UseAuthReturn = {
   isSeasonal: false,
   isPro: false,
   isDirector: false,
+  isGM: false,
   isStaff: false,
   isManager: false,
   canCreateInvites: false,
@@ -223,14 +225,15 @@ export function useAuthInternal(): UseAuthReturn {
   const isSeasonal = role === "seasonal";
   const isPro = role === "pro";
   const isDirector = role === "director";
+  const isGM = role === "gm";
   const isStaff = role !== undefined;
 
-  // Permission helpers — director can see everything (read-all oversight)
-  const isManager = isSuper || isAsstSuper || isPro || isDirector;
-  const canCreateInvites = isSuper || isAsstSuper || isDirector;
-  const canManageEquipment = isSuper || isAsstSuper || isForeman || isMechanic || isDirector;
-  const canManageChemicals = isSuper || isAsstSuper || isDirector;
-  const canApproveTimesheets = isSuper || isAsstSuper || isForeman || isDirector;
+  // Permission helpers — director and gm can see everything (read-all oversight)
+  const isManager = isSuper || isAsstSuper || isPro || isDirector || isGM;
+  const canCreateInvites = isSuper || isAsstSuper || isDirector || isGM;
+  const canManageEquipment = isSuper || isAsstSuper || isForeman || isMechanic || isDirector || isGM;
+  const canManageChemicals = isSuper || isAsstSuper || isDirector || isGM;
+  const canApproveTimesheets = isSuper || isAsstSuper || isForeman || isDirector || isGM;
 
   return {
     user,
@@ -248,6 +251,7 @@ export function useAuthInternal(): UseAuthReturn {
     isSeasonal,
     isPro,
     isDirector,
+    isGM,
     isStaff,
     isManager,
     canCreateInvites,

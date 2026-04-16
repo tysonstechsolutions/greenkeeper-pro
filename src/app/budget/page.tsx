@@ -16,6 +16,7 @@ import {
   FileText,
   Calculator,
   Loader2,
+  Eye,
 } from "lucide-react";
 import {
   BarChart,
@@ -327,6 +328,10 @@ export default function BudgetPage() {
         <Button variant="outline" onClick={() => router.push("/budget/expenses")}>
           <FileText className="w-4 h-4 mr-2" />
           View All Expenses
+        </Button>
+        <Button variant="outline" onClick={() => router.push("/budget/overview")}>
+          <Eye className="w-4 h-4 mr-2" />
+          Overview
         </Button>
       </div>
 

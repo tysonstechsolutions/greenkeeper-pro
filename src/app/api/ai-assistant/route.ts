@@ -323,6 +323,24 @@ const TOOLS = [
     },
   },
   {
+    name: "search_vendors",
+    description:
+      "Search the vendor contact directory by name, company, category, or what they supply. Use when the user asks 'who is our spray contractor?', 'find irrigation vendor', 'vendor phone number', etc.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        search: { type: "string", description: "Search vendor name, company, or supplies text" },
+        category: {
+          type: "string",
+          enum: ["spray_contractor", "equipment_dealer", "parts_supplier", "irrigation", "landscaping", "construction", "fuel", "seed_sod", "general"],
+          description: "Filter by vendor category",
+        },
+        limit: { type: "number", description: "Max results (default 20, max 50)" },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_fy26_assets_summary",
     description:
       "Summary of FY26 annual inventory assets by status (Present / MIA / Unverified / Disposed) and site (7009 Golf Course, 7010 Maintenance). Use when the user asks about inventory status, MIA counts, missing equipment, or annual inventory progress. Also supports searching specific assets by description or serial.",
@@ -962,6 +980,32 @@ async function executeTool(
         }
 
         return sections.join("\n");
+      }
+
+      case "search_vendors": {
+        const limit = Math.min(input.limit || 20, 50);
+        let query = supabase
+          .from("vendors")
+          .select("id, name, company, phone, email, category, supplies, notes, contract_end_date")
+          .order("name")
+          .limit(limit);
+
+        if (input.category) query = query.eq("category", input.category);
+        if (input.search) {
+          const term = `%${input.search}%`;
+          query = query.or(
+            `name.ilike.${term},company.ilike.${term},supplies.ilike.${term}`
+          );
+        }
+
+        const { data, error } = await query;
+        if (error) return `Error searching vendors: ${error.message}`;
+        if (!data || data.length === 0) return "No vendors found matching your criteria.";
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return data.map((v: any) =>
+          `• ${v.name}${v.company ? ` (${v.company})` : ""} — ${v.category.replace(/_/g, " ")}${v.phone ? ` | Phone: ${v.phone}` : ""}${v.email ? ` | Email: ${v.email}` : ""}${v.supplies ? ` | Supplies: ${v.supplies}` : ""}${v.notes ? ` | Notes: ${v.notes.substring(0, 80)}` : ""}`
+        ).join("\n");
       }
 
       case "get_fy26_assets_summary": {

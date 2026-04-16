@@ -21,13 +21,13 @@ const DEFAULT_CHANNELS: DefaultChannel[] = [
     name: "Foremen",
     description: "Discussion channel for foremen and supervisors",
     type: "role",
-    roleFilter: ["foreman", "asst_super", "super", "director"],
+    roleFilter: ["foreman", "asst_super", "super", "director", "gm"],
   },
   {
     name: "Mechanics",
     description: "Equipment maintenance and repair coordination",
     type: "role",
-    roleFilter: ["mechanic", "asst_super", "super", "director"],
+    roleFilter: ["mechanic", "asst_super", "super", "director", "gm"],
   },
 ];
 

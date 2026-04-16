@@ -37,7 +37,8 @@ export default function CompliancePage() {
   const isAllowed =
     profile?.role === "super" ||
     profile?.role === "asst_super" ||
-    profile?.role === "director";
+    profile?.role === "director" ||
+    profile?.role === "gm";
 
   const [since, setSince] = useState(() => {
     const d = new Date();

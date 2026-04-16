@@ -2,7 +2,7 @@
 // Auto-generated types for Supabase integration
 // Based on the complete schema from greenkeeper-pro-spec.md
 
-export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director";
+export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director" | "gm";
 
 export type ZoneType =
   | "green"
@@ -811,7 +811,7 @@ export interface Notification {
   created_at: string;
 }
 
-export type InviteRole = "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "director";
+export type InviteRole = "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "director" | "gm";
 
 export interface Invite {
   id: string;

@@ -374,7 +374,8 @@ export default function InspectionsPage() {
   const isAllowed =
     profile?.role === "super" ||
     profile?.role === "asst_super" ||
-    profile?.role === "director";
+    profile?.role === "director" ||
+    profile?.role === "gm";
 
   // ── Fetch active checklist ──
   const fetchChecklist = useCallback(async () => {

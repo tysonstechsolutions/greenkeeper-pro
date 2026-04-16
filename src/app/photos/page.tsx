@@ -485,6 +485,12 @@ export default function PhotosPage() {
             <Clock className="w-4 h-4 mr-1" />
             Timeline
           </Button>
+          <Link href="/photos/timeline">
+            <Button variant="outline" size="sm">
+              <Calendar className="w-4 h-4 mr-1" />
+              Condition Timeline
+            </Button>
+          </Link>
         </div>
       </PageHeader>
 

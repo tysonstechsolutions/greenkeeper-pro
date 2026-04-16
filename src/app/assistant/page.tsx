@@ -553,7 +553,8 @@ export default function AssistantPage() {
     profile?.role === "super" ||
     profile?.role === "asst_super" ||
     profile?.role === "foreman" ||
-    profile?.role === "director";
+    profile?.role === "director" ||
+    profile?.role === "gm";
 
   if (!isAllowed) {
     return (

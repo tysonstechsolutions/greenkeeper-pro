@@ -21,7 +21,8 @@ export function ChatBubble() {
     profile?.role === "super" ||
     profile?.role === "asst_super" ||
     profile?.role === "foreman" ||
-    profile?.role === "director";
+    profile?.role === "director" ||
+    profile?.role === "gm";
 
   if (!allowed) return null;
 

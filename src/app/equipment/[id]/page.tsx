@@ -534,6 +534,17 @@ export default function EquipmentDetailPage() {
           )}
           {generatingReport ? "Generating Report..." : equipment.condition_status === "beyond_repair" || equipment.status === "out_of_service" ? "Download DRMO Report" : "Download Equipment Report"}
         </Button>
+
+        {/* Service History Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push(`/equipment/${equipmentId}/service-history`)}
+          className="active:scale-95 transition-all"
+        >
+          <Clock className="w-4 h-4 mr-1" />
+          Service History
+        </Button>
       </div>
 
       {/* Beyond Repair Banner */}

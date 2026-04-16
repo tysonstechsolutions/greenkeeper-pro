@@ -35,6 +35,7 @@ import {
   MessageSquare,
   Flag,
   Lightbulb,
+  Printer,
 } from "lucide-react";
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
@@ -57,6 +58,8 @@ import { useRecentActivity } from "@/lib/hooks/useRecentActivity";
 import { createClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/utils/resilient-fetch";
 import { format } from "date-fns";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { Task, Equipment } from "@/types/database";
 
 // Dynamically import MiniMapWidget to avoid SSR issues with Leaflet
@@ -1181,6 +1184,30 @@ function LeadershipDashboardView() {
             </Link>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const res = await fetch("/api/reports/daily-assignments");
+              if (!res.ok) throw new Error("Failed to generate PDF");
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `VMGC-Daily-Assignments-${new Date().toISOString().split("T")[0]}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error("Error downloading daily assignments:", err);
+            }
+          }}
+          className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-card border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30 transition-all text-muted-foreground"
+        >
+          <Printer className="w-4 h-4" />
+          Print Daily Assignments
+        </button>
       </div>
 
       {/* ===== Main Content Grid ===== */}
@@ -2125,11 +2152,495 @@ function StaffDashboardView() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// GM DASHBOARD VIEW (General Manager)
+// Financial oversight + operational KPIs
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+interface RevenueEntry {
+  id: string;
+  entry_date: string;
+  category: string;
+  amount: number;
+  rounds_count: number | null;
+  description: string | null;
+}
+
+interface CapitalProject {
+  id: string;
+  name: string;
+  status: string;
+  budget_amount: number | null;
+  spent_amount: number | null;
+  target_completion: string | null;
+  category: string | null;
+}
+
+function BarChart3Icon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="12" x2="12" y1="20" y2="10" />
+      <line x1="18" x2="18" y1="20" y2="4" />
+      <line x1="6" x2="6" y1="20" y2="16" />
+    </svg>
+  );
+}
+
+function DollarSignIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="12" x2="12" y1="2" y2="22" />
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+}
+
+function GMDashboardView() {
+  const { profile } = useAuth();
+  const { activities, loading: activitiesLoading } = useRecentActivity();
+
+  const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>([]);
+  const [capitalProjects, setCapitalProjects] = useState<CapitalProject[]>([]);
+  const [totalExpenses, setTotalExpenses] = useState(0);
+  const [equipmentStats, setEquipmentStats] = useState({ operational: 0, total: 0 });
+  const [openTasksCount, setOpenTasksCount] = useState(0);
+  const [openIssuesCount, setOpenIssuesCount] = useState(0);
+  const [miaAssetsCount, setMiaAssetsCount] = useState(0);
+  const [gmLoading, setGmLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
+
+  const greeting = useMemo(() => getGreeting(), []);
+  const firstName = profile?.full_name?.split(" ")[0] || "GM";
+
+  const now = useMemo(() => new Date(), []);
+  const monthStart = useMemo(
+    () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
+    [now]
+  );
+  const monthEnd = useMemo(
+    () => new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0],
+    [now]
+  );
+
+  useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
+    async function loadGMData() {
+      setGmLoading(true);
+      try {
+        const supabase = createClient();
+
+        const [
+          revenueResult,
+          projectsResult,
+          expensesResult,
+          equipmentResult,
+          tasksResult,
+          issuesResult,
+          assetsResult,
+        ] = await Promise.all([
+          supabase
+            .from("revenue_entries")
+            .select("id, entry_date, category, amount, rounds_count, description")
+            .gte("entry_date", monthStart)
+            .lte("entry_date", monthEnd)
+            .order("entry_date", { ascending: false }),
+          supabase
+            .from("capital_projects")
+            .select("id, name, status, budget_amount, spent_amount, target_completion, category")
+            .in("status", ["approved", "in_progress"]),
+          supabase
+            .from("expenses")
+            .select("amount")
+            .gte("expense_date", monthStart)
+            .lte("expense_date", monthEnd)
+            .in("status", ["approved", "paid"]),
+          supabase
+            .from("equipment")
+            .select("id, status")
+            .neq("status", "retired"),
+          supabase
+            .from("tasks")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["pending", "in_progress"]),
+          supabase
+            .from("hole_observations")
+            .select("id", { count: "exact", head: true })
+            .in("status", ["open", "in_progress"]),
+          supabase
+            .from("fy26_assets")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "mia"),
+        ]);
+
+        setRevenueEntries((revenueResult.data || []) as RevenueEntry[]);
+        setCapitalProjects((projectsResult.data || []) as CapitalProject[]);
+
+        const expTotal = (expensesResult.data || []).reduce(
+          (sum: number, e: { amount: number }) => sum + (e.amount || 0),
+          0
+        );
+        setTotalExpenses(expTotal);
+
+        const eqData = (equipmentResult.data || []) as { id: string; status: string }[];
+        setEquipmentStats({
+          operational: eqData.filter((e) => e.status === "operational").length,
+          total: eqData.length,
+        });
+
+        setOpenTasksCount(tasksResult.count ?? 0);
+        setOpenIssuesCount(issuesResult.count ?? 0);
+        setMiaAssetsCount(assetsResult.count ?? 0);
+      } catch (err) {
+        console.error("GM dashboard load error:", err);
+      } finally {
+        setGmLoading(false);
+      }
+    }
+
+    void loadGMData();
+  }, [monthStart, monthEnd]);
+
+  // Computed values
+  const totalRevenue = revenueEntries.reduce((sum, e) => sum + e.amount, 0);
+  const totalRounds = revenueEntries.reduce((sum, e) => sum + (e.rounds_count || 0), 0);
+  const netPosition = totalRevenue - totalExpenses;
+  const uptimePct = equipmentStats.total > 0
+    ? Math.round((equipmentStats.operational / equipmentStats.total) * 100)
+    : 0;
+
+  // Revenue by category
+  const revenueByCategory = useMemo(() => {
+    const catMap: Record<string, number> = {};
+    for (const entry of revenueEntries) {
+      catMap[entry.category] = (catMap[entry.category] || 0) + entry.amount;
+    }
+    return Object.entries(catMap)
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        pct: totalRevenue > 0 ? Math.round((amount / totalRevenue) * 100) : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [revenueEntries, totalRevenue]);
+
+  const categoryLabel = (cat: string) =>
+    cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto">
+      {/* Welcome Header */}
+      <div className="gk-animate-in gk-animate-in-1 mb-6">
+        <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
+          <div className="relative z-10">
+            <p className="text-white/60 text-sm font-medium mb-1">
+              {new Date().toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+              {greeting}, {firstName}
+            </h1>
+            <p className="text-sm text-white/50 mt-1.5">General Manager</p>
+          </div>
+          <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-[#B68D40]/10 rounded-full blur-2xl pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Financial Summary Cards */}
+      <div className="gk-animate-in gk-animate-in-2 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <DollarSignIcon className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">Revenue (Month)</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">
+              {gmLoading ? "..." : `$${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 0 })}`}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <Users className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">Rounds (Month)</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">
+              {gmLoading ? "..." : totalRounds.toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">Expenses (Month)</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground">
+              {gmLoading ? "..." : `$${totalExpenses.toLocaleString("en-US", { minimumFractionDigits: 0 })}`}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <DollarSignIcon className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">Net Position</span>
+            </div>
+            <p className={cn("text-2xl font-bold", netPosition >= 0 ? "text-green-600" : "text-red-600")}>
+              {gmLoading ? "..." : `${netPosition >= 0 ? "+" : ""}$${Math.abs(netPosition).toLocaleString("en-US", { minimumFractionDigits: 0 })}`}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Grid */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+        {/* Revenue by Category */}
+        <Card className="gk-animate-in gk-animate-in-3">
+          <CardContent className="p-5">
+            <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+              <BarChart3Icon className="w-4 h-4 text-primary" />
+              Revenue by Category
+            </h2>
+            {gmLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-8 bg-muted/50 rounded animate-pulse" />
+                ))}
+              </div>
+            ) : revenueByCategory.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No revenue data this month</p>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground pb-1 border-b border-border">
+                  <span>Category</span>
+                  <span className="text-right">Amount</span>
+                  <span className="text-right">% of Total</span>
+                </div>
+                {revenueByCategory.map((row) => (
+                  <div key={row.category} className="grid grid-cols-3 text-sm py-1">
+                    <span className="truncate">{categoryLabel(row.category)}</span>
+                    <span className="text-right font-medium">${row.amount.toLocaleString()}</span>
+                    <span className="text-right text-muted-foreground">{row.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Active Capital Projects */}
+        <Card className="gk-animate-in gk-animate-in-4">
+          <CardContent className="p-5">
+            <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary" />
+              Active Capital Projects
+            </h2>
+            {gmLoading ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-16 bg-muted/50 rounded animate-pulse" />
+                ))}
+              </div>
+            ) : capitalProjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No active projects</p>
+            ) : (
+              <div className="space-y-3">
+                {capitalProjects.map((proj) => {
+                  const budget = proj.budget_amount || 0;
+                  const spent = proj.spent_amount || 0;
+                  const progressPct = budget > 0 ? Math.min(Math.round((spent / budget) * 100), 100) : 0;
+                  return (
+                    <div key={proj.id} className="p-3 bg-muted/30 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm truncate">{proj.name}</span>
+                        <Badge variant={proj.status === "in_progress" ? "default" : "secondary"} className="text-xs ml-2">
+                          {proj.status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                        <span>${spent.toLocaleString()} / ${budget.toLocaleString()}</span>
+                        {proj.target_completion && (
+                          <span>Target: {new Date(proj.target_completion).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                        )}
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            progressPct > 90 ? "bg-red-500" : progressPct > 70 ? "bg-amber-500" : "bg-primary"
+                          )}
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Operational KPIs */}
+        <Card className="gk-animate-in gk-animate-in-5">
+          <CardContent className="p-5">
+            <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-primary" />
+              Operational KPIs
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">Equipment Uptime</span>
+                </div>
+                <span className={cn("font-bold text-sm", uptimePct >= 90 ? "text-green-600" : uptimePct >= 70 ? "text-amber-600" : "text-red-600")}>
+                  {gmLoading ? "..." : `${uptimePct}%`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">Open Tasks</span>
+                </div>
+                <span className="font-bold text-sm">{gmLoading ? "..." : openTasksCount}</span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">Open Course Issues</span>
+                </div>
+                <span className="font-bold text-sm">{gmLoading ? "..." : openIssuesCount}</span>
+              </div>
+              <div className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm">MIA Assets</span>
+                </div>
+                <span className={cn("font-bold text-sm", miaAssetsCount > 0 ? "text-red-600" : "text-green-600")}>
+                  {gmLoading ? "..." : miaAssetsCount}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card className="gk-animate-in gk-animate-in-6">
+          <CardContent className="p-5">
+            <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-[#B68D40]" />
+              Quick Actions
+            </h2>
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/budget">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <DollarSignIcon className="w-4 h-4" />
+                  View Budget
+                </Button>
+              </Link>
+              <Link href="/reports">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <BarChart3Icon className="w-4 h-4" />
+                  View Reports
+                </Button>
+              </Link>
+              <Link href="/staff">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <Users className="w-4 h-4" />
+                  View Staff
+                </Button>
+              </Link>
+              <Link href="/equipment">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <Wrench className="w-4 h-4" />
+                  View Equipment
+                </Button>
+              </Link>
+              <Link href="/reports/monthly-board" className="col-span-2">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <FileText className="w-4 h-4" />
+                  Download Board Report
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card className="gk-animate-in gk-animate-in-7 lg:col-span-2">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                Recent Activity
+              </h2>
+              <span className="gk-live-dot" title="Live" />
+            </div>
+            {activitiesLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-12 bg-muted/50 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : activities.length > 0 ? (
+              <div className="space-y-0.5">
+                {activities.slice(0, 10).map((activity, idx) => {
+                  const IconComponent = getActivityIcon(activity.action_type);
+                  const isCompleted = activity.action_type === "task_completed";
+                  return (
+                    <div
+                      key={activity.id}
+                      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
+                      style={{ animationDelay: `${420 + idx * 60}ms` }}
+                    >
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                          isCompleted ? "bg-green-500/10" : "bg-muted/60"
+                        )}
+                      >
+                        <IconComponent
+                          className={cn(
+                            "w-3.5 h-3.5",
+                            isCompleted ? "text-green-600" : "text-muted-foreground"
+                          )}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{activity.description}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {activity.user?.full_name || "System"} &middot;{" "}
+                          {formatActivityTime(activity.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Clock className="w-7 h-7 mx-auto mb-2 opacity-30" />
+                <p className="text-xs">No recent activity</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // PAGE — role-driven dashboard router
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function DashboardPage() {
-  const { isPro, isSuper, isAsstSuper, isDirector, loading } = useAuth();
+  const { isPro, isSuper, isAsstSuper, isDirector, isGM, loading } = useAuth();
 
   const isLeadership = isSuper || isAsstSuper || isDirector;
 
@@ -2147,6 +2658,10 @@ export default function DashboardPage() {
         </div>
       </div>
     );
+  }
+
+  if (isGM) {
+    return <GMDashboardView />;
   }
 
   if (isPro) {

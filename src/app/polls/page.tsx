@@ -69,7 +69,7 @@ export default function PollsPage() {
   const [addingComment, setAddingComment] = useState<Record<string, boolean>>({});
   const [commentText, setCommentText] = useState<Record<string, string>>({});
 
-  const isManager = profile?.role && ["super", "asst_super", "director", "pro"].includes(profile.role);
+  const isManager = profile?.role && ["super", "asst_super", "director", "pro", "gm"].includes(profile.role);
 
   useEffect(() => {
     fetchPolls();

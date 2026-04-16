@@ -31,6 +31,8 @@ import {
   ClipboardCheck,
   Bot,
   Archive,
+  Mic,
+  Phone,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
@@ -66,6 +68,7 @@ const leadershipQuickAccess: QuickItem[] = [
   { href: "/dashboard", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
+  { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
 ];
 
 const leadershipOperations: ListItem[] = [
@@ -92,6 +95,7 @@ const leadershipAdmin: ListItem[] = [
   { href: "/knowledge", label: "Knowledge Base", description: "SOPs & documents", icon: BookOpen, iconColor: "text-orange-600", bgColor: "bg-orange-500/10" },
   { href: "/inspections", label: "Inspections", description: "Command readiness", icon: ClipboardCheck, iconColor: "text-indigo-600", bgColor: "bg-indigo-500/10" },
   { href: "/assets", label: "FY26 Assets", description: "Annual inventory (AI)", icon: Archive, iconColor: "text-amber-700", bgColor: "bg-amber-500/10" },
+  { href: "/vendors", label: "Vendors", description: "Contact directory", icon: Phone, iconColor: "text-purple-600", bgColor: "bg-purple-500/10" },
 ];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -109,6 +113,7 @@ const foremanQuickAccess: QuickItem[] = [
   { href: "/dashboard", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/irrigation", label: "Irrigation", icon: Droplets, color: "from-blue-500 to-indigo-600" },
+  { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
 ];
 
 const foremanOperations: ListItem[] = [
