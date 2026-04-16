@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -29,6 +29,12 @@ import {
   ArrowRight,
   Zap,
   FileText,
+  CalendarOff,
+  Coffee,
+  Shield,
+  MessageSquare,
+  Flag,
+  Lightbulb,
 } from "lucide-react";
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
@@ -44,13 +50,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { usePhotos } from "@/lib/hooks/usePhotos";
+import { useGolferFeedback } from "@/lib/hooks/useGolferFeedback";
 import { cn } from "@/lib/utils";
 import { useRecentActivity } from "@/lib/hooks/useRecentActivity";
 import { createClient } from "@/lib/supabase/client";
+import { withTimeout } from "@/lib/utils/resilient-fetch";
+import { format } from "date-fns";
+import type { Task, Equipment } from "@/types/database";
 
 // Dynamically import MiniMapWidget to avoid SSR issues with Leaflet
 const MiniMapWidget = dynamic(
-  () => import("@/components/features/map/mini-map-widget").then((mod) => mod.MiniMapWidget),
+  () =>
+    import("@/components/features/map/mini-map-widget").then(
+      (mod) => mod.MiniMapWidget
+    ),
   {
     ssr: false,
     loading: () => (
@@ -61,14 +75,24 @@ const MiniMapWidget = dynamic(
   }
 );
 
+// ────────────────────────────────────────────
+// Shared helpers
+// ────────────────────────────────────────────
+
 function getAlertIcon(type: WeatherAlert["type"]) {
   switch (type) {
-    case "frost": return <Snowflake className="w-4 h-4" />;
-    case "wind": return <Wind className="w-4 h-4" />;
-    case "rain": return <CloudRain className="w-4 h-4" />;
-    case "heat": return <Thermometer className="w-4 h-4" />;
-    case "uv": return <Sun className="w-4 h-4" />;
-    default: return <AlertTriangle className="w-4 h-4" />;
+    case "frost":
+      return <Snowflake className="w-4 h-4" />;
+    case "wind":
+      return <Wind className="w-4 h-4" />;
+    case "rain":
+      return <CloudRain className="w-4 h-4" />;
+    case "heat":
+      return <Thermometer className="w-4 h-4" />;
+    case "uv":
+      return <Sun className="w-4 h-4" />;
+    default:
+      return <AlertTriangle className="w-4 h-4" />;
   }
 }
 
@@ -88,13 +112,20 @@ function getAlertStyles(severity: WeatherAlert["severity"]) {
 function getActivityIcon(actionType: string) {
   switch (actionType) {
     case "task_created":
-    case "task_assigned": return Plus;
-    case "task_completed": return CheckCircle2;
-    case "equipment_updated": return Wrench;
-    case "chemical_applied": return FlaskConical;
-    case "photo_uploaded": return Camera;
-    case "schedule_changed": return Calendar;
-    default: return Clock;
+    case "task_assigned":
+      return Plus;
+    case "task_completed":
+      return CheckCircle2;
+    case "equipment_updated":
+      return Wrench;
+    case "chemical_applied":
+      return FlaskConical;
+    case "photo_uploaded":
+      return Camera;
+    case "schedule_changed":
+      return Calendar;
+    default:
+      return Clock;
   }
 }
 
@@ -113,16 +144,501 @@ function formatActivityTime(timestamp: string): string {
   return date.toLocaleDateString();
 }
 
-const quickActions = [
-  { href: "/tasks/new", label: "New Task", icon: Plus, color: "from-blue-500 to-blue-600" },
-  { href: "/photos", label: "Take Photo", icon: Camera, color: "from-emerald-500 to-emerald-600" },
-  { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-teal-600" },
-  { href: "/chemicals/apply", label: "Log Chemical", icon: FlaskConical, color: "from-amber-500 to-amber-600" },
-  { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-orange-600" },
-  { href: "/reports", label: "Reports", icon: FileText, color: "from-[#1B4332] to-[#2D6A4F]" },
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 6) return "Early morning";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+// Task category icons for pro view
+const categoryIcons: Record<
+  string,
+  React.ComponentType<{ className?: string }>
+> = {
+  mowing: Wrench,
+  chemical: FlaskConical,
+  irrigation: CloudRain,
+  greens: Flag,
+  bunker: MapPin,
+};
+
+// ────────────────────────────────────────────
+// Quick actions by role
+// ────────────────────────────────────────────
+
+const leadershipQuickActions = [
+  {
+    href: "/tasks/new",
+    label: "New Task",
+    icon: Plus,
+    color: "from-blue-500 to-blue-600",
+  },
+  {
+    href: "/photos",
+    label: "Take Photo",
+    icon: Camera,
+    color: "from-emerald-500 to-emerald-600",
+  },
+  {
+    href: "/course-map",
+    label: "Course Map",
+    icon: Map,
+    color: "from-teal-500 to-teal-600",
+  },
+  {
+    href: "/chemicals/apply",
+    label: "Log Chemical",
+    icon: FlaskConical,
+    color: "from-amber-500 to-amber-600",
+  },
+  {
+    href: "/equipment",
+    label: "Equipment",
+    icon: Wrench,
+    color: "from-orange-500 to-orange-600",
+  },
+  {
+    href: "/reports",
+    label: "Reports",
+    icon: FileText,
+    color: "from-[#1B4332] to-[#2D6A4F]",
+  },
 ];
 
-export default function DashboardPage() {
+const staffQuickActions = [
+  {
+    href: "/tasks/new",
+    label: "New Task",
+    icon: Plus,
+    color: "from-blue-500 to-blue-600",
+  },
+  {
+    href: "/photos",
+    label: "Take Photo",
+    icon: Camera,
+    color: "from-emerald-500 to-emerald-600",
+  },
+  {
+    href: "/course-map",
+    label: "Course Map",
+    icon: Map,
+    color: "from-teal-500 to-teal-600",
+  },
+  {
+    href: "/chemicals/apply",
+    label: "Log Chemical",
+    icon: FlaskConical,
+    color: "from-amber-500 to-amber-600",
+  },
+  {
+    href: "/equipment",
+    label: "Equipment",
+    icon: Wrench,
+    color: "from-orange-500 to-orange-600",
+  },
+];
+
+// ────────────────────────────────────────────
+// Briefing data types
+// ────────────────────────────────────────────
+
+interface BriefingData {
+  tasks: {
+    critical: Task[];
+    high: Task[];
+    normal: Task[];
+    overdue: Task[];
+    totalDueToday: number;
+  };
+  staff: {
+    onToday: {
+      id: string;
+      name: string;
+      role: string;
+      shift: string;
+      crew: string | null;
+    }[];
+    offToday: { id: string; name: string; type: string }[];
+    totalActive: number;
+  };
+  equipment: {
+    needsService: {
+      id: string;
+      name: string;
+      status: string;
+      notes: string | null;
+    }[];
+  };
+  chemicals: {
+    activeREI: {
+      id: string;
+      product: string;
+      zones: string[];
+      expires: string;
+    }[];
+    lowStock: {
+      id: string;
+      name: string;
+      current: number;
+      threshold: number;
+      unit: string;
+    }[];
+  };
+  feedback: {
+    recent: {
+      id: string;
+      type: string;
+      area: string;
+      notes: string;
+      date: string;
+    }[];
+    unresolved: number;
+  };
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PRO DASHBOARD VIEW
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function ProDashboardView() {
+  const { profile } = useAuth();
+  const { getAlerts } = useWeather();
+  const { fetchTeamTasks } = useTasks();
+  const { photos: recentPhotosData, fetchPhotos } = usePhotos();
+  const { getNewFeedbackCount } = useGolferFeedback();
+
+  const [todaysTasks, setTodaysTasks] = useState<TaskWithRelations[]>([]);
+  const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
+
+  const alerts = getAlerts();
+  const firstName = profile?.full_name?.split(" ")[0] || "Pro";
+  const greeting = getGreeting();
+
+  useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
+    const loadData = async () => {
+      setLoading(true);
+      const today = new Date().toISOString().split("T")[0];
+      const tasks = await fetchTeamTasks(today);
+      const playImpactCategories = [
+        "mowing",
+        "chemical",
+        "greens",
+        "bunker",
+        "irrigation",
+        "construction",
+      ];
+      const relevantTasks = tasks.filter(
+        (t) =>
+          playImpactCategories.includes(t.category) &&
+          (t.status === "pending" || t.status === "in_progress")
+      );
+      setTodaysTasks(relevantTasks.slice(0, 5));
+      await fetchPhotos({}, 0);
+      await getNewFeedbackCount();
+      setLoading(false);
+    };
+
+    loadData();
+  }, [fetchTeamTasks, fetchPhotos, getNewFeedbackCount]);
+
+  return (
+    <div className="p-4 md:p-6 pb-24 md:pb-6">
+      {/* Welcome Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-foreground">
+          {greeting}, {firstName}
+        </h1>
+        <p className="text-muted-foreground">
+          {format(new Date(), "EEEE, MMMM d, yyyy")}
+        </p>
+      </div>
+
+      <CourseStatusBanner className="mb-6" />
+
+      {/* Weather Alerts */}
+      {alerts && alerts.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {alerts.slice(0, 2).map((alert, index) => (
+            <div
+              key={index}
+              className={cn(
+                "flex items-start gap-3 p-3 rounded-lg border",
+                alert.severity === "warning"
+                  ? "bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400"
+                  : alert.severity === "caution"
+                    ? "bg-orange-500/10 border-orange-500/20 text-orange-700 dark:text-orange-400"
+                    : "bg-yellow-500/10 border-yellow-500/20 text-yellow-700 dark:text-yellow-400"
+              )}
+            >
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="font-medium text-sm">{alert.message}</p>
+                <p className="text-xs opacity-80 mt-0.5">
+                  {alert.recommendation}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <Link
+          href="/report-issue"
+          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+            <Flag className="w-5 h-5 text-red-500" />
+          </div>
+          <span className="text-xs font-medium text-center">Report Issue</span>
+        </Link>
+        <Link
+          href="/messages"
+          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <MessageSquare className="w-5 h-5 text-blue-500" />
+          </div>
+          <span className="text-xs font-medium text-center">Messages</span>
+        </Link>
+        <Link
+          href="/feedback"
+          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors relative"
+        >
+          <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
+            <Lightbulb className="w-5 h-5 text-purple-500" />
+          </div>
+          <span className="text-xs font-medium text-center">Log Feedback</span>
+        </Link>
+        <Link
+          href="/course-map"
+          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
+            <MapPin className="w-5 h-5 text-green-500" />
+          </div>
+          <span className="text-xs font-medium text-center">Course Map</span>
+        </Link>
+      </div>
+
+      {/* Main Grid */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Today's Maintenance Impact */}
+        <div className="bg-card rounded-lg border border-border p-6 lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-primary" />
+              Maintenance Today
+            </h2>
+            <Badge variant="secondary">{todaysTasks.length} active</Badge>
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+              ))}
+            </div>
+          ) : todaysTasks.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Wrench className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No active maintenance affecting play</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {todaysTasks.map((task) => {
+                const Icon = categoryIcons[task.category] || Wrench;
+                return (
+                  <div
+                    key={task.id}
+                    className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {task.title}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {task.zone?.name && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {task.zone.name}
+                          </span>
+                        )}
+                        {task.hole_numbers && task.hole_numbers.length > 0 && (
+                          <span>Holes {task.hole_numbers.join(", ")}</span>
+                        )}
+                        <Badge variant="outline" className="text-xs">
+                          {task.status === "in_progress"
+                            ? "In Progress"
+                            : "Pending"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* REI Warning */}
+          {todaysTasks.some((t) => t.category === "chemical") && (
+            <div className="mt-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+              <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                <FlaskConical className="w-4 h-4" />
+                <span className="text-sm font-medium">REI Restrictions</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Check with maintenance before allowing play in treated areas.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Weather Widget */}
+        <div className="lg:col-span-1">
+          <WeatherWidget className="h-full" />
+        </div>
+
+        {/* Course Conditions */}
+        <div className="bg-card rounded-lg border border-border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Sun className="w-4 h-4 text-primary" />
+              Course Conditions
+            </h2>
+            <Link
+              href="/course-map"
+              className="text-sm text-primary hover:underline flex items-center gap-1"
+            >
+              Details
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs text-muted-foreground">Green Speed</p>
+              <p className="text-lg font-semibold">10.5</p>
+              <p className="text-xs text-muted-foreground">Stimpmeter</p>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs text-muted-foreground">Overall</p>
+              <p className="text-lg font-semibold text-green-600">Good</p>
+              <p className="text-xs text-muted-foreground">Condition</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Photos */}
+        <div className="bg-card rounded-lg border border-border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Camera className="w-4 h-4 text-primary" />
+              Recent Photos
+            </h2>
+            <Link
+              href="/photos"
+              className="text-sm text-primary hover:underline flex items-center gap-1"
+            >
+              View all
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+          {loading ? (
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="aspect-square bg-muted rounded animate-pulse"
+                />
+              ))}
+            </div>
+          ) : recentPhotosData.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <Camera className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No recent photos</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {recentPhotosData.slice(0, 6).map((photo) => (
+                <Link
+                  key={photo.id}
+                  href={`/photos/${photo.id}`}
+                  className="aspect-square bg-muted rounded-lg overflow-hidden hover:ring-2 ring-primary transition-all"
+                >
+                  <img
+                    src={photo.thumbnail_path || photo.storage_path}
+                    alt={photo.caption || "Course photo"}
+                    className="w-full h-full object-cover"
+                  />
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Communication Card */}
+        <div className="bg-card rounded-lg border border-border p-6">
+          <h2 className="font-semibold mb-4 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-primary" />
+            Quick Contact
+          </h2>
+          <div className="space-y-3">
+            <Link
+              href="/messages/superintendent"
+              className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-primary" />
+                </div>
+                <span className="font-medium text-sm">
+                  Message Superintendent
+                </span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </Link>
+            <Link
+              href="/report-issue"
+              className="flex items-center justify-between p-3 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <Flag className="w-4 h-4 text-red-500" />
+                </div>
+                <span className="font-medium text-sm text-red-700 dark:text-red-400">
+                  Report an Issue
+                </span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-red-500" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Course Map */}
+        <div className="md:col-span-2 lg:col-span-3">
+          <MiniMapWidget />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LEADERSHIP DASHBOARD VIEW (super, asst_super, director)
+// Combines dashboard + briefing into one view
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function LeadershipDashboardView() {
   const { profile } = useAuth();
   const { getAlerts } = useWeather();
   const alerts = getAlerts();
@@ -133,32 +649,232 @@ export default function DashboardPage() {
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
   const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
   const [staffCount, setStaffCount] = useState<number | null>(null);
-  const [, setSecondaryLoaded] = useState(false);
+  const [briefingData, setBriefingData] = useState<BriefingData | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(true);
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const hasFetchedRef = useRef(false);
 
-  // Get greeting based on time of day
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 6) return "Early morning";
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
-  }, []);
-
+  const greeting = useMemo(() => getGreeting(), []);
   const firstName = profile?.full_name?.split(" ")[0] || "Superintendent";
 
   // Today's tasks stats
   const todaysTasks = useMemo(() => {
-    const completed = todayTasks.filter((t) => t.status === "completed").length;
+    const completed = todayTasks.filter(
+      (t) => t.status === "completed"
+    ).length;
     const total = todayTasks.length;
     const highPriority = todayTasks.filter(
-      (t) => (t.priority === "high" || t.priority === "critical") && t.status !== "completed"
+      (t) =>
+        (t.priority === "high" || t.priority === "critical") &&
+        t.status !== "completed"
     );
-    const completionPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const completionPct =
+      total > 0 ? Math.round((completed / total) * 100) : 0;
     return { completed, total, highPriority, completionPct };
   }, [todayTasks]);
+
+  // Fetch briefing data (crew, equipment, chemicals, feedback)
+  const fetchBriefing = useCallback(async () => {
+    setBriefingLoading(true);
+    try {
+      const supabase = createClient();
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0];
+
+      const [
+        tasksResult,
+        overdueResult,
+        schedulesResult,
+        timeOffResult,
+        equipmentResult,
+        chemAppsResult,
+        chemProductsResult,
+        feedbackResult,
+      ] = await Promise.all([
+        withTimeout(
+          supabase
+            .from("tasks")
+            .select("*")
+            .eq("due_date", todayStr)
+            .in("status", ["pending", "in_progress"])
+            .order("priority", { ascending: true }),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("tasks")
+            .select("*")
+            .lt("due_date", todayStr)
+            .in("status", ["pending", "in_progress"])
+            .order("due_date", { ascending: true })
+            .limit(10),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("schedules")
+            .select("*, profiles:user_id(id, full_name, role)")
+            .eq("schedule_date", todayStr)
+            .neq("shift_type", "off"),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("time_off_requests")
+            .select("*, profiles:user_id(id, full_name)")
+            .eq("status", "approved")
+            .lte("start_date", todayStr)
+            .gte("end_date", todayStr),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("equipment")
+            .select("*")
+            .in("status", ["needs_service", "in_repair", "out_of_service"]),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("chemical_applications")
+            .select("*, chemical_products:product_id(product_name)")
+            .gte("rei_expires_at", now.toISOString())
+            .order("rei_expires_at", { ascending: true }),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("chemical_products")
+            .select("*")
+            .eq("is_active", true)
+            .not("reorder_threshold", "is", null),
+          8000,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase
+            .from("golfer_feedback")
+            .select("*")
+            .in("status", ["new", "acknowledged", "in_progress"])
+            .order("created_at", { ascending: false })
+            .limit(5),
+          8000,
+          { data: null, error: null }
+        ),
+      ]);
+
+      const tasks = (tasksResult.data || []) as Task[];
+      const overdue = (overdueResult.data || []) as Task[];
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const onToday = (schedulesResult.data || []).map((s: any) => ({
+        id: s.profiles?.id || s.user_id,
+        name: s.profiles?.full_name || "Unknown",
+        role: s.profiles?.role || "crew",
+        shift:
+          s.shift_start && s.shift_end
+            ? `${s.shift_start.slice(0, 5)} - ${s.shift_end.slice(0, 5)}`
+            : s.shift_type || "Scheduled",
+        crew: s.crew_assignment || null,
+      }));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const offToday = (timeOffResult.data || []).map((t: any) => ({
+        id: t.profiles?.id || t.user_id,
+        name: t.profiles?.full_name || "Unknown",
+        type: (t.request_type || "time off").replace("_", " "),
+      }));
+
+      const needsServiceEquip = (equipmentResult.data || []) as Equipment[];
+
+      const allProducts = (chemProductsResult.data || []) as Array<{
+        id: string;
+        product_name: string;
+        current_inventory: number | null;
+        reorder_threshold: number | null;
+        unit_of_measure: string | null;
+      }>;
+      const lowStock = allProducts.filter(
+        (p) =>
+          p.current_inventory !== null &&
+          p.reorder_threshold !== null &&
+          p.current_inventory <= p.reorder_threshold
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const activeREI = (chemAppsResult.data || []).map((a: any) => ({
+        id: a.id,
+        product: a.chemical_products?.product_name || "Unknown product",
+        zones:
+          a.hole_numbers?.map((h: number) => `Hole ${h}`) || a.zone_ids || [],
+        expires: a.rei_expires_at,
+      }));
+
+      const feedbackItems = (feedbackResult.data || []) as Array<{
+        id: string;
+        feedback_type: string;
+        area: string;
+        notes: string;
+        feedback_date: string;
+      }>;
+
+      setBriefingData({
+        tasks: {
+          critical: tasks.filter((t) => t.priority === "critical"),
+          high: tasks.filter((t) => t.priority === "high"),
+          normal: tasks.filter(
+            (t) => t.priority === "normal" || t.priority === "low"
+          ),
+          overdue,
+          totalDueToday: tasks.length,
+        },
+        staff: {
+          onToday,
+          offToday,
+          totalActive: 0,
+        },
+        equipment: {
+          needsService: needsServiceEquip.map((e) => ({
+            id: e.id,
+            name: e.name,
+            status: e.status,
+            notes: e.notes,
+          })),
+        },
+        chemicals: {
+          activeREI,
+          lowStock: lowStock.map((p) => ({
+            id: p.id,
+            name: p.product_name,
+            current: p.current_inventory ?? 0,
+            threshold: p.reorder_threshold ?? 0,
+            unit: p.unit_of_measure || "units",
+          })),
+        },
+        feedback: {
+          recent: feedbackItems.map((f) => ({
+            id: f.id,
+            type: f.feedback_type,
+            area: f.area,
+            notes: f.notes,
+            date: f.feedback_date,
+          })),
+          unresolved: feedbackItems.length,
+        },
+      });
+    } catch (err) {
+      console.error("Error loading briefing:", err);
+    } finally {
+      setBriefingLoading(false);
+    }
+  }, []);
 
   // Progressive loading
   useEffect(() => {
@@ -176,13 +892,16 @@ export default function DashboardPage() {
       }
     }
     void loadCriticalData();
+    void fetchBriefing();
 
     const secondaryTimer = setTimeout(async () => {
       try {
         const supabase = createClient();
         const [overview, staffResult] = await Promise.all([
           fetchPlanOverview(currentYear),
-          supabase.from("profiles").select("id", { count: "exact", head: true }),
+          supabase
+            .from("profiles")
+            .select("id", { count: "exact", head: true }),
         ]);
         setPlanOverview(overview);
         if (staffResult.count !== null) setStaffCount(staffResult.count);
@@ -195,11 +914,17 @@ export default function DashboardPage() {
       } catch (err) {
         console.error("Failed to load secondary data:", err);
       }
-      setSecondaryLoaded(true);
     }, 300);
 
     return () => clearTimeout(secondaryTimer);
-  }, [fetchMyTasks, fetchGoals, fetchPlanOverview, currentYear, currentMonth]);
+  }, [
+    fetchMyTasks,
+    fetchGoals,
+    fetchPlanOverview,
+    fetchBriefing,
+    currentYear,
+    currentMonth,
+  ]);
 
   const focusGoals = useMemo(
     () =>
@@ -237,17 +962,21 @@ export default function DashboardPage() {
               </div>
               <div className="hidden md:flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-3 py-2 border border-white/10 shrink-0">
                 <Leaf className="w-4 h-4 text-[#D4A853]" />
-                <span className="text-sm font-medium text-white/80 whitespace-nowrap">Veterans Memorial GC</span>
+                <span className="text-sm font-medium text-white/80 whitespace-nowrap">
+                  Veterans Memorial GC
+                </span>
               </div>
             </div>
 
             {/* Inline course status */}
             <div className="mt-4">
-              <CourseStatusBanner className="!bg-white/10 !border-white/10 !text-white [&_*]:!text-white/80 !rounded-xl" showUpdateButton />
+              <CourseStatusBanner
+                className="!bg-white/10 !border-white/10 !text-white [&_*]:!text-white/80 !rounded-xl"
+                showUpdateButton
+              />
             </div>
           </div>
 
-          {/* Decorative elements */}
           <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-[#B68D40]/10 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute right-12 top-4 w-20 h-20 bg-[#B68D40]/5 rounded-full blur-xl pointer-events-none" />
         </div>
@@ -264,34 +993,79 @@ export default function DashboardPage() {
               <div className="mt-0.5 shrink-0">{getAlertIcon(alert.type)}</div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm">{alert.message}</p>
-                <p className="text-xs opacity-70 mt-0.5">{alert.recommendation}</p>
+                <p className="text-xs opacity-70 mt-0.5">
+                  {alert.recommendation}
+                </p>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ===== Push notification opt-in (conditional) ===== */}
+      {/* ===== Push notification opt-in ===== */}
       <div className="mb-4">
         <PushOptInCard />
       </div>
 
-      {/* ===== Spray Window Card (shown when disease pressure is moderate+) ===== */}
+      {/* ===== Spray Window Card ===== */}
       <div className="mb-4">
         <SprayWindowCard />
       </div>
 
+      {/* ===== Overdue Tasks (from briefing) ===== */}
+      {briefingData && briefingData.tasks.overdue.length > 0 && (
+        <div className="gk-animate-in gk-animate-in-2 mb-6 p-5 rounded-xl bg-red-500/5 border border-red-200/50">
+          <h2 className="font-semibold text-red-700 dark:text-red-400 flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-5 h-5" />
+            Overdue Tasks ({briefingData.tasks.overdue.length})
+          </h2>
+          <div className="space-y-2">
+            {briefingData.tasks.overdue.slice(0, 5).map((task) => (
+              <Link
+                key={task.id}
+                href={`/tasks/${task.id}`}
+                className="flex items-center justify-between p-3 rounded-lg bg-white/60 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
+              >
+                <div>
+                  <div className="font-medium text-sm">{task.title}</div>
+                  <div className="text-xs text-red-600 dark:text-red-400">
+                    Due{" "}
+                    {new Date(task.due_date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    task.priority === "critical"
+                      ? "bg-purple-500/10 text-purple-600"
+                      : "bg-red-500/10 text-red-600"
+                  }`}
+                >
+                  {task.priority}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ===== Quick Stats Row ===== */}
       <div className="gk-animate-in gk-animate-in-3 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-        {/* Weather Widget */}
         <WeatherWidget className="col-span-2 lg:col-span-1" />
 
         {/* Tasks Today */}
-        <Link href="/tasks" className="gk-stat-card group hover:border-primary/20 active:bg-muted/20 transition-all">
+        <Link
+          href="/tasks"
+          className="gk-stat-card group hover:border-primary/20 active:bg-muted/20 transition-all"
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-muted-foreground">
               <ClipboardCheck className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Tasks Today</span>
+              <span className="text-xs font-medium uppercase tracking-wider">
+                Tasks Today
+              </span>
             </div>
             <ChevronRight className="w-4 h-4 text-muted-foreground/0 group-hover:text-muted-foreground transition-all" />
           </div>
@@ -306,16 +1080,23 @@ export default function DashboardPage() {
             </div>
             {todaysTasks.total > 0 && (
               <div className="w-12 h-12 relative">
-                <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+                <svg
+                  className="w-12 h-12 -rotate-90"
+                  viewBox="0 0 36 36"
+                >
                   <circle
-                    cx="18" cy="18" r="15"
+                    cx="18"
+                    cy="18"
+                    r="15"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="3"
                     className="text-muted/60"
                   />
                   <circle
-                    cx="18" cy="18" r="15"
+                    cx="18"
+                    cy="18"
+                    r="15"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="3"
@@ -332,16 +1113,23 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        {/* Staff On Duty */}
-        <Link href="/staff" className="gk-stat-card group hover:border-primary/20 active:bg-muted/20 transition-all">
+        {/* Staff */}
+        <Link
+          href="/staff"
+          className="gk-stat-card group hover:border-primary/20 active:bg-muted/20 transition-all"
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Users className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Staff</span>
+              <span className="text-xs font-medium uppercase tracking-wider">
+                Staff
+              </span>
             </div>
             <span className="gk-live-dot" title="Live" />
           </div>
-          <p className="text-3xl font-bold tracking-tight text-foreground gk-count">{staffCount ?? "—"}</p>
+          <p className="text-3xl font-bold tracking-tight text-foreground gk-count">
+            {staffCount ?? "—"}
+          </p>
           <p className="text-xs text-muted-foreground mt-0.5">Team members</p>
         </Link>
 
@@ -349,7 +1137,9 @@ export default function DashboardPage() {
         <div className="gk-stat-card">
           <div className="flex items-center gap-2 text-muted-foreground mb-3">
             <AlertTriangle className="w-4 h-4" />
-            <span className="text-xs font-medium uppercase tracking-wider">Alerts</span>
+            <span className="text-xs font-medium uppercase tracking-wider">
+              Alerts
+            </span>
           </div>
           <p className="text-3xl font-bold tracking-tight text-foreground gk-count">
             {alerts?.length ?? 0}
@@ -371,16 +1161,18 @@ export default function DashboardPage() {
           </h2>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {quickActions.map((action) => (
+          {leadershipQuickActions.map((action) => (
             <Link
               key={action.href}
               href={action.href}
               className="gk-action-btn flex flex-col items-center gap-2.5 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
             >
-              <div className={cn(
-                "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
-                action.color
-              )}>
+              <div
+                className={cn(
+                  "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
+                  action.color
+                )}
+              >
                 <action.icon className="w-5 h-5" />
               </div>
               <span className="text-sm font-medium text-center text-muted-foreground leading-tight">
@@ -393,15 +1185,12 @@ export default function DashboardPage() {
 
       {/* ===== Main Content Grid ===== */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-
         {/* Course Map Widget */}
         <Link
           href="/course-map"
           className="gk-animate-in gk-animate-in-5 gk-card group p-5 relative overflow-hidden"
         >
-          {/* Decorative background */}
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#1B4332]/5 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500" />
-
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2.5">
@@ -410,15 +1199,16 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="font-semibold text-sm">Course Map</h2>
-                  <p className="text-[11px] text-muted-foreground">AI-powered diagnostics</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    AI-powered diagnostics
+                  </p>
                 </div>
               </div>
             </div>
-
             <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-              Pin issues on holes and greens, snap a photo, and get instant AI diagnosis with treatment plans.
+              Pin issues on holes and greens, snap a photo, and get instant AI
+              diagnosis with treatment plans.
             </p>
-
             <div className="flex items-center gap-1.5 text-sm text-primary font-medium group-hover:gap-2.5 transition-all">
               Open map
               <ArrowRight className="w-4 h-4" />
@@ -444,11 +1234,12 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Year Progress */}
           {planOverview ? (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground font-medium">{currentYear} Goals</span>
+                <span className="text-xs text-muted-foreground font-medium">
+                  {currentYear} Goals
+                </span>
                 <span className="text-xs font-bold text-foreground">
                   {planOverview.completion_percent}%
                 </span>
@@ -462,7 +1253,9 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <TrendingUp className="w-3 h-3" />
-                  {planOverview.by_status.find((s) => s.status === "completed")?.count || 0} completed
+                  {planOverview.by_status.find((s) => s.status === "completed")
+                    ?.count || 0}{" "}
+                  completed
                 </span>
                 <span>{planOverview.total_goals} total</span>
               </div>
@@ -471,11 +1264,12 @@ export default function DashboardPage() {
             <div className="h-16 bg-muted/50 rounded-lg animate-pulse mb-4" />
           )}
 
-          {/* This Month's Focus */}
           <div>
             <div className="flex items-center gap-2 mb-2.5">
               <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground font-medium">This Month&apos;s Focus</span>
+              <span className="text-xs text-muted-foreground font-medium">
+                This Month&apos;s Focus
+              </span>
             </div>
             {focusGoals.length > 0 ? (
               <div className="space-y-1.5">
@@ -488,12 +1282,17 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <span
                         className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: goalCategoryColors[goal.category] }}
+                        style={{
+                          backgroundColor: goalCategoryColors[goal.category],
+                        }}
                       />
                       <span className="text-sm truncate">{goal.title}</span>
                     </div>
                     {goal.progress_percent !== undefined && (
-                      <Badge variant="secondary" className="text-[10px] ml-2 font-bold">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] ml-2 font-bold"
+                      >
                         {goal.progress_percent}%
                       </Badge>
                     )}
@@ -515,7 +1314,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Today's Priority Tasks */}
+        {/* Priority Tasks */}
         <div className="gk-animate-in gk-animate-in-7 gk-card p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2.5">
@@ -561,8 +1360,684 @@ export default function DashboardPage() {
               <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-2">
                 <CheckCircle2 className="w-6 h-6 text-green-500" />
               </div>
-              <p className="text-sm font-medium text-foreground">All caught up!</p>
-              <p className="text-xs mt-0.5">No high priority tasks remaining</p>
+              <p className="text-sm font-medium text-foreground">
+                All caught up!
+              </p>
+              <p className="text-xs mt-0.5">
+                No high priority tasks remaining
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Crew Today (from briefing) */}
+        <div className="gk-animate-in gk-animate-in-7 gk-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 flex items-center justify-center">
+                <Users className="w-5 h-5 text-blue-500" />
+              </div>
+              <h2 className="font-semibold text-sm">Crew Today</h2>
+            </div>
+            <Link
+              href="/schedule"
+              className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+            >
+              Schedule
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {briefingLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-10 bg-muted/50 rounded-lg animate-pulse"
+                />
+              ))}
+            </div>
+          ) : briefingData &&
+            briefingData.staff.onToday.length === 0 &&
+            briefingData.staff.offToday.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No schedule data for today.
+            </p>
+          ) : briefingData ? (
+            <>
+              {briefingData.staff.onToday.length > 0 && (
+                <div className="space-y-1.5 mb-3">
+                  {briefingData.staff.onToday.slice(0, 6).map((s, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between text-sm p-2 rounded bg-green-500/5"
+                    >
+                      <div>
+                        <span className="font-medium">{s.name}</span>
+                        {s.crew && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {s.crew}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {s.shift}
+                      </span>
+                    </div>
+                  ))}
+                  {briefingData.staff.onToday.length > 6 && (
+                    <p className="text-xs text-muted-foreground text-center mt-1">
+                      +{briefingData.staff.onToday.length - 6} more
+                    </p>
+                  )}
+                </div>
+              )}
+              {briefingData.staff.offToday.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-amber-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <CalendarOff className="w-3 h-3" />
+                    Off Today
+                  </div>
+                  {briefingData.staff.offToday.map((s, i) => (
+                    <div
+                      key={i}
+                      className="text-sm text-muted-foreground p-1.5"
+                    >
+                      {s.name}{" "}
+                      <span className="text-xs capitalize">({s.type})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
+
+        {/* Equipment Alerts (from briefing) */}
+        {briefingData && briefingData.equipment.needsService.length > 0 && (
+          <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-500/5 flex items-center justify-center">
+                  <Wrench className="w-5 h-5 text-amber-600" />
+                </div>
+                <h2 className="font-semibold text-sm">
+                  Equipment Alerts (
+                  {briefingData.equipment.needsService.length})
+                </h2>
+              </div>
+              <Link
+                href="/equipment"
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+              >
+                View all
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {briefingData.equipment.needsService.map((e) => (
+                <Link
+                  key={e.id}
+                  href={`/equipment/${e.id}`}
+                  className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+                >
+                  <span className="font-medium text-sm">{e.name}</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      e.status === "out_of_service"
+                        ? "bg-red-500/10 text-red-600"
+                        : e.status === "in_repair"
+                          ? "bg-orange-500/10 text-orange-600"
+                          : "bg-amber-500/10 text-amber-600"
+                    }`}
+                  >
+                    {e.status.replace("_", " ")}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Chemical Status (from briefing) */}
+        {briefingData &&
+          (briefingData.chemicals.activeREI.length > 0 ||
+            briefingData.chemicals.lowStock.length > 0) && (
+            <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 flex items-center justify-center">
+                  <FlaskConical className="w-5 h-5 text-blue-600" />
+                </div>
+                <h2 className="font-semibold text-sm">Chemical Status</h2>
+              </div>
+
+              {briefingData.chemicals.activeREI.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-xs font-medium text-red-600 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    Active REI Windows
+                  </div>
+                  {briefingData.chemicals.activeREI.map((c, i) => (
+                    <div
+                      key={i}
+                      className="p-2.5 rounded-lg bg-red-500/5 mb-1.5 text-sm"
+                    >
+                      <div className="font-medium">{c.product}</div>
+                      <div className="text-xs text-red-600 mt-0.5">
+                        REI expires:{" "}
+                        {new Date(c.expires).toLocaleString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                      {c.zones.length > 0 && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {c.zones.slice(0, 4).join(", ")}
+                          {c.zones.length > 4 &&
+                            ` +${c.zones.length - 4} more`}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {briefingData.chemicals.lowStock.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-amber-600 uppercase tracking-wider mb-2">
+                    Low Stock
+                  </div>
+                  {briefingData.chemicals.lowStock.map((c, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between p-2 rounded-lg bg-amber-500/5 mb-1 text-sm"
+                    >
+                      <span>{c.name}</span>
+                      <span className="text-xs text-amber-600 font-medium">
+                        {c.current} / {c.threshold} {c.unit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+        {/* Recent Activity */}
+        <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm">Recent Activity</h2>
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <span className="gk-live-dot inline-block" /> Live feed
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {activitiesLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-12 bg-muted/50 rounded-lg animate-pulse"
+                />
+              ))}
+            </div>
+          ) : activities.length > 0 ? (
+            <div className="space-y-0.5">
+              {activities.slice(0, 5).map((activity, idx) => {
+                const IconComponent = getActivityIcon(activity.action_type);
+                const isCompleted =
+                  activity.action_type === "task_completed";
+                return (
+                  <div
+                    key={activity.id}
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
+                    style={{ animationDelay: `${420 + idx * 60}ms` }}
+                  >
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                        isCompleted ? "bg-green-500/10" : "bg-muted/60"
+                      )}
+                    >
+                      <IconComponent
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          isCompleted
+                            ? "text-green-600"
+                            : "text-muted-foreground"
+                        )}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">
+                        {activity.description}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {activity.user?.full_name || "System"} &middot;{" "}
+                        {formatActivityTime(activity.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground">
+              <Clock className="w-7 h-7 mx-auto mb-2 opacity-30" />
+              <p className="text-xs">No recent activity</p>
+            </div>
+          )}
+        </div>
+
+        {/* Golfer Feedback (from briefing) */}
+        {briefingData && briefingData.feedback.recent.length > 0 && (
+          <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 flex items-center justify-center">
+                  <MessageSquare className="w-5 h-5 text-indigo-600" />
+                </div>
+                <h2 className="font-semibold text-sm">
+                  Feedback ({briefingData.feedback.unresolved})
+                </h2>
+              </div>
+              <Link
+                href="/feedback"
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+              >
+                View all
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {briefingData.feedback.recent.map((f) => (
+                <div
+                  key={f.id}
+                  className="p-2.5 rounded-lg bg-muted/50 text-sm"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-xs font-medium capitalize ${
+                        f.type === "complaint"
+                          ? "bg-red-500/10 text-red-600"
+                          : f.type === "suggestion"
+                            ? "bg-blue-500/10 text-blue-600"
+                            : "bg-green-500/10 text-green-600"
+                      }`}
+                    >
+                      {f.type}
+                    </span>
+                    <span className="text-xs text-muted-foreground capitalize">
+                      {f.area.replace("_", " ")}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {f.notes}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Course Map Widget */}
+        <div className="gk-animate-in gk-animate-in-8 md:col-span-2">
+          <MiniMapWidget />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// STAFF DASHBOARD VIEW (foreman, mechanic, crew, seasonal)
+// Original dashboard content
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function StaffDashboardView() {
+  const { profile } = useAuth();
+  const { getAlerts } = useWeather();
+  const alerts = getAlerts();
+  const { fetchMyTasks } = useTasks();
+  const { activities, loading: activitiesLoading } = useRecentActivity();
+
+  const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
+  const [staffCount, setStaffCount] = useState<number | null>(null);
+  const hasFetchedRef = useRef(false);
+
+  const greeting = useMemo(() => getGreeting(), []);
+  const firstName = profile?.full_name?.split(" ")[0] || "Team";
+
+  const todaysTasks = useMemo(() => {
+    const completed = todayTasks.filter(
+      (t) => t.status === "completed"
+    ).length;
+    const total = todayTasks.length;
+    const highPriority = todayTasks.filter(
+      (t) =>
+        (t.priority === "high" || t.priority === "critical") &&
+        t.status !== "completed"
+    );
+    const completionPct =
+      total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { completed, total, highPriority, completionPct };
+  }, [todayTasks]);
+
+  useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
+    const today = new Date().toISOString().split("T")[0];
+    async function loadData() {
+      try {
+        const tasks = await fetchMyTasks(today);
+        setTodayTasks(tasks.slice(0, 10));
+        const supabase = createClient();
+        const staffResult = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true });
+        if (staffResult.count !== null) setStaffCount(staffResult.count);
+      } catch (err) {
+        console.error("Failed to load data:", err);
+      }
+    }
+    void loadData();
+  }, [fetchMyTasks]);
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto">
+      {/* ===== Hero Welcome Section ===== */}
+      <div className="gk-animate-in gk-animate-in-1 mb-6">
+        <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
+          <div className="relative z-10">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-white/60 text-sm font-medium mb-1">
+                  {new Date().toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                  {greeting}, {firstName}
+                </h1>
+                {todaysTasks.total > 0 && (
+                  <p className="text-sm text-white/50 mt-1.5">
+                    {todaysTasks.completed === todaysTasks.total
+                      ? "All tasks complete for today"
+                      : `${todaysTasks.total - todaysTasks.completed} task${todaysTasks.total - todaysTasks.completed !== 1 ? "s" : ""} remaining today`}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <CourseStatusBanner
+                className="!bg-white/10 !border-white/10 !text-white [&_*]:!text-white/80 !rounded-xl"
+                showUpdateButton
+              />
+            </div>
+          </div>
+
+          <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-[#B68D40]/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute right-12 top-4 w-20 h-20 bg-[#B68D40]/5 rounded-full blur-xl pointer-events-none" />
+        </div>
+      </div>
+
+      {/* ===== Weather Alerts ===== */}
+      {alerts && alerts.length > 0 && (
+        <div className="gk-animate-in gk-animate-in-2 mb-6 space-y-2">
+          {alerts.slice(0, 2).map((alert, index) => (
+            <div
+              key={index}
+              className={`flex items-start gap-3 p-3 rounded-xl border ${getAlertStyles(alert.severity)}`}
+            >
+              <div className="mt-0.5 shrink-0">{getAlertIcon(alert.type)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm">{alert.message}</p>
+                <p className="text-xs opacity-70 mt-0.5">
+                  {alert.recommendation}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ===== Push notification opt-in ===== */}
+      <div className="mb-4">
+        <PushOptInCard />
+      </div>
+
+      {/* ===== Spray Window Card ===== */}
+      <div className="mb-4">
+        <SprayWindowCard />
+      </div>
+
+      {/* ===== Quick Stats Row ===== */}
+      <div className="gk-animate-in gk-animate-in-3 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <WeatherWidget className="col-span-2 lg:col-span-1" />
+
+        <Link
+          href="/tasks"
+          className="gk-stat-card group hover:border-primary/20 active:bg-muted/20 transition-all"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ClipboardCheck className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">
+                Tasks Today
+              </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground/0 group-hover:text-muted-foreground transition-all" />
+          </div>
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-3xl font-bold tracking-tight text-foreground gk-count">
+                {todaysTasks.total}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {todaysTasks.completed} of {todaysTasks.total} done
+              </p>
+            </div>
+            {todaysTasks.total > 0 && (
+              <div className="w-12 h-12 relative">
+                <svg
+                  className="w-12 h-12 -rotate-90"
+                  viewBox="0 0 36 36"
+                >
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    className="text-muted/60"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeDasharray={`${todaysTasks.completionPct * 0.94} 100`}
+                    strokeLinecap="round"
+                    className="text-primary transition-all duration-1000"
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground">
+                  {todaysTasks.completionPct}%
+                </span>
+              </div>
+            )}
+          </div>
+        </Link>
+
+        <Link
+          href="/staff"
+          className="gk-stat-card group hover:border-primary/20 active:bg-muted/20 transition-all"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Users className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">
+                Staff
+              </span>
+            </div>
+            <span className="gk-live-dot" title="Live" />
+          </div>
+          <p className="text-3xl font-bold tracking-tight text-foreground gk-count">
+            {staffCount ?? "—"}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">Team members</p>
+        </Link>
+
+        <div className="gk-stat-card">
+          <div className="flex items-center gap-2 text-muted-foreground mb-3">
+            <AlertTriangle className="w-4 h-4" />
+            <span className="text-xs font-medium uppercase tracking-wider">
+              Alerts
+            </span>
+          </div>
+          <p className="text-3xl font-bold tracking-tight text-foreground gk-count">
+            {alerts?.length ?? 0}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {alerts && alerts.length > 0
+              ? `${alerts.filter((a) => a.severity === "warning").length} warnings`
+              : "All clear"}
+          </p>
+        </div>
+      </div>
+
+      {/* ===== Quick Actions ===== */}
+      <div className="gk-animate-in gk-animate-in-4 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4 text-[#B68D40]" />
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Quick Actions
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {staffQuickActions.map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="gk-action-btn flex flex-col items-center gap-2.5 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
+            >
+              <div
+                className={cn(
+                  "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
+                  action.color
+                )}
+              >
+                <action.icon className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-medium text-center text-muted-foreground leading-tight">
+                {action.label}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* ===== Main Content Grid ===== */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+        {/* Course Map Widget */}
+        <Link
+          href="/course-map"
+          className="gk-animate-in gk-animate-in-5 gk-card group p-5 relative overflow-hidden"
+        >
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#1B4332]/5 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center shadow-sm">
+                  <Map className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-sm">Course Map</h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    AI-powered diagnostics
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+              Pin issues on holes and greens, snap a photo, and get instant AI
+              diagnosis with treatment plans.
+            </p>
+            <div className="flex items-center gap-1.5 text-sm text-primary font-medium group-hover:gap-2.5 transition-all">
+              Open map
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </div>
+        </Link>
+
+        {/* Priority Tasks */}
+        <div className="gk-animate-in gk-animate-in-7 gk-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/10 to-red-500/5 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
+              </div>
+              <h2 className="font-semibold text-sm">Priority Tasks</h2>
+            </div>
+            <Link
+              href="/tasks"
+              className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+            >
+              View all
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {todaysTasks.highPriority.length > 0 ? (
+            <div className="space-y-1.5">
+              {todaysTasks.highPriority.slice(0, 4).map((task) => (
+                <Link
+                  key={task.id}
+                  href={`/tasks/${task.id}`}
+                  className="flex items-center gap-3 p-2.5 bg-muted/40 rounded-lg hover:bg-muted/70 transition-colors group"
+                >
+                  <div className="w-6 h-6 rounded-full border-2 border-red-400/60 flex items-center justify-center shrink-0 group-hover:border-red-500 transition-colors">
+                    <Circle className="w-2.5 h-2.5 text-red-500/60" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    {task.zone?.name && (
+                      <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        {task.zone.name}
+                      </p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground">
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-2">
+                <CheckCircle2 className="w-6 h-6 text-green-500" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                All caught up!
+              </p>
+              <p className="text-xs mt-0.5">
+                No high priority tasks remaining
+              </p>
             </div>
           )}
         </div>
@@ -586,33 +2061,46 @@ export default function DashboardPage() {
           {activitiesLoading ? (
             <div className="space-y-3">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-12 bg-muted/50 rounded-lg animate-pulse" />
+                <div
+                  key={i}
+                  className="h-12 bg-muted/50 rounded-lg animate-pulse"
+                />
               ))}
             </div>
           ) : activities.length > 0 ? (
             <div className="space-y-0.5">
               {activities.slice(0, 5).map((activity, idx) => {
                 const IconComponent = getActivityIcon(activity.action_type);
-                const isCompleted = activity.action_type === "task_completed";
+                const isCompleted =
+                  activity.action_type === "task_completed";
                 return (
                   <div
                     key={activity.id}
                     className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/30 transition-colors"
                     style={{ animationDelay: `${420 + idx * 60}ms` }}
                   >
-                    <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                      isCompleted ? "bg-green-500/10" : "bg-muted/60"
-                    )}>
-                      <IconComponent className={cn(
-                        "w-3.5 h-3.5",
-                        isCompleted ? "text-green-600" : "text-muted-foreground"
-                      )} />
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                        isCompleted ? "bg-green-500/10" : "bg-muted/60"
+                      )}
+                    >
+                      <IconComponent
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          isCompleted
+                            ? "text-green-600"
+                            : "text-muted-foreground"
+                        )}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{activity.description}</p>
+                      <p className="text-sm truncate">
+                        {activity.description}
+                      </p>
                       <p className="text-[11px] text-muted-foreground">
-                        {activity.user?.full_name || "System"} &middot; {formatActivityTime(activity.created_at)}
+                        {activity.user?.full_name || "System"} &middot;{" "}
+                        {formatActivityTime(activity.created_at)}
                       </p>
                     </div>
                   </div>
@@ -627,11 +2115,48 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Course Map Widget - spans 2 columns */}
+        {/* Course Map Widget */}
         <div className="gk-animate-in gk-animate-in-8 md:col-span-2">
           <MiniMapWidget />
         </div>
       </div>
     </div>
   );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PAGE — role-driven dashboard router
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export default function DashboardPage() {
+  const { isPro, isSuper, isAsstSuper, isDirector, loading } = useAuth();
+
+  const isLeadership = isSuper || isAsstSuper || isDirector;
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
+        <div className="text-center py-16">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Coffee className="w-8 h-8 text-primary animate-pulse" />
+          </div>
+          <h2 className="text-lg font-semibold">Loading your dashboard...</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Getting everything ready
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPro) {
+    return <ProDashboardView />;
+  }
+
+  if (isLeadership) {
+    return <LeadershipDashboardView />;
+  }
+
+  // foreman, mechanic, crew, seasonal
+  return <StaffDashboardView />;
 }

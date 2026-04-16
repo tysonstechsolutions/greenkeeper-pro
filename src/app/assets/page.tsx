@@ -11,8 +11,10 @@ import {
   Search,
   ChevronRight,
   Loader2,
+  ScanLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -97,11 +99,21 @@ export default function AssetsPage() {
 
   return (
     <div className="p-4 md:p-6 pb-24">
-      <PageHeader
-        title="FY26 Assets"
-        description={`Annual Inventory (AI) \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
-        icon={Archive}
-      />
+      <div className="flex items-center justify-between mb-6">
+        <PageHeader
+          title="FY26 Assets"
+          description={`Annual Inventory (AI) \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
+          icon={Archive}
+        />
+        <Button
+          onClick={() => router.push("/assets/scan")}
+          size="sm"
+          className="shrink-0"
+        >
+          <ScanLine className="w-4 h-4 mr-1.5" />
+          Scan
+        </Button>
+      </div>
 
       {error && (
         <div className="mb-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">

@@ -1,20 +1,6 @@
-import { Droplets, Play, Pause } from "lucide-react";
+import { Droplets } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { Button } from "@/components/ui/button";
-
-const mockZones = [
-  { id: 1, name: "Green #1", status: "idle", lastRun: "Yesterday 4:00 AM", runtime: "12 min" },
-  { id: 2, name: "Green #2", status: "running", lastRun: "Running now", runtime: "8/12 min" },
-  { id: 3, name: "Fairway #1-3", status: "idle", lastRun: "Yesterday 3:30 AM", runtime: "25 min" },
-  { id: 4, name: "Fairway #4-6", status: "scheduled", lastRun: "Scheduled 4:00 AM", runtime: "25 min" },
-  { id: 5, name: "Practice Green", status: "idle", lastRun: "Mar 15 4:00 AM", runtime: "15 min" },
-];
-
-const statusConfig = {
-  idle: { label: "Idle", color: "bg-muted text-muted-foreground" },
-  running: { label: "Running", color: "bg-primary text-primary-foreground" },
-  scheduled: { label: "Scheduled", color: "bg-accent text-accent-foreground" },
-};
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function IrrigationPage() {
   return (
@@ -23,57 +9,42 @@ export default function IrrigationPage() {
         title="Irrigation"
         description="Zone management and schedules"
         icon={Droplets}
-      >
-        <Button variant="outline" size="sm">
-          Rain Delay
-        </Button>
-        <Button size="sm">
-          <Play className="w-4 h-4 mr-2" />
-          Manual Run
-        </Button>
-      </PageHeader>
+      />
 
-      {/* Active Status */}
-      <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium text-primary">Zone Running</p>
-            <p className="text-sm text-muted-foreground">Green #2 - 8 of 12 minutes remaining</p>
-          </div>
-          <Button variant="outline" size="sm">
-            <Pause className="w-4 h-4 mr-2" />
-            Stop
-          </Button>
-        </div>
-      </div>
-
-      {/* Zone List */}
-      <div className="space-y-3">
-        {mockZones.map((zone) => {
-          const status = statusConfig[zone.status as keyof typeof statusConfig];
-          return (
-            <div
-              key={zone.id}
-              className="bg-card rounded-lg border border-border p-4 hover:border-primary/50 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-medium">{zone.name}</h3>
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${status.color}`}>
-                      {status.label}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{zone.lastRun}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">{zone.runtime}</p>
-                  <p className="text-sm text-muted-foreground">Runtime</p>
-                </div>
-              </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <Droplets className="w-8 h-8 text-primary" />
             </div>
-          );
-        })}
+
+            <h2 className="text-xl font-semibold mb-2">
+              Irrigation Management &mdash; Coming Soon
+            </h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              We&apos;re building a full irrigation management system. Here&apos;s what&apos;s on the way:
+            </p>
+
+            <ul className="text-sm text-muted-foreground space-y-2 text-left">
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                Zone control &amp; scheduling
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                Flow monitoring
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                Smart weather-based adjustments
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                Pump station status
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

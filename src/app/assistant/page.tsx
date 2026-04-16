@@ -12,10 +12,12 @@ import {
   Camera,
   X,
   Image as ImageIcon,
+  Square,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { uploadPhoto } from "@/lib/supabase/storage";
+import { createClient } from "@/lib/supabase/client";
 import ReactMarkdown from "react-markdown";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -97,6 +99,17 @@ export default function AssistantPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Stop-generating support
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Conversation persistence
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  // Keep ref in sync so sendMessage callback always has latest value
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   // Photo attachment state
   const [pendingPhoto, setPendingPhoto] = useState<{
     file: File;
@@ -118,6 +131,44 @@ export default function AssistantPage() {
       }
     };
   }, [pendingPhoto]);
+
+  // Load most recent conversation from last 24h on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    const supabase = createClient();
+    (async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: conv } = await supabase
+        .from("ai_conversations")
+        .select("id, title, updated_at")
+        .eq("user_id", user.id)
+        .gte("updated_at", since)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (!conv) return;
+
+      const { data: rows } = await supabase
+        .from("ai_messages")
+        .select("id, role, content, error, image_url, created_at")
+        .eq("conversation_id", conv.id)
+        .order("created_at", { ascending: true });
+
+      if (rows && rows.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const loaded: Message[] = rows.map((r: any) => ({
+          id: r.id,
+          role: r.role as "user" | "assistant",
+          content: r.content,
+          error: r.error || false,
+          imageUrl: r.image_url || undefined,
+          timestamp: new Date(r.created_at),
+        }));
+        setMessages(loaded);
+        setConversationId(conv.id);
+      }
+    })();
+  }, [user?.id]);
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -194,6 +245,15 @@ export default function AssistantPage() {
         inputRef.current.style.height = "auto";
       }
 
+      // Create AbortController for this request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // Set a 120s timeout that aborts automatically
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 120000);
+
       // Create a placeholder assistant message that we'll stream into.
       const assistantId = crypto.randomUUID();
       setMessages((prev) => [
@@ -206,8 +266,12 @@ export default function AssistantPage() {
         },
       ]);
 
+      // Track streamed content for persistence
+      let finalAssistantContent = "";
+
       // Helper: append text to the streaming assistant message.
       const appendToAssistant = (delta: string) => {
+        finalAssistantContent += delta;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, content: m.content + delta } : m
@@ -249,7 +313,7 @@ export default function AssistantPage() {
             photoStoragePath: photoStoragePath || undefined,
             photoPublicUrl: photoPublicUrl || undefined,
           }),
-          signal: AbortSignal.timeout(120000),
+          signal: controller.signal,
         });
 
         // If the server errored out before streaming began, it returns JSON.
@@ -332,11 +396,131 @@ export default function AssistantPage() {
           // We got partial text, then an error. Append a note.
           appendToAssistant(`\n\n_(Note: ${streamError})_`);
         }
-      } catch (err) {
-        console.error("Assistant stream error:", err);
+
+        // ── Persist to Supabase ──────────────────────────────────────────
+        if (gotAnyText && user?.id) {
+          const supabase = createClient();
+          const currentConvId = conversationIdRef.current;
+          try {
+            if (!currentConvId) {
+              // First exchange: create conversation + save both messages
+              const title = displayText.slice(0, 50);
+              const { data: conv } = await supabase
+                .from("ai_conversations")
+                .insert({ user_id: user.id, title })
+                .select("id")
+                .single();
+              if (conv) {
+                const newConvId = conv.id as string;
+                setConversationId(newConvId);
+                await supabase.from("ai_messages").insert([
+                  {
+                    conversation_id: newConvId,
+                    role: "user",
+                    content: displayText,
+                    image_url: photoPublicUrl || null,
+                  },
+                  {
+                    conversation_id: newConvId,
+                    role: "assistant",
+                    content: finalAssistantContent,
+                  },
+                ]);
+              }
+            } else {
+              // Subsequent exchange: append both messages
+              await supabase.from("ai_messages").insert([
+                {
+                  conversation_id: currentConvId,
+                  role: "user",
+                  content: displayText,
+                  image_url: photoPublicUrl || null,
+                },
+                {
+                  conversation_id: currentConvId,
+                  role: "assistant",
+                  content: finalAssistantContent,
+                },
+              ]);
+              // Touch updated_at on the conversation
+              await supabase
+                .from("ai_conversations")
+                .update({ updated_at: new Date().toISOString() })
+                .eq("id", currentConvId);
+            }
+          } catch (err) {
+            console.error("Failed to persist conversation:", err);
+          }
+        }
+      } catch (err: unknown) {
         setToolActivity(null);
-        replaceAssistantWithError("Network error — check your connection and try again.");
+        // If user clicked Stop or timeout fired, don't replace with error
+        if (err instanceof DOMException && err.name === "AbortError") {
+          if (finalAssistantContent) {
+            appendToAssistant(" _(stopped)_");
+            // Persist the partial response
+            if (user?.id) {
+              const supabase = createClient();
+              const currentConvId = conversationIdRef.current;
+              const stoppedContent = finalAssistantContent; // already includes everything before _(stopped)_
+              try {
+                if (!currentConvId) {
+                  const title = displayText.slice(0, 50);
+                  const { data: conv } = await supabase
+                    .from("ai_conversations")
+                    .insert({ user_id: user.id, title })
+                    .select("id")
+                    .single();
+                  if (conv) {
+                    const newConvId = conv.id as string;
+                    setConversationId(newConvId);
+                    await supabase.from("ai_messages").insert([
+                      {
+                        conversation_id: newConvId,
+                        role: "user",
+                        content: displayText,
+                        image_url: photoPublicUrl || null,
+                      },
+                      {
+                        conversation_id: newConvId,
+                        role: "assistant",
+                        content: stoppedContent + " _(stopped)_",
+                      },
+                    ]);
+                  }
+                } else {
+                  await supabase.from("ai_messages").insert([
+                    {
+                      conversation_id: currentConvId,
+                      role: "user",
+                      content: displayText,
+                      image_url: photoPublicUrl || null,
+                    },
+                    {
+                      conversation_id: currentConvId,
+                      role: "assistant",
+                      content: stoppedContent + " _(stopped)_",
+                    },
+                  ]);
+                  await supabase
+                    .from("ai_conversations")
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq("id", currentConvId);
+                }
+              } catch (persistErr) {
+                console.error("Failed to persist stopped conversation:", persistErr);
+              }
+            }
+          } else {
+            replaceAssistantWithError("Response was stopped.");
+          }
+        } else {
+          console.error("Assistant stream error:", err);
+          replaceAssistantWithError("Network error — check your connection and try again.");
+        }
       } finally {
+        clearTimeout(timeoutId);
+        abortControllerRef.current = null;
         setLoading(false);
       }
     },
@@ -355,8 +539,13 @@ export default function AssistantPage() {
     }
   };
 
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+  };
+
   const clearChat = () => {
     setMessages([]);
+    setConversationId(null);
     clearPendingPhoto();
   };
 
@@ -608,17 +797,24 @@ export default function AssistantPage() {
             disabled={loading}
             className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 placeholder:text-muted-foreground/50"
           />
-          <button
-            type="submit"
-            disabled={loading || (!input.trim() && !pendingPhoto)}
-            className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 shrink-0"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
+          {loading ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              className="w-11 h-11 rounded-xl bg-red-500 text-white flex items-center justify-center hover:bg-red-600 active:scale-95 transition-all shrink-0"
+              aria-label="Stop generating"
+            >
+              <Square className="w-5 h-5" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim() && !pendingPhoto}
+              className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 shrink-0"
+            >
               <Send className="w-5 h-5" />
-            )}
-          </button>
+            </button>
+          )}
         </form>
         <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
           Tap 📷 to attach a photo — it&apos;ll be saved with any task or issue I create

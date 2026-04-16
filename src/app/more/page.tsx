@@ -63,7 +63,7 @@ const leadershipQuickAccess: QuickItem[] = [
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/briefing", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
+  { href: "/dashboard", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
 ];
@@ -106,7 +106,7 @@ const foremanQuickAccess: QuickItem[] = [
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/briefing", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
+  { href: "/dashboard", label: "Briefing", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/irrigation", label: "Irrigation", icon: Droplets, color: "from-blue-500 to-indigo-600" },
 ];
