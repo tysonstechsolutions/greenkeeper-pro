@@ -102,11 +102,61 @@ export default function AssetScanPage() {
           return;
         }
 
-        // 2. Substring match on barcode_value. Catches the case where the
-        //    stored value has extra chars (prefix/suffix the scanner added
-        //    when linking) or the new scan does. E.g. stored "1234567890"
-        //    but new scan returned "1234567890\r" → trimmed to same, but
-        //    legacy data may have been stored dirty.
+        // 2. MWRMA property-tag format: "17000198-0018" →
+        //    asset_number=17000198, sub_number=18. The asset tags on
+        //    every piece of MWRMA equipment follow this pattern. The
+        //    DB stores sub_number without leading zeros ("18" not
+        //    "0018"), so strip them from the scanned value before
+        //    matching. Also handle "-0000" → sub_number "0" which is
+        //    how the baseline/primary asset is stored.
+        const tagMatch = normalized.match(/^(\d+)-(\d+)$/);
+        if (tagMatch) {
+          const assetNum = tagMatch[1];
+          const subNum = String(parseInt(tagMatch[2], 10)); // strips leading zeros
+          const { data: tagRows, error: tagErr } = await supabase
+            .from("fy26_assets")
+            .select("*")
+            .eq("asset_number", assetNum)
+            .eq("sub_number", subNum)
+            .limit(1);
+          if (tagErr) {
+            setMatchError(`Lookup failed: ${tagErr.message}`);
+            return;
+          }
+          if (tagRows && tagRows.length > 0) {
+            setMatch(tagRows[0] as Fy26Asset);
+            return;
+          }
+          // Also try the raw string form in case some rows stored the sub
+          // with leading zeros. Rare but cheap to check.
+          const { data: tagRowsRaw } = await supabase
+            .from("fy26_assets")
+            .select("*")
+            .eq("asset_number", assetNum)
+            .eq("sub_number", tagMatch[2])
+            .limit(1);
+          if (tagRowsRaw && tagRowsRaw.length > 0) {
+            setMatch(tagRowsRaw[0] as Fy26Asset);
+            return;
+          }
+        }
+
+        // 3. Just-digits scan (no dash) → try asset_number exact match
+        //    for the case where the scanner decoded without the sub.
+        if (/^\d+$/.test(normalized)) {
+          const { data: numRows } = await supabase
+            .from("fy26_assets")
+            .select("*")
+            .eq("asset_number", normalized)
+            .limit(1);
+          if (numRows && numRows.length > 0) {
+            setMatch(numRows[0] as Fy26Asset);
+            return;
+          }
+        }
+
+        // 4. Substring match on barcode_value. Catches legacy rows stored
+        //    with stray whitespace/control chars the scanner appended.
         const likeTerm = `%${escapedForLike.trim()}%`;
         const { data: substringRows } = await supabase
           .from("fy26_assets")
@@ -118,7 +168,7 @@ export default function AssetScanPage() {
           return;
         }
 
-        // 3. Fall back to fuzzy search on serial / asset # / description /
+        // 5. Fall back to fuzzy search on serial / asset # / description /
         //    model / barcode_value.
         if (!escapedForLike.trim()) {
           setMatchError(`No asset matching "${normalized}"`);
