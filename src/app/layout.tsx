@@ -6,8 +6,7 @@ import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync
 import { OfflineBanner } from "@/components/features/offline/offline-banner";
 import { OfflineIndicator } from "@/components/ui/offline-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import { AuthGate } from "@/components/auth/auth-gate";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -85,13 +84,13 @@ export default function RootLayout({
         }}
       >
         <AuthProvider>
-          <OfflineIndicator />
-          <AppShell>{children}</AppShell>
-          <OfflineBanner />
-          <OfflineSyncIndicator />
+          <AuthGate>
+            <OfflineIndicator />
+            <AppShell>{children}</AppShell>
+            <OfflineBanner />
+            <OfflineSyncIndicator />
+          </AuthGate>
         </AuthProvider>
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   );

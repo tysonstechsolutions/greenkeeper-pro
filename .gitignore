@@ -48,5 +48,18 @@ yarn-error.log*
 next-env.d.ts
 nul
 
+# Local Claude Code working dir (agent worktrees, etc.)
+/.claude/
+
 # Equipment photos (stored in Supabase)
 /equipment/
+
+# Capacitor / Android build artifacts (keep android/ source, ignore build output)
+/android/app/build/
+/android/app/src/main/assets/public/
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json
+/android/build/
+/android/.gradle/
+/android/captures/
+/android/local.properties

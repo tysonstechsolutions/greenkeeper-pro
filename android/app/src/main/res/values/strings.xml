@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VMGC GreenKeeper</string>
+    <string name="title_activity_main">VMGC GreenKeeper</string>
+    <string name="package_name">com.vmgc.greenkeeper</string>
+    <string name="custom_url_scheme">com.vmgc.greenkeeper</string>
+</resources>
