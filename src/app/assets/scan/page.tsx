@@ -192,6 +192,69 @@ export default function AssetScanPage() {
           }
         }
 
+        // 3b. Reverse-substring match. Field scanner example:
+        //       label: 17000198-0004
+        //       decoded by html5-qrcode: "1700019870004" (extra "7"
+        //       injected from the Code 128 internal encoding)
+        //     No pattern of our own fixes that because the extra char
+        //     is in the middle. But 17000198 IS a substring of the
+        //     decoded value, so we can fetch the asset list and find
+        //     any row whose asset_number appears inside the scan, then
+        //     disambiguate by checking the trailing digits against
+        //     sub_number.
+        if (/^\d{6,}$/.test(normalized) && normalized.length >= 8) {
+          const { data: allAssets } = await supabase
+            .from("fy26_assets")
+            .select("*");
+
+          if (allAssets && allAssets.length > 0) {
+            // Any asset whose full asset_number appears anywhere in
+            // the scan string. Require asset_number ≥ 6 chars so a
+            // short "0" doesn't claim every scan.
+            const candidates = (allAssets as Fy26Asset[])
+              .filter(
+                (a) =>
+                  a.asset_number.length >= 6 &&
+                  normalized.includes(a.asset_number)
+              );
+
+            if (candidates.length === 1) {
+              setMatch(candidates[0]);
+              return;
+            }
+
+            if (candidates.length > 1) {
+              // Multiple asset_numbers embedded in the scan — happens
+              // when asset_numbers share a common prefix. Disambiguate
+              // by looking at what's after the asset_number in the
+              // scan and checking if it matches (or ends with) the
+              // sub_number.
+              const withScore = candidates.map((a) => {
+                const pos = normalized.indexOf(a.asset_number);
+                const tail = normalized.slice(pos + a.asset_number.length);
+                const tailAsInt = tail ? String(parseInt(tail, 10)) : "";
+                const lastFourAsInt = tail.length >= 4
+                  ? String(parseInt(tail.slice(-4), 10))
+                  : "";
+                const sub = a.sub_number ?? "";
+                let score = 0;
+                if (sub && tailAsInt === sub) score = 3;
+                else if (sub && lastFourAsInt === sub) score = 2;
+                else if (sub && tail.endsWith(sub)) score = 1;
+                else if (!sub || sub === "0") score = 1; // primary asset, no sub
+                return { asset: a, score, tailLen: tail.length };
+              });
+              withScore.sort(
+                (x, y) => y.score - x.score || x.tailLen - y.tailLen
+              );
+              if (withScore[0].score > 0) {
+                setMatch(withScore[0].asset);
+                return;
+              }
+            }
+          }
+        }
+
         // 4. Substring match on barcode_value. Catches legacy rows stored
         //    with stray whitespace/control chars the scanner appended.
         const likeTerm = `%${escapedForLike.trim()}%`;
