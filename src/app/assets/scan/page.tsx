@@ -462,6 +462,42 @@ export default function AssetScanPage() {
     []
   );
 
+  // Grab the current frame from the live barcode scanner video element,
+  // convert to a File, and run it through the same OCR pipeline as the
+  // explicit "Read label" mode. This gives the user a one-tap fallback
+  // right from the barcode camera — no mode switching required.
+  // stopScannerRef is populated once stopScanner is declared (below),
+  // so this callback can be declared here without a hoisting cycle.
+  const stopScannerRef = useRef<(() => Promise<void>) | null>(null);
+  const captureFrameAndOcr = useCallback(async () => {
+    const video = document.querySelector<HTMLVideoElement>(
+      "#scanner-viewport video"
+    );
+    if (!video || !video.videoWidth) {
+      setMatchError("Camera isn't ready yet — give it a second and try again.");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.92)
+    );
+    if (!blob) {
+      setMatchError("Couldn't capture a frame — try the full Read label mode.");
+      return;
+    }
+    const file = new File([blob], `scan-${Date.now()}.jpg`, {
+      type: "image/jpeg",
+    });
+    // Stop the scanner so it doesn't fight with OCR for the camera.
+    await stopScannerRef.current?.();
+    await runOcrOnFile(file);
+  }, [runOcrOnFile]);
+
   const markPresent = async () => {
     if (!match) return;
     setUpdating(true);
@@ -520,8 +556,13 @@ export default function AssetScanPage() {
         { facingMode: "environment" },
         {
           fps: 10,
-          qrbox: { width: 280, height: 120 },
-          aspectRatio: 2.0,
+          // No qrbox → scan the entire video frame. Users reported the
+          // small 280×120 crop made it impossible to fit the whole
+          // MWRMA label legibly. Detection is slightly slower across
+          // the full frame but still real-time on modern phones, and
+          // tag-style Code 128 decodes reliably at any position now.
+          // No aspectRatio either — let the camera use its native
+          // aspect so nothing gets squished.
         },
         (decodedText) => {
           // Stop scanning on first successful decode. Clear the ref
@@ -569,6 +610,12 @@ export default function AssetScanPage() {
       }
     }
   }, []);
+
+  // Keep captureFrameAndOcr able to call stopScanner without a forward
+  // reference cycle — see the stopScannerRef declaration above.
+  useEffect(() => {
+    stopScannerRef.current = stopScanner;
+  }, [stopScanner]);
 
   // Auto-start the scanner on mount and whenever we enter (or re-enter)
   // camera mode without an active match or unresolved error.
@@ -740,20 +787,50 @@ export default function AssetScanPage() {
           scanner so the camera LED goes off too.) */}
       {!manualMode && !ocrMode && !match && !matchError && (
         <div className="mb-4">
-          <div
-            id="scanner-viewport"
-            ref={scanContainerRef}
-            className="rounded-xl overflow-hidden bg-black relative"
-            style={{ minHeight: "min(70vh, 480px)" }}
-          />
+          <div className="relative">
+            <div
+              id="scanner-viewport"
+              ref={scanContainerRef}
+              className="rounded-xl overflow-hidden bg-black"
+              style={{ minHeight: "min(70vh, 480px)" }}
+            />
+            {/* OCR shutter — when the barcode isn't cooperating, tap
+                this to grab the current video frame and OCR the whole
+                label in one shot. Stays out of the way visually. */}
+            {scanning && (
+              <button
+                type="button"
+                onClick={captureFrameAndOcr}
+                disabled={ocrRunning}
+                aria-label="Read label text from current frame"
+                className="absolute bottom-3 right-3 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex flex-col items-center justify-center active:scale-95 transition disabled:opacity-50"
+              >
+                {ocrRunning ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  <>
+                    <FileText className="w-5 h-5" />
+                    <span className="text-[9px] font-semibold leading-none mt-0.5">
+                      READ
+                    </span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
           {!scanning && !cameraError && !match && (
             <p className="text-xs text-center text-muted-foreground mt-2 animate-pulse">
               Starting camera…
             </p>
           )}
-          {scanning && (
+          {scanning && !ocrRunning && (
             <p className="text-xs text-center text-muted-foreground mt-2">
-              Point the camera at the asset barcode
+              Aim at the barcode — or tap READ to scan the whole label
+            </p>
+          )}
+          {ocrRunning && (
+            <p className="text-xs text-center text-primary mt-2">
+              Reading label… {ocrProgress}%
             </p>
           )}
           {cameraError && (
