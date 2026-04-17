@@ -21,6 +21,7 @@ import {
   Pencil,
   Edit3,
   Trash2,
+  Ruler,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -483,6 +484,17 @@ export default function RouteContent() {
           subtitle="Putting surface observation & tracking"
           backHref="/course-map"
         />
+
+        {/* Measure on satellite map — square footage of green and moss patches */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push(`/course-map/green/${holeNumber}/measure`)}
+          className="mt-2 w-full sm:w-auto"
+        >
+          <Ruler className="w-4 h-4 mr-1.5" />
+          Measure green & moss patches
+        </Button>
 
         {/* Navigation between greens */}
         <div className="flex items-center justify-between mt-2 mb-4">

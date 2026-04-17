@@ -1,7 +1,14 @@
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist, CacheFirst, NetworkFirst, NetworkOnly, ExpirationPlugin } from "serwist";
+import {
+  Serwist,
+  CacheFirst,
+  NetworkFirst,
+  NetworkOnly,
+  StaleWhileRevalidate,
+  ExpirationPlugin,
+} from "serwist";
 import { createSupabaseMutationQueue } from "@/lib/sw/background-sync";
 
 // This declares the value of `injectionPoint` to TypeScript.
@@ -19,18 +26,54 @@ const serwist = new Serwist({
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: [
-    // App shell (CSS, JS, fonts) - Cache First
+    // HTML documents (page navigations) — Network First so newly
+    // deployed versions show up on the next load without a hard refresh.
+    // Previous behavior fell through to the default cache which could
+    // keep serving stale HTML referencing deleted JS chunks, producing
+    // the "have to refresh the page for it to load correctly" bug.
     {
-      matcher: ({ request }) =>
-        request.destination === "style" ||
-        request.destination === "script" ||
-        request.destination === "font",
-      handler: new CacheFirst({
-        cacheName: "app-shell-v1",
+      matcher: ({ request }) => request.destination === "document",
+      handler: new NetworkFirst({
+        cacheName: "pages-v1",
+        networkTimeoutSeconds: 5,
         plugins: [
           new ExpirationPlugin({
-            maxEntries: 100,
+            maxEntries: 50,
+            maxAgeSeconds: 60 * 60 * 24, // 24 hours
+          }),
+        ],
+      }),
+    },
+    // Fonts — long-lived, Cache First is fine (filenames are hashed or
+    // stable Google Fonts URLs).
+    {
+      matcher: ({ request }) => request.destination === "font",
+      handler: new CacheFirst({
+        cacheName: "fonts-v1",
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 30,
             maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+          }),
+        ],
+      }),
+    },
+    // JS / CSS — Next.js emits content-hashed filenames (e.g.
+    // `/_next/static/chunks/abc123.js`), so a new deploy references new
+    // files and the old cache entries just go unused until they expire.
+    // But if the OLD shell is served from cache and references filenames
+    // that no longer exist, you get a broken page. StaleWhileRevalidate
+    // returns the cached copy instantly while fetching a fresh one in
+    // the background — best of both worlds for hashed static assets.
+    {
+      matcher: ({ request }) =>
+        request.destination === "style" || request.destination === "script",
+      handler: new StaleWhileRevalidate({
+        cacheName: "app-shell-v2",
+        plugins: [
+          new ExpirationPlugin({
+            maxEntries: 150,
+            maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
           }),
         ],
       }),

@@ -1,12 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 interface BackButtonProps {
+  /**
+   * Fallback URL if there's nowhere to go back to in browser history
+   * (e.g. the user opened this page from a bookmark / QR deeplink).
+   * When history IS available, router.back() is preferred because it
+   * preserves any query-string filters the previous page was using —
+   * otherwise tapping Back would strip ?status=unverified etc. and the
+   * user loses their list filter every time they open an item.
+   */
   href?: string;
   label?: string;
   className?: string;
@@ -15,28 +22,28 @@ interface BackButtonProps {
 export function BackButton({ href, label = "Back", className }: BackButtonProps) {
   const router = useRouter();
 
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className={cn(
-          "inline-flex items-center justify-center gap-2 text-sm font-medium h-9 px-3 rounded-md transition-colors",
-          "text-muted-foreground hover:text-foreground hover:bg-accent",
-          className
-        )}
-      >
-        <ArrowLeft className="w-4 h-4" />
-        {label}
-      </Link>
-    );
-  }
+  const handleClick = () => {
+    // Prefer browser history — this preserves the filter query string
+    // on the previous page. Only use the static href when there IS no
+    // previous entry (length 1 means we were the first page loaded).
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    if (href) {
+      router.push(href);
+    }
+  };
 
   return (
     <Button
       variant="ghost"
       size="sm"
-      onClick={() => router.back()}
-      className={cn("gap-2 text-muted-foreground hover:text-foreground", className)}
+      onClick={handleClick}
+      className={cn(
+        "gap-2 text-muted-foreground hover:text-foreground",
+        className
+      )}
     >
       <ArrowLeft className="w-4 h-4" />
       {label}
