@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
   AlertTriangle,
@@ -66,15 +66,35 @@ function StatCard({
   );
 }
 
-export default function AssetsPage() {
+function AssetsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { assets, loading, error, fetchAssets, stats } = useFy26Assets();
 
-  const [search, setSearch] = useState("");
-  const [siteFilter, setSiteFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<Fy26AssetStatus | "all">("all");
+  // Initialize filter state from URL params so back-navigation restores them
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
+  const [siteFilter, setSiteFilter] = useState<string>(
+    () => searchParams.get("site") ?? "all"
+  );
+  const [statusFilter, setStatusFilter] = useState<Fy26AssetStatus | "all">(
+    () => (searchParams.get("status") as Fy26AssetStatus | null) ?? "all"
+  );
+  const [manufacturerFilter, setManufacturerFilter] = useState<string>(
+    () => searchParams.get("mfr") ?? "all"
+  );
 
-  // Debounced fetch on filter change
+  // Sync filters to URL (so going back restores them)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (siteFilter !== "all") params.set("site", siteFilter);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (manufacturerFilter !== "all") params.set("mfr", manufacturerFilter);
+    const qs = params.toString();
+    router.replace(qs ? `/assets?${qs}` : "/assets", { scroll: false });
+  }, [search, siteFilter, statusFilter, manufacturerFilter, router]);
+
+  // Debounced fetch on filter change (manufacturer is filtered client-side)
   useEffect(() => {
     const timeout = setTimeout(() => {
       const filters: Fy26AssetFilters = {};
@@ -88,6 +108,25 @@ export default function AssetsPage() {
 
   const toggleStatus = (s: Fy26AssetStatus) =>
     setStatusFilter((prev) => (prev === s ? "all" : s));
+
+  // Build distinct-manufacturer list from the currently-loaded assets
+  const manufacturerOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of assets) {
+      if (a.manufacturer && a.manufacturer.trim()) {
+        set.add(a.manufacturer.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [assets]);
+
+  // Apply manufacturer filter client-side (simpler than round-tripping)
+  const visibleAssets = useMemo(() => {
+    if (manufacturerFilter === "all") return assets;
+    return assets.filter(
+      (a) => (a.manufacturer ?? "").trim() === manufacturerFilter
+    );
+  }, [assets, manufacturerFilter]);
 
   const formatMoney = (v: number | null | undefined) =>
     v == null ? "—" : `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -157,7 +196,7 @@ export default function AssetsPage() {
         />
       </div>
 
-      {/* Search + site filter */}
+      {/* Search + site + manufacturer filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -169,7 +208,7 @@ export default function AssetsPage() {
           />
         </div>
         <Select value={siteFilter} onValueChange={setSiteFilter}>
-          <SelectTrigger className="w-full sm:w-[220px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="All Sites" />
           </SelectTrigger>
           <SelectContent>
@@ -181,21 +220,34 @@ export default function AssetsPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={manufacturerFilter} onValueChange={setManufacturerFilter}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="All Manufacturers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Manufacturers</SelectItem>
+            {manufacturerOptions.map((m) => (
+              <SelectItem key={m} value={m}>
+                {m}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* List */}
-      {loading && assets.length === 0 ? (
+      {loading && visibleAssets.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      ) : assets.length === 0 ? (
+      ) : visibleAssets.length === 0 ? (
         <div className="text-center py-12">
           <Archive className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">No assets match the current filters.</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {assets.map((a) => {
+          {visibleAssets.map((a) => {
             const statusColor = fy26AssetStatusColors[a.status];
             return (
               <Card
@@ -260,5 +312,19 @@ export default function AssetsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AssetsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 md:p-6 flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <AssetsPageContent />
+    </Suspense>
   );
 }

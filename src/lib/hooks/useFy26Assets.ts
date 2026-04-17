@@ -181,31 +181,35 @@ export function useFy26Assets(): UseFy26AssetsReturn {
       file: File,
       userId: string
     ): Promise<string | null> => {
-      try {
-        const result = await uploadPhoto(file, userId);
-        const url = result.publicUrl;
+      // Upload to storage — throw lets caller surface the exact error.
+      const result = await uploadPhoto(file, userId);
+      const url = result.publicUrl;
 
-        // Fetch current photos to merge
-        const { data: current } = await supabase
-          .from("fy26_assets")
-          .select("condition_photos")
-          .eq("id", assetId)
-          .single();
+      // Fetch current photos to merge
+      const { data: current, error: fetchErr } = await supabase
+        .from("fy26_assets")
+        .select("condition_photos")
+        .eq("id", assetId)
+        .single();
 
-        const existing: ConditionPhotos = (current?.condition_photos as ConditionPhotos) || {};
-        const updated = { ...existing, [angle]: url };
-
-        await supabase
-          .from("fy26_assets")
-          .update({ condition_photos: updated })
-          .eq("id", assetId);
-
-        return url;
-      } catch (err) {
-        console.error("[useFy26Assets] uploadConditionPhoto error:", err);
-        setError(err instanceof Error ? err.message : "Failed to upload photo");
-        return null;
+      if (fetchErr) {
+        throw new Error(`Could not read existing photos: ${fetchErr.message}`);
       }
+
+      const existing: ConditionPhotos =
+        (current?.condition_photos as ConditionPhotos) || {};
+      const updated = { ...existing, [angle]: url };
+
+      const { error: updateErr } = await supabase
+        .from("fy26_assets")
+        .update({ condition_photos: updated })
+        .eq("id", assetId);
+
+      if (updateErr) {
+        throw new Error(`Photo uploaded but DB update failed: ${updateErr.message}`);
+      }
+
+      return url;
     },
     [supabase]
   );
@@ -214,13 +218,9 @@ export function useFy26Assets(): UseFy26AssetsReturn {
 
   const uploadDamagePhoto = useCallback(
     async (file: File, userId: string): Promise<string | null> => {
-      try {
-        const result = await uploadPhoto(file, userId);
-        return result.publicUrl;
-      } catch (err) {
-        console.error("[useFy26Assets] uploadDamagePhoto error:", err);
-        return null;
-      }
+      // Let callers see the real error; they surface it in the UI.
+      const result = await uploadPhoto(file, userId);
+      return result.publicUrl;
     },
     []
   );

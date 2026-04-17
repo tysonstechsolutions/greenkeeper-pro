@@ -61,21 +61,35 @@ export default function AssetScanPage() {
       setMatchError(null);
 
       try {
-        // 1. Try exact barcode match first (fastest, most reliable)
-        const { data: barcodeHit } = await supabase
+        // 1. Try exact barcode match first (fastest, most reliable).
+        //    NOTE: capture the error — previously it was swallowed,
+        //    which hid real DB failures behind a misleading "no match".
+        const { data: barcodeHit, error: barcodeErr } = await supabase
           .from("fy26_assets")
           .select("*")
           .eq("barcode_value", trimmed)
-          .limit(1)
           .maybeSingle();
+
+        if (barcodeErr) {
+          setMatchError(`Lookup failed: ${barcodeErr.message}`);
+          return;
+        }
 
         if (barcodeHit) {
           setMatch(barcodeHit as Fy26Asset);
           return;
         }
 
-        // 2. Fall back to fuzzy search on serial / asset # / description / model
-        const term = `%${trimmed}%`;
+        // 2. Fall back to fuzzy search on serial / asset # / description / model.
+        //    Sanitize the term — commas, parentheses, asterisks break
+        //    PostgREST's .or() filter parser and cause 400 errors.
+        const safe = trimmed.replace(/[,()%*]/g, " ").trim();
+        if (!safe) {
+          setMatchError(`No asset matching "${trimmed}"`);
+          return;
+        }
+
+        const term = `%${safe}%`;
         const { data, error } = await supabase
           .from("fy26_assets")
           .select("*")
@@ -85,13 +99,21 @@ export default function AssetScanPage() {
           .limit(1)
           .maybeSingle();
 
-        if (error || !data) {
-          setMatchError(`No asset found matching "${trimmed}"`);
-        } else {
-          setMatch(data as Fy26Asset);
+        if (error) {
+          setMatchError(`Search failed: ${error.message}`);
+          return;
         }
-      } catch {
-        setMatchError("Search failed — check connection.");
+        if (!data) {
+          setMatchError(`No asset found matching "${trimmed}"`);
+          return;
+        }
+        setMatch(data as Fy26Asset);
+      } catch (err) {
+        setMatchError(
+          err instanceof Error
+            ? `Search failed: ${err.message}`
+            : "Search failed — check connection."
+        );
       } finally {
         setSearching(false);
       }

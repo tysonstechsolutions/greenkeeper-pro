@@ -79,6 +79,7 @@ export default function AssetDetailPage() {
   const [asset, setAsset] = useState<Fy26Asset | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [savingStatus, setSavingStatus] = useState<Fy26AssetStatus | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -203,23 +204,73 @@ export default function AssetDetailPage() {
   }, []);
 
   const handleConditionPhotoUpload = async (angle: ConditionPhotoAngle, file: File) => {
-    if (!asset || !user?.id) return;
-    setUploadingAngle(angle);
-    const url = await uploadConditionPhoto(asset.id, angle, file, user.id);
-    if (url) {
-      setConditionPhotos((prev) => ({ ...prev, [angle]: url }));
+    if (!asset) {
+      setUploadError("Asset not loaded — please refresh the page.");
+      return;
     }
-    setUploadingAngle(null);
+    if (!user?.id) {
+      setUploadError("You must be signed in to upload photos. Try signing out and back in.");
+      return;
+    }
+    setUploadError(null);
+    setUploadingAngle(angle);
+    try {
+      const url = await uploadConditionPhoto(asset.id, angle, file, user.id);
+      if (url) {
+        setConditionPhotos((prev) => ({ ...prev, [angle]: url }));
+      } else {
+        setUploadError(
+          "Photo upload failed. Check your internet connection and that the photos bucket RLS policies are applied."
+        );
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Photo upload failed.");
+    } finally {
+      setUploadingAngle(null);
+    }
+  };
+
+  const handleDeleteConditionPhoto = async (angle: ConditionPhotoAngle) => {
+    if (!asset) return;
+    if (!window.confirm(`Delete the ${CONDITION_PHOTO_LABELS[angle]} photo? This can't be undone.`)) {
+      return;
+    }
+    setUploadError(null);
+    // Build new photo map without this angle
+    const newPhotos: ConditionPhotos = { ...conditionPhotos };
+    delete newPhotos[angle];
+    // Optimistic UI
+    const previous = conditionPhotos;
+    setConditionPhotos(newPhotos);
+    const updated = await updateAsset(asset.id, { condition_photos: newPhotos });
+    if (updated) {
+      setAsset(updated);
+    } else {
+      // Revert on failure
+      setConditionPhotos(previous);
+      setUploadError("Could not delete photo. Please try again.");
+    }
   };
 
   const handleDamagePhotoUpload = async (file: File) => {
-    if (!user?.id) return;
-    setUploadingDamagePhoto(true);
-    const url = await uploadDamagePhoto(file, user.id);
-    if (url) {
-      setDamagePhotos((prev) => [...prev, url]);
+    if (!user?.id) {
+      setUploadError("You must be signed in to upload damage photos.");
+      return;
     }
-    setUploadingDamagePhoto(false);
+    setUploadError(null);
+    setUploadingDamagePhoto(true);
+    try {
+      const url = await uploadDamagePhoto(file, user.id);
+      if (url) {
+        setDamagePhotos((prev) => [...prev, url]);
+      } else {
+        setUploadError("Damage photo upload failed.");
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Damage photo upload failed.");
+    } finally {
+      setUploadingDamagePhoto(false);
+    }
   };
 
   const handleSaveDamage = async () => {
@@ -302,6 +353,23 @@ export default function AssetDetailPage() {
           </span>
         }
       />
+
+      {/* Upload error banner */}
+      {uploadError && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-red-700 dark:text-red-400 flex-1">
+              {uploadError}
+            </p>
+            <button
+              onClick={() => setUploadError(null)}
+              className="text-red-500 hover:text-red-700 text-xs font-medium shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Status action buttons */}
       <Card className="mb-4">
@@ -434,20 +502,34 @@ export default function AssetDetailPage() {
                     {CONDITION_PHOTO_LABELS[angle]}
                   </p>
                   {url ? (
-                    <button
-                      className="relative w-full aspect-[4/3] rounded-lg overflow-hidden border border-border bg-muted group"
-                      onClick={() => setCameraAngle(angle)}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`${CONDITION_PHOTO_LABELS[angle]} view`}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Camera className="w-6 h-6 text-white" />
-                      </div>
-                    </button>
+                    <div className="relative w-full aspect-[4/3] rounded-lg overflow-hidden border border-border bg-muted group">
+                      <button
+                        className="absolute inset-0"
+                        onClick={() => setCameraAngle(angle)}
+                        aria-label={`Retake ${CONDITION_PHOTO_LABELS[angle]} photo`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`${CONDITION_PHOTO_LABELS[angle]} view`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Camera className="w-6 h-6 text-white" />
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteConditionPhoto(angle);
+                        }}
+                        className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-md z-10"
+                        aria-label={`Delete ${CONDITION_PHOTO_LABELS[angle]} photo`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ) : (
                     <button
                       className="w-full aspect-[4/3] rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1.5 hover:border-primary/50 hover:bg-primary/5 transition-colors"

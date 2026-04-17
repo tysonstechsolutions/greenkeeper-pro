@@ -150,9 +150,12 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+    <div
+      className="fixed inset-x-0 top-0 z-[60] bg-black flex flex-col overflow-hidden"
+      style={{ height: "100svh", maxHeight: "100svh" }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/80">
+      <div className="flex items-center justify-between px-4 py-3 bg-black/80 shrink-0">
         <button onClick={handleClose} className="text-white p-2">
           <X className="w-6 h-6" />
         </button>
@@ -195,7 +198,7 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
       </div>
 
       {/* Controls */}
-      <div className="bg-black px-6 py-8 pb-12 safe-area-bottom">
+      <div className="bg-black px-6 pt-4 pb-6 shrink-0" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}>
         {preview ? (
           <div className="flex items-center justify-center gap-12">
             <button
