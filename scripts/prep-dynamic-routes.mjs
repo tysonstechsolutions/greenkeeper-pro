@@ -36,6 +36,11 @@ const ROUTES = [
     paramName: "hole",
     staticParams: Array.from({ length: 18 }, (_, i) => String(i + 1)),
   },
+  {
+    dir: "course-map/green/[hole]/measure",
+    paramName: "hole",
+    staticParams: Array.from({ length: 18 }, (_, i) => String(i + 1)),
+  },
   { dir: "equipment/[id]", paramName: "id", staticParams: null },
   { dir: "equipment/[id]/service-history", paramName: "id", staticParams: null },
   { dir: "invite/[token]", paramName: "token", staticParams: null },
