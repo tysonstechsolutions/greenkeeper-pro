@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   Loader2,
   Keyboard,
+  FileText,
+  Camera,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +23,7 @@ import {
   type Fy26Asset,
   type Fy26AssetStatus,
 } from "@/types/fy26-assets";
+import { parseAssetLabel } from "@/lib/utils/parse-asset-label";
 
 // Dynamically import html5-qrcode only on client to avoid SSR issues.
 let Html5Qrcode: typeof import("html5-qrcode").Html5Qrcode | null = null;
@@ -38,6 +41,14 @@ export default function AssetScanPage() {
   const [scanning, setScanning] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [manualInput, setManualInput] = useState("");
+
+  // OCR (read label text) fallback state
+  const [ocrMode, setOcrMode] = useState(false);
+  const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrText, setOcrText] = useState<string>("");
+  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
+  const ocrFileInputRef = useRef<HTMLInputElement>(null);
   const [searching, setSearching] = useState(false);
   const [match, setMatch] = useState<Fy26Asset | null>(null);
   const [matchError, setMatchError] = useState<string | null>(null);
@@ -55,6 +66,9 @@ export default function AssetScanPage() {
   // lookupAsset as a dep (which would destabilize its identity). Filled in
   // by an effect below once lookupAsset is declared.
   const lookupAssetRef = useRef<((query: string) => void) | null>(null);
+  // Mirrors `match` state so OCR's async candidate loop can see the
+  // latest value without the stale-closure problem.
+  const matchRef = useRef<Fy26Asset | null>(null);
 
   // ── Lookup logic ──────────────────────────────────────────────────────
 
@@ -355,7 +369,98 @@ export default function AssetScanPage() {
     lookupAssetRef.current = lookupAsset;
   }, [lookupAsset]);
 
+  // Keep matchRef aligned with match so async OCR code sees fresh value.
+  useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+
   // ── Mark asset present ────────────────────────────────────────────────
+
+  // ── OCR fallback: read the whole sticker instead of the barcode ─────
+  //    When the barcode scan keeps failing (printed at an angle, worn
+  //    label, Code 128 quirks), we can take a photo of the whole label
+  //    and run Tesseract.js on it client-side. We extract every
+  //    plausible identifier (tag-format, asset number, serial, model)
+  //    and try each against the DB until something matches. Tesseract
+  //    is lazy-imported so the 2 MB WASM bundle only downloads when
+  //    the user actually picks this mode.
+
+  const runOcrOnFile = useCallback(
+    async (file: File) => {
+      setOcrRunning(true);
+      setOcrProgress(0);
+      setMatch(null);
+      setMatchError(null);
+
+      // Show a preview of what they captured
+      const previewUrl = URL.createObjectURL(file);
+      setOcrPreview(previewUrl);
+
+      try {
+        const { createWorker } = await import("tesseract.js");
+        const worker = await createWorker("eng", 1, {
+          logger: (m: { status: string; progress: number }) => {
+            if (m.status === "recognizing text") {
+              setOcrProgress(Math.round(m.progress * 100));
+            }
+          },
+        });
+        const { data } = await worker.recognize(file);
+        await worker.terminate();
+        const text = data.text ?? "";
+        setOcrText(text);
+
+        console.log("[scan/ocr] text:", JSON.stringify(text));
+        const candidates = parseAssetLabel(text);
+        console.log("[scan/ocr] candidates:", candidates);
+
+        if (candidates.all.length === 0) {
+          setMatchError(
+            "No asset identifiers could be read from the label. Try a clearer photo, or use Manual entry."
+          );
+          return;
+        }
+
+        // Try each candidate in order until one matches.
+        for (const candidate of candidates.all) {
+          // Re-use the same lookup cascade we use for barcodes.
+          await new Promise<void>((resolve) => {
+            const sub = lookupAssetRef.current;
+            if (!sub) return resolve();
+            // lookupAsset updates match/matchError state. We want to
+            // keep trying until one produces a match, so we clear
+            // matchError between candidates.
+            setMatchError(null);
+            sub(candidate);
+            // Small delay to let state settle. Cheap — max 4 candidates
+            // and the lookups themselves take ~100ms each.
+            setTimeout(resolve, 350);
+          });
+          // Check whether a match landed; if so, stop iterating.
+          if (matchRef.current) return;
+        }
+        // Fell through — no candidate matched. lookupAsset will have
+        // set matchError with the last attempt's message already.
+        if (!matchRef.current) {
+          setMatchError(
+            `Couldn't find any of: ${candidates.all.slice(0, 4).join(", ")}${
+              candidates.all.length > 4 ? "…" : ""
+            }`
+          );
+        }
+      } catch (err) {
+        console.error("[scan/ocr] failed:", err);
+        setMatchError(
+          err instanceof Error
+            ? `Text recognition failed: ${err.message}`
+            : "Text recognition failed."
+        );
+      } finally {
+        setOcrRunning(false);
+      }
+    },
+    []
+  );
 
   const markPresent = async () => {
     if (!match) return;
@@ -472,12 +577,12 @@ export default function AssetScanPage() {
   // switches to manual, tear the scanner down so the camera light
   // turns off and the black viewport unmounts.
   useEffect(() => {
-    if (manualMode || match || matchError) {
+    if (manualMode || ocrMode || match || matchError) {
       stopScanner();
       return;
     }
     startScanner();
-  }, [manualMode, match, matchError, startScanner, stopScanner]);
+  }, [manualMode, ocrMode, match, matchError, startScanner, stopScanner]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -521,18 +626,33 @@ export default function AssetScanPage() {
       </div>
 
       {/* Mode toggle */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         <Button
-          variant={!manualMode ? "default" : "outline"}
+          variant={!manualMode && !ocrMode ? "default" : "outline"}
           size="sm"
           onClick={() => {
             setManualMode(false);
+            setOcrMode(false);
             setMatch(null);
             setMatchError(null);
           }}
         >
           <ScanLine className="w-4 h-4 mr-1.5" />
-          Camera
+          Barcode
+        </Button>
+        <Button
+          variant={ocrMode ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            stopScanner();
+            setManualMode(false);
+            setOcrMode(true);
+            setMatch(null);
+            setMatchError(null);
+          }}
+        >
+          <FileText className="w-4 h-4 mr-1.5" />
+          Read label
         </Button>
         <Button
           variant={manualMode ? "default" : "outline"}
@@ -540,6 +660,7 @@ export default function AssetScanPage() {
           onClick={() => {
             stopScanner();
             setManualMode(true);
+            setOcrMode(false);
             setMatch(null);
             setMatchError(null);
           }}
@@ -549,10 +670,75 @@ export default function AssetScanPage() {
         </Button>
       </div>
 
+      {/* OCR mode — take a photo of the whole label, extract any asset
+          identifiers we can find, try each. Useful when the barcode
+          itself is scratched/worn/printed wrong and won't scan. */}
+      {ocrMode && !match && (
+        <div className="mb-4">
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="text-center">
+                <FileText className="w-8 h-8 text-primary mx-auto mb-2" />
+                <p className="text-sm font-semibold">Read the label text</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Take a photo of the MWRMA sticker. We&apos;ll look for the
+                  asset number, serial number, or tag ID on the label.
+                </p>
+              </div>
+              <input
+                ref={ocrFileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) runOcrOnFile(file);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={() => ocrFileInputRef.current?.click()}
+                disabled={ocrRunning}
+              >
+                {ocrRunning ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <Camera className="w-5 h-5 mr-2" />
+                )}
+                {ocrRunning ? `Reading… ${ocrProgress}%` : "Take photo of label"}
+              </Button>
+              {ocrPreview && (
+                <div className="space-y-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={ocrPreview}
+                    alt="Label preview"
+                    className="w-full rounded-lg border border-border"
+                  />
+                  {ocrText && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">
+                        Text read from label
+                      </summary>
+                      <pre className="mt-1 p-2 bg-muted rounded text-[10px] whitespace-pre-wrap break-all">
+                        {ocrText}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Camera scanner — auto-starts on mount, hidden once a match
           lands OR an error is showing. (Effect above tears down the
           scanner so the camera LED goes off too.) */}
-      {!manualMode && !match && !matchError && (
+      {!manualMode && !ocrMode && !match && !matchError && (
         <div className="mb-4">
           <div
             id="scanner-viewport"
