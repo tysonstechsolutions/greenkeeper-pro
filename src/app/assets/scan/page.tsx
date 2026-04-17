@@ -8,7 +8,6 @@ import {
   CheckCircle,
   AlertTriangle,
   Loader2,
-  X,
   Keyboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,42 +53,51 @@ export default function AssetScanPage() {
 
   const lookupAsset = useCallback(
     async (query: string) => {
-      const trimmed = query.trim();
-      if (!trimmed) return;
+      // Normalize: trim, strip control chars (scanners often append
+      // CR/LF/NUL), collapse internal whitespace. Barcode comparisons
+      // below then happen case-insensitively via `ilike` so TXT vs
+      // txt scans all match the stored value.
+      const normalized = query
+        .replace(/[\u0000-\u001F\u007F]+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!normalized) return;
+
       setSearching(true);
       setMatch(null);
       setMatchError(null);
 
+      // Escape PostgREST special chars inside a filter value. Any of
+      // , ( ) % * " \ break the or/ilike syntax and cause a 400 response,
+      // and a leading * in the pattern collides with the wildcard.
+      const escapedForLike = normalized.replace(/[,()%*"\\]/g, " ");
+
       try {
-        // 1. Try exact barcode match first (fastest, most reliable).
-        //    NOTE: capture the error — previously it was swallowed,
-        //    which hid real DB failures behind a misleading "no match".
-        const { data: barcodeHit, error: barcodeErr } = await supabase
+        // 1. Try CASE-INSENSITIVE barcode match. The bug users were
+        //    hitting was that a barcode stored "ABC123" wouldn't match
+        //    a scan that returned "abc123" (or vice versa). `ilike`
+        //    fixes that in one query.
+        const { data: barcodeRows, error: barcodeErr } = await supabase
           .from("fy26_assets")
           .select("*")
-          .eq("barcode_value", trimmed)
-          .maybeSingle();
+          .ilike("barcode_value", normalized)
+          .limit(1);
 
         if (barcodeErr) {
           setMatchError(`Lookup failed: ${barcodeErr.message}`);
           return;
         }
-
-        if (barcodeHit) {
-          setMatch(barcodeHit as Fy26Asset);
+        if (barcodeRows && barcodeRows.length > 0) {
+          setMatch(barcodeRows[0] as Fy26Asset);
           return;
         }
 
         // 2. Fall back to fuzzy search on serial / asset # / description / model.
-        //    Sanitize the term — commas, parentheses, asterisks break
-        //    PostgREST's .or() filter parser and cause 400 errors.
-        const safe = trimmed.replace(/[,()%*]/g, " ").trim();
-        if (!safe) {
-          setMatchError(`No asset matching "${trimmed}"`);
+        if (!escapedForLike.trim()) {
+          setMatchError(`No asset matching "${normalized}"`);
           return;
         }
-
-        const term = `%${safe}%`;
+        const term = `%${escapedForLike.trim()}%`;
         const { data, error } = await supabase
           .from("fy26_assets")
           .select("*")
@@ -104,7 +112,7 @@ export default function AssetScanPage() {
           return;
         }
         if (!data) {
-          setMatchError(`No asset found matching "${trimmed}"`);
+          setMatchError(`No asset found matching "${normalized}"`);
           return;
         }
         setMatch(data as Fy26Asset);
@@ -171,15 +179,19 @@ export default function AssetScanPage() {
           aspectRatio: 2.0,
         },
         (decodedText) => {
-          // Stop scanning on first successful decode
+          // Stop scanning on first successful decode. Clear the ref
+          // so the auto-start effect can re-arm after user dismisses
+          // the match card.
           scanner
             .stop()
             .then(() => {
+              scannerRef.current = null;
               setScanning(false);
               lookupAsset(decodedText);
             })
             .catch(() => {
-              /* ignore */
+              scannerRef.current = null;
+              setScanning(false);
             });
         },
         () => {
@@ -196,16 +208,29 @@ export default function AssetScanPage() {
   }, [scanning, lookupAsset]);
 
   const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
+    const ref = scannerRef.current;
+    scannerRef.current = null;
+    setScanning(false);
+    if (ref) {
       try {
-        await scannerRef.current.stop();
+        await ref.stop();
       } catch {
         /* already stopped */
       }
-      scannerRef.current = null;
     }
-    setScanning(false);
   }, []);
+
+  // Auto-start the scanner as soon as the page mounts in camera mode.
+  // Also restart it automatically whenever the user switches back to
+  // camera mode from manual, or after a successful match is dismissed.
+  useEffect(() => {
+    if (manualMode) return;
+    if (match) return; // a match card is showing — don't burn battery scanning
+    if (scanning) return;
+    if (scannerRef.current) return;
+    // Fire and forget; startScanner handles its own errors.
+    startScanner();
+  }, [manualMode, match, scanning, startScanner]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -277,34 +302,34 @@ export default function AssetScanPage() {
         </Button>
       </div>
 
-      {/* Camera scanner */}
+      {/* Camera scanner — auto-starts on mount */}
       {!manualMode && (
         <div className="mb-4">
           <div
             id="scanner-viewport"
             ref={scanContainerRef}
-            className="rounded-xl overflow-hidden bg-black min-h-[220px] relative"
+            className="rounded-xl overflow-hidden bg-black relative"
+            style={{ minHeight: "min(70vh, 480px)" }}
           />
-          {cameraError && (
-            <p className="text-sm text-red-500 mt-2">{cameraError}</p>
+          {!scanning && !cameraError && !match && (
+            <p className="text-xs text-center text-muted-foreground mt-2 animate-pulse">
+              Starting camera…
+            </p>
           )}
-          <div className="flex gap-2 mt-3">
-            {!scanning ? (
-              <Button onClick={startScanner} className="flex-1">
+          {scanning && (
+            <p className="text-xs text-center text-muted-foreground mt-2">
+              Point the camera at the asset barcode
+            </p>
+          )}
+          {cameraError && (
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-red-500">{cameraError}</p>
+              <Button onClick={startScanner} size="sm" className="w-full">
                 <ScanLine className="w-4 h-4 mr-2" />
-                Start scanning
+                Try camera again
               </Button>
-            ) : (
-              <Button
-                variant="outline"
-                onClick={stopScanner}
-                className="flex-1"
-              >
-                <X className="w-4 h-4 mr-2" />
-                Stop
-              </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

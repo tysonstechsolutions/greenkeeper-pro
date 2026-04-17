@@ -152,9 +152,17 @@ export default function AssetDetailPage() {
   };
 
   const handleLinkBarcode = async (value: string) => {
-    if (!asset || !value.trim()) return;
+    if (!asset) return;
+    // Strip control chars (CR/LF/NUL that barcode scanners append) and
+    // collapse whitespace so the stored value matches what future scans
+    // will produce. Lookups are case-insensitive so we preserve case.
+    const normalized = value
+      .replace(/[\u0000-\u001F\u007F]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return;
     setSavingBarcode(true);
-    const updated = await updateAsset(asset.id, { barcode_value: value.trim() } as Partial<Fy26Asset>);
+    const updated = await updateAsset(asset.id, { barcode_value: normalized } as Partial<Fy26Asset>);
     if (updated) {
       setAsset(updated);
       setShowBarcodeScanner(false);
