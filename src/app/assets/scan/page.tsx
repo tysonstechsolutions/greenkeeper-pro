@@ -103,16 +103,15 @@ export default function AssetScanPage() {
         }
 
         // 2. MWRMA property-tag format: "17000198-0018" →
-        //    asset_number=17000198, sub_number=18. The asset tags on
-        //    every piece of MWRMA equipment follow this pattern. The
-        //    DB stores sub_number without leading zeros ("18" not
-        //    "0018"), so strip them from the scanned value before
-        //    matching. Also handle "-0000" → sub_number "0" which is
-        //    how the baseline/primary asset is stored.
+        //    asset_number=17000198, sub_number=18. The DB stores
+        //    sub_number without leading zeros ("18" not "0018"), so
+        //    strip them from the scanned value before matching.
         const tagMatch = normalized.match(/^(\d+)-(\d+)$/);
         if (tagMatch) {
           const assetNum = tagMatch[1];
           const subNum = String(parseInt(tagMatch[2], 10)); // strips leading zeros
+
+          // 2a. Exact match (clean scan)
           const { data: tagRows, error: tagErr } = await supabase
             .from("fy26_assets")
             .select("*")
@@ -127,8 +126,8 @@ export default function AssetScanPage() {
             setMatch(tagRows[0] as Fy26Asset);
             return;
           }
-          // Also try the raw string form in case some rows stored the sub
-          // with leading zeros. Rare but cheap to check.
+
+          // 2b. Sub stored WITH leading zeros (legacy). Cheap to check.
           const { data: tagRowsRaw } = await supabase
             .from("fy26_assets")
             .select("*")
@@ -137,6 +136,44 @@ export default function AssetScanPage() {
             .limit(1);
           if (tagRowsRaw && tagRowsRaw.length > 0) {
             setMatch(tagRowsRaw[0] as Fy26Asset);
+            return;
+          }
+
+          // 2c. Scanner-misread tolerance. Scanners occasionally drop
+          //     a leading or trailing digit on Code 128 tags at an
+          //     angle, so "17000198-0004" decodes as "1000198-004" (as
+          //     happened on the HP LaserJet MGR label). Substring match
+          //     on asset_number catches that: %1000198% matches
+          //     17000198. We still require an exact sub_number match
+          //     so we don't pick the wrong sibling in a multi-sub
+          //     asset family.
+          const { data: fuzzyTagRows } = await supabase
+            .from("fy26_assets")
+            .select("*")
+            .ilike("asset_number", `%${assetNum}%`)
+            .eq("sub_number", subNum)
+            .limit(2);
+          if (fuzzyTagRows && fuzzyTagRows.length === 1) {
+            setMatch(fuzzyTagRows[0] as Fy26Asset);
+            return;
+          }
+          if (fuzzyTagRows && fuzzyTagRows.length > 1) {
+            setMatchError(
+              `Scanner read "${assetNum}-${tagMatch[2]}" but that matches ${fuzzyTagRows.length} assets. Try scanning again or use Manual entry.`
+            );
+            return;
+          }
+
+          // 2d. Also allow the sub to be missing/fuzzy — only asset
+          //     number substring + any sub. Rare but happens when the
+          //     sub digits are at the edge of the scanned frame.
+          const { data: fuzzyAssetRows } = await supabase
+            .from("fy26_assets")
+            .select("*")
+            .ilike("asset_number", `%${assetNum}%`)
+            .limit(5);
+          if (fuzzyAssetRows && fuzzyAssetRows.length === 1) {
+            setMatch(fuzzyAssetRows[0] as Fy26Asset);
             return;
           }
         }
