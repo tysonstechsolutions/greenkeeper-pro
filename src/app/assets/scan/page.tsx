@@ -85,6 +85,35 @@ export default function AssetScanPage() {
       // or fullwidth digits that visibly look the same.
       console.log("[scan] raw:", JSON.stringify(query), "normalized:", JSON.stringify(normalized));
 
+      // Once we find an asset via any non-exact path, auto-link the raw
+      // scanned value to that asset's barcode_value — but only if the
+      // slot is empty. Next scan of the same physical tag then hits the
+      // fast exact-match branch with zero fallback round-trips.
+      const learnBarcodeIfEmpty = (asset: Fy26Asset) => {
+        if (asset.barcode_value && asset.barcode_value.trim()) return;
+        // Fire-and-forget: don't hold up the match card render.
+        (async () => {
+          const { error } = await supabase
+            .from("fy26_assets")
+            .update({ barcode_value: normalized })
+            .eq("id", asset.id)
+            .is("barcode_value", null);
+          if (error) {
+            console.warn("[scan] auto-link failed:", error.message);
+          } else {
+            console.log(
+              "[scan] auto-linked",
+              JSON.stringify(normalized),
+              "→",
+              asset.asset_number +
+                (asset.sub_number && asset.sub_number !== "0"
+                  ? "/" + asset.sub_number
+                  : "")
+            );
+          }
+        })();
+      };
+
       try {
         // 1. Try CASE-INSENSITIVE exact match on barcode_value.
         const { data: barcodeRows, error: barcodeErr } = await supabase
@@ -135,7 +164,9 @@ export default function AssetScanPage() {
             .eq("sub_number", tagMatch[2])
             .limit(1);
           if (tagRowsRaw && tagRowsRaw.length > 0) {
-            setMatch(tagRowsRaw[0] as Fy26Asset);
+            const hit = tagRowsRaw[0] as Fy26Asset;
+            learnBarcodeIfEmpty(hit);
+            setMatch(hit);
             return;
           }
 
@@ -154,7 +185,9 @@ export default function AssetScanPage() {
             .eq("sub_number", subNum)
             .limit(2);
           if (fuzzyTagRows && fuzzyTagRows.length === 1) {
-            setMatch(fuzzyTagRows[0] as Fy26Asset);
+            const hit = fuzzyTagRows[0] as Fy26Asset;
+            learnBarcodeIfEmpty(hit);
+            setMatch(hit);
             return;
           }
           if (fuzzyTagRows && fuzzyTagRows.length > 1) {
@@ -173,7 +206,9 @@ export default function AssetScanPage() {
             .ilike("asset_number", `%${assetNum}%`)
             .limit(5);
           if (fuzzyAssetRows && fuzzyAssetRows.length === 1) {
-            setMatch(fuzzyAssetRows[0] as Fy26Asset);
+            const hit = fuzzyAssetRows[0] as Fy26Asset;
+            learnBarcodeIfEmpty(hit);
+            setMatch(hit);
             return;
           }
         }
@@ -187,7 +222,9 @@ export default function AssetScanPage() {
             .eq("asset_number", normalized)
             .limit(1);
           if (numRows && numRows.length > 0) {
-            setMatch(numRows[0] as Fy26Asset);
+            const hit = numRows[0] as Fy26Asset;
+            learnBarcodeIfEmpty(hit);
+            setMatch(hit);
             return;
           }
         }
@@ -219,6 +256,7 @@ export default function AssetScanPage() {
               );
 
             if (candidates.length === 1) {
+              learnBarcodeIfEmpty(candidates[0]);
               setMatch(candidates[0]);
               return;
             }
@@ -248,6 +286,7 @@ export default function AssetScanPage() {
                 (x, y) => y.score - x.score || x.tailLen - y.tailLen
               );
               if (withScore[0].score > 0) {
+                learnBarcodeIfEmpty(withScore[0].asset);
                 setMatch(withScore[0].asset);
                 return;
               }
@@ -264,7 +303,9 @@ export default function AssetScanPage() {
           .ilike("barcode_value", likeTerm)
           .limit(1);
         if (substringRows && substringRows.length > 0) {
-          setMatch(substringRows[0] as Fy26Asset);
+          const hit = substringRows[0] as Fy26Asset;
+          learnBarcodeIfEmpty(hit);
+          setMatch(hit);
           return;
         }
 
@@ -293,7 +334,9 @@ export default function AssetScanPage() {
           );
           return;
         }
-        setMatch(data as Fy26Asset);
+        const hit = data as Fy26Asset;
+        learnBarcodeIfEmpty(hit);
+        setMatch(hit);
       } catch (err) {
         setMatchError(
           err instanceof Error
@@ -423,17 +466,18 @@ export default function AssetScanPage() {
   }, []);
 
   // Auto-start the scanner on mount and whenever we enter (or re-enter)
-  // camera mode without an active match. startScanner is stable and
-  // self-guards against double-starts, so this is safe to fire eagerly.
-  // When a match lands (or user switches to manual), tear down the
-  // scanner so the camera light turns off and the viewport unmounts.
+  // camera mode without an active match or unresolved error.
+  // startScanner is stable and self-guards against double-starts, so
+  // this is safe to fire eagerly. When a match/error lands or the user
+  // switches to manual, tear the scanner down so the camera light
+  // turns off and the black viewport unmounts.
   useEffect(() => {
-    if (manualMode || match) {
+    if (manualMode || match || matchError) {
       stopScanner();
       return;
     }
     startScanner();
-  }, [manualMode, match, startScanner, stopScanner]);
+  }, [manualMode, match, matchError, startScanner, stopScanner]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -505,8 +549,10 @@ export default function AssetScanPage() {
         </Button>
       </div>
 
-      {/* Camera scanner — auto-starts on mount, hidden once a match lands */}
-      {!manualMode && !match && (
+      {/* Camera scanner — auto-starts on mount, hidden once a match
+          lands OR an error is showing. (Effect above tears down the
+          scanner so the camera LED goes off too.) */}
+      {!manualMode && !match && !matchError && (
         <div className="mb-4">
           <div
             id="scanner-viewport"
@@ -563,24 +609,27 @@ export default function AssetScanPage() {
         </div>
       )}
 
-      {/* No match */}
+      {/* No match — camera viewport is torn down by the effect above
+          so the screen is just the error + the big button. */}
       {matchError && !searching && (
         <Card className="border-red-200 dark:border-red-900">
-          <CardContent className="p-4 text-center">
-            <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-2" />
-            <p className="text-sm text-red-600 dark:text-red-400">
+          <CardContent className="p-6 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            <p className="text-sm text-red-600 dark:text-red-400 mb-5">
               {matchError}
             </p>
             <Button
-              variant="outline"
-              size="sm"
-              className="mt-3"
+              className="w-full"
+              size="lg"
               onClick={() => {
                 setMatchError(null);
-                if (manualMode) setManualInput("");
+                setManualInput("");
+                // Effect will auto-restart the scanner now that
+                // matchError cleared.
               }}
             >
-              Try again
+              <ScanLine className="w-5 h-5 mr-2" />
+              Scan again
             </Button>
           </CardContent>
         </Card>
