@@ -6,7 +6,8 @@ export type Fy26AssetStatus =
   | "verified_present"
   | "mia"
   | "disposed"
-  | "no_asset_tag";
+  | "no_asset_tag"
+  | "needs_disposed";
 
 export type ConditionPhotoAngle = "front" | "back" | "left" | "right";
 
@@ -67,6 +68,7 @@ export const fy26AssetStatusLabels: Record<Fy26AssetStatus, string> = {
   mia: "MIA",
   disposed: "Disposed",
   no_asset_tag: "No Asset Tag",
+  needs_disposed: "Needs Disposed",
 };
 
 export const fy26AssetStatusColors: Record<Fy26AssetStatus, string> = {
@@ -75,6 +77,7 @@ export const fy26AssetStatusColors: Record<Fy26AssetStatus, string> = {
   mia: "#ef4444", // red-500
   disposed: "#991b1b", // red-800
   no_asset_tag: "#f59e0b", // amber-500 — visible but present, needs action
+  needs_disposed: "#ea580c", // orange-600 — pending disposal paperwork
 };
 
 export const fy26AssetSiteLabels: Record<string, string> = {

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Loader2,
   ScanLine,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -161,7 +162,7 @@ function AssetsPageContent() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         <StatCard
           label="Present"
           count={stats.verified_present}
@@ -193,6 +194,14 @@ function AssetsPageContent() {
           icon={ScanLine}
           onClick={() => toggleStatus("no_asset_tag")}
           active={statusFilter === "no_asset_tag"}
+        />
+        <StatCard
+          label="Needs Disposed"
+          count={stats.needs_disposed}
+          color={fy26AssetStatusColors.needs_disposed}
+          icon={Trash2}
+          onClick={() => toggleStatus("needs_disposed")}
+          active={statusFilter === "needs_disposed"}
         />
         <StatCard
           label="Disposed"

@@ -18,6 +18,7 @@ export interface Fy26AssetStats {
   mia: number;
   disposed: number;
   no_asset_tag: number;
+  needs_disposed: number;
   total_value: number;
 }
 
@@ -317,6 +318,7 @@ export function useFy26Assets(): UseFy26AssetsReturn {
     mia: assets.filter((a) => a.status === "mia").length,
     disposed: assets.filter((a) => a.status === "disposed").length,
     no_asset_tag: assets.filter((a) => a.status === "no_asset_tag").length,
+    needs_disposed: assets.filter((a) => a.status === "needs_disposed").length,
     total_value: assets.reduce((sum, a) => sum + (Number(a.original_value) || 0), 0),
   };
 

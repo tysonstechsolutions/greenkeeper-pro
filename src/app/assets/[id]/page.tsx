@@ -335,6 +335,7 @@ export default function AssetDetailPage() {
     { status: "no_asset_tag", label: "No Asset Tag", icon: ScanLine },
     { status: "mia", label: "MIA", icon: AlertTriangle },
     { status: "unverified", label: "Unverified", icon: HelpCircle },
+    { status: "needs_disposed", label: "Needs Disposed", icon: Trash2 },
     { status: "disposed", label: "Disposed", icon: XCircle },
   ];
 
@@ -385,7 +386,7 @@ export default function AssetDetailPage() {
       <Card className="mb-4">
         <CardContent className="p-4">
           <p className="text-sm font-semibold mb-3">Mark status</p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {statusButtons.map(({ status, label, icon: Icon }) => {
               const isCurrent = asset.status === status;
               const color = fy26AssetStatusColors[status];
