@@ -150,12 +150,28 @@ export function PolygonMeasureMap({
     });
   };
 
-  // When vertices change, force the map to invalidate its size on next
-  // frame — otherwise tile sizing can get stuck on some Android webviews.
+  // Leaflet needs its container to have a concrete height when it
+  // initializes, AND it often needs a manual invalidateSize() nudge
+  // after the parent's flex layout settles — otherwise the map renders
+  // as a 0-px strip and all you see is the dark header + controls.
+  // Fire invalidateSize a handful of times over the first second to
+  // cover mobile URL-bar collapse, font loads, and late layout ticks.
   useEffect(() => {
-    if (mapRef.current) {
-      requestAnimationFrame(() => mapRef.current?.invalidateSize());
-    }
+    const timeouts = [0, 100, 300, 700, 1200].map((ms) =>
+      setTimeout(() => mapRef.current?.invalidateSize(), ms)
+    );
+    return () => timeouts.forEach(clearTimeout);
+  }, []);
+
+  // Re-invalidate on resize / orientation change.
+  useEffect(() => {
+    const onResize = () => mapRef.current?.invalidateSize();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, []);
 
   const formatArea = (sqft: number) => {
@@ -165,7 +181,10 @@ export function PolygonMeasureMap({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black flex flex-col">
+    <div
+      className="fixed inset-x-0 top-0 z-[70] bg-black flex flex-col"
+      style={{ height: "100svh", maxHeight: "100svh" }}
+    >
       {/* Header */}
       <div className="bg-black/85 text-white px-4 py-3 flex items-center gap-3 shrink-0">
         <MapPin className="w-5 h-5" />
@@ -181,16 +200,26 @@ export function PolygonMeasureMap({
         </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 relative">
+      {/* Map — min-h-0 is CRITICAL: without it, a flex child won't
+          shrink below its content size and Leaflet ends up with a
+          larger-than-viewport container that can push the controls
+          off-screen. The absolute-positioned MapContainer below is
+          pinned to the full area of this wrapper. */}
+      <div className="flex-1 min-h-0 relative bg-black">
         <MapContainer
           center={center}
           zoom={initialZoom}
           maxZoom={GOOGLE_SATELLITE_MAX_ZOOM}
-          style={{ height: "100%", width: "100%" }}
+          style={{ position: "absolute", inset: 0 }}
           scrollWheelZoom
           ref={(m) => {
-            if (m) mapRef.current = m;
+            if (m) {
+              mapRef.current = m;
+              // Give Leaflet one more invalidateSize immediately after
+              // it's attached — this catches the case where the flex
+              // parent had 0 height during initial mount.
+              setTimeout(() => m.invalidateSize(), 0);
+            }
           }}
         >
           <TileLayer
