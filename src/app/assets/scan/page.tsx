@@ -325,11 +325,15 @@ export default function AssetScanPage() {
   // Auto-start the scanner on mount and whenever we enter (or re-enter)
   // camera mode without an active match. startScanner is stable and
   // self-guards against double-starts, so this is safe to fire eagerly.
+  // When a match lands (or user switches to manual), tear down the
+  // scanner so the camera light turns off and the viewport unmounts.
   useEffect(() => {
-    if (manualMode) return;
-    if (match) return; // a match card is showing — don't burn battery scanning
+    if (manualMode || match) {
+      stopScanner();
+      return;
+    }
     startScanner();
-  }, [manualMode, match, startScanner]);
+  }, [manualMode, match, startScanner, stopScanner]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -401,8 +405,8 @@ export default function AssetScanPage() {
         </Button>
       </div>
 
-      {/* Camera scanner — auto-starts on mount */}
-      {!manualMode && (
+      {/* Camera scanner — auto-starts on mount, hidden once a match lands */}
+      {!manualMode && !match && (
         <div className="mb-4">
           <div
             id="scanner-viewport"
@@ -484,7 +488,24 @@ export default function AssetScanPage() {
 
       {/* Match found */}
       {match && !searching && (
-        <Card className="rounded-2xl">
+        <Card className="rounded-2xl overflow-hidden">
+          {/* Front condition photo — shown full-width at the top so you
+              can visually confirm you've scanned the right thing before
+              marking it present. Falls back to any available angle if
+              front isn't set. */}
+          {(() => {
+            const photos = match.condition_photos ?? {};
+            const frontPhoto =
+              photos.front ?? photos.back ?? photos.left ?? photos.right;
+            return frontPhoto ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={frontPhoto}
+                alt={`${match.description} — front view`}
+                className="w-full aspect-[4/3] object-cover bg-muted"
+              />
+            ) : null;
+          })()}
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
