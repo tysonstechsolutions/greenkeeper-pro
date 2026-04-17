@@ -79,11 +79,14 @@ export default function AssetScanPage() {
       // and a leading * in the pattern collides with the wildcard.
       const escapedForLike = normalized.replace(/[,()%*"\\]/g, " ");
 
+      // Log the raw + normalized values so the user can share them with
+      // support if nothing matches. Two identical-looking barcodes can
+      // differ in Unicode code points (NFC vs NFD), zero-width chars,
+      // or fullwidth digits that visibly look the same.
+      console.log("[scan] raw:", JSON.stringify(query), "normalized:", JSON.stringify(normalized));
+
       try {
-        // 1. Try CASE-INSENSITIVE barcode match. The bug users were
-        //    hitting was that a barcode stored "ABC123" wouldn't match
-        //    a scan that returned "abc123" (or vice versa). `ilike`
-        //    fixes that in one query.
+        // 1. Try CASE-INSENSITIVE exact match on barcode_value.
         const { data: barcodeRows, error: barcodeErr } = await supabase
           .from("fy26_assets")
           .select("*")
@@ -99,17 +102,33 @@ export default function AssetScanPage() {
           return;
         }
 
-        // 2. Fall back to fuzzy search on serial / asset # / description / model.
+        // 2. Substring match on barcode_value. Catches the case where the
+        //    stored value has extra chars (prefix/suffix the scanner added
+        //    when linking) or the new scan does. E.g. stored "1234567890"
+        //    but new scan returned "1234567890\r" → trimmed to same, but
+        //    legacy data may have been stored dirty.
+        const likeTerm = `%${escapedForLike.trim()}%`;
+        const { data: substringRows } = await supabase
+          .from("fy26_assets")
+          .select("*")
+          .ilike("barcode_value", likeTerm)
+          .limit(1);
+        if (substringRows && substringRows.length > 0) {
+          setMatch(substringRows[0] as Fy26Asset);
+          return;
+        }
+
+        // 3. Fall back to fuzzy search on serial / asset # / description /
+        //    model / barcode_value.
         if (!escapedForLike.trim()) {
           setMatchError(`No asset matching "${normalized}"`);
           return;
         }
-        const term = `%${escapedForLike.trim()}%`;
         const { data, error } = await supabase
           .from("fy26_assets")
           .select("*")
           .or(
-            `serial_number.ilike.${term},asset_number.ilike.${term},description.ilike.${term},model_text.ilike.${term}`
+            `barcode_value.ilike.${likeTerm},serial_number.ilike.${likeTerm},asset_number.ilike.${likeTerm},description.ilike.${likeTerm},model_text.ilike.${likeTerm}`
           )
           .limit(1)
           .maybeSingle();
@@ -119,7 +138,9 @@ export default function AssetScanPage() {
           return;
         }
         if (!data) {
-          setMatchError(`No asset found matching "${normalized}"`);
+          setMatchError(
+            `No asset found matching "${normalized}". Check the browser console (raw scan value is logged) — if it looks right, the barcode may not actually be linked in the DB.`
+          );
           return;
         }
         setMatch(data as Fy26Asset);

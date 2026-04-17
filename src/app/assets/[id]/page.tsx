@@ -161,6 +161,7 @@ export default function AssetDetailPage() {
       .replace(/\s+/g, " ")
       .trim();
     if (!normalized) return;
+    console.log("[link-barcode] raw:", JSON.stringify(value), "storing:", JSON.stringify(normalized));
     setSavingBarcode(true);
     const updated = await updateAsset(asset.id, { barcode_value: normalized } as Partial<Fy26Asset>);
     if (updated) {
