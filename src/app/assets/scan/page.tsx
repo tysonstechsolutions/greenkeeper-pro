@@ -48,6 +48,13 @@ export default function AssetScanPage() {
     typeof import("html5-qrcode").Html5Qrcode
   > | null>(null);
   const scanContainerRef = useRef<HTMLDivElement>(null);
+  // Prevents the auto-start effect from firing twice in flight (React 19
+  // StrictMode / re-renders) before the first attempt finishes.
+  const startingRef = useRef(false);
+  // Stable ref to the latest lookupAsset so startScanner doesn't need
+  // lookupAsset as a dep (which would destabilize its identity). Filled in
+  // by an effect below once lookupAsset is declared.
+  const lookupAssetRef = useRef<((query: string) => void) | null>(null);
 
   // ── Lookup logic ──────────────────────────────────────────────────────
 
@@ -129,6 +136,11 @@ export default function AssetScanPage() {
     [supabase]
   );
 
+  // Keep the ref in sync with the latest lookupAsset closure.
+  useEffect(() => {
+    lookupAssetRef.current = lookupAsset;
+  }, [lookupAsset]);
+
   // ── Mark asset present ────────────────────────────────────────────────
 
   const markPresent = async () => {
@@ -156,8 +168,13 @@ export default function AssetScanPage() {
 
   // ── Camera scanner lifecycle ──────────────────────────────────────────
 
+  // startScanner uses refs instead of closed-over state so its identity is
+  // stable across renders. This prevents the "effect re-runs, sees stale
+  // scanning=false, bails or re-fires" race that was blocking auto-start.
   const startScanner = useCallback(async () => {
-    if (scanning) return;
+    if (startingRef.current) return;
+    if (scannerRef.current) return;
+    startingRef.current = true;
     setCameraError(null);
 
     try {
@@ -167,7 +184,16 @@ export default function AssetScanPage() {
         Html5Qrcode = mod.Html5Qrcode;
       }
 
+      // Wait a tick for React to paint the viewport div if we were called
+      // from an effect on the same render that mounted it.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+
       const containerId = "scanner-viewport";
+      if (!document.getElementById(containerId)) {
+        // Viewport not in DOM — bail quietly so effect can retry later.
+        return;
+      }
+
       const scanner = new Html5Qrcode(containerId);
       scannerRef.current = scanner;
 
@@ -187,7 +213,7 @@ export default function AssetScanPage() {
             .then(() => {
               scannerRef.current = null;
               setScanning(false);
-              lookupAsset(decodedText);
+              lookupAssetRef.current?.(decodedText);
             })
             .catch(() => {
               scannerRef.current = null;
@@ -201,11 +227,16 @@ export default function AssetScanPage() {
       setScanning(true);
     } catch (err) {
       console.error("Camera start error:", err);
+      scannerRef.current = null;
       setCameraError(
-        "Could not access camera. Make sure you granted camera permission, or use manual entry."
+        err instanceof Error && err.name === "NotAllowedError"
+          ? "Camera permission denied. Tap the lock icon in the browser's address bar to allow camera access, or use Manual entry."
+          : "Could not access camera. Use Manual entry or tap Try camera again."
       );
+    } finally {
+      startingRef.current = false;
     }
-  }, [scanning, lookupAsset]);
+  }, []);
 
   const stopScanner = useCallback(async () => {
     const ref = scannerRef.current;
@@ -220,17 +251,14 @@ export default function AssetScanPage() {
     }
   }, []);
 
-  // Auto-start the scanner as soon as the page mounts in camera mode.
-  // Also restart it automatically whenever the user switches back to
-  // camera mode from manual, or after a successful match is dismissed.
+  // Auto-start the scanner on mount and whenever we enter (or re-enter)
+  // camera mode without an active match. startScanner is stable and
+  // self-guards against double-starts, so this is safe to fire eagerly.
   useEffect(() => {
     if (manualMode) return;
     if (match) return; // a match card is showing — don't burn battery scanning
-    if (scanning) return;
-    if (scannerRef.current) return;
-    // Fire and forget; startScanner handles its own errors.
     startScanner();
-  }, [manualMode, match, scanning, startScanner]);
+  }, [manualMode, match, startScanner]);
 
   // Cleanup on unmount
   useEffect(() => {
