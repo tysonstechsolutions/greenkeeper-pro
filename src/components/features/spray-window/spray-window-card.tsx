@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Droplets, ChevronRight, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RISK_LEVEL_CONFIG } from "@/lib/utils/disease-models";
+import { callApi } from "@/lib/api/client";
 
 interface SprayWindowData {
   disease_pressure: number;
@@ -47,11 +48,7 @@ export function SprayWindowCard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/spray-window", {
-          signal: AbortSignal.timeout(10000),
-        });
-        if (!res.ok) return;
-        const json: SprayWindowData = await res.json();
+        const json = await callApi<SprayWindowData>("spray-window");
         // Only show card when disease pressure is moderate+
         if (json.disease_pressure >= 0.2) {
           setData(json);

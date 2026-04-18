@@ -3,6 +3,21 @@
 import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Delete, Loader2, KeyRound } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+interface PinLoginResponse {
+  success: boolean;
+  user?: { id?: string; name?: string; role?: string };
+  session?: {
+    access_token: string;
+    refresh_token: string;
+    expires_in?: number;
+    expires_at?: number;
+    token_type?: string;
+  };
+  redirectPath?: string;
+  error?: string;
+}
 
 function PinLoginInner() {
   const router = useRouter();
@@ -51,24 +66,39 @@ function PinLoginInner() {
     setError(null);
 
     try {
-      const res = await fetch("/api/auth/pin-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
-      });
+      const supabase = createClient();
+      const { data: dataRaw, error: fnError } = await supabase.functions.invoke(
+        "pin-login",
+        {
+          method: "POST",
+          body: { pin },
+        },
+      );
+      const data = dataRaw as PinLoginResponse | null;
 
-      const data = await res.json();
+      if (fnError || !data) {
+        setError(fnError?.message || "Invalid PIN");
+        setPin("");
+        setLoading(false);
+        return;
+      }
 
-      if (!res.ok) {
+      if (!data.success) {
         setError(data.error || "Invalid PIN");
         setPin("");
         setLoading(false);
         return;
       }
 
+      if (data.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+      }
+
       setUserName(data.user?.name || "User");
 
-      // Brief delay to show welcome message
       setTimeout(() => {
         const destination = returnTo || data.redirectPath || "/dashboard";
         router.push(destination);

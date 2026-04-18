@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { MorningTimeline } from "@/components/features/schedule/morning-timeline";
 import type { MorningRoute, RoutedTask } from "@/lib/ai/morning-router";
+import { callApi } from "@/lib/api/client";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,18 +59,10 @@ export default function MorningRoutePage() {
     setError(null);
 
     try {
-      const res = await fetch("/api/morning-route", {
+      const data = await callApi<MorningRoute>("morning-route", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
+        body: { date },
       });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(body.error || `HTTP ${res.status}`);
-      }
-
-      const data: MorningRoute = await res.json();
       setRoute(data);
 
       // Expand all crew by default

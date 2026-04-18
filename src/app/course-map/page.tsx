@@ -33,6 +33,7 @@ import {
   greenPriorityColors,
 } from "@/lib/hooks/useGreenObservations";
 import type { TaskPriority } from "@/types/database";
+import { downloadObservationReport } from "@/lib/reports/observation-report";
 
 // ── Hole image placeholder component ──
 function HoleImage({
@@ -234,14 +235,7 @@ export default function CourseMapPage() {
             setGeneratingReport(true);
             try {
               const type = activeTab === "holes" ? "hole" : "green";
-              const res = await fetch(`/api/reports/observation-report?type=${type}`);
-              if (!res.ok) throw new Error("Failed to generate report");
-              const blob = await res.blob();
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = `All-Holes-${type === "green" ? "Green" : "Fairway"}-Report-${new Date().toISOString().slice(0, 10)}.pdf`;
-              a.click();
-              URL.revokeObjectURL(a.href);
+              await downloadObservationReport({ type });
             } catch (err) {
               console.error("Report generation failed:", err);
             } finally {

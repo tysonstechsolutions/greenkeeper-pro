@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { downloadIllinoisRupReport } from "@/lib/reports/illinois-rup-report";
 import {
   mapToILRupRecord,
   validateILRupRecord,
@@ -90,8 +91,12 @@ export default function CompliancePage() {
     }
   }, [since, until]);
 
-  const downloadPdf = () => {
-    window.open(`/api/reports/illinois-rup?since=${since}&until=${until}`, "_blank");
+  const downloadPdf = async () => {
+    try {
+      await downloadIllinoisRupReport({ since, until });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download report");
+    }
   };
 
   // ── Role Guard ──

@@ -70,6 +70,8 @@ import { useAssetDisposal } from "@/lib/hooks/useAssetDisposal";
 import type { DisposalStatus } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentInspection, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
+import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
+import { downloadNavcompt2212Report } from "@/lib/reports/navcompt-2212-report";
 
 const partStatusLabels: Record<string, string> = {
   needed: "Needed", ordered: "Ordered", received: "Received",
@@ -351,21 +353,7 @@ export default function RouteContent() {
     if (!equipment) return;
     setGeneratingReport(true);
     try {
-      const res = await fetch(`/api/reports/equipment-report?id=${equipmentId}`);
-      if (!res.ok) throw new Error("Failed to generate report");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const safeName = (equipment.name || "equipment")
-        .replace(/[^a-zA-Z0-9-_ ]/g, "")
-        .replace(/\s+/g, "-")
-        .toLowerCase();
-      a.download = `${safeName}-report.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await downloadEquipmentReport({ id: equipmentId });
     } catch (err) {
       console.error("Report download error:", err);
     } finally {
@@ -662,14 +650,10 @@ export default function RouteContent() {
                   size="sm"
                   variant="outline"
                   onClick={async () => {
-                    const res = await fetch(`/api/reports/navcompt-2212?equipment_id=${equipmentId}`);
-                    if (res.ok) {
-                      const blob = await res.blob();
-                      const a = document.createElement("a");
-                      a.href = URL.createObjectURL(blob);
-                      a.download = `NAVCOMPT-2212-${equipment.name}-${new Date().toISOString().slice(0, 10)}.pdf`;
-                      a.click();
-                      URL.revokeObjectURL(a.href);
+                    try {
+                      await downloadNavcompt2212Report({ equipmentId });
+                    } catch (err) {
+                      console.error("NAVCOMPT 2212 download error:", err);
                     }
                   }}
                 >

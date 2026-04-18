@@ -18,12 +18,18 @@ import { createClient } from "@/lib/supabase/client";
  * Add a name here AFTER `supabase functions deploy <name>` succeeds.
  */
 const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
-  // Phase 2 progress — add routes here as they ship:
-  // "translate",
-  // "spray-window",
-  // "push",
-  // "ai-assistant",
-  // ...
+  // Phase 2 — deployed on Supabase Edge Functions.
+  "ai-assistant",
+  "drone/upload",
+  "fix-instructions",
+  "green-fix-instructions",
+  "morning-route",
+  "push/send",
+  "push/subscribe",
+  "spray-window",
+  "translate",
+  // Auth functions (pin-login, pin-signup) have a special return shape
+  // (session tokens) handled at their callsites, not via callApi.
 ]);
 
 export interface CallApiOptions {
@@ -73,19 +79,28 @@ export async function callApi<T = unknown>(
 ): Promise<T> {
   const { method = "GET", body, headers = {}, query, raw = false } = options;
 
-  if (EDGE_ROUTES.has(route)) {
-    // Call Supabase Edge Function. `body` here is normalized: for GET we
-    // send `{ query }`, for other verbs we send `body` merged with `query`.
-    const supabase = createClient();
-    const payload =
-      method === "GET"
-        ? { query: query ?? {} }
-        : query
-          ? { ...(body as Record<string, unknown>), query }
-          : body;
+  // FormData bodies (file uploads) get passed through verbatim.
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
-    const { data, error } = await supabase.functions.invoke(route, {
-      body: payload,
+  if (EDGE_ROUTES.has(route)) {
+    // Supabase Edge Function. JSON bodies are normalized; FormData passes through.
+    const supabase = createClient();
+    let payload: unknown;
+    if (isFormData) {
+      payload = body;
+    } else if (method === "GET") {
+      payload = { query: query ?? {} };
+    } else if (query) {
+      payload = { ...(body as Record<string, unknown>), query };
+    } else {
+      payload = body;
+    }
+
+    // Edge function slugs use dashes; translate any slash in the route name
+    // (e.g. "drone/upload" -> "drone-upload", "push/send" -> "push-send").
+    const fnSlug = route.replace(/\//g, "-");
+    const { data, error } = await supabase.functions.invoke(fnSlug, {
+      body: payload as BodyInit | Record<string, unknown> | undefined,
       headers,
       method: method === "GET" ? "POST" : method, // Edge Functions always use POST
     });
@@ -108,10 +123,11 @@ export async function callApi<T = unknown>(
   const res = await fetch(url, {
     method,
     headers: {
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      // Don't set Content-Type for FormData — browser sets it w/ boundary.
+      ...(body && !isFormData ? { "Content-Type": "application/json" } : {}),
       ...headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: isFormData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
   });
 
   if (raw) {

@@ -10,17 +10,17 @@ Capacitor build can ship without a Next.js server.
 | `/api/translate`              | `translate`               | ✅ ported |
 | `/api/push/subscribe`         | `push-subscribe`          | ✅ ported |
 | `/api/push/send`              | `push-send`               | ✅ ported |
-| `/api/ai-assistant`           | `ai-assistant`            | ⬜ todo |
-| `/api/fix-instructions`       | `fix-instructions`        | ⬜ todo |
-| `/api/green-fix-instructions` | `green-fix-instructions`  | ⬜ todo |
-| `/api/daily-briefing`         | `daily-briefing`          | ⬜ todo |
-| `/api/morning-route`          | `morning-route`           | ⬜ todo |
-| `/api/spray-window`           | `spray-window`            | ⬜ todo |
-| `/api/auth/pin-login`         | `pin-login`               | ⬜ todo |
-| `/api/auth/pin-signup`        | `pin-signup`              | ⬜ todo |
-| `/api/cron/*`                 | `pg_cron` trigger         | ⬜ todo (DB-level) |
-| `/api/reports/*`              | client-side jsPDF         | ⬜ todo (move to client) |
-| `/api/drone/upload`           | `drone-upload`            | ⬜ todo (heavy, last) |
+| `/api/ai-assistant`           | `ai-assistant`            | ✅ ported |
+| `/api/fix-instructions`       | `fix-instructions`        | ✅ ported |
+| `/api/green-fix-instructions` | `green-fix-instructions`  | ✅ ported |
+| `/api/daily-briefing`         | `daily-briefing`          | ✅ ported |
+| `/api/morning-route`          | `morning-route`           | ✅ ported |
+| `/api/spray-window`           | `spray-window`            | ✅ ported |
+| `/api/auth/pin-login`         | `pin-login`               | ✅ ported (deploy with `--no-verify-jwt`) |
+| `/api/auth/pin-signup`        | `pin-signup`              | ✅ ported (deploy with `--no-verify-jwt`) |
+| `/api/cron/*`                 | `pg_cron` trigger         | ✅ scheduled — see `supabase/migrations/20260417c_add_pg_cron_daily_briefing.sql` |
+| `/api/reports/*`              | client-side jsPDF         | ✅ all 11 migrated — see `supabase/functions/REPORTS_MIGRATION.md` |
+| `/api/drone/upload`           | `drone-upload`            | ✅ ported (see note in file about large-TIFF body-size limits) |
 
 ## Deploy
 
@@ -44,6 +44,10 @@ supabase secrets set ANTHROPIC_API_KEY=sk-...
 supabase secrets set VAPID_PRIVATE_KEY=...
 supabase secrets set VAPID_PUBLIC_KEY=...
 supabase secrets set VAPID_SUBJECT=mailto:admin@example.com
+# daily-briefing is called by pg_cron/scheduled triggers with a shared secret:
+supabase secrets set DAILY_BRIEFING_SECRET=$(openssl rand -hex 32)
+# morning-route needs weather data:
+supabase secrets set NEXT_PUBLIC_WEATHER_API_KEY=...
 ```
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are

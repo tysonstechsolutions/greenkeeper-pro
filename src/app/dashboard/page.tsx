@@ -61,6 +61,7 @@ import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Task, Equipment } from "@/types/database";
+import { downloadDailyAssignmentsReport } from "@/lib/reports/daily-assignments-report";
 
 // Dynamically import MiniMapWidget to avoid SSR issues with Leaflet
 const MiniMapWidget = dynamic(
@@ -1188,17 +1189,7 @@ function LeadershipDashboardView() {
           type="button"
           onClick={async () => {
             try {
-              const res = await fetch("/api/reports/daily-assignments");
-              if (!res.ok) throw new Error("Failed to generate PDF");
-              const blob = await res.blob();
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `VMGC-Daily-Assignments-${new Date().toISOString().split("T")[0]}.pdf`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
+              await downloadDailyAssignmentsReport();
             } catch (err) {
               console.error("Error downloading daily assignments:", err);
             }

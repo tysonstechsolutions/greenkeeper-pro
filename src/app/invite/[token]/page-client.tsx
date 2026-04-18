@@ -90,23 +90,48 @@ export default function RouteContent() {
     setSubmitting(true);
 
     try {
-      const res = await fetch("/api/auth/pin-signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          fullName: fullName.trim(),
-          phone: phone.trim() || null,
-          pin,
-        }),
-      });
+      const supabase = createClient();
+      interface PinSignupResponse {
+        success: boolean;
+        user?: { id: string; name: string; role: string };
+        session?: {
+          access_token: string;
+          refresh_token: string;
+        } | null;
+        redirectPath?: string;
+        error?: string;
+      }
+      const { data: dataRaw, error: fnError } = await supabase.functions.invoke(
+        "pin-signup",
+        {
+          method: "POST",
+          body: {
+            token,
+            fullName: fullName.trim(),
+            phone: phone.trim() || null,
+            pin,
+          },
+        },
+      );
+      const data = dataRaw as PinSignupResponse | null;
 
-      const data = await res.json();
+      if (fnError || !data) {
+        setError(fnError?.message || "Failed to create account.");
+        setSubmitting(false);
+        return;
+      }
 
-      if (!res.ok) {
+      if (!data.success) {
         setError(data.error || "Failed to create account.");
         setSubmitting(false);
         return;
+      }
+
+      if (data.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
       }
 
       router.push(data.redirectPath || "/dashboard");

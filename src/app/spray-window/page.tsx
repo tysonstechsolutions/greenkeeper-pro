@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { RISK_LEVEL_CONFIG } from "@/lib/utils/disease-models";
 import type { SprayWindow, HourlyForecast } from "@/lib/utils/spray-window";
+import { callApi } from "@/lib/api/client";
 
 interface SprayWindowResponse {
   disease_pressure: number;
@@ -74,9 +75,7 @@ export default function SprayWindowPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch("/api/spray-window");
-        if (!res.ok) throw new Error("Failed to fetch spray window data");
-        const json = await res.json();
+        const json = await callApi<SprayWindowResponse>("spray-window");
         setData(json);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unknown error");

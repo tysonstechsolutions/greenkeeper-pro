@@ -14,10 +14,14 @@ import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
 const PUBLIC_ROUTES = ["/login", "/pin-login", "/join", "/install", "/offline"];
 
 function isPublicRoute(pathname: string): boolean {
-  // Exact matches
-  if (PUBLIC_ROUTES.includes(pathname)) return true;
-  // Prefix matches for invite tokens: /invite/[token]
-  if (pathname.startsWith("/invite/")) return true;
+  // Normalize by stripping any trailing slash so /pin-login and /pin-login/
+  // both match. The Capacitor build uses `trailingSlash: true` in
+  // next.config.ts, so pathnames arrive with a trailing slash.
+  const normalized = pathname.length > 1 && pathname.endsWith("/")
+    ? pathname.slice(0, -1)
+    : pathname;
+  if (PUBLIC_ROUTES.includes(normalized)) return true;
+  if (normalized.startsWith("/invite/")) return true;
   return false;
 }
 

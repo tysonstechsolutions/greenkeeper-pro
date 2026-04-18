@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/client";
+import { callApi } from "@/lib/api/client";
 import ReactMarkdown from "react-markdown";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -29,32 +30,6 @@ interface Message {
   imageUrl?: string;
   error?: boolean;
   timestamp: Date;
-}
-
-// ── Tool-name → user-friendly activity label ────────────────────────────────
-
-const TOOL_LABELS: Record<string, string> = {
-  get_daily_snapshot: "Checking today's snapshot",
-  get_recent_observations: "Reviewing recent observations",
-  get_fy26_assets_summary: "Looking up inventory",
-  search_tasks: "Searching tasks",
-  search_equipment: "Searching equipment",
-  search_chemicals: "Searching chemicals",
-  get_weather_history: "Checking weather history",
-  search_budget: "Checking budget",
-  search_staff: "Looking up staff",
-  get_schedule: "Checking schedule",
-  search_order_items: "Checking the order list",
-  create_task: "Creating a task",
-  update_task: "Updating the task",
-  add_order_item: "Adding to the order list",
-  update_order_item: "Updating the order item",
-  report_course_issue: "Reporting the issue",
-  update_equipment_status: "Updating equipment status",
-};
-
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name] || `Running ${name.replace(/_/g, " ")}`;
 }
 
 // ── Example prompts ─────────────────────────────────────────────────────────
@@ -304,98 +279,43 @@ export default function AssistantPage() {
             : `[Photo attached: ${photoStoragePath}]`;
         }
 
-        const res = await fetch("/api/ai-assistant", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: messageForApi,
-            history,
-            photoStoragePath: photoStoragePath || undefined,
-            photoPublicUrl: photoPublicUrl || undefined,
-          }),
-          signal: controller.signal,
+        setToolActivity("Thinking…");
+
+        // Abort path: wire the AbortController to a rejection we can catch below.
+        const abortPromise = new Promise<never>((_, reject) => {
+          controller.signal.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
         });
 
-        // If the server errored out before streaming began, it returns JSON.
-        if (!res.ok) {
-          let errMsg = "Something went wrong. Please try again.";
-          try {
-            const data = await res.json();
-            if (data?.error) errMsg = data.error;
-          } catch {
-            // response was not JSON
-          }
-          replaceAssistantWithError(errMsg);
-          return;
-        }
-
-        if (!res.body) {
-          replaceAssistantWithError("Empty response from the assistant.");
-          return;
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let streamError: string | null = null;
-        let gotAnyText = false;
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          // Parse SSE events separated by blank lines.
-          const events = buffer.split("\n\n");
-          buffer = events.pop() || "";
-
-          for (const rawEvent of events) {
-            if (!rawEvent.trim()) continue;
-            let eventType = "";
-            let dataStr = "";
-            for (const line of rawEvent.split("\n")) {
-              if (line.startsWith(":")) continue; // SSE comment (heartbeat)
-              if (line.startsWith("event: ")) eventType = line.slice(7).trim();
-              else if (line.startsWith("data: ")) dataStr += line.slice(6);
-            }
-            if (!eventType || !dataStr) continue;
-
-            let data: { delta?: string; name?: string; status?: string; message?: string };
-            try {
-              data = JSON.parse(dataStr);
-            } catch {
-              continue;
-            }
-
-            if (eventType === "text" && typeof data.delta === "string") {
-              setToolActivity(null);
-              appendToAssistant(data.delta);
-              gotAnyText = true;
-            } else if (eventType === "tool" && data.name) {
-              if (data.status === "start") {
-                setToolActivity(toolLabel(data.name));
-              } else if (data.status === "done") {
-                // Keep the label visible briefly so fast tools still show.
-                // It'll clear on the next text delta.
-              }
-            } else if (eventType === "error") {
-              streamError = data.message || "AI service error.";
-            } else if (eventType === "done") {
-              // No-op; stream will end naturally.
-            }
-          }
-        }
+        const reply = await Promise.race([
+          callApi<{ reply?: string; error?: string }>("ai-assistant", {
+            method: "POST",
+            body: {
+              message: messageForApi,
+              history,
+              photoStoragePath: photoStoragePath || undefined,
+              photoPublicUrl: photoPublicUrl || undefined,
+            },
+          }),
+          abortPromise,
+        ]);
 
         setToolActivity(null);
 
-        if (streamError && !gotAnyText) {
-          replaceAssistantWithError(streamError);
-        } else if (!gotAnyText) {
-          replaceAssistantWithError("I wasn't able to generate a response. Please try again.");
-        } else if (streamError) {
-          // We got partial text, then an error. Append a note.
-          appendToAssistant(`\n\n_(Note: ${streamError})_`);
+        const text = typeof reply?.reply === "string" ? reply.reply : "";
+        if (!text) {
+          replaceAssistantWithError(
+            reply?.error || "I wasn't able to generate a response. Please try again.",
+          );
+          return;
         }
+
+        appendToAssistant(text);
+        const gotAnyText = true;
+        void gotAnyText; // retained for the persistence branch below
 
         // ── Persist to Supabase ──────────────────────────────────────────
         if (gotAnyText && user?.id) {

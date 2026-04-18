@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { downloadPinSheetReport } from "@/lib/reports/pin-sheet-report";
 import {
   usePinPositions,
   todayIso,
@@ -108,7 +109,16 @@ function PinSheetEditor() {
     }
   };
 
-  const printUrl = `/api/reports/pin-sheet?date=${encodeURIComponent(date)}`;
+  const handlePrintPinSheet = async () => {
+    try {
+      await downloadPinSheetReport({ date });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to generate pin sheet PDF",
+      });
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6">
@@ -154,12 +164,10 @@ function PinSheetEditor() {
             </>
           )}
         </Button>
-        <a href={printUrl} target="_blank" rel="noreferrer">
-          <Button variant="outline">
-            <Printer className="w-4 h-4 mr-1" />
-            Print pin sheet PDF
-          </Button>
-        </a>
+        <Button variant="outline" onClick={handlePrintPinSheet}>
+          <Printer className="w-4 h-4 mr-1" />
+          Print pin sheet PDF
+        </Button>
       </div>
 
       {message && (

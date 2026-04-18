@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
 import { notificationToUrl } from "@/lib/utils/notification-url";
+import { callApi } from "@/lib/api/client";
 import type { Notification, NotificationType, Database } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -229,15 +230,14 @@ export function useNotifications(): UseNotificationsReturn {
             reference_type: referenceType ?? null,
             reference_id: referenceId ?? null,
           });
-          void fetch("/api/push/send", {
+          void callApi("push/send", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            body: {
               user_ids: [userId],
               title,
               body: body ?? "",
               url: pushUrl,
-            }),
+            },
           }).catch((err) => {
             console.warn("Push mirror failed (non-fatal):", err);
           });

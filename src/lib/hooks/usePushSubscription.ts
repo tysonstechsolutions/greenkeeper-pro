@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { callApi } from "@/lib/api/client";
 
 export type PushPermission = "default" | "granted" | "denied";
 
@@ -125,23 +126,17 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
         });
       }
 
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subscription: sub.toJSON(),
-          user_agent:
-            typeof navigator !== "undefined" ? navigator.userAgent : null,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(
-          (data as { error?: string }).error ||
-            `Subscribe failed (${res.status})`
-        );
+      try {
+        await callApi("push/subscribe", {
+          method: "POST",
+          body: {
+            subscription: sub.toJSON(),
+            user_agent:
+              typeof navigator !== "undefined" ? navigator.userAgent : null,
+          },
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Subscribe failed");
         return false;
       }
 
@@ -178,11 +173,9 @@ export function usePushSubscription(): UsePushSubscriptionReturn {
       const endpoint = sub.endpoint;
       await sub.unsubscribe();
 
-      await fetch("/api/push/subscribe", {
+      await callApi("push/subscribe", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint }),
-        signal: AbortSignal.timeout(15000),
+        body: { endpoint },
       }).catch(() => {
         // DB cleanup is best-effort
       });

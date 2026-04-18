@@ -42,6 +42,7 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/database";
+import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
 
 // Per-equipment summary of rows from the `equipment_parts` table.
 type PartsSummary = { needed: number; ordered: number };
@@ -398,19 +399,9 @@ export default function EquipmentPage() {
   const handleDownloadReport = async () => {
     setGeneratingReport(true);
     try {
-      const params = new URLSearchParams();
-      if (conditionFilter !== "all") params.set("condition", conditionFilter);
-      const res = await fetch(`/api/reports/equipment-report${params.toString() ? `?${params}` : ""}`);
-      if (!res.ok) throw new Error("Failed to generate report");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `vmgc-equipment-report-${new Date().toISOString().slice(0, 10)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await downloadEquipmentReport({
+        condition: conditionFilter !== "all" ? conditionFilter : undefined,
+      });
     } catch (err) {
       console.error("Report download error:", err);
     } finally {

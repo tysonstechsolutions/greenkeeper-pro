@@ -54,6 +54,11 @@ import { useReports, type DailyReportData, type WeeklyReportData, type Equipment
 import { exportElementToPDF, exportToCSV, generateReportFilename, printElement, formatReportDate, formatDateRange } from "@/lib/utils/pdf-export";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard, MANAGEMENT_ROLES } from "@/components/auth/role-guard";
+import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
+import { downloadParkingLotReport } from "@/lib/reports/parking-lot-report";
+import { downloadClubhouseReport } from "@/lib/reports/clubhouse-report";
+import { downloadObservationReport } from "@/lib/reports/observation-report";
+import { downloadFullReport } from "@/lib/reports/full-download";
 
 const REPORT_TYPES = [
   {
@@ -181,26 +186,26 @@ export default function ReportsPage() {
     return reportType.requiresRole.includes(profile?.role || "");
   }, [profile?.role]);
 
-  // Direct PDF download for report types that have server-side PDF routes
+  // Direct PDF download for report types — now all client-side via jsPDF.
   const handleDirectPDFDownload = useCallback(async (reportType: string) => {
     setGenerating(true);
     try {
-      const routeMap: Record<string, string> = {
-        "equipment": "/api/reports/equipment-report",
-        "parking-lot": "/api/reports/parking-lot-report",
-        "clubhouse": "/api/reports/clubhouse-report",
-        "observations": "/api/reports/observation-report",
-      };
-      const url = routeMap[reportType];
-      if (!url) return;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to generate report");
-      const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `vmgc-${reportType}-report-${new Date().toISOString().slice(0, 10)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      switch (reportType) {
+        case "equipment":
+          await downloadEquipmentReport();
+          break;
+        case "parking-lot":
+          await downloadParkingLotReport();
+          break;
+        case "clubhouse":
+          await downloadClubhouseReport();
+          break;
+        case "observations":
+          await downloadObservationReport({ type: "hole" });
+          break;
+        default:
+          return;
+      }
     } catch (error) {
       console.error("Error downloading report:", error);
       showToast('error', 'Failed to download report. Please try again.');
@@ -209,21 +214,12 @@ export default function ReportsPage() {
     }
   }, []);
 
-  // Download all reports as ZIP
+  // Download all reports as a ZIP (client-side jsPDF + jszip).
   const [downloadingAll, setDownloadingAll] = useState(false);
   const handleDownloadAll = useCallback(async () => {
     setDownloadingAll(true);
     try {
-      const res = await fetch("/api/reports/full-download");
-      if (!res.ok) throw new Error("Failed to generate full report");
-      const blob = await res.blob();
-      const contentType = res.headers.get("content-type") || "";
-      const ext = contentType.includes("zip") ? "zip" : "pdf";
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `vmgc-full-report-${new Date().toISOString().slice(0, 10)}.${ext}`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      await downloadFullReport();
     } catch (error) {
       console.error("Error downloading full report:", error);
       showToast('error', 'Failed to download full report. Please try again.');

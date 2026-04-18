@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import { downloadMonthlyBoardReport } from "@/lib/reports/monthly-board-report";
 import {
   fetchMonthlyBoardData,
   type MonthlyBoardData,
@@ -77,9 +78,15 @@ function MonthlyBoardReportContent() {
     loadPreview();
   }, [loadPreview]);
 
-  const handleGenerate = () => {
-    const url = `/api/reports/monthly-board?month=${month}&year=${year}`;
-    window.open(url, "_blank");
+  const handleGenerate = async () => {
+    try {
+      await downloadMonthlyBoardReport({
+        month: parseInt(month, 10),
+        year: parseInt(year, 10),
+      });
+    } catch (err) {
+      console.error("Failed to generate monthly board report:", err);
+    }
   };
 
   const monthLabel =

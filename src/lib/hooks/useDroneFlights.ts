@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { callApi } from "@/lib/api/client";
 import type { DroneFlight } from "@/types/database";
 
 export interface DroneFlightFilters {
@@ -74,19 +75,13 @@ export function useDroneFlights(): UseDroneFlightsReturn {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/drone/upload", {
+        // callApi handles the FormData → multipart pass-through and
+        // routes to either the Supabase Edge Function (when "drone/upload"
+        // is in EDGE_ROUTES) or the legacy /api/drone/upload route.
+        const row = await callApi<DroneFlight>("drone/upload", {
           method: "POST",
           body: formData,
-          signal: AbortSignal.timeout(120000), // 2 min for large uploads
         });
-
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: res.statusText }));
-          setError(body.error ?? "Upload failed");
-          return null;
-        }
-
-        const row = (await res.json()) as DroneFlight;
         setFlights((prev) => [row, ...prev]);
         return row;
       } catch (err) {

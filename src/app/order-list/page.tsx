@@ -41,6 +41,7 @@ import {
   type DisplayOrderItem,
 } from '@/lib/hooks/useOrderItems';
 import type { OrderItemStatus, OrderCategory } from '@/types/database';
+import { downloadOrderListReport, OrderListReportError } from '@/lib/reports/order-list-report';
 
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -206,23 +207,14 @@ export default function OrderListPage() {
   const handleDownloadReport = async () => {
     setIsDownloading(true);
     try {
-      const response = await fetch('/api/reports/order-list-report');
-      if (!response.ok) {
-        throw new Error('Failed to download report');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `order-list-${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      await downloadOrderListReport();
     } catch (error) {
       console.error('Failed to download report:', error);
-      showToast('error', 'Failed to download report');
+      if (error instanceof OrderListReportError && error.step === 'no-data') {
+        showToast('error', 'No order items or equipment parts to report');
+      } else {
+        showToast('error', 'Failed to download report');
+      }
     } finally {
       setIsDownloading(false);
     }

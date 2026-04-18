@@ -51,6 +51,9 @@ nul
 # Local Claude Code working dir (agent worktrees, etc.)
 /.claude/
 
+# Supabase CLI local state (project-ref, versions, etc.)
+supabase/.temp/
+
 # Equipment photos (stored in Supabase)
 /equipment/
 

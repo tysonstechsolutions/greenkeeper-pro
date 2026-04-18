@@ -64,6 +64,8 @@ import {
 import { greenIssueTypeDescriptions, greenIssueTypeFixTemplates } from "@/lib/green-constants";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import { downloadObservationReport } from "@/lib/reports/observation-report";
+import { callApi } from "@/lib/api/client";
 import GreenDrawingCanvas, { computeCentroid } from "@/components/green-drawing-canvas";
 import TreatmentPlanView from "@/components/treatment-plan-view";
 import type {
@@ -226,22 +228,18 @@ export default function RouteContent() {
     setGeneratingFix(true);
     const title = greenIssueTypeLabels[formData.issue_type] || formData.issue_type;
     try {
-      const res = await fetch("/api/green-fix-instructions", {
+      const data = await callApi<{ fix_instructions?: string }>("green-fix-instructions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           title,
           issue_type: formData.issue_type,
           priority: formData.priority,
           description: formData.description || undefined,
           hole_number: holeNumber,
-        }),
+        },
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.fix_instructions) {
-          setFormData((p) => ({ ...p, fix_instructions: data.fix_instructions }));
-        }
+      if (data.fix_instructions) {
+        setFormData((p) => ({ ...p, fix_instructions: data.fix_instructions! }));
       }
     } catch (err) {
       console.error("Failed to generate fix instructions:", err);
@@ -368,23 +366,19 @@ export default function RouteContent() {
     setGeneratingFixForObs(true);
     const title = greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type;
     try {
-      const res = await fetch("/api/green-fix-instructions", {
+      const data = await callApi<{ fix_instructions?: string }>("green-fix-instructions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           title,
           issue_type: editFormData.issue_type,
           priority: editFormData.priority,
           description: editFormData.description || undefined,
           hole_number: holeNumber,
-        }),
+        },
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.fix_instructions) {
-          setEditFormData((p) => ({ ...p, fix_instructions: data.fix_instructions }));
-          triggerAutoSave({ fix_instructions: data.fix_instructions });
-        }
+      if (data.fix_instructions) {
+        setEditFormData((p) => ({ ...p, fix_instructions: data.fix_instructions! }));
+        triggerAutoSave({ fix_instructions: data.fix_instructions });
       }
     } catch (err) {
       console.error("Failed to generate fix:", err);
@@ -561,19 +555,8 @@ export default function RouteContent() {
             onClick={async () => {
               setFeedbackMsg({ type: "loading", text: "Generating PDF report..." });
               try {
-                const res = await fetch(`/api/reports/observation-report?hole=${holeNumber}&type=green`);
-                if (!res.ok) throw new Error("Failed to generate PDF");
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                try {
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `Hole-${holeNumber}-Green-Report-${new Date().toISOString().split("T")[0]}.pdf`;
-                  a.click();
-                  setFeedbackMsg({ type: "success", text: "Report downloaded!" });
-                } finally {
-                  setTimeout(() => URL.revokeObjectURL(url), 1000);
-                }
+                await downloadObservationReport({ hole: holeNumber, type: "green" });
+                setFeedbackMsg({ type: "success", text: "Report downloaded!" });
               } catch {
                 setFeedbackMsg({ type: "error", text: "Failed to generate report." });
               }
