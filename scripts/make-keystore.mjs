@@ -55,7 +55,20 @@ function askSecret(q) {
 
 async function run(cmd, args) {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, {
+    // On Windows we have to use shell: true so PATH resolution finds
+    // keytool (which ships as a .exe inside the JDK bin dir). But shell
+    // mode joins args with spaces and does no escaping — so any arg
+    // containing whitespace, commas, or quotes must be wrapped in double
+    // quotes ourselves or cmd.exe will split it. The distinguished-name
+    // string hits every one of those cases.
+    const quotedArgs = process.platform === "win32"
+      ? args.map((a) =>
+          /[\s,"&|<>^]/.test(a)
+            ? `"${a.replace(/"/g, '\\"')}"`
+            : a,
+        )
+      : args;
+    const p = spawn(cmd, quotedArgs, {
       stdio: "inherit",
       shell: process.platform === "win32",
     });
