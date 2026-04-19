@@ -71,3 +71,10 @@ fcm-service-account*.json
 /android/.gradle/
 /android/captures/
 /android/local.properties
+
+# Release signing — NEVER commit the keystore or its credentials
+/android/keystore.properties
+/android/app/*.jks
+/android/app/*.keystore
+*.jks
+*.keystore
