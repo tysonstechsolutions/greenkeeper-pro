@@ -14,6 +14,12 @@
 --        select vault.create_secret('<same value as above>', 'daily_briefing_secret');
 --      (Or replace the lookup below with a hardcoded literal — less safe but
 --       fine for single-tenant deployments.)
+--   4. Replace PROJECT_URL below with your project's functions URL:
+--        https://<project-ref>.supabase.co
+--      (Supabase hosted Postgres disallows `ALTER DATABASE ... SET app.*`,
+--       so the URL must be hardcoded here. This migration is already
+--       project-specific because of the secret lookup, so hardcoding the
+--       URL doesn't reduce portability.)
 --
 -- ─── What this migration does ────────────────────────────────────────────
 --   * Enables pg_cron + pg_net (no-op if already enabled).
@@ -43,10 +49,7 @@ select cron.schedule(
   '0 11 * * *',
   $cron$
     select net.http_post(
-      url := concat(
-        current_setting('app.supabase_url', true),
-        '/functions/v1/daily-briefing'
-      ),
+      url := 'https://mbgublyqnyghmvqfooao.supabase.co/functions/v1/daily-briefing',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
         'Authorization', concat(
