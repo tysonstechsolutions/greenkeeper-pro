@@ -84,14 +84,25 @@ Deno.serve(async (req) => {
     const admin = getAdminClient();
 
     // 1. Find the PIN → user_id
-    const { data: pinRecord } = await admin
+    const { data: pinRecord, error: pinErr } = await admin
       .from("pin_codes")
       .select("user_id, is_active")
       .eq("pin", pin)
       .eq("is_active", true)
       .single();
 
-    if (!pinRecord) {
+    if (pinErr || !pinRecord) {
+      // Diagnostic logging — surfaces RLS / permission errors that the
+      // legacy code silently treated as "no match". Keep until pin-login
+      // is proven stable in production, then tighten back to data-only.
+      console.error("PIN lookup failed:", {
+        pinLen: pin.length,
+        errCode: pinErr?.code,
+        errMsg: pinErr?.message,
+        errDetails: pinErr?.details,
+        errHint: pinErr?.hint,
+        hasRecord: !!pinRecord,
+      });
       return jsonError("Invalid PIN. Please try again.", 401);
     }
 

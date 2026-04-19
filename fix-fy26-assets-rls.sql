@@ -64,6 +64,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON asset_damage_records TO authenticated;
 GRANT SELECT ON fy26_assets          TO anon;
 GRANT SELECT ON asset_damage_records TO anon;
 
+-- Edge functions hit these tables via the service_role client (bypasses
+-- RLS). Without explicit GRANT, service_role gets 42501 "permission denied"
+-- at the Postgres layer. Same class of bug we hit on pin_codes.
+GRANT ALL ON fy26_assets          TO service_role;
+GRANT ALL ON asset_damage_records TO service_role;
+
 -- ---- 5. Verify ---------------------------------------------
 SELECT schemaname, tablename, policyname, cmd, roles
 FROM pg_policies

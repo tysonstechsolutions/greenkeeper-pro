@@ -68,6 +68,7 @@ CREATE POLICY "Anon can verify pins" ON pin_codes
 -- Grant permissions
 GRANT ALL ON pin_codes TO authenticated;
 GRANT SELECT ON pin_codes TO anon;
+GRANT ALL ON pin_codes TO service_role;  -- required for pin-login edge function (bypasses RLS via service-role key)
 
 -- Auto-update trigger
 CREATE OR REPLACE FUNCTION update_pin_codes_timestamp()

@@ -38,6 +38,47 @@ let Html5Qrcode: typeof import("html5-qrcode").Html5Qrcode | null = null;
 // noise, and we should keep scanning instead of wasting a lookup.
 const VALID_TAG_RE = /^\d{8}-\d{4}$|^\d{12}$/;
 
+// Hard ceiling on how long ANY single supabase query can block the
+// lookup flow. The scanner used to hang forever on "Searching
+// inventory..." if the service worker's NetworkFirst strategy got
+// stuck waiting on a stale cache entry, a flaky 4G connection
+// dropped mid-response, or the browser's fetch queue stalled. 8 s is
+// plenty for a healthy round-trip and short enough that the UI can
+// fall back to the next lookup strategy — or surface a real error —
+// instead of spinning indefinitely.
+const QUERY_TIMEOUT_MS = 8_000;
+
+/**
+ * Wrap a Supabase query (PromiseLike) in a timeout. If the query doesn't
+ * settle within `ms`, rejects with a Timeout error so the caller can
+ * move on to the next lookup path or show an error instead of hanging.
+ *
+ * Default generic is `any` rather than `unknown` because `createClient()`
+ * returns a Supabase client WITHOUT a Database generic (see
+ * src/lib/supabase/client.ts for rationale), which means every
+ * `.from(...).select(...)` chain is typed as `any`. If we defaulted T to
+ * `unknown`, destructuring `{ data, error }` off the awaited result
+ * would trip TS2339 at every call site.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function withTimeout<T = any>(p: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+    Promise.resolve(p).then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
 /**
  * Asset barcode / serial scanner page.
  *
@@ -93,6 +134,14 @@ export default function AssetScanPage() {
   // filters out transient misreads (which are usually non-repeating).
   const recentDecodesRef = useRef<string[]>([]);
   const recentMisreadsRef = useRef<number>(0);
+  // Set to true by the unmount cleanup so any in-flight lookup bails
+  // out of its state-setters. Without this, navigating away while
+  // "Searching inventory..." was up would (a) leak a setState onto an
+  // unmounted tree and (b) sometimes leave the Supabase client in a
+  // pending state that made subsequent pages (tasks / schedule /
+  // messages) appear to hang too, because the user's perception was
+  // that the whole app had died.
+  const cancelledRef = useRef(false);
 
   // ── Lookup logic ──────────────────────────────────────────────────────
 
@@ -108,9 +157,20 @@ export default function AssetScanPage() {
         .trim();
       if (!normalized) return;
 
-      setSearching(true);
-      setMatch(null);
-      setMatchError(null);
+      // Guard against setState after unmount (see cancelledRef above).
+      const safeSetSearching = (v: boolean) => {
+        if (!cancelledRef.current) setSearching(v);
+      };
+      const safeSetMatch = (v: Fy26Asset | null) => {
+        if (!cancelledRef.current) setMatch(v);
+      };
+      const safeSetMatchError = (v: string | null) => {
+        if (!cancelledRef.current) setMatchError(v);
+      };
+
+      safeSetSearching(true);
+      safeSetMatch(null);
+      safeSetMatchError(null);
 
       // Escape PostgREST special chars inside a filter value. Any of
       // , ( ) % * " \ break the or/ilike syntax and cause a 400 response,
@@ -129,43 +189,59 @@ export default function AssetScanPage() {
       // fast exact-match branch with zero fallback round-trips.
       const learnBarcodeIfEmpty = (asset: Fy26Asset) => {
         if (asset.barcode_value && asset.barcode_value.trim()) return;
-        // Fire-and-forget: don't hold up the match card render.
+        // Fire-and-forget: don't hold up the match card render. Bound
+        // by the same timeout so a stuck update doesn't leak a pending
+        // promise into the service worker's background-sync queue.
         (async () => {
-          const { error } = await supabase
-            .from("fy26_assets")
-            .update({ barcode_value: normalized })
-            .eq("id", asset.id)
-            .is("barcode_value", null);
-          if (error) {
-            console.warn("[scan] auto-link failed:", error.message);
-          } else {
-            console.log(
-              "[scan] auto-linked",
-              JSON.stringify(normalized),
-              "→",
-              asset.asset_number +
-                (asset.sub_number && asset.sub_number !== "0"
-                  ? "/" + asset.sub_number
-                  : "")
+          try {
+            const { error } = await withTimeout(
+              supabase
+                .from("fy26_assets")
+                .update({ barcode_value: normalized })
+                .eq("id", asset.id)
+                .is("barcode_value", null),
+              QUERY_TIMEOUT_MS,
+              "auto-link"
             );
+            if (error) {
+              console.warn("[scan] auto-link failed:", error.message);
+            } else {
+              console.log(
+                "[scan] auto-linked",
+                JSON.stringify(normalized),
+                "→",
+                asset.asset_number +
+                  (asset.sub_number && asset.sub_number !== "0"
+                    ? "/" + asset.sub_number
+                    : "")
+              );
+            }
+          } catch (err) {
+            console.warn("[scan] auto-link errored:", err);
           }
         })();
       };
 
       try {
         // 1. Try CASE-INSENSITIVE exact match on barcode_value.
-        const { data: barcodeRows, error: barcodeErr } = await supabase
-          .from("fy26_assets")
-          .select("*")
-          .ilike("barcode_value", normalized)
-          .limit(1);
+        const { data: barcodeRows, error: barcodeErr } = await withTimeout(
+          supabase
+            .from("fy26_assets")
+            .select("*")
+            .ilike("barcode_value", normalized)
+            .limit(1),
+          QUERY_TIMEOUT_MS,
+          "barcode_value exact"
+        );
+
+        if (cancelledRef.current) return;
 
         if (barcodeErr) {
-          setMatchError(`Lookup failed: ${barcodeErr.message}`);
+          safeSetMatchError(`Lookup failed: ${barcodeErr.message}`);
           return;
         }
         if (barcodeRows && barcodeRows.length > 0) {
-          setMatch(barcodeRows[0] as Fy26Asset);
+          safeSetMatch(barcodeRows[0] as Fy26Asset);
           return;
         }
 
@@ -179,32 +255,42 @@ export default function AssetScanPage() {
           const subNum = String(parseInt(tagMatch[2], 10)); // strips leading zeros
 
           // 2a. Exact match (clean scan)
-          const { data: tagRows, error: tagErr } = await supabase
-            .from("fy26_assets")
-            .select("*")
-            .eq("asset_number", assetNum)
-            .eq("sub_number", subNum)
-            .limit(1);
+          const { data: tagRows, error: tagErr } = await withTimeout(
+            supabase
+              .from("fy26_assets")
+              .select("*")
+              .eq("asset_number", assetNum)
+              .eq("sub_number", subNum)
+              .limit(1),
+            QUERY_TIMEOUT_MS,
+            "tag exact"
+          );
+          if (cancelledRef.current) return;
           if (tagErr) {
-            setMatchError(`Lookup failed: ${tagErr.message}`);
+            safeSetMatchError(`Lookup failed: ${tagErr.message}`);
             return;
           }
           if (tagRows && tagRows.length > 0) {
-            setMatch(tagRows[0] as Fy26Asset);
+            safeSetMatch(tagRows[0] as Fy26Asset);
             return;
           }
 
           // 2b. Sub stored WITH leading zeros (legacy). Cheap to check.
-          const { data: tagRowsRaw } = await supabase
-            .from("fy26_assets")
-            .select("*")
-            .eq("asset_number", assetNum)
-            .eq("sub_number", tagMatch[2])
-            .limit(1);
+          const { data: tagRowsRaw } = await withTimeout(
+            supabase
+              .from("fy26_assets")
+              .select("*")
+              .eq("asset_number", assetNum)
+              .eq("sub_number", tagMatch[2])
+              .limit(1),
+            QUERY_TIMEOUT_MS,
+            "tag raw sub"
+          );
+          if (cancelledRef.current) return;
           if (tagRowsRaw && tagRowsRaw.length > 0) {
             const hit = tagRowsRaw[0] as Fy26Asset;
             learnBarcodeIfEmpty(hit);
-            setMatch(hit);
+            safeSetMatch(hit);
             return;
           }
 
@@ -216,20 +302,25 @@ export default function AssetScanPage() {
           //     17000198. We still require an exact sub_number match
           //     so we don't pick the wrong sibling in a multi-sub
           //     asset family.
-          const { data: fuzzyTagRows } = await supabase
-            .from("fy26_assets")
-            .select("*")
-            .ilike("asset_number", `%${assetNum}%`)
-            .eq("sub_number", subNum)
-            .limit(2);
+          const { data: fuzzyTagRows } = await withTimeout(
+            supabase
+              .from("fy26_assets")
+              .select("*")
+              .ilike("asset_number", `%${assetNum}%`)
+              .eq("sub_number", subNum)
+              .limit(2),
+            QUERY_TIMEOUT_MS,
+            "tag fuzzy asset+sub"
+          );
+          if (cancelledRef.current) return;
           if (fuzzyTagRows && fuzzyTagRows.length === 1) {
             const hit = fuzzyTagRows[0] as Fy26Asset;
             learnBarcodeIfEmpty(hit);
-            setMatch(hit);
+            safeSetMatch(hit);
             return;
           }
           if (fuzzyTagRows && fuzzyTagRows.length > 1) {
-            setMatchError(
+            safeSetMatchError(
               `Scanner read "${assetNum}-${tagMatch[2]}" but that matches ${fuzzyTagRows.length} assets. Try scanning again or use Manual entry.`
             );
             return;
@@ -238,15 +329,20 @@ export default function AssetScanPage() {
           // 2d. Also allow the sub to be missing/fuzzy — only asset
           //     number substring + any sub. Rare but happens when the
           //     sub digits are at the edge of the scanned frame.
-          const { data: fuzzyAssetRows } = await supabase
-            .from("fy26_assets")
-            .select("*")
-            .ilike("asset_number", `%${assetNum}%`)
-            .limit(5);
+          const { data: fuzzyAssetRows } = await withTimeout(
+            supabase
+              .from("fy26_assets")
+              .select("*")
+              .ilike("asset_number", `%${assetNum}%`)
+              .limit(5),
+            QUERY_TIMEOUT_MS,
+            "tag fuzzy asset any-sub"
+          );
+          if (cancelledRef.current) return;
           if (fuzzyAssetRows && fuzzyAssetRows.length === 1) {
             const hit = fuzzyAssetRows[0] as Fy26Asset;
             learnBarcodeIfEmpty(hit);
-            setMatch(hit);
+            safeSetMatch(hit);
             return;
           }
         }
@@ -254,15 +350,20 @@ export default function AssetScanPage() {
         // 3. Just-digits scan (no dash) → try asset_number exact match
         //    for the case where the scanner decoded without the sub.
         if (/^\d+$/.test(normalized)) {
-          const { data: numRows } = await supabase
-            .from("fy26_assets")
-            .select("*")
-            .eq("asset_number", normalized)
-            .limit(1);
+          const { data: numRows } = await withTimeout(
+            supabase
+              .from("fy26_assets")
+              .select("*")
+              .eq("asset_number", normalized)
+              .limit(1),
+            QUERY_TIMEOUT_MS,
+            "digits exact"
+          );
+          if (cancelledRef.current) return;
           if (numRows && numRows.length > 0) {
             const hit = numRows[0] as Fy26Asset;
             learnBarcodeIfEmpty(hit);
-            setMatch(hit);
+            safeSetMatch(hit);
             return;
           }
         }
@@ -273,30 +374,65 @@ export default function AssetScanPage() {
         //       injected from the Code 128 internal encoding)
         //     No pattern of our own fixes that because the extra char
         //     is in the middle. But 17000198 IS a substring of the
-        //     decoded value, so we can fetch the asset list and find
-        //     any row whose asset_number appears inside the scan, then
-        //     disambiguate by checking the trailing digits against
+        //     decoded value, so we can fetch a bounded asset list and
+        //     find any row whose asset_number appears inside the scan,
+        //     then disambiguate by checking the trailing digits against
         //     sub_number.
+        //
+        //     IMPORTANT: We cap this at 2000 rows. The original code
+        //     did `.select("*")` with no limit, which returned the
+        //     ENTIRE fy26_assets table on every digit-style scan —
+        //     multi-megabyte payload, multi-second round-trip, and on
+        //     a phone cell connection with the service worker's
+        //     NetworkFirst wrapper it was the number-one source of the
+        //     "Searching inventory..." hang. Selecting only the three
+        //     columns we actually need for matching is ~20x smaller
+        //     than `*` and plenty fast.
         if (/^\d{6,}$/.test(normalized) && normalized.length >= 8) {
-          const { data: allAssets } = await supabase
-            .from("fy26_assets")
-            .select("*");
+          const { data: allAssets } = await withTimeout(
+            supabase
+              .from("fy26_assets")
+              .select("id, asset_number, sub_number")
+              .limit(2000),
+            QUERY_TIMEOUT_MS,
+            "reverse-substring list"
+          );
+          if (cancelledRef.current) return;
 
           if (allAssets && allAssets.length > 0) {
+            type MiniAsset = Pick<Fy26Asset, "id" | "asset_number" | "sub_number">;
             // Any asset whose full asset_number appears anywhere in
             // the scan string. Require asset_number ≥ 6 chars so a
             // short "0" doesn't claim every scan.
-            const candidates = (allAssets as Fy26Asset[])
+            const candidates = (allAssets as MiniAsset[])
               .filter(
                 (a) =>
                   a.asset_number.length >= 6 &&
                   normalized.includes(a.asset_number)
               );
 
+            const fetchFullAsset = async (id: string): Promise<Fy26Asset | null> => {
+              const { data } = await withTimeout(
+                supabase
+                  .from("fy26_assets")
+                  .select("*")
+                  .eq("id", id)
+                  .limit(1),
+                QUERY_TIMEOUT_MS,
+                "reverse-substring full row"
+              );
+              if (!data || data.length === 0) return null;
+              return data[0] as Fy26Asset;
+            };
+
             if (candidates.length === 1) {
-              learnBarcodeIfEmpty(candidates[0]);
-              setMatch(candidates[0]);
-              return;
+              const full = await fetchFullAsset(candidates[0].id);
+              if (cancelledRef.current) return;
+              if (full) {
+                learnBarcodeIfEmpty(full);
+                safeSetMatch(full);
+                return;
+              }
             }
 
             if (candidates.length > 1) {
@@ -324,9 +460,13 @@ export default function AssetScanPage() {
                 (x, y) => y.score - x.score || x.tailLen - y.tailLen
               );
               if (withScore[0].score > 0) {
-                learnBarcodeIfEmpty(withScore[0].asset);
-                setMatch(withScore[0].asset);
-                return;
+                const full = await fetchFullAsset(withScore[0].asset.id);
+                if (cancelledRef.current) return;
+                if (full) {
+                  learnBarcodeIfEmpty(full);
+                  safeSetMatch(full);
+                  return;
+                }
               }
             }
           }
@@ -335,54 +475,68 @@ export default function AssetScanPage() {
         // 4. Substring match on barcode_value. Catches legacy rows stored
         //    with stray whitespace/control chars the scanner appended.
         const likeTerm = `%${escapedForLike.trim()}%`;
-        const { data: substringRows } = await supabase
-          .from("fy26_assets")
-          .select("*")
-          .ilike("barcode_value", likeTerm)
-          .limit(1);
+        const { data: substringRows } = await withTimeout(
+          supabase
+            .from("fy26_assets")
+            .select("*")
+            .ilike("barcode_value", likeTerm)
+            .limit(1),
+          QUERY_TIMEOUT_MS,
+          "barcode_value substring"
+        );
+        if (cancelledRef.current) return;
         if (substringRows && substringRows.length > 0) {
           const hit = substringRows[0] as Fy26Asset;
           learnBarcodeIfEmpty(hit);
-          setMatch(hit);
+          safeSetMatch(hit);
           return;
         }
 
         // 5. Fall back to fuzzy search on serial / asset # / description /
         //    model / barcode_value.
         if (!escapedForLike.trim()) {
-          setMatchError(`No asset matching "${normalized}"`);
+          safeSetMatchError(`No asset matching "${normalized}"`);
           return;
         }
-        const { data, error } = await supabase
-          .from("fy26_assets")
-          .select("*")
-          .or(
-            `barcode_value.ilike.${likeTerm},serial_number.ilike.${likeTerm},asset_number.ilike.${likeTerm},description.ilike.${likeTerm},model_text.ilike.${likeTerm}`
-          )
-          .limit(1)
-          .maybeSingle();
+        const { data, error } = await withTimeout(
+          supabase
+            .from("fy26_assets")
+            .select("*")
+            .or(
+              `barcode_value.ilike.${likeTerm},serial_number.ilike.${likeTerm},asset_number.ilike.${likeTerm},description.ilike.${likeTerm},model_text.ilike.${likeTerm}`
+            )
+            .limit(1)
+            .maybeSingle(),
+          QUERY_TIMEOUT_MS,
+          "fuzzy or"
+        );
+        if (cancelledRef.current) return;
 
         if (error) {
-          setMatchError(`Search failed: ${error.message}`);
+          safeSetMatchError(`Search failed: ${error.message}`);
           return;
         }
         if (!data) {
-          setMatchError(
+          safeSetMatchError(
             `No asset found matching "${normalized}". Check the browser console (raw scan value is logged) — if it looks right, the barcode may not actually be linked in the DB.`
           );
           return;
         }
         const hit = data as Fy26Asset;
         learnBarcodeIfEmpty(hit);
-        setMatch(hit);
+        safeSetMatch(hit);
       } catch (err) {
-        setMatchError(
+        // `err.message` includes our "… timed out after 8000ms" label, so
+        // the user gets an actionable message instead of the old silent
+        // forever-spin.
+        if (cancelledRef.current) return;
+        safeSetMatchError(
           err instanceof Error
             ? `Search failed: ${err.message}`
             : "Search failed — check connection."
         );
       } finally {
-        setSearching(false);
+        safeSetSearching(false);
       }
     },
     [supabase]
@@ -526,15 +680,19 @@ export default function AssetScanPage() {
     if (!match) return;
     setUpdating(true);
     try {
-      const { data, error } = await supabase
-        .from("fy26_assets")
-        .update({
-          status: "verified_present" as Fy26AssetStatus,
-          verified_at: new Date().toISOString(),
-        })
-        .eq("id", match.id)
-        .select()
-        .single();
+      const { data, error } = await withTimeout(
+        supabase
+          .from("fy26_assets")
+          .update({
+            status: "verified_present" as Fy26AssetStatus,
+            verified_at: new Date().toISOString(),
+          })
+          .eq("id", match.id)
+          .select()
+          .single(),
+        QUERY_TIMEOUT_MS,
+        "mark present"
+      );
 
       if (error) throw error;
       setMatch(data as Fy26Asset);
@@ -783,9 +941,14 @@ export default function AssetScanPage() {
     startScanner();
   }, [manualMode, ocrMode, match, matchError, startScanner, stopScanner]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount. Mark cancelled so any lookup in flight bails
+  // out of its setState calls — without this, navigating away during
+  // "Searching inventory..." could leave the Supabase JS client in a
+  // weird state (the response arrives after the React tree is gone,
+  // a listener fires, and subsequent pages appear to hang).
   useEffect(() => {
     return () => {
+      cancelledRef.current = true;
       if (scannerRef.current) {
         scannerRef.current.stop().catch(() => {});
       }
