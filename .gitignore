@@ -54,6 +54,11 @@ nul
 # Supabase CLI local state (project-ref, versions, etc.)
 supabase/.temp/
 
+# FCM / Firebase service account keys — NEVER commit these
+fcm-service-account*.json
+*-service-account*.json
+/firebase-adminsdk-*.json
+
 # Equipment photos (stored in Supabase)
 /equipment/
 

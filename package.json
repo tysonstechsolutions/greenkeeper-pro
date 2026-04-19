@@ -65,6 +65,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.3.1",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
@@ -83,6 +84,7 @@
     "happy-dom": "^20.8.9",
     "msw": "^2.12.14",
     "serwist": "^9.5.7",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.2"
