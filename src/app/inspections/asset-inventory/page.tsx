@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { createClient } from "@/lib/supabase/client";
+import { isNativeBarcodeAvailable, scanBarcodeNative } from "@/lib/scan/barcode";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
@@ -119,7 +120,20 @@ export default function AssetInventoryPage() {
     setScanningId(assetId);
     setManualBarcode("");
 
-    // Wait for DOM to render the viewport div
+    // Native path: ML Kit full-screen overlay. No inline viewport needed.
+    if (isNativeBarcodeAvailable()) {
+      const raw = await scanBarcodeNative();
+      if (raw) {
+        await linkBarcode(assetId, raw);
+      } else {
+        // User cancelled or nothing read — drop back to manual entry row.
+        setScanningId(null);
+      }
+      return;
+    }
+
+    // Web path: html5-qrcode inline video into the rendered viewport div.
+    // Wait for DOM to render the viewport div.
     await new Promise((r) => setTimeout(r, 150));
 
     try {

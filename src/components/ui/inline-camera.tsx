@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, X, RotateCcw, Check, AlertCircle } from "lucide-react";
+import { X, RotateCcw, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Capacitor } from "@capacitor/core";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 
 interface InlineCameraProps {
   open: boolean;
@@ -11,11 +13,71 @@ interface InlineCameraProps {
 }
 
 /**
- * Inline camera component using getUserMedia.
- * Opens the device camera inside the browser — no native intent, no tab kill.
- * Returns a compressed JPEG File via onCapture callback.
+ * Photo capture component.
+ *
+ * On native (Capacitor Android/iOS): delegates to `@capacitor/camera`, which
+ * launches the OS camera full-screen. No in-webview video stream — ML Kit /
+ * hardware camera2 pipeline, much better low-light + autofocus than
+ * `getUserMedia`.
+ *
+ * On web: falls back to `getUserMedia` + <video> preview + canvas capture,
+ * so `npm run dev` in a browser still works.
+ *
+ * Interface is identical in both modes: `open` opens, `onCapture(file)`
+ * returns a JPEG File, `onClose()` dismisses.
  */
 export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
+  const isNative = Capacitor.isNativePlatform();
+
+  // ── Native path ────────────────────────────────────────────────────────────
+  // When `open` flips to true on native, launch the Capacitor camera and pipe
+  // the result back through onCapture. There's no in-component UI to render.
+  const nativeInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (!isNative || !open || nativeInFlightRef.current) return;
+    nativeInFlightRef.current = true;
+
+    (async () => {
+      try {
+        const photo = await Camera.getPhoto({
+          quality: 85,
+          allowEditing: false,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Camera,
+          saveToGallery: false,
+          correctOrientation: true,
+          width: 1920,
+        });
+
+        const webPath = photo.webPath;
+        if (!webPath) {
+          onClose();
+          return;
+        }
+
+        // Convert the file:// (or blob:) URI into a File for the caller.
+        const res = await fetch(webPath);
+        const blob = await res.blob();
+        const file = new File([blob], `photo-${Date.now()}.jpg`, {
+          type: blob.type || "image/jpeg",
+        });
+        onCapture(file);
+      } catch (err) {
+        // User cancelled, or permission denied — close gracefully.
+        // (Capacitor throws "User cancelled photos app" or similar.)
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/cancel/i.test(msg)) {
+          console.error("Native camera error:", err);
+        }
+        onClose();
+      } finally {
+        nativeInFlightRef.current = false;
+      }
+    })();
+  }, [isNative, open, onCapture, onClose]);
+
+  // ── Web path (existing getUserMedia flow) ──────────────────────────────────
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -23,7 +85,6 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
   const [error, setError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
 
-  // Start camera stream
   const startCamera = useCallback(async () => {
     setError(null);
     setCameraReady(false);
@@ -58,7 +119,6 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
     }
   }, []);
 
-  // Stop camera stream
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -67,8 +127,8 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
     setCameraReady(false);
   }, []);
 
-  // Start/stop camera when open changes
   useEffect(() => {
+    if (isNative) return; // native path handles itself
     if (open) {
       startCamera(); // eslint-disable-line react-hooks/set-state-in-effect -- camera lifecycle
     } else {
@@ -78,16 +138,13 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
       setError(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on close
     }
     return () => stopCamera();
-  }, [open, startCamera, stopCamera]);
+  }, [isNative, open, startCamera, stopCamera]);
 
-  // Capture photo from video stream
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
 
     const canvas = document.createElement("canvas");
-
-    // Limit to 1920px wide for reasonable file size
     let w = video.videoWidth;
     let h = video.videoHeight;
     if (w > 1920) {
@@ -107,7 +164,6 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
         if (blob) {
           setCapturedBlob(blob);
           setPreview(URL.createObjectURL(blob));
-          // Pause video to show captured frame
           video.pause();
         }
       },
@@ -116,7 +172,6 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
     );
   }, []);
 
-  // Retake — resume video
   const handleRetake = useCallback(() => {
     if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
@@ -126,20 +181,17 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
     }
   }, [preview]);
 
-  // Confirm — pass file to parent
   const handleConfirm = useCallback(() => {
     if (!capturedBlob) return;
     const file = new File([capturedBlob], `photo-${Date.now()}.jpg`, {
       type: "image/jpeg",
     });
     onCapture(file);
-    // Cleanup
     if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
     setCapturedBlob(null);
   }, [capturedBlob, preview, onCapture]);
 
-  // Close — stop everything
   const handleClose = useCallback(() => {
     if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
@@ -147,7 +199,8 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
     onClose();
   }, [preview, onClose]);
 
-  if (!open) return null;
+  // On native, the component renders nothing — the OS camera takes over.
+  if (!open || isNative) return null;
 
   return (
     <div
@@ -240,3 +293,4 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
     </div>
   );
 }
+

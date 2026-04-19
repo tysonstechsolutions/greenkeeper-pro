@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { InlineCamera } from "@/components/ui/inline-camera";
+import { isNativeBarcodeAvailable, scanBarcodeNative } from "@/lib/scan/barcode";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useFy26Assets } from "@/lib/hooks/useFy26Assets";
 import {
@@ -186,6 +187,14 @@ export default function RouteContent() {
   };
 
   const startBarcodeScanner = async () => {
+    // Native path: use ML Kit. One-shot full-screen scanner.
+    if (isNativeBarcodeAvailable()) {
+      const raw = await scanBarcodeNative();
+      if (raw) handleLinkBarcode(raw);
+      return;
+    }
+
+    // Web path: html5-qrcode inline video.
     try {
       const mod = await import("html5-qrcode");
       const scanner = new mod.Html5Qrcode("barcode-link-viewport");

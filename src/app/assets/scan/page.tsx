@@ -26,6 +26,7 @@ import {
   type Fy26AssetStatus,
 } from "@/types/fy26-assets";
 import { parseAssetLabel } from "@/lib/utils/parse-asset-label";
+import { isNativeBarcodeAvailable, scanBarcodeNative } from "@/lib/scan/barcode";
 
 // Dynamically import html5-qrcode only on client to avoid SSR issues.
 let Html5Qrcode: typeof import("html5-qrcode").Html5Qrcode | null = null;
@@ -558,6 +559,40 @@ export default function AssetScanPage() {
     recentDecodesRef.current = [];
     recentMisreadsRef.current = 0;
 
+    // ── Native path (ML Kit) ──────────────────────────────────────────────
+    // One-shot full-screen scanner. ML Kit handles autofocus, low-light,
+    // and 2D/1D symbology detection natively — none of the MWRMA hack
+    // layer (reverse-substring, 2-frame confirmation, OCR fallback)
+    // applies here because ML Kit's decoder is accurate enough that we
+    // can trust a first read. We still normalize the value and route it
+    // through lookupAsset, which already handles the 12-digit no-dash
+    // form and non-exact substring matches.
+    if (isNativeBarcodeAvailable()) {
+      try {
+        setScanning(true);
+        const raw = await scanBarcodeNative();
+        setScanning(false);
+        startingRef.current = false;
+        if (raw) {
+          const clean = raw.replace(/[\u0000-\u001F\u007F\s]+/g, "").trim();
+          const canonical = /^\d{12}$/.test(clean)
+            ? `${clean.slice(0, 8)}-${clean.slice(8)}`
+            : clean;
+          lookupAssetRef.current?.(canonical);
+        }
+        return;
+      } catch (err) {
+        setScanning(false);
+        startingRef.current = false;
+        console.error("Native scan error:", err);
+        setCameraError(
+          "Could not open the native barcode scanner. Use Manual entry or tap Try again."
+        );
+        return;
+      }
+    }
+
+    // ── Web path (html5-qrcode) ───────────────────────────────────────────
     try {
       // Dynamic import so SSR doesn't fail
       if (!Html5Qrcode) {
