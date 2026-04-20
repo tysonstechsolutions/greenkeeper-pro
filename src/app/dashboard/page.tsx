@@ -2560,11 +2560,16 @@ function GMDashboardView() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export default function DashboardPage() {
-  const { isPro, isSuper, isAsstSuper, isDirector, isGM, loading } = useAuth();
+  const { user, isPro, isSuper, isAsstSuper, isDirector, isGM, loading } = useAuth();
 
   const isLeadership = isSuper || isAsstSuper || isDirector;
 
-  if (loading) {
+  // Show the loading view BOTH while auth is resolving AND when we've
+  // resolved but there's no user yet (AuthGate is about to redirect to
+  // /pin-login). Without the `!user` check, child data-fetching components
+  // mount for a frame with no JWT, fire requests that 401, and pollute
+  // the debug log with fake errors before the redirect happens.
+  if (loading || !user) {
     return (
       <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
         <div className="text-center py-16">

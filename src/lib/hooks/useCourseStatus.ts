@@ -53,9 +53,9 @@ export function useCourseStatus() {
         .from("app_settings")
         .select("value")
         .eq("key", "course_status")
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
+      if (error) {
         console.error("Error fetching course status:", error);
       }
 

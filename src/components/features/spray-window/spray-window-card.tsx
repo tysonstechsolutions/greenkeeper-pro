@@ -6,6 +6,7 @@ import { Droplets, ChevronRight, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RISK_LEVEL_CONFIG } from "@/lib/utils/disease-models";
 import { callApi } from "@/lib/api/client";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 interface SprayWindowData {
   disease_pressure: number;
@@ -44,21 +45,28 @@ function formatWindowDay(iso: string): string {
  */
 export function SprayWindowCard() {
   const [data, setData] = useState<SprayWindowData | null>(null);
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
+    // Don't call the edge function until auth is resolved AND we have a
+    // user — otherwise the WebView fires the request with no JWT and the
+    // function 401s, showing up as a red error in the debug log.
+    if (authLoading || !user) return;
+    let cancelled = false;
     async function load() {
       try {
         const json = await callApi<SprayWindowData>("spray-window");
-        // Only show card when disease pressure is moderate+
-        if (json.disease_pressure >= 0.2) {
-          setData(json);
-        }
+        if (cancelled) return;
+        if (json.disease_pressure >= 0.2) setData(json);
       } catch {
-        // Silently fail — this is a non-critical card
+        // Non-critical card — keep the dashboard quiet on failure.
       }
     }
     load();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading]);
 
   if (!data || data.windows.length === 0) return null;
 

@@ -73,24 +73,28 @@ public class MainActivity extends BridgeActivity {
                 WebView view,
                 WebResourceRequest request
             ) {
-                // First try the normal path — hits index.html, JS bundles,
-                // CSS, images. The vast majority of requests resolve here.
-                WebResourceResponse resp = super.shouldInterceptRequest(view, request);
-                if (resp != null) return resp;
-
-                // Fallback: rewrite /tasks/abc/... to /tasks/_/... and retry.
+                // Rewrite dynamic routes BEFORE delegating to the normal
+                // asset lookup. Capacitor's LocalServer falls back to
+                // serving /index.html for any unmatched path, which in our
+                // app is the dashboard. If we let that fallback run first
+                // on /tasks/<real-id>/, the user ends up on the dashboard
+                // — which is the exact symptom the user reported ("click
+                // overdue task, get sent back to dashboard"). So we intercept
+                // BEFORE the SPA fallback, rewrite to /tasks/_/, and only
+                // THEN hand off to super.
                 Uri uri = request.getUrl();
                 String path = uri != null ? uri.getPath() : null;
-                if (path == null) return null;
-
-                String rewritten = rewriteDynamicPath(path);
-                if (rewritten == null) return null;
-
-                Uri newUri = uri.buildUpon().path(rewritten).build();
-                return super.shouldInterceptRequest(
-                    view,
-                    new RewrittenRequest(newUri, request)
-                );
+                if (path != null) {
+                    String rewritten = rewriteDynamicPath(path);
+                    if (rewritten != null) {
+                        Uri newUri = uri.buildUpon().path(rewritten).build();
+                        return super.shouldInterceptRequest(
+                            view,
+                            new RewrittenRequest(newUri, request)
+                        );
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
             }
         });
     }
