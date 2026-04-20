@@ -6,8 +6,24 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 /**
+ * Pages where the primary "create" FAB sits at `bottom-24 right-4` — the
+ * same mobile slot the chat bubble uses. Rather than layer two floating
+ * buttons on top of each other, we suppress the chat bubble on these
+ * routes. Users can still reach the AI assistant via the More menu.
+ */
+const ROUTES_WITH_FAB = new Set([
+  "/tasks",
+  "/schedule",
+  "/equipment",
+  "/chemicals",
+  "/photos",
+  "/assets",
+]);
+
+/**
  * Floating chat bubble that links to the AI assistant page.
- * Hidden on the assistant page itself, public routes, and for non-staff roles.
+ * Hidden on the assistant page itself, public routes, routes with their
+ * own FAB, and for non-staff roles.
  */
 export function ChatBubble() {
   const pathname = usePathname();
@@ -15,6 +31,14 @@ export function ChatBubble() {
 
   // Hide on assistant page (already there)
   if (pathname === "/assistant") return null;
+
+  // Normalize trailing slash for route lookup (Next static export emits
+  // pathnames like "/tasks/" with trailingSlash: true).
+  const canonical =
+    pathname.length > 1 && pathname.endsWith("/")
+      ? pathname.slice(0, -1)
+      : pathname;
+  if (ROUTES_WITH_FAB.has(canonical)) return null;
 
   // Only show for roles that can access the assistant
   const allowed =

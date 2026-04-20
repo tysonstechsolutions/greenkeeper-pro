@@ -7,6 +7,7 @@ import { OfflineBanner } from "@/components/features/offline/offline-banner";
 import { OfflineIndicator } from "@/components/ui/offline-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { AuthGate } from "@/components/auth/auth-gate";
+import { CapacitorInit } from "@/components/capacitor-init";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -77,12 +78,25 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
         style={{
-          paddingTop: "env(safe-area-inset-top)",
+          /*
+            Top padding defends against Android edge-to-edge mode (API 35+)
+            where the WebView would otherwise render under the status bar
+            and the system clock / battery icon would cover our header.
+            CapacitorInit also calls StatusBar.setOverlaysWebView({overlay:
+            false}) so the WebView is actually placed below the bar; this
+            env() padding is a fallback for the case where the plugin call
+            hasn't run yet (first paint) or failed. Use max() with a 28px
+            floor because env(safe-area-inset-top) is 0 on Android devices
+            that don't report insets, and 28px covers the typical ~24dp
+            status bar height.
+          */
+          paddingTop: "max(env(safe-area-inset-top, 0px), 28px)",
           /* Bottom padding handled by bottom-nav safe-area-bottom class */
           paddingLeft: "env(safe-area-inset-left)",
           paddingRight: "env(safe-area-inset-right)",
         }}
       >
+        <CapacitorInit />
         <AuthProvider>
           <AuthGate>
             <OfflineIndicator />

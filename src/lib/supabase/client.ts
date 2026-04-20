@@ -29,8 +29,11 @@ let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
 //      offer the user a one-tap Reset — calling resetClient() creates a
 //      fresh client instance without reloading the WebView.
 
-const FETCH_TIMEOUT_MS = 15_000;
-const STUCK_THRESHOLD = 3;
+const FETCH_TIMEOUT_MS = 12_000;
+// Fire the reset-needed event after even a single timeout. Waiting for 3
+// consecutive timeouts means 36+ seconds of a hung app before the user sees
+// any affordance — long past when they'll force-quit out of frustration.
+const STUCK_THRESHOLD = 1;
 
 // Pending request counter, exposed so diagnostic UI can show "N requests
 // in flight" without reaching into Supabase internals.

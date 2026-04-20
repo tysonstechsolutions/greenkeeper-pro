@@ -93,13 +93,33 @@ export function DebugOverlay() {
     return () => window.removeEventListener("debug-overlay:update", onUpdate);
   }, []);
 
-  // Poll pending-request count from Supabase telemetry. Light: 1 Hz.
+  // Poll pending-request count from Supabase telemetry. Also runs the
+  // "silent hang" watchdog: if the request counter stays > 0 for 10s, the
+  // fetch probably hasn't errored out but something upstream (auth lock,
+  // realtime channel backpressure, webview bridge) is wedged. Fire the
+  // same reset-needed banner the explicit timeout path uses — user
+  // doesn't care why it's stuck, only that they can get out of it.
   useEffect(() => {
+    let stuckSince: number | null = null;
     const id = setInterval(() => {
-      setPending(getSupabaseTelemetry().pending);
+      const p = getSupabaseTelemetry().pending;
+      setPending(p);
+      if (p > 0) {
+        if (stuckSince === null) stuckSince = Date.now();
+        else if (Date.now() - stuckSince > 10_000 && !showStuck) {
+          pushLog({
+            time: Date.now(),
+            kind: "timeout",
+            message: `App stuck: ${p} Supabase request(s) pending for 10+ seconds without responding`,
+          });
+          setShowStuck(true);
+        }
+      } else {
+        stuckSince = null;
+      }
     }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [showStuck]);
 
   const handleReset = useCallback(() => {
     resetClient();
@@ -144,18 +164,37 @@ export function DebugOverlay() {
         )}
       </button>
 
-      {/* Stuck banner — auto-surfaces when client wedges */}
+      {/* Stuck banner — auto-surfaces when client wedges. Primary action
+          is a direct Reset (one tap) so the user doesn't need to open the
+          debug panel first. Dismissable via the secondary X. */}
       {showStuck && !open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="fixed top-16 left-3 right-3 z-40 flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg shadow-lg active:scale-[0.98] transition"
-        >
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span className="text-sm font-medium flex-1 text-left truncate">
-            App looks stuck — tap to see details
-          </span>
-        </button>
+        <div className="fixed top-16 left-3 right-3 z-40 flex items-stretch gap-2 bg-red-600 text-white rounded-lg shadow-lg overflow-hidden">
+          <div className="flex items-center gap-2 pl-3 py-2 flex-1 min-w-0">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold leading-tight">App stuck</p>
+              <p className="text-[11px] opacity-90 truncate">
+                Request pending too long — reset to recover
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="px-3 flex items-center justify-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 transition text-sm font-semibold"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowStuck(false)}
+            aria-label="Dismiss stuck warning"
+            className="px-2 flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
       {/* Panel */}
