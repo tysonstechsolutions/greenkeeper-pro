@@ -8,6 +8,7 @@ import { OfflineIndicator } from "@/components/ui/offline-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { CapacitorInit } from "@/components/capacitor-init";
+import { DynamicLinkInterceptor } from "@/components/dynamic-link-interceptor";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -97,6 +98,7 @@ export default function RootLayout({
         }}
       >
         <CapacitorInit />
+        <DynamicLinkInterceptor />
         <AuthProvider>
           <AuthGate>
             <OfflineIndicator />
