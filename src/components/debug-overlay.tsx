@@ -1,81 +1,116 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Bug, X, RefreshCw, AlertTriangle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Bug,
+  X,
+  RefreshCw,
+  AlertTriangle,
+  Copy,
+  Trash2,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSupabaseTelemetry, resetClient } from "@/lib/supabase/client";
-
-interface LogEntry {
-  time: number;
-  kind: "error" | "rejection" | "reset" | "timeout";
-  message: string;
-  source?: string;
-}
-
-// Capped ring buffer of recent errors/diagnostics. Module-level so the
-// overlay can rehydrate from anywhere in the app.
-const MAX_LOGS = 50;
-const logBuffer: LogEntry[] = [];
-
-function pushLog(entry: LogEntry) {
-  logBuffer.push(entry);
-  if (logBuffer.length > MAX_LOGS) logBuffer.shift();
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("debug-overlay:update"));
-  }
-}
+import {
+  clearBreadcrumbs,
+  formatBreadcrumbsAsText,
+  getBreadcrumbs,
+  recordBreadcrumb,
+  subscribeBreadcrumbs,
+  type Breadcrumb,
+  type BreadcrumbKind,
+} from "@/lib/debug/breadcrumbs";
 
 /**
- * Floating debug button + overlay for diagnosing "nothing loads" bugs
- * inside the Capacitor APK, where there is no browser devtools to attach.
+ * Floating debug button + panel. Designed around the fact that most
+ * real-world bugs in this app are SILENT — a click that doesn't navigate,
+ * a fetch that never resolves, a layout problem. The previous iteration
+ * only caught thrown exceptions, so the user never saw it light up even
+ * when things were broken. This version:
  *
- * - Bottom-left bug icon, badge shows error count.
- * - Tap → panel with recent errors, pending Supabase requests, and a
- *   Reset button that rebuilds the Supabase client without killing the
- *   app. Also reloads the current route.
- * - Listens for global window errors, unhandledrejection, and the
- *   `supabase:reset-needed` custom event our client dispatches when it
- *   detects too many consecutive fetch timeouts.
+ *  - Reads from a breadcrumb buffer that records nav changes, link
+ *    clicks, fetch start/done, console.error/warn/info, and lifecycle.
+ *  - Shows a status dot on the icon: green = clean, amber = something
+ *    pending/warning, red = errors captured. So even when the app is
+ *    healthy the user knows the recorder is working.
+ *  - Has a one-tap "Copy log" button so the user can send me the
+ *    timeline without having to transcribe.
+ *  - Has the existing big red "Reset app state" button for when Supabase
+ *    is wedged.
  */
+
+// Which kinds we consider "bad" vs "noisy but fine". Drives the status dot.
+const ERROR_KINDS: ReadonlySet<BreadcrumbKind> = new Set([
+  "error",
+  "timeout",
+  "reset",
+]);
+const WARN_KINDS: ReadonlySet<BreadcrumbKind> = new Set(["warn"]);
+
+const KIND_CLASS: Record<BreadcrumbKind, string> = {
+  nav: "border-primary/40 bg-primary/5",
+  click: "border-blue-500/30 bg-blue-500/5",
+  fetch: "border-slate-500/30 bg-slate-500/5",
+  "fetch-done": "border-slate-500/20 bg-slate-500/5 opacity-70",
+  error: "border-red-500/40 bg-red-500/10",
+  warn: "border-amber-500/40 bg-amber-500/10",
+  info: "border-sky-500/30 bg-sky-500/5",
+  lifecycle: "border-violet-500/30 bg-violet-500/5",
+  reset: "border-blue-600/40 bg-blue-600/10",
+  timeout: "border-orange-500/40 bg-orange-500/10",
+};
+
 export function DebugOverlay() {
   const [open, setOpen] = useState(false);
-  const [logs, setLogs] = useState<LogEntry[]>(() => [...logBuffer]);
+  const [logs, setLogs] = useState<readonly Breadcrumb[]>(() =>
+    getBreadcrumbs(),
+  );
   const [pending, setPending] = useState(0);
   const [showStuck, setShowStuck] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
-  // Capture global errors and promise rejections.
+  // Subscribe to breadcrumb updates.
+  useEffect(() => {
+    const unsubscribe = subscribeBreadcrumbs(() => {
+      setLogs([...getBreadcrumbs()]);
+    });
+    setLogs([...getBreadcrumbs()]);
+    return unsubscribe;
+  }, []);
+
+  // Capture window errors + promise rejections into the breadcrumb buffer.
   useEffect(() => {
     const onError = (e: ErrorEvent) => {
-      pushLog({
-        time: Date.now(),
-        kind: "error",
-        message: e.message || "Unknown error",
-        source: e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : undefined,
-      });
+      recordBreadcrumb(
+        "error",
+        e.message || "Unknown error",
+        e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : undefined,
+      );
     };
     const onRejection = (e: PromiseRejectionEvent) => {
-      const reason = e.reason;
+      const r = e.reason;
       const msg =
-        reason instanceof Error
-          ? `${reason.name}: ${reason.message}`
-          : typeof reason === "string"
-            ? reason
-            : JSON.stringify(reason).slice(0, 200);
-      pushLog({
-        time: Date.now(),
-        kind: "rejection",
-        message: msg,
-      });
+        r instanceof Error
+          ? `${r.name}: ${r.message}`
+          : typeof r === "string"
+            ? r
+            : (() => {
+                try {
+                  return JSON.stringify(r);
+                } catch {
+                  return String(r);
+                }
+              })();
+      recordBreadcrumb("error", `UnhandledRejection: ${msg}`);
     };
     const onStuck = () => {
-      pushLog({
-        time: Date.now(),
-        kind: "timeout",
-        message: "Supabase client looks stuck — 3+ consecutive request timeouts",
-      });
+      recordBreadcrumb(
+        "timeout",
+        "Supabase client signalled a stuck state (1+ request timed out)",
+      );
       setShowStuck(true);
     };
-
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onRejection);
     window.addEventListener("supabase:reset-needed", onStuck);
@@ -86,19 +121,9 @@ export function DebugOverlay() {
     };
   }, []);
 
-  // Re-render when buffer changes.
-  useEffect(() => {
-    const onUpdate = () => setLogs([...logBuffer]);
-    window.addEventListener("debug-overlay:update", onUpdate);
-    return () => window.removeEventListener("debug-overlay:update", onUpdate);
-  }, []);
-
-  // Poll pending-request count from Supabase telemetry. Also runs the
-  // "silent hang" watchdog: if the request counter stays > 0 for 10s, the
-  // fetch probably hasn't errored out but something upstream (auth lock,
-  // realtime channel backpressure, webview bridge) is wedged. Fire the
-  // same reset-needed banner the explicit timeout path uses — user
-  // doesn't care why it's stuck, only that they can get out of it.
+  // Poll pending-request count + run the silent-hang watchdog: if any
+  // Supabase request stays pending for > 10s, flag stuck even if nothing
+  // has formally timed out yet.
   useEffect(() => {
     let stuckSince: number | null = null;
     const id = setInterval(() => {
@@ -107,11 +132,10 @@ export function DebugOverlay() {
       if (p > 0) {
         if (stuckSince === null) stuckSince = Date.now();
         else if (Date.now() - stuckSince > 10_000 && !showStuck) {
-          pushLog({
-            time: Date.now(),
-            kind: "timeout",
-            message: `App stuck: ${p} Supabase request(s) pending for 10+ seconds without responding`,
-          });
+          recordBreadcrumb(
+            "timeout",
+            `App stuck: ${p} request(s) pending for 10+ seconds`,
+          );
           setShowStuck(true);
         }
       } else {
@@ -121,29 +145,52 @@ export function DebugOverlay() {
     return () => clearInterval(id);
   }, [showStuck]);
 
+  const stats = useMemo(() => {
+    let errors = 0;
+    let warns = 0;
+    for (const c of logs) {
+      if (ERROR_KINDS.has(c.kind)) errors++;
+      else if (WARN_KINDS.has(c.kind)) warns++;
+    }
+    return { errors, warns, total: logs.length };
+  }, [logs]);
+
+  const status: "healthy" | "warning" | "error" =
+    stats.errors > 0 || showStuck ? "error" : stats.warns > 0 ? "warning" : "healthy";
+
   const handleReset = useCallback(() => {
     resetClient();
-    pushLog({
-      time: Date.now(),
-      kind: "reset",
-      message: "Supabase client reset — reloading route",
-    });
+    recordBreadcrumb("reset", "Manual client reset → reloading");
     setShowStuck(false);
-    // Hard-reload the current path so every hook re-initializes with the
-    // fresh client. Uses window.location instead of router.refresh because
-    // refresh() relies on the same Supabase session that might be wedged.
-    setTimeout(() => {
-      window.location.reload();
-    }, 300);
+    setTimeout(() => window.location.reload(), 300);
   }, []);
 
-  const errorCount = logs.filter(
-    (l) => l.kind === "error" || l.kind === "rejection" || l.kind === "timeout",
-  ).length;
+  const handleCopy = useCallback(async () => {
+    const text = formatBreadcrumbsAsText({
+      status,
+      errors: String(stats.errors),
+      warns: String(stats.warns),
+      pending: String(pending),
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback("Copied!");
+    } catch {
+      // Fallback: show inline so the user can select-copy manually.
+      setCopyFeedback("Copy failed — long-press the log text");
+    }
+    setTimeout(() => setCopyFeedback(null), 2500);
+  }, [stats, pending, status]);
+
+  const handleClear = useCallback(() => {
+    clearBreadcrumbs();
+    recordBreadcrumb("lifecycle", "Log cleared");
+  }, []);
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating button — always visible with a live status dot so the
+          user knows the recorder is working even when nothing is wrong. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -151,22 +198,31 @@ export function DebugOverlay() {
         className={cn(
           "fixed bottom-24 left-3 md:bottom-6 md:left-6 z-40 w-11 h-11 rounded-full",
           "flex items-center justify-center shadow-lg active:scale-95 transition",
-          errorCount > 0 || showStuck
+          status === "error"
             ? "bg-red-600 text-white animate-pulse"
-            : "bg-black/60 text-white/80 backdrop-blur-sm",
+            : status === "warning"
+              ? "bg-amber-500 text-white"
+              : "bg-black/60 text-white/90 backdrop-blur-sm",
         )}
       >
         <Bug className="w-5 h-5" />
-        {errorCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-white text-red-600 text-[10px] font-bold rounded-full flex items-center justify-center">
-            {errorCount > 9 ? "9+" : errorCount}
+        <span
+          className={cn(
+            "absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full ring-2 ring-background",
+            status === "error" && "bg-red-500",
+            status === "warning" && "bg-amber-400",
+            status === "healthy" && "bg-emerald-500",
+          )}
+        />
+        {stats.errors > 0 && (
+          <span className="absolute -bottom-1 -right-1 min-w-[18px] h-[18px] px-1 bg-white text-red-600 text-[10px] font-bold rounded-full flex items-center justify-center">
+            {stats.errors > 9 ? "9+" : stats.errors}
           </span>
         )}
       </button>
 
-      {/* Stuck banner — auto-surfaces when client wedges. Primary action
-          is a direct Reset (one tap) so the user doesn't need to open the
-          debug panel first. Dismissable via the secondary X. */}
+      {/* Auto-surfaced banner when the client wedges. One-tap Reset +
+          dismissable X so the user doesn't have to open the panel. */}
       {showStuck && !open && (
         <div className="fixed top-16 left-3 right-3 z-40 flex items-stretch gap-2 bg-red-600 text-white rounded-lg shadow-lg overflow-hidden">
           <div className="flex items-center gap-2 pl-3 py-2 flex-1 min-w-0">
@@ -189,7 +245,7 @@ export function DebugOverlay() {
           <button
             type="button"
             onClick={() => setShowStuck(false)}
-            aria-label="Dismiss stuck warning"
+            aria-label="Dismiss"
             className="px-2 flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 transition"
           >
             <X className="w-4 h-4" />
@@ -208,79 +264,130 @@ export function DebugOverlay() {
           />
           <div className="relative w-full md:max-w-lg bg-card rounded-t-2xl md:rounded-2xl border border-border shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30 shrink-0">
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-muted/30 shrink-0">
               <div className="min-w-0 flex-1">
                 <h2 className="font-semibold text-base flex items-center gap-2">
                   <Bug className="w-5 h-5" />
                   Debug
                 </h2>
                 <p className="text-xs text-muted-foreground truncate">
-                  {errorCount} errors · {pending} request{pending === 1 ? "" : "s"} in flight
+                  {stats.total} event{stats.total === 1 ? "" : "s"} · {stats.errors} error{stats.errors === 1 ? "" : "s"} · {pending} pending
                 </p>
               </div>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="w-9 h-9 -mr-1 flex items-center justify-center rounded-full active:bg-muted/70 transition-colors shrink-0"
+                className="w-9 h-9 flex items-center justify-center rounded-full active:bg-muted/70 transition-colors shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Reset button — most important action */}
-            <div className="px-4 py-3 border-b border-border bg-red-500/5 shrink-0">
-              <button
-                onClick={handleReset}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg font-semibold active:scale-[0.98] transition"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Reset app state
-              </button>
-              <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
-                Rebuilds the Supabase connection and reloads the page.
-                Use this when nothing loads — don&apos;t kill the app.
-              </p>
+            {/* What's happening right now — the most useful thing when
+                something "doesn't load" but nothing obviously errored. */}
+            <div className="px-4 py-3 border-b border-border bg-muted/10 shrink-0 space-y-1.5 text-xs">
+              <StatRow label="On page" value={getCurrentPath()} />
+              <StatRow
+                label="Status"
+                value={
+                  status === "healthy"
+                    ? "🟢 healthy"
+                    : status === "warning"
+                      ? "🟠 warnings"
+                      : "🔴 errors captured"
+                }
+              />
+              <StatRow label="Requests in flight" value={String(pending)} />
             </div>
 
-            {/* Log list */}
-            <div className="overflow-y-auto flex-1 p-3 space-y-2">
+            {/* Primary actions */}
+            <div className="flex gap-2 px-4 py-3 border-b border-border bg-red-500/5 shrink-0">
+              <button
+                onClick={handleReset}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-red-600 text-white rounded-lg font-semibold text-sm active:scale-[0.98] transition"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Reset app
+              </button>
+              <button
+                onClick={handleCopy}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-primary text-primary-foreground rounded-lg font-semibold text-sm active:scale-[0.98] transition"
+              >
+                <Copy className="w-4 h-4" />
+                {copyFeedback ?? "Copy log"}
+              </button>
+            </div>
+
+            {/* Breadcrumb timeline */}
+            <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
               {logs.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  No errors captured this session.
+                  No activity captured yet. Navigate around the app and
+                  come back.
                 </p>
               ) : (
-                [...logs].reverse().map((log, i) => (
+                [...logs].reverse().map((c) => (
                   <div
-                    key={`${log.time}-${i}`}
+                    key={c.id}
                     className={cn(
-                      "text-xs p-2.5 rounded-lg border",
-                      log.kind === "error" && "border-red-500/30 bg-red-500/5",
-                      log.kind === "rejection" && "border-orange-500/30 bg-orange-500/5",
-                      log.kind === "timeout" && "border-amber-500/30 bg-amber-500/5",
-                      log.kind === "reset" && "border-blue-500/30 bg-blue-500/5",
+                      "text-xs px-2.5 py-1.5 rounded-lg border",
+                      KIND_CLASS[c.kind],
                     )}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="uppercase font-semibold text-[10px] tracking-wider">
-                        {log.kind}
+                    <div className="flex items-center gap-2">
+                      <span className="uppercase font-semibold text-[10px] tracking-wider shrink-0">
+                        {c.kind}
                       </span>
-                      <span className="text-muted-foreground text-[10px]">
-                        {new Date(log.time).toLocaleTimeString()}
+                      <span className="text-muted-foreground text-[10px] shrink-0">
+                        {new Date(c.time).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </span>
+                      <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                      <span className="font-mono break-words min-w-0">
+                        {c.message}
                       </span>
                     </div>
-                    <p className="font-mono break-all">{log.message}</p>
-                    {log.source && (
-                      <p className="font-mono text-[10px] text-muted-foreground mt-1 break-all">
-                        {log.source}
+                    {c.detail && (
+                      <p className="font-mono text-[10px] text-muted-foreground mt-1 pl-2 break-words">
+                        {c.detail}
                       </p>
                     )}
                   </div>
                 ))
               )}
             </div>
+
+            {/* Clear button — tucked at the bottom so it's not easy to
+                tap by accident. */}
+            <div className="px-3 py-2 border-t border-border bg-muted/20 shrink-0 flex justify-end">
+              <button
+                onClick={handleClear}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground rounded active:bg-muted/70 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear log
+              </button>
+            </div>
           </div>
         </div>
       )}
     </>
   );
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="font-mono text-foreground truncate min-w-0">{value}</span>
+    </div>
+  );
+}
+
+function getCurrentPath(): string {
+  if (typeof window === "undefined") return "(ssr)";
+  return window.location.pathname + window.location.search;
 }

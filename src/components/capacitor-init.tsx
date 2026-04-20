@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect } from "react";
+import { hookConsoleForBreadcrumbs, recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 /**
  * Runs once on app boot to apply Capacitor-specific native tweaks that
- * have to happen at runtime (they can't be baked into capacitor.config.ts).
- *
- * Currently: pushes the Android status bar OUT of the WebView so the
- * system clock / battery icon stop covering our header. We target Android
- * SDK 36 which ships edge-to-edge enforcement by default — meaning the
- * WebView extends under the status bar unless we explicitly opt out here.
- * Without this, `env(safe-area-inset-top)` can't save us because Android's
- * status bar is drawn on top of whatever the WebView renders.
+ * have to happen at runtime (they can't be baked into capacitor.config.ts)
+ * AND to install the app-wide breadcrumb recorder used by the debug panel.
  *
  * Renders nothing. Safe to include on every page.
  */
 export function CapacitorInit() {
   useEffect(() => {
+    // Breadcrumb recorder hooks console.error/warn/info so the debug panel
+    // surfaces code that logs problems without throwing (most of our real
+    // bugs). Idempotent — calling twice is a no-op.
+    hookConsoleForBreadcrumbs();
+    recordBreadcrumb("lifecycle", "App boot");
+
     (async () => {
       try {
         const { Capacitor } = await import("@capacitor/core");

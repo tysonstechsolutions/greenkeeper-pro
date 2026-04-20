@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 /**
  * Bridges the Next.js App Router's `dynamicParams: false` + static export
@@ -90,6 +91,18 @@ export function DynamicLinkInterceptor() {
       const path = url.pathname.endsWith("/")
         ? url.pathname
         : url.pathname + "/";
+
+      // Record the click regardless — makes "I tapped it and nothing
+      // happened" debuggable because the breadcrumb log shows the click
+      // AND the (missing) navigation that should have followed.
+      recordBreadcrumb(
+        "click",
+        `Link click → ${url.pathname}`,
+        isUnknownDynamicPath(path)
+          ? "dynamic route — forcing hard nav"
+          : undefined,
+      );
+
       if (!isUnknownDynamicPath(path)) return;
 
       // Force a real navigation so the WebView asset loader runs our

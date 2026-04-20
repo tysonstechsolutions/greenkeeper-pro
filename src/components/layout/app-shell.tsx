@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Sidebar } from "./sidebar";
@@ -11,6 +12,7 @@ import { ChatBubble } from "@/components/features/ai/chat-bubble";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { DebugOverlay } from "@/components/debug-overlay";
 import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 // Routes that should NOT show the app shell (sidebar, header, bottom nav)
 const PUBLIC_ROUTES = ["/login", "/pin-login", "/join", "/install", "/offline"];
@@ -38,6 +40,20 @@ export function AppShell({ children }: AppShellProps) {
 
   // Auto-scroll focused inputs above the virtual keyboard on mobile
   useKeyboardScroll();
+
+  // Navigation breadcrumb — every pathname change becomes a log entry the
+  // debug panel can surface. Catches silent nav failures (click registered,
+  // pathname never changed) by simply NOT showing up after a click event.
+  const prevPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevPathRef.current !== pathname) {
+      recordBreadcrumb(
+        "nav",
+        `${prevPathRef.current ?? "(initial)"} → ${pathname}`,
+      );
+      prevPathRef.current = pathname;
+    }
+  }, [pathname]);
 
   // Public pages get a clean layout with no chrome. We still mount the
   // DebugOverlay here so users can diagnose login-page hangs and trigger

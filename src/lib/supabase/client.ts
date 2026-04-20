@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 // NOTE: We intentionally don't pass a Database generic to createBrowserClient.
 // Our hand-written `Database` type in `./database` doesn't match Supabase's
@@ -77,10 +78,17 @@ async function timeoutFetch(
     controller.abort(new DOMException("Request timed out", "TimeoutError"));
   }, FETCH_TIMEOUT_MS);
 
+  const shortUrl = shortenUrl(url);
+  const started = Date.now();
   requestTelemetry.pending++;
+  recordBreadcrumb("fetch", `→ ${shortUrl}`);
   try {
     const resp = await fetch(input, { ...init, signal: controller.signal });
     requestTelemetry.consecutiveTimeouts = 0;
+    recordBreadcrumb(
+      "fetch-done",
+      `${resp.status} ${shortUrl} (${Date.now() - started}ms)`,
+    );
     return resp;
   } catch (err) {
     const isTimeout =
@@ -93,6 +101,10 @@ async function timeoutFetch(
         at: Date.now(),
         url,
       };
+      recordBreadcrumb(
+        "timeout",
+        `Timed out after ${FETCH_TIMEOUT_MS}ms: ${shortUrl}`,
+      );
       maybeSignalReset();
     } else {
       requestTelemetry.lastError = {
@@ -100,11 +112,26 @@ async function timeoutFetch(
         at: Date.now(),
         url,
       };
+      recordBreadcrumb(
+        "error",
+        `Fetch failed: ${shortUrl}`,
+        err instanceof Error ? err.message : String(err),
+      );
     }
     throw err;
   } finally {
     clearTimeout(timer);
     requestTelemetry.pending = Math.max(0, requestTelemetry.pending - 1);
+  }
+}
+
+// Trim the Supabase domain prefix off URLs for more readable breadcrumbs.
+function shortenUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname + (u.search ? "?…" : "");
+  } catch {
+    return url;
   }
 }
 
