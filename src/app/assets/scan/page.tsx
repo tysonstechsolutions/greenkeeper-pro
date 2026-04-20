@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ScanLine,
   ArrowLeft,
+  X,
   CheckCircle,
   AlertTriangle,
   Loader2,
@@ -1029,53 +1030,77 @@ export default function AssetScanPage() {
 
   return (
     <div className="p-4 md:p-6 pb-24 max-w-lg mx-auto">
-      {nativeScanning && (
-        <div className="scanner-overlay fixed inset-0 z-[100] pointer-events-none">
-          {/* Dim edges so the viewfinder reticle is clearly the focus */}
-          <div className="absolute inset-0 bg-black/30" aria-hidden />
-
-          {/* Close button — top-right, safe-area-aware */}
-          <div
-            className="absolute top-0 right-0 p-4 pointer-events-auto"
-            style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
-          >
+      {nativeScanning && (() => {
+        // Single cancel handler — used by the X button, the Cancel pill,
+        // and tap-outside-reticle. Stop the camera session first so the
+        // camera light turns off, then navigate back to the asset list.
+        const cancelScan = () => {
+          stopScanner();
+          router.push("/assets");
+        };
+        return (
+          <div className="scanner-overlay fixed inset-0 z-[100]">
+            {/* Dim background. Tapping it also cancels — matches Spark / iOS
+                scanner UX where anywhere outside the reticle dismisses. */}
             <button
               type="button"
-              onClick={() => {
-                stopScanner();
-                router.push("/assets");
-              }}
-              aria-label="Close scanner"
-              className="w-11 h-11 rounded-full bg-black/60 text-white flex items-center justify-center active:scale-95 transition backdrop-blur-sm"
+              onClick={cancelScan}
+              aria-label="Cancel scan"
+              className="absolute inset-0 bg-black/35"
+            />
+
+            {/* Top-right X button — obvious close affordance. White on a
+                dark chip so it's readable against any camera feed. */}
+            <div
+              className="absolute top-0 right-0 p-4"
+              style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
             >
-              <ArrowLeft className="w-6 h-6" />
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={cancelScan}
+                aria-label="Close scanner"
+                className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center active:scale-95 transition shadow-lg"
+              >
+                <X className="w-6 h-6" strokeWidth={2.5} />
+              </button>
+            </div>
 
-          {/* Viewfinder reticle — centered, with corner brackets */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-72 h-72 max-w-[80vw] max-h-[60vh]">
-              {/* Corner brackets */}
-              <span className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-white rounded-tl-2xl" />
-              <span className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-white rounded-tr-2xl" />
-              <span className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-white rounded-bl-2xl" />
-              <span className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-white rounded-br-2xl" />
-              {/* Scanning line animation */}
-              <div className="absolute inset-x-4 top-1/2 h-0.5 bg-primary shadow-[0_0_12px_var(--color-primary)] animate-pulse" />
+            {/* Viewfinder reticle — centered, pointer-events-none so taps
+                on the reticle area fall through to the dim-background
+                cancel button. */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="relative w-72 h-72 max-w-[80vw] max-h-[60vh]">
+                <span className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-white rounded-tl-2xl" />
+                <span className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-white rounded-tr-2xl" />
+                <span className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-white rounded-bl-2xl" />
+                <span className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-white rounded-br-2xl" />
+                <div className="absolute inset-x-4 top-1/2 h-0.5 bg-primary shadow-[0_0_12px_var(--color-primary)] animate-pulse" />
+              </div>
+            </div>
+
+            {/* Bottom zone: instruction pill + big Cancel button in the
+                thumb-reach area. Cancel is the primary escape — the X up
+                top is a secondary. */}
+            <div
+              className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-4 px-6 pb-8"
+              style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
+            >
+              <div className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-medium backdrop-blur-sm pointer-events-none">
+                Point at the asset barcode
+              </div>
+              <button
+                type="button"
+                onClick={cancelScan}
+                aria-label="Cancel scanning"
+                className="w-full max-w-xs h-14 rounded-full bg-white text-black font-semibold text-base shadow-xl active:scale-95 transition flex items-center justify-center gap-2"
+              >
+                <X className="w-5 h-5" strokeWidth={2.5} />
+                Cancel
+              </button>
             </div>
           </div>
-
-          {/* Instruction pill */}
-          <div
-            className="absolute inset-x-0 bottom-0 flex justify-center pb-8 pointer-events-none"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
-          >
-            <div className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-medium backdrop-blur-sm">
-              Point at the asset barcode
-            </div>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
