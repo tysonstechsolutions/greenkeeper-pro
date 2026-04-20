@@ -53,15 +53,24 @@ const TITLES: Record<string, string> = {
   "/weather": "Weather",
 };
 
+// Next.js with `trailingSlash: true` may surface pathnames like "/dashboard/"
+// or root "/". Normalize to a canonical "/<segment>" form before lookup.
+function canonical(pathname: string): string {
+  if (!pathname || pathname === "/") return "/";
+  const stripped = pathname.replace(/\/+$/, "");
+  return stripped || "/";
+}
+
 export function isTopLevelRoute(pathname: string): boolean {
-  return TOP_LEVEL_ROUTES.has(pathname);
+  return TOP_LEVEL_ROUTES.has(canonical(pathname));
 }
 
 export function getPageTitle(pathname: string): string {
-  if (TITLES[pathname]) return TITLES[pathname];
-  const firstSeg = "/" + pathname.split("/").filter(Boolean)[0];
+  const p = canonical(pathname);
+  if (TITLES[p]) return TITLES[p];
+  const firstSeg = "/" + p.split("/").filter(Boolean)[0];
   if (TITLES[firstSeg]) return TITLES[firstSeg];
-  const last = pathname.split("/").filter(Boolean).pop() ?? "";
+  const last = p.split("/").filter(Boolean).pop() ?? "";
   return last
     .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());

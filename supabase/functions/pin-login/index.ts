@@ -147,8 +147,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 4. Redirect by role
-    const redirectPath = p.role === "pro" ? "/pro-dashboard" : "/dashboard";
+    // 4. All roles land on /dashboard — the old /pro-dashboard route was
+    //    removed when we consolidated to a single dashboard.
+    const redirectPath = "/dashboard";
 
     return jsonResponse({
       success: true,

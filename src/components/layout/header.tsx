@@ -163,7 +163,10 @@ export function Header() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 flex items-center justify-between h-12 md:h-14 px-3 md:px-4 bg-background/80 backdrop-blur-md border-b border-border/60",
+        // Body already applies `env(safe-area-inset-top)` so the header sits
+        // below the Android status bar / notch. Header height = 56px which
+        // gives the back button a comfortable 44x44 tap target.
+        "sticky top-0 z-40 flex items-center justify-between h-14 px-3 md:px-4 bg-background/95 backdrop-blur-md border-b border-border/60",
         "transition-transform duration-300 ease-in-out",
         shouldHide ? "-translate-y-full md:translate-y-0" : "translate-y-0"
       )}
@@ -185,11 +188,11 @@ export function Header() {
               <button
                 onClick={() => router.back()}
                 aria-label="Go back"
-                className="w-9 h-9 -ml-1 flex items-center justify-center rounded-full active:bg-muted/70 transition-colors shrink-0"
+                className="w-11 h-11 -ml-2 flex items-center justify-center rounded-full active:bg-muted/70 transition-colors shrink-0"
               >
-                <ChevronLeft className="w-5 h-5 text-foreground" />
+                <ChevronLeft className="w-6 h-6 text-foreground" />
               </button>
-              <span className="font-semibold text-foreground text-[15px] tracking-tight truncate">
+              <span className="font-semibold text-foreground text-base tracking-tight truncate">
                 {pageTitle}
               </span>
             </>

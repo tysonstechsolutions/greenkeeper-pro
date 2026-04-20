@@ -8,6 +8,7 @@ import { Header } from "./header";
 import { OnlineStatus } from "@/components/ui/online-status";
 import { InstallPrompt } from "@/components/ui/install-prompt";
 import { ChatBubble } from "@/components/features/ai/chat-bubble";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
 
 // Routes that should NOT show the app shell (sidebar, header, bottom nav)
@@ -59,9 +60,11 @@ export function AppShell({ children }: AppShellProps) {
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
 
-        {/* Page content */}
+        {/* Page content — wrapped in an ErrorBoundary so a crash inside one
+            page doesn't leave the whole shell wedged with invisible broken
+            event handlers. The boundary resets on route change via `key`. */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden pb-20 md:pb-0">
-          {children}
+          <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
         </main>
       </div>
 

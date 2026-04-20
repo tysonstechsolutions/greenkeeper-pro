@@ -1,5 +1,20 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Android 11 (API 30) + Google Play Services package visibility.
+      Without these entries, @capacitor-mlkit/barcode-scanning's call to
+      isGoogleBarcodeScannerModuleAvailable() returns false, module install
+      silently fails, and BarcodeScanner.scan() never opens on devices
+      running API 30+. Adding the explicit package ref makes Play Services
+      queryable so the ML Kit scanner module resolves correctly.
+    -->
+    <queries>
+        <package android:name="com.google.android.gms" />
+        <intent>
+            <action android:name="com.google.mlkit.vision.codescanner.internal.ACTION_SCAN" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

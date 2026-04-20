@@ -192,7 +192,8 @@ Deno.serve(async (req) => {
       // Non-fatal: account exists, user can go to /pin-login.
     }
 
-    const redirectPath = invite.role === "pro" ? "/pro-dashboard" : "/dashboard";
+    // All roles land on /dashboard — /pro-dashboard was removed.
+    const redirectPath = "/dashboard";
 
     return jsonResponse({
       success: true,

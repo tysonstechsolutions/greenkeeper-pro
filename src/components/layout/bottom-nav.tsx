@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ClipboardList,
-  Calendar,
   MessageSquare,
   MoreHorizontal,
   Flag,
   Map,
+  Archive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChannels } from "@/lib/hooks/useChannels";
@@ -19,8 +19,8 @@ import { useEffect } from "react";
 const maintenanceNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
-  { href: "/schedule", label: "Schedule", icon: Calendar },
-  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/assets", label: "Assets", icon: Archive },
+  { href: "/course-map", label: "Map", icon: Map },
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 

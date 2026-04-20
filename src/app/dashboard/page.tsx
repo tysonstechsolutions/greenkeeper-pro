@@ -41,6 +41,9 @@ import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
 import { PushOptInCard } from "@/components/features/notifications/push-opt-in-card";
 import { SprayWindowCard } from "@/components/features/spray-window/spray-window-card";
+import { QuickActionsCustomizeSheet } from "@/components/features/quick-actions/customize-sheet";
+import { useQuickActions } from "@/lib/hooks/useQuickActions";
+import { Settings2 } from "lucide-react";
 import { useWeather } from "@/lib/hooks/useWeather";
 import type { WeatherAlert } from "@/lib/hooks/useWeather";
 import {
@@ -169,80 +172,58 @@ const categoryIcons: Record<
 };
 
 // ────────────────────────────────────────────
-// Quick actions by role
+// Quick actions — user-customizable, persisted via useQuickActions hook
+// (defaults live in lib/hooks/useQuickActions.ts)
 // ────────────────────────────────────────────
 
-const leadershipQuickActions = [
-  {
-    href: "/tasks/new",
-    label: "New Task",
-    icon: Plus,
-    color: "from-blue-500 to-blue-600",
-  },
-  {
-    href: "/photos",
-    label: "Take Photo",
-    icon: Camera,
-    color: "from-emerald-500 to-emerald-600",
-  },
-  {
-    href: "/course-map",
-    label: "Course Map",
-    icon: Map,
-    color: "from-teal-500 to-teal-600",
-  },
-  {
-    href: "/chemicals/apply",
-    label: "Log Chemical",
-    icon: FlaskConical,
-    color: "from-amber-500 to-amber-600",
-  },
-  {
-    href: "/equipment",
-    label: "Equipment",
-    icon: Wrench,
-    color: "from-orange-500 to-orange-600",
-  },
-  {
-    href: "/reports",
-    label: "Reports",
-    icon: FileText,
-    color: "from-[#1B4332] to-[#2D6A4F]",
-  },
-];
+function DashboardQuickActions() {
+  const { actions } = useQuickActions();
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-const staffQuickActions = [
-  {
-    href: "/tasks/new",
-    label: "New Task",
-    icon: Plus,
-    color: "from-blue-500 to-blue-600",
-  },
-  {
-    href: "/photos",
-    label: "Take Photo",
-    icon: Camera,
-    color: "from-emerald-500 to-emerald-600",
-  },
-  {
-    href: "/course-map",
-    label: "Course Map",
-    icon: Map,
-    color: "from-teal-500 to-teal-600",
-  },
-  {
-    href: "/chemicals/apply",
-    label: "Log Chemical",
-    icon: FlaskConical,
-    color: "from-amber-500 to-amber-600",
-  },
-  {
-    href: "/equipment",
-    label: "Equipment",
-    icon: Wrench,
-    color: "from-orange-500 to-orange-600",
-  },
-];
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Zap className="w-4 h-4 text-[#B68D40] shrink-0" />
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
+            Quick Actions
+          </h2>
+        </div>
+        <button
+          onClick={() => setSheetOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground rounded-lg border border-border active:bg-muted/70 transition-colors shrink-0"
+        >
+          <Settings2 className="w-3.5 h-3.5" />
+          Customize
+        </button>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        {actions.map((action) => (
+          <Link
+            key={action.id}
+            href={action.href}
+            className="gk-action-btn flex flex-col items-center gap-2 p-3 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
+          >
+            <div
+              className={cn(
+                "w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm shrink-0",
+                action.color
+              )}
+            >
+              <action.icon className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium text-center text-muted-foreground leading-tight line-clamp-2">
+              {action.label}
+            </span>
+          </Link>
+        ))}
+      </div>
+      {sheetOpen && (
+        <QuickActionsCustomizeSheet open onClose={() => setSheetOpen(false)} />
+      )}
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────
 // Briefing data types
@@ -945,15 +926,15 @@ function LeadershipDashboardView() {
         <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
           <div className="relative z-10">
             <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-white/60 text-sm font-medium mb-1">
+              <div className="min-w-0 flex-1">
+                <p className="text-white/60 text-sm font-medium mb-1 truncate">
                   {new Date().toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
+                    weekday: "short",
+                    month: "short",
                     day: "numeric",
                   })}
                 </p>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate">
                   {greeting}, {firstName}
                 </h1>
                 {todaysTasks.total > 0 && (
@@ -1028,10 +1009,10 @@ function LeadershipDashboardView() {
               <Link
                 key={task.id}
                 href={`/tasks/${task.id}`}
-                className="flex items-center justify-between p-3 rounded-lg bg-white/60 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
+                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/60 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
               >
-                <div>
-                  <div className="font-medium text-sm">{task.title}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm truncate">{task.title}</div>
                   <div className="text-xs text-red-600 dark:text-red-400">
                     Due{" "}
                     {new Date(task.due_date).toLocaleDateString("en-US", {
@@ -1041,7 +1022,7 @@ function LeadershipDashboardView() {
                   </div>
                 </div>
                 <span
-                  className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  className={`px-2 py-0.5 rounded text-xs font-medium shrink-0 ${
                     task.priority === "critical"
                       ? "bg-purple-500/10 text-purple-600"
                       : "bg-red-500/10 text-red-600"
@@ -1158,33 +1139,7 @@ function LeadershipDashboardView() {
 
       {/* ===== Quick Actions ===== */}
       <div className="gk-animate-in gk-animate-in-4 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4 text-[#B68D40]" />
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Quick Actions
-          </h2>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {leadershipQuickActions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              className="gk-action-btn flex flex-col items-center gap-2.5 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
-            >
-              <div
-                className={cn(
-                  "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
-                  action.color
-                )}
-              >
-                <action.icon className="w-5 h-5" />
-              </div>
-              <span className="text-sm font-medium text-center text-muted-foreground leading-tight">
-                {action.label}
-              </span>
-            </Link>
-          ))}
-        </div>
+        <DashboardQuickActions />
         <button
           type="button"
           onClick={async () => {
@@ -1778,15 +1733,15 @@ function StaffDashboardView() {
         <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
           <div className="relative z-10">
             <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-white/60 text-sm font-medium mb-1">
+              <div className="min-w-0 flex-1">
+                <p className="text-white/60 text-sm font-medium mb-1 truncate">
                   {new Date().toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
+                    weekday: "short",
+                    month: "short",
                     day: "numeric",
                   })}
                 </p>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate">
                   {greeting}, {firstName}
                 </h1>
                 {todaysTasks.total > 0 && (
@@ -1940,35 +1895,9 @@ function StaffDashboardView() {
         </div>
       </div>
 
-      {/* ===== Quick Actions ===== */}
+      {/* ===== Quick Actions (same customizable grid as leadership) ===== */}
       <div className="gk-animate-in gk-animate-in-4 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4 text-[#B68D40]" />
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Quick Actions
-          </h2>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {staffQuickActions.map((action) => (
-            <Link
-              key={action.href}
-              href={action.href}
-              className="gk-action-btn flex flex-col items-center gap-2.5 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:scale-95 active:bg-muted/30"
-            >
-              <div
-                className={cn(
-                  "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-sm",
-                  action.color
-                )}
-              >
-                <action.icon className="w-5 h-5" />
-              </div>
-              <span className="text-sm font-medium text-center text-muted-foreground leading-tight">
-                {action.label}
-              </span>
-            </Link>
-          ))}
-        </div>
+        <DashboardQuickActions />
       </div>
 
       {/* ===== Main Content Grid ===== */}
