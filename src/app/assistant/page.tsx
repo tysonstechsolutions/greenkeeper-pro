@@ -120,7 +120,7 @@ export default function AssistantPage() {
         .gte("updated_at", since)
         .order("updated_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       if (!conv) return;
 
       const { data: rows } = await supabase

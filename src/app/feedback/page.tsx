@@ -49,7 +49,7 @@ const feedbackTypeIcons: Record<FeedbackType, React.ComponentType<{ className?: 
 
 export default function FeedbackPage() {
   const router = useRouter();
-  const { profile, isPro, isSuper, isAsstSuper } = useAuth();
+  const { profile, isSuper, isAsstSuper } = useAuth();
   const {
     feedback,
     loading,
@@ -68,8 +68,7 @@ export default function FeedbackPage() {
   const [submitted, setSubmitted] = useState(false);
   const [statusFilter, setStatusFilter] = useState<FeedbackStatus | "all">("all");
 
-  // Determine back link based on role
-  const backHref = isPro ? "/pro-dashboard" : "/dashboard";
+  const backHref = "/dashboard";
 
   // Load feedback history
   useEffect(() => {

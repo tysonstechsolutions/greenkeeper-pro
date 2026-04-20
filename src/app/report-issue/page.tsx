@@ -167,7 +167,7 @@ export default function ReportIssuePage() {
         setSubmitted(true);
         // Redirect after showing success
         setTimeout(() => {
-          router.push("/pro-dashboard");
+          router.push("/dashboard");
         }, 2000);
       }
     } catch (error) {
@@ -201,7 +201,7 @@ export default function ReportIssuePage() {
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
       <DetailPageHeader
-        backHref="/pro-dashboard"
+        backHref="/dashboard"
         backLabel="Dashboard"
         title="Report an Issue"
         subtitle="Alert maintenance about problems on the course"

@@ -8,7 +8,6 @@ import {
   Calendar,
   MessageSquare,
   MoreHorizontal,
-  Store,
   Flag,
   Map,
 } from "lucide-react";
@@ -26,25 +25,11 @@ const maintenanceNavItems = [
 ];
 
 const proNavItems = [
-  { href: "/pro-dashboard", label: "Dashboard", icon: Store },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/report-issue", label: "Report", icon: Flag },
   { href: "/course-map", label: "Map", icon: Map },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/more", label: "More", icon: MoreHorizontal },
-];
-
-const moreRoutes = [
-  "/more", "/plan", "/course-map", "/weather", "/photos",
-  "/equipment", "/chemicals", "/irrigation", "/staff", "/budget", "/reports",
-  "/knowledge", "/settings", "/notifications", "/feedback", "/pro-dashboard",
-  "/briefing", "/checklists",
-  "/equipment-checkout",
-  "/polls", "/report-issue", "/install",
-  "/parking-lot", "/clubhouse", "/order-list",
-  "/assistant", "/inspections", "/environmental", "/water-usage",
-  "/voice-log", "/vendors",
-  "/revenue", "/capital-projects",
-  "/tournaments",
 ];
 
 export function BottomNav() {
@@ -58,9 +43,13 @@ export function BottomNav() {
     fetchChannels();
   }, [fetchChannels]);
 
-  const isMoreActive = moreRoutes.some(
-    (route) => pathname === route || pathname.startsWith(route + "/")
+  const topLevelHrefs = navItems
+    .filter((item) => item.href !== "/more")
+    .map((item) => item.href);
+  const isOnTopLevel = topLevelHrefs.some(
+    (href) => pathname === href || pathname.startsWith(href + "/")
   );
+  const isMoreActive = !isOnTopLevel;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/80 backdrop-blur-xl border-t border-border/50 safe-area-bottom">

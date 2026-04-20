@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Bell,
@@ -9,6 +9,7 @@ import {
   Settings,
   UserPlus,
   ChevronDown,
+  ChevronLeft,
   Check,
   Loader2,
   Calendar,
@@ -21,6 +22,7 @@ import {
   Wind,
   Leaf,
 } from "lucide-react";
+import { getPageTitle, isTopLevelRoute } from "@/lib/utils/page-title";
 import { Button } from "@/components/ui/button";
 import { WeatherIcon } from "@/components/ui/weather-icon";
 import { cn } from "@/lib/utils";
@@ -55,6 +57,7 @@ const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const { profile, signOut, canCreateInvites, loading, refreshProfile } = useAuth();
   const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
@@ -150,9 +153,12 @@ export function Header() {
   const weatherAvailable = currentWeather !== null;
   const weatherFailed = !weatherAvailable && weatherError !== null;
 
-  // Keep dropdowns open override: don't hide header when dropdown is open
+  // Keep dropdowns open override: don't hide header when dropdown is open.
+  // Only auto-hide on top-level routes — deep pages need the back button visible.
   const isDropdownOpen = menuOpen || notificationsOpen;
-  const shouldHide = scrollDirection === "down" && !isDropdownOpen;
+  const onTopLevel = isTopLevelRoute(pathname);
+  const shouldHide = onTopLevel && scrollDirection === "down" && !isDropdownOpen;
+  const pageTitle = getPageTitle(pathname);
 
   return (
     <header
@@ -162,13 +168,32 @@ export function Header() {
         shouldHide ? "-translate-y-full md:translate-y-0" : "translate-y-0"
       )}
     >
-      {/* Left: Mobile logo — compact */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 md:hidden">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm">
-            <Leaf className="w-3.5 h-3.5 text-[#1B4332]" />
-          </div>
-          <span className="font-bold text-foreground text-[13px] tracking-tight">VMGC</span>
+      {/* Left: Back button + page title on deep pages, VMGC logo on top-level */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 md:hidden min-w-0">
+          {onTopLevel ? (
+            <>
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm shrink-0">
+                <Leaf className="w-3.5 h-3.5 text-[#1B4332]" />
+              </div>
+              <span className="font-bold text-foreground text-[13px] tracking-tight truncate">
+                {pageTitle === "Dashboard" ? "VMGC" : pageTitle}
+              </span>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => router.back()}
+                aria-label="Go back"
+                className="w-9 h-9 -ml-1 flex items-center justify-center rounded-full active:bg-muted/70 transition-colors shrink-0"
+              >
+                <ChevronLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <span className="font-semibold text-foreground text-[15px] tracking-tight truncate">
+                {pageTitle}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
