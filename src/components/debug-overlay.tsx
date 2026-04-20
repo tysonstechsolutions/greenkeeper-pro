@@ -121,14 +121,18 @@ export function DebugOverlay() {
     };
   }, []);
 
-  // Poll pending-request count + run the silent-hang watchdog: if any
-  // Supabase request stays pending for > 10s, flag stuck even if nothing
-  // has formally timed out yet.
+  // Poll pending-request count + run the silent-hang watchdog. Guard the
+  // setState with a change check so the 1Hz interval doesn't schedule a
+  // React re-render every second when nothing changed.
   useEffect(() => {
     let stuckSince: number | null = null;
+    let prevPending = -1;
     const id = setInterval(() => {
       const p = getSupabaseTelemetry().pending;
-      setPending(p);
+      if (p !== prevPending) {
+        prevPending = p;
+        setPending(p);
+      }
       if (p > 0) {
         if (stuckSince === null) stuckSince = Date.now();
         else if (Date.now() - stuckSince > 10_000 && !showStuck) {
@@ -154,6 +158,11 @@ export function DebugOverlay() {
     }
     return { errors, warns, total: logs.length };
   }, [logs]);
+
+  // Memoize the reversed list so the map() doesn't re-spread the whole
+  // buffer on every render — the panel also renders per-row elements so
+  // this scales with total render work.
+  const reversedLogs = useMemo(() => [...logs].reverse(), [logs]);
 
   const status: "healthy" | "warning" | "error" =
     stats.errors > 0 || showStuck ? "error" : stats.warns > 0 ? "warning" : "healthy";
@@ -320,13 +329,13 @@ export function DebugOverlay() {
 
             {/* Breadcrumb timeline */}
             <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
-              {logs.length === 0 ? (
+              {reversedLogs.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
                   No activity captured yet. Navigate around the app and
                   come back.
                 </p>
               ) : (
-                [...logs].reverse().map((c) => (
+                reversedLogs.map((c) => (
                   <div
                     key={c.id}
                     className={cn(
@@ -348,6 +357,11 @@ export function DebugOverlay() {
                       <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0" />
                       <span className="font-mono break-words min-w-0">
                         {c.message}
+                        {c.count && c.count > 1 ? (
+                          <span className="ml-1.5 text-muted-foreground">
+                            ×{c.count}
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                     {c.detail && (

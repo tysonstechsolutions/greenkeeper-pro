@@ -4,6 +4,7 @@ import { Bot } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { stripTrailingSlash } from "@/lib/utils/page-title";
 
 /**
  * Pages where the primary "create" FAB sits at `bottom-24 right-4` — the
@@ -32,13 +33,7 @@ export function ChatBubble() {
   // Hide on assistant page (already there)
   if (pathname === "/assistant") return null;
 
-  // Normalize trailing slash for route lookup (Next static export emits
-  // pathnames like "/tasks/" with trailingSlash: true).
-  const canonical =
-    pathname.length > 1 && pathname.endsWith("/")
-      ? pathname.slice(0, -1)
-      : pathname;
-  if (ROUTES_WITH_FAB.has(canonical)) return null;
+  if (ROUTES_WITH_FAB.has(stripTrailingSlash(pathname))) return null;
 
   // Only show for roles that can access the assistant
   const allowed =

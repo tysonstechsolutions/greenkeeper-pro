@@ -20,19 +20,26 @@ export function CapacitorInit() {
 
     (async () => {
       try {
-        const { Capacitor } = await import("@capacitor/core");
+        // Dynamic imports are independent — parallelize so boot waits on
+        // the slower of the two instead of their sum.
+        const [{ Capacitor }, statusBarMod] = await Promise.all([
+          import("@capacitor/core"),
+          import("@capacitor/status-bar"),
+        ]);
         if (!Capacitor.isNativePlatform()) return;
-        const { StatusBar, Style } = await import("@capacitor/status-bar");
-        // 1. Don't let the WebView draw under the status bar. This is the
-        //    direct fix for "the clock covers the back button".
-        await StatusBar.setOverlaysWebView({ overlay: false });
-        // 2. Re-assert background + style. With overlay off these
-        //    determine the status bar's own pixels (not the WebView's).
-        await StatusBar.setBackgroundColor({ color: "#1B4332" });
-        await StatusBar.setStyle({ style: Style.Dark });
+        const { StatusBar, Style } = statusBarMod;
+        // These three calls have no ordering requirement between them —
+        // fire together. Fixes "clock covers the back button" on Android
+        // SDK 36 edge-to-edge; without setOverlaysWebView(false) the
+        // WebView draws under the status bar.
+        await Promise.all([
+          StatusBar.setOverlaysWebView({ overlay: false }),
+          StatusBar.setBackgroundColor({ color: "#1B4332" }),
+          StatusBar.setStyle({ style: Style.Dark }),
+        ]);
       } catch (err) {
-        // Non-fatal — if the plugin isn't available (web dev, older device)
-        // we just keep running with whatever the default is.
+        // Non-fatal — if the plugin isn't available (web dev, older
+        // device) keep running with whatever the default is.
         console.warn("[CapacitorInit] StatusBar setup failed:", err);
       }
     })();

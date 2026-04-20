@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Fy26Asset, Fy26AssetStatus, AssetDamageRecord, ConditionPhotoAngle, ConditionPhotos } from "@/types/fy26-assets";
 import { uploadPhoto } from "@/lib/supabase/storage";
@@ -41,15 +41,17 @@ interface UseFy26AssetsReturn {
 
 export function useFy26Assets(): UseFy26AssetsReturn {
   const [assets, setAssets] = useState<Fy26Asset[]>([]);
-  // Separate "all statuses" cache used purely for computing filter counts.
-  // If we derived counts off `assets` (the filtered list), then selecting
-  // a filter like "No Tag" would zero out every other chip — which is the
-  // exact bug the user reported. This cache stays in sync with raw totals
-  // by being re-fetched only when the non-status portion of the filter
-  // (site, search) changes OR when a mutation happens.
+  // Status-agnostic cache for computing filter counts (so "No Tag" chip
+  // doesn't zero out every other chip). Kept in sync with site/search
+  // filters but never filtered by status.
   const [allStatusAssets, setAllStatusAssets] = useState<Fy26Asset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Monotonically increasing id for the side-query that refreshes
+  // allStatusAssets. Rapid filter toggles fire multiple status-agnostic
+  // queries out of order; we record the latest id at dispatch and only
+  // apply a result if it's still the latest when it resolves.
+  const statsReqIdRef = useRef(0);
 
   const supabase = createClient();
 
@@ -80,14 +82,17 @@ export function useFy26Assets(): UseFy26AssetsReturn {
         const items = (data as Fy26Asset[]) || [];
         setAssets(items);
 
-        // If no status filter was applied, this result already reflects
-        // every status under the current site/search scope — reuse it for
-        // the stats cache instead of making a second round-trip. If a
-        // status filter IS applied, we fire a separate status-agnostic
-        // query so the chip counts stay correct.
+        // If no status filter was applied, the result already covers
+        // every status under the current site/search scope — reuse it
+        // for the stats cache, no second round-trip. If a status filter
+        // IS applied, fire a separate status-agnostic query, but guard
+        // against races: rapid filter toggles can fire multiple side
+        // queries; we only accept the latest one.
         if (!filters?.status) {
           setAllStatusAssets(items);
+          statsReqIdRef.current++; // invalidate any in-flight stats query
         } else {
+          const reqId = ++statsReqIdRef.current;
           let statsQuery = supabase.from("fy26_assets").select("*");
           if (filters.site) statsQuery = statsQuery.eq("site", filters.site);
           if (filters.search && filters.search.trim()) {
@@ -96,9 +101,14 @@ export function useFy26Assets(): UseFy26AssetsReturn {
               `description.ilike.${term},asset_number.ilike.${term},serial_number.ilike.${term},model_text.ilike.${term},manufacturer.ilike.${term},license_plate.ilike.${term}`
             );
           }
-          statsQuery.then(
+          Promise.resolve(statsQuery).then(
             ({ data: statsData }: { data: Fy26Asset[] | null }) => {
+              if (reqId !== statsReqIdRef.current) return; // stale
               if (statsData) setAllStatusAssets(statsData as Fy26Asset[]);
+            },
+            (err) => {
+              if (reqId !== statsReqIdRef.current) return;
+              console.warn("[useFy26Assets] stats query failed:", err);
             },
           );
         }

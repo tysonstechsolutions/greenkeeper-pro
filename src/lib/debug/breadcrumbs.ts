@@ -34,34 +34,73 @@ export interface Breadcrumb {
   time: number;
   kind: BreadcrumbKind;
   message: string;
-  // Optional free-form extras that show on long-press / expand. Kept small
-  // so the buffer doesn't balloon.
   detail?: string;
+  // Set when identical consecutive entries are coalesced — renders as
+  // "Loading tasks (x3)" instead of 3 separate rows.
+  count?: number;
 }
 
 const MAX = 100;
 const EVENT = "debug:breadcrumb-update";
+// If the same (kind, message) repeats within this window, bump a counter
+// on the last entry instead of pushing a duplicate. Stops rapid navs /
+// fetch-done bursts from pushing useful context out of the ring buffer.
+const COALESCE_WINDOW_MS = 500;
 
 let nextId = 1;
 const buffer: Breadcrumb[] = [];
+
+// Coalesce dispatchEvent() spam into one notification per animation
+// frame. Without this, a dashboard load that fires 10 fetches + 20
+// console.info calls would schedule 30 setState()s on the overlay; with
+// this, subscribers see a single "something changed" per frame.
+let dispatchScheduled = false;
+function scheduleDispatch() {
+  if (dispatchScheduled) return;
+  if (typeof window === "undefined") return;
+  dispatchScheduled = true;
+  const fire = () => {
+    dispatchScheduled = false;
+    window.dispatchEvent(new CustomEvent(EVENT));
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(fire);
+  } else {
+    setTimeout(fire, 16);
+  }
+}
 
 export function recordBreadcrumb(
   kind: BreadcrumbKind,
   message: string,
   detail?: string,
 ): void {
+  const now = Date.now();
+  const msg = truncate(message, 200);
+  const last = buffer[buffer.length - 1];
+  if (
+    last &&
+    last.kind === kind &&
+    last.message === msg &&
+    !detail &&
+    !last.detail &&
+    now - last.time < COALESCE_WINDOW_MS
+  ) {
+    last.count = (last.count ?? 1) + 1;
+    last.time = now;
+    scheduleDispatch();
+    return;
+  }
   const crumb: Breadcrumb = {
     id: nextId++,
-    time: Date.now(),
+    time: now,
     kind,
-    message: truncate(message, 200),
+    message: msg,
     detail: detail ? truncate(detail, 500) : undefined,
   };
   buffer.push(crumb);
   if (buffer.length > MAX) buffer.shift();
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(EVENT));
-  }
+  scheduleDispatch();
 }
 
 export function getBreadcrumbs(): readonly Breadcrumb[] {
@@ -70,9 +109,7 @@ export function getBreadcrumbs(): readonly Breadcrumb[] {
 
 export function clearBreadcrumbs(): void {
   buffer.length = 0;
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(EVENT));
-  }
+  scheduleDispatch();
 }
 
 export function subscribeBreadcrumbs(listener: () => void): () => void {

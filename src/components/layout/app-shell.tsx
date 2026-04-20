@@ -13,17 +13,13 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { DebugOverlay } from "@/components/debug-overlay";
 import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
+import { stripTrailingSlash } from "@/lib/utils/page-title";
 
 // Routes that should NOT show the app shell (sidebar, header, bottom nav)
 const PUBLIC_ROUTES = ["/login", "/pin-login", "/join", "/install", "/offline"];
 
 function isPublicRoute(pathname: string): boolean {
-  // Normalize by stripping any trailing slash so /pin-login and /pin-login/
-  // both match. The Capacitor build uses `trailingSlash: true` in
-  // next.config.ts, so pathnames arrive with a trailing slash.
-  const normalized = pathname.length > 1 && pathname.endsWith("/")
-    ? pathname.slice(0, -1)
-    : pathname;
+  const normalized = stripTrailingSlash(pathname);
   if (PUBLIC_ROUTES.includes(normalized)) return true;
   if (normalized.startsWith("/invite/")) return true;
   return false;

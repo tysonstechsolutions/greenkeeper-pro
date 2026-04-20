@@ -53,13 +53,20 @@ const TITLES: Record<string, string> = {
   "/weather": "Weather",
 };
 
-// Next.js with `trailingSlash: true` may surface pathnames like "/dashboard/"
-// or root "/". Normalize to a canonical "/<segment>" form before lookup.
-function canonical(pathname: string): string {
+/**
+ * Normalize pathnames that Next.js with `trailingSlash: true` can hand us
+ * (e.g. "/dashboard/", "/tasks//", "/") to a canonical "/<segment>" form.
+ * Exported so other route-matching code (AppShell.isPublicRoute,
+ * ChatBubble's FAB list) can use the same rule.
+ */
+export function stripTrailingSlash(pathname: string): string {
   if (!pathname || pathname === "/") return "/";
   const stripped = pathname.replace(/\/+$/, "");
   return stripped || "/";
 }
+
+// Kept as a local alias — existing call sites in this file use it.
+const canonical = stripTrailingSlash;
 
 export function isTopLevelRoute(pathname: string): boolean {
   return TOP_LEVEL_ROUTES.has(canonical(pathname));

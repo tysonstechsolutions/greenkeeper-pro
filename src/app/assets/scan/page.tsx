@@ -126,7 +126,6 @@ export default function AssetScanPage() {
   // Active native (ML Kit) scan session, when on Capacitor. Held in a ref
   // so stopScanner / unmount can tear it down even from stale-closure code.
   const nativeSessionRef = useRef<NativeScanSession | null>(null);
-  const scanContainerRef = useRef<HTMLDivElement>(null);
   // Prevents the auto-start effect from firing twice in flight (React 19
   // StrictMode / re-renders) before the first attempt finishes.
   const startingRef = useRef(false);
@@ -1237,7 +1236,6 @@ export default function AssetScanPage() {
           <div className="relative">
             <div
               id="scanner-viewport"
-              ref={scanContainerRef}
               className="rounded-xl overflow-hidden bg-black"
               style={{ minHeight: "min(70vh, 480px)" }}
             />
