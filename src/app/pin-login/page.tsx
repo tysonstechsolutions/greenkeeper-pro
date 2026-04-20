@@ -91,10 +91,32 @@ function PinLoginInner() {
       }
 
       if (data.session) {
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
+        // setSession persists the tokens to storage synchronously, then
+        // does a network call to fetch the user profile for the in-memory
+        // session. On flaky connections that network call can hang — the
+        // user ends up stuck on "Verifying..." even though the tokens
+        // already wrote to localStorage. Race it against a 4s timeout:
+        // if it hangs, we fall through. The session is already stored, so
+        // on the dashboard onAuthStateChange / getSession picks it up and
+        // the user is logged in — which matches the "close+reopen fixes
+        // it" symptom the user reported.
+        try {
+          await Promise.race([
+            supabase.auth.setSession({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            }),
+            new Promise<void>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("setSession timeout")),
+                4000,
+              ),
+            ),
+          ]);
+        } catch (err) {
+          // Non-fatal: tokens are persisted. Continue the redirect.
+          console.warn("[pin-login] setSession slow/timed out:", err);
+        }
       }
 
       setUserName(data.user?.name || "User");

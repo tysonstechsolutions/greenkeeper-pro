@@ -39,12 +39,15 @@ export function AppShell({ children }: AppShellProps) {
   // Auto-scroll focused inputs above the virtual keyboard on mobile
   useKeyboardScroll();
 
-  // Public pages get a clean layout with no chrome
+  // Public pages get a clean layout with no chrome. We still mount the
+  // DebugOverlay here so users can diagnose login-page hangs and trigger
+  // a client reset without killing the app.
   if (isPublic) {
     return (
       <div className="min-h-screen bg-background">
         <OnlineStatus />
         <main>{children}</main>
+        <DebugOverlay />
       </div>
     );
   }

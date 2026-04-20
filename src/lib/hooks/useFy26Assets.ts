@@ -41,6 +41,13 @@ interface UseFy26AssetsReturn {
 
 export function useFy26Assets(): UseFy26AssetsReturn {
   const [assets, setAssets] = useState<Fy26Asset[]>([]);
+  // Separate "all statuses" cache used purely for computing filter counts.
+  // If we derived counts off `assets` (the filtered list), then selecting
+  // a filter like "No Tag" would zero out every other chip — which is the
+  // exact bug the user reported. This cache stays in sync with raw totals
+  // by being re-fetched only when the non-status portion of the filter
+  // (site, search) changes OR when a mutation happens.
+  const [allStatusAssets, setAllStatusAssets] = useState<Fy26Asset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +79,30 @@ export function useFy26Assets(): UseFy26AssetsReturn {
 
         const items = (data as Fy26Asset[]) || [];
         setAssets(items);
+
+        // If no status filter was applied, this result already reflects
+        // every status under the current site/search scope — reuse it for
+        // the stats cache instead of making a second round-trip. If a
+        // status filter IS applied, we fire a separate status-agnostic
+        // query so the chip counts stay correct.
+        if (!filters?.status) {
+          setAllStatusAssets(items);
+        } else {
+          let statsQuery = supabase.from("fy26_assets").select("*");
+          if (filters.site) statsQuery = statsQuery.eq("site", filters.site);
+          if (filters.search && filters.search.trim()) {
+            const term = `%${filters.search.trim()}%`;
+            statsQuery = statsQuery.or(
+              `description.ilike.${term},asset_number.ilike.${term},serial_number.ilike.${term},model_text.ilike.${term},manufacturer.ilike.${term},license_plate.ilike.${term}`
+            );
+          }
+          statsQuery.then(
+            ({ data: statsData }: { data: Fy26Asset[] | null }) => {
+              if (statsData) setAllStatusAssets(statsData as Fy26Asset[]);
+            },
+          );
+        }
+
         return items;
       } catch (err) {
         console.error("[useFy26Assets] fetchAssets error:", err);
@@ -310,16 +341,20 @@ export function useFy26Assets(): UseFy26AssetsReturn {
     fetchAssets();
   }, [fetchAssets]);
 
-  // Stats derived from current in-memory list
+  // Stats derived from the STATUS-AGNOSTIC cache so each chip shows the
+  // true total for its status even when another filter chip is active.
+  // Previously these were derived from `assets` (the filtered list), which
+  // made every chip except the active one drop to 0.
+  const statsSource = allStatusAssets.length > 0 ? allStatusAssets : assets;
   const stats: Fy26AssetStats = {
-    total: assets.length,
-    unverified: assets.filter((a) => a.status === "unverified").length,
-    verified_present: assets.filter((a) => a.status === "verified_present").length,
-    mia: assets.filter((a) => a.status === "mia").length,
-    disposed: assets.filter((a) => a.status === "disposed").length,
-    no_asset_tag: assets.filter((a) => a.status === "no_asset_tag").length,
-    needs_disposed: assets.filter((a) => a.status === "needs_disposed").length,
-    total_value: assets.reduce((sum, a) => sum + (Number(a.original_value) || 0), 0),
+    total: statsSource.length,
+    unverified: statsSource.filter((a) => a.status === "unverified").length,
+    verified_present: statsSource.filter((a) => a.status === "verified_present").length,
+    mia: statsSource.filter((a) => a.status === "mia").length,
+    disposed: statsSource.filter((a) => a.status === "disposed").length,
+    no_asset_tag: statsSource.filter((a) => a.status === "no_asset_tag").length,
+    needs_disposed: statsSource.filter((a) => a.status === "needs_disposed").length,
+    total_value: statsSource.reduce((sum, a) => sum + (Number(a.original_value) || 0), 0),
   };
 
   return {

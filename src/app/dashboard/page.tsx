@@ -414,7 +414,7 @@ function ProDashboardView() {
       </div>
 
       {/* Main Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Today's Maintenance Impact */}
         <div className="bg-card rounded-lg border border-border p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
@@ -920,7 +920,7 @@ function LeadershipDashboardView() {
   );
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto overflow-x-hidden">
       {/* ===== Hero Welcome Section ===== */}
       <div className="gk-animate-in gk-animate-in-1 mb-6">
         <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
@@ -1157,7 +1157,7 @@ function LeadershipDashboardView() {
       </div>
 
       {/* ===== Main Content Grid ===== */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {/* Course Map Widget */}
         <Link
           href="/course-map"
@@ -1727,7 +1727,7 @@ function StaffDashboardView() {
   }, [fetchMyTasks]);
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto overflow-x-hidden">
       {/* ===== Hero Welcome Section ===== */}
       <div className="gk-animate-in gk-animate-in-1 mb-6">
         <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
@@ -1901,7 +1901,7 @@ function StaffDashboardView() {
       </div>
 
       {/* ===== Main Content Grid ===== */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {/* Course Map Widget */}
         <Link
           href="/course-map"
@@ -2248,7 +2248,7 @@ function GMDashboardView() {
     cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto overflow-x-hidden">
       {/* Welcome Header */}
       <div className="gk-animate-in gk-animate-in-1 mb-6">
         <div className="gk-gradient-hero gk-texture-overlay rounded-2xl p-5 md:p-6 text-white relative overflow-clip">
@@ -2318,7 +2318,7 @@ function GMDashboardView() {
       </div>
 
       {/* Main Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {/* Revenue by Category */}
         <Card className="gk-animate-in gk-animate-in-3">
           <CardContent className="p-5">

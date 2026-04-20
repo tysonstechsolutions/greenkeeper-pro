@@ -211,15 +211,16 @@ export default function CourseMapPage() {
   }, [greenSummaries, search, filterPriority]);
 
   return (
-    <div className="p-4 md:p-6 pb-24">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#1B4332] flex items-center justify-center">
+    <div className="p-4 md:p-6 pb-24 overflow-x-hidden">
+      {/* Header — title stacks above the Download button on mobile so
+          "Course Map" never wraps awkwardly next to a full-width button. */}
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#1B4332] flex items-center justify-center shrink-0">
             <MapPin className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Course Map</h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-foreground truncate">Course Map</h1>
             <p className="text-muted-foreground text-sm">
               {activeTab === "holes"
                 ? "Tap any hole to report or view issues"
@@ -242,7 +243,7 @@ export default function CourseMapPage() {
               setGeneratingReport(false);
             }
           }}
-          className="gap-2"
+          className="gap-2 self-start md:self-auto shrink-0"
         >
           <Download className="w-4 h-4" />
           {generatingReport ? "Generating..." : "Download Report"}
