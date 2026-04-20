@@ -90,12 +90,40 @@ export function useChannels(): UseChannelsReturn {
         memberData.map((m: { channel_id: string; last_read_at: string | null }) => [m.channel_id, m.last_read_at])
       );
 
-      // Get channel details - limit to 20 most recent to prevent loading too many
-       
-      const { data: channelsData, error: channelsError } = await supabase.from("channels")
-        .select("*")
-        .in("id", channelIds.slice(0, 20)) // Limit to 20 channels
-        .eq("is_active", true);
+      const topChannelIds = channelIds.slice(0, 20); // Limit to 20 channels
+
+      // THREE PARALLEL BATCHED QUERIES instead of 3 per channel (was 60
+      // requests for 20 channels — debug log showed ~100 firing on
+      // dashboard boot). Recent messages are fetched once and partitioned
+      // client-side, and member count comes from the already-loaded
+      // membership rows for rare channels + a single aggregate query
+      // otherwise.
+      const [
+        { data: channelsData, error: channelsError },
+        { data: recentMessages },
+        { data: allMemberships },
+      ] = await Promise.all([
+        supabase.from("channels")
+          .select("*")
+          .in("id", topChannelIds)
+          .eq("is_active", true),
+        // Fetch the N most-recent messages across all visible channels in
+        // one query. 500 is well beyond what a chatty 20-channel group
+        // should need for "last message" + unread detection on the
+        // dashboard badge. If a user is severely behind, the unread count
+        // is floored at 500 — acceptable UI behavior.
+        supabase.from("messages")
+          .select("channel_id, content, created_at, sender_id")
+          .in("channel_id", topChannelIds)
+          .order("created_at", { ascending: false })
+          .limit(500),
+        // One query for every membership row across the user's channels.
+        // Rows are tiny (channel_id + user_id) so this is fast even with
+        // big channels; aggregation happens client-side below.
+        supabase.from("channel_members")
+          .select("channel_id")
+          .in("channel_id", topChannelIds),
+      ]);
 
       if (channelsError) {
         console.error("Error fetching channels:", channelsError);
@@ -103,51 +131,42 @@ export function useChannels(): UseChannelsReturn {
         return [];
       }
 
-      // Get last message for each channel and count members
-      const channelsWithDetails: ChannelWithDetails[] = await Promise.all(
-        (channelsData || []).map(async (channel: Channel) => {
-          // Get last message (use maybeSingle to avoid 406 when no messages exist)
-           
-          const { data: lastMessage } = await supabase.from("messages")
-            .select("content, created_at")
-            .eq("channel_id", channel.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+      // Partition recent messages by channel_id.
+      const messagesByChannel = new Map<string, Array<{ content: string | null; created_at: string; sender_id: string }>>();
+      for (const m of (recentMessages || []) as Array<{ channel_id: string; content: string | null; created_at: string; sender_id: string }>) {
+        let list = messagesByChannel.get(m.channel_id);
+        if (!list) {
+          list = [];
+          messagesByChannel.set(m.channel_id, list);
+        }
+        list.push({ content: m.content, created_at: m.created_at, sender_id: m.sender_id });
+      }
 
-          // Count unread messages
-          const lastReadAt = lastReadMap.get(channel.id);
-          let unreadCount = 0;
+      // Count memberships by channel_id.
+      const memberCountByChannel = new Map<string, number>();
+      for (const m of (allMemberships || []) as Array<{ channel_id: string }>) {
+        memberCountByChannel.set(m.channel_id, (memberCountByChannel.get(m.channel_id) ?? 0) + 1);
+      }
 
-          if (lastReadAt) {
-             
-            const { count } = await supabase.from("messages")
-              .select("*", { count: "exact", head: true })
-              .eq("channel_id", channel.id)
-              .gt("created_at", lastReadAt)
-              .neq("sender_id", user.id); // Don't count own messages
+      const channelsWithDetails: ChannelWithDetails[] = (channelsData || []).map((channel: Channel) => {
+        const msgs = messagesByChannel.get(channel.id) ?? [];
+        const lastMessage = msgs[0]; // Already sorted by created_at DESC
+        const lastReadAt = lastReadMap.get(channel.id);
+        const unreadCount = lastReadAt
+          ? msgs.filter((m) => m.created_at > lastReadAt && m.sender_id !== user.id).length
+          : 0;
 
-            unreadCount = count || 0;
-          }
-
-          // Count members
-           
-          const { count: memberCount } = await supabase.from("channel_members")
-            .select("*", { count: "exact", head: true })
-            .eq("channel_id", channel.id);
-
-          return {
-            ...channel,
-            unread_count: unreadCount,
-            last_message_at: lastMessage?.created_at || null,
-            last_message_preview: lastMessage?.content
-              ? lastMessage.content.substring(0, 50) +
-                (lastMessage.content.length > 50 ? "..." : "")
-              : null,
-            member_count: memberCount || 0,
-          };
-        })
-      );
+        return {
+          ...channel,
+          unread_count: unreadCount,
+          last_message_at: lastMessage?.created_at ?? null,
+          last_message_preview: lastMessage?.content
+            ? lastMessage.content.substring(0, 50) +
+              (lastMessage.content.length > 50 ? "..." : "")
+            : null,
+          member_count: memberCountByChannel.get(channel.id) ?? 0,
+        };
+      });
 
       // Sort by last message (most recent first)
       channelsWithDetails.sort((a, b) => {

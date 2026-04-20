@@ -8,7 +8,6 @@ import {
   Calendar,
   MessageSquare,
   Wrench,
-  FlaskConical,
   Camera,
   Map,
   BarChart3,
@@ -45,7 +44,6 @@ const primaryItems = [
 // ── Maintenance: course care tools ──
 const maintenanceItems = [
   { href: "/equipment", label: "Equipment", icon: Wrench },
-  { href: "/chemicals", label: "Chemicals", icon: FlaskConical },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },

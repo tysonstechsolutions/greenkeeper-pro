@@ -86,8 +86,6 @@ const leadershipOperations: ListItem[] = [
 ];
 
 const leadershipFeedback: ListItem[] = [
-  { href: "/polls", label: "Polls", description: "Surveys & votes", icon: Vote, iconColor: "text-pink-600", bgColor: "bg-pink-500/10" },
-  { href: "/feedback", label: "Feedback", description: "Golfer comments", icon: Lightbulb, iconColor: "text-amber-600", bgColor: "bg-amber-500/10" },
   { href: "/report-issue", label: "Report Issue", description: "Course problems", icon: Flag, iconColor: "text-red-600", bgColor: "bg-red-500/10" },
 ];
 
@@ -166,7 +164,6 @@ const crewQuickAccess: QuickItem[] = [
 
 const proQuickAccess: QuickItem[] = [
   { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-600" },
-  { href: "/feedback", label: "Feedback", icon: Lightbulb, color: "from-amber-500 to-yellow-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },

@@ -40,7 +40,6 @@ import {
 import { WeatherWidget } from "@/components/features/weather/weather-widget";
 import { CourseStatusBanner } from "@/components/features/course-status";
 import { PushOptInCard } from "@/components/features/notifications/push-opt-in-card";
-import { SprayWindowCard } from "@/components/features/spray-window/spray-window-card";
 import { QuickActionsCustomizeSheet } from "@/components/features/quick-actions/customize-sheet";
 import { useQuickActions } from "@/lib/hooks/useQuickActions";
 import { Settings2 } from "lucide-react";
@@ -55,7 +54,6 @@ import { Badge } from "@/components/ui/badge";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePhotos } from "@/lib/hooks/usePhotos";
-import { useGolferFeedback } from "@/lib/hooks/useGolferFeedback";
 import { cn } from "@/lib/utils";
 import { useRecentActivity } from "@/lib/hooks/useRecentActivity";
 import { createClient } from "@/lib/supabase/client";
@@ -292,7 +290,6 @@ function ProDashboardView() {
   const { getAlerts } = useWeather();
   const { fetchTeamTasks } = useTasks();
   const { photos: recentPhotosData, fetchPhotos } = usePhotos();
-  const { getNewFeedbackCount } = useGolferFeedback();
 
   const [todaysTasks, setTodaysTasks] = useState<TaskWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,12 +322,11 @@ function ProDashboardView() {
       );
       setTodaysTasks(relevantTasks.slice(0, 5));
       await fetchPhotos({}, 0);
-      await getNewFeedbackCount();
       setLoading(false);
     };
 
     loadData();
-  }, [fetchTeamTasks, fetchPhotos, getNewFeedbackCount]);
+  }, [fetchTeamTasks, fetchPhotos]);
 
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
@@ -392,15 +388,6 @@ function ProDashboardView() {
             <MessageSquare className="w-5 h-5 text-blue-500" />
           </div>
           <span className="text-xs font-medium text-center">Messages</span>
-        </Link>
-        <Link
-          href="/feedback"
-          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors relative"
-        >
-          <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-            <Lightbulb className="w-5 h-5 text-purple-500" />
-          </div>
-          <span className="text-xs font-medium text-center">Log Feedback</span>
         </Link>
         <Link
           href="/course-map"
@@ -992,11 +979,6 @@ function LeadershipDashboardView() {
         <PushOptInCard />
       </div>
 
-      {/* ===== Spray Window Card ===== */}
-      <div className="mb-4">
-        <SprayWindowCard />
-      </div>
-
       {/* ===== Overdue Tasks (from briefing) ===== */}
       {briefingData && briefingData.tasks.overdue.length > 0 && (
         <div className="gk-animate-in gk-animate-in-2 mb-6 p-5 rounded-xl bg-red-500/5 border border-red-200/50">
@@ -1472,72 +1454,6 @@ function LeadershipDashboardView() {
           </div>
         )}
 
-        {/* Chemical Status (from briefing) */}
-        {briefingData &&
-          (briefingData.chemicals.activeREI.length > 0 ||
-            briefingData.chemicals.lowStock.length > 0) && (
-            <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 flex items-center justify-center">
-                  <FlaskConical className="w-5 h-5 text-blue-600" />
-                </div>
-                <h2 className="font-semibold text-sm">Chemical Status</h2>
-              </div>
-
-              {briefingData.chemicals.activeREI.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-xs font-medium text-red-600 uppercase tracking-wider mb-2 flex items-center gap-1">
-                    <Shield className="w-3 h-3" />
-                    Active REI Windows
-                  </div>
-                  {briefingData.chemicals.activeREI.map((c, i) => (
-                    <div
-                      key={i}
-                      className="p-2.5 rounded-lg bg-red-500/5 mb-1.5 text-sm min-w-0 overflow-hidden"
-                    >
-                      <div className="font-medium break-words">{c.product}</div>
-                      <div className="text-xs text-red-600 mt-0.5">
-                        REI expires:{" "}
-                        {new Date(c.expires).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                      {c.zones.length > 0 && (
-                        <div className="text-xs text-muted-foreground mt-0.5 break-words">
-                          {c.zones.slice(0, 4).join(", ")}
-                          {c.zones.length > 4 &&
-                            ` +${c.zones.length - 4} more`}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {briefingData.chemicals.lowStock.length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-amber-600 uppercase tracking-wider mb-2">
-                    Low Stock
-                  </div>
-                  {briefingData.chemicals.lowStock.map((c, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between gap-3 p-2 rounded-lg bg-amber-500/5 mb-1 text-sm"
-                    >
-                      <span className="truncate min-w-0 flex-1">{c.name}</span>
-                      <span className="text-xs text-amber-600 font-medium whitespace-nowrap shrink-0">
-                        {c.current} / {c.threshold} {c.unit}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
         {/* Recent Activity */}
         <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
           <div className="flex items-center justify-between mb-4">
@@ -1610,57 +1526,6 @@ function LeadershipDashboardView() {
             </div>
           )}
         </div>
-
-        {/* Golfer Feedback (from briefing) */}
-        {briefingData && briefingData.feedback.recent.length > 0 && (
-          <div className="gk-animate-in gk-animate-in-8 gk-card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 flex items-center justify-center">
-                  <MessageSquare className="w-5 h-5 text-indigo-600" />
-                </div>
-                <h2 className="font-semibold text-sm">
-                  Feedback ({briefingData.feedback.unresolved})
-                </h2>
-              </div>
-              <Link
-                href="/feedback"
-                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
-              >
-                View all
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-            <div className="space-y-2">
-              {briefingData.feedback.recent.map((f) => (
-                <div
-                  key={f.id}
-                  className="p-2.5 rounded-lg bg-muted/50 text-sm"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-xs font-medium capitalize ${
-                        f.type === "complaint"
-                          ? "bg-red-500/10 text-red-600"
-                          : f.type === "suggestion"
-                            ? "bg-blue-500/10 text-blue-600"
-                            : "bg-green-500/10 text-green-600"
-                      }`}
-                    >
-                      {f.type}
-                    </span>
-                    <span className="text-xs text-muted-foreground capitalize">
-                      {f.area.replace("_", " ")}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {f.notes}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Course Map Widget */}
         <div className="gk-animate-in gk-animate-in-8 md:col-span-2">
@@ -1790,11 +1655,6 @@ function StaffDashboardView() {
       {/* ===== Push notification opt-in ===== */}
       <div className="mb-4">
         <PushOptInCard />
-      </div>
-
-      {/* ===== Spray Window Card ===== */}
-      <div className="mb-4">
-        <SprayWindowCard />
       </div>
 
       {/* ===== Quick Stats Row ===== */}
