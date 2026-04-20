@@ -9,6 +9,7 @@ import { OnlineStatus } from "@/components/ui/online-status";
 import { InstallPrompt } from "@/components/ui/install-prompt";
 import { ChatBubble } from "@/components/features/ai/chat-bubble";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { DebugOverlay } from "@/components/debug-overlay";
 import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
 
 // Routes that should NOT show the app shell (sidebar, header, bottom nav)
@@ -76,6 +77,11 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* PWA Install Prompt */}
       <InstallPrompt />
+
+      {/* Floating debug overlay — diagnoses "nothing loads" hangs and
+          exposes a one-tap "Reset app state" escape hatch without a
+          full app kill. Shows a red pulsing icon if errors are captured. */}
+      {user && <DebugOverlay />}
     </div>
   );
 }
