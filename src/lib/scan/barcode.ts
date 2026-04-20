@@ -1,13 +1,16 @@
 /**
- * Barcode scanning helper.
+ * Barcode scanning helpers.
  *
- * On native (Capacitor): uses @capacitor-mlkit/barcode-scanning, which
- * wraps Google's ML Kit barcode scanner module. Full-screen native
- * overlay, hardware-accelerated, dramatically faster + more accurate
- * than html5-qrcode — particularly for 1D codes (Code 128, Code 39)
- * like the MWRMA property tags used on every piece of equipment.
+ * Spark-for-Walmart-style live scanner on native:
+ *   - Uses @capacitor-mlkit/barcode-scanning's `startScan()` which runs the
+ *     BUNDLED ML Kit library (no Play Services dependency, no module
+ *     download, works offline).
+ *   - The plugin makes the WebView background transparent while scanning;
+ *     our own React UI renders ON TOP of the live camera feed. We control
+ *     the lifecycle, so there is no full-screen Google Code Scanner
+ *     modal that can leave the app on a black screen when it closes.
  *
- * On web: returns null immediately, so the caller can fall back to the
+ * On web: returns null / no-ops, so the caller can fall back to the
  * existing html5-qrcode inline scanner. Keeps `npm run dev` working on
  * a laptop without tethering a phone.
  */
@@ -17,53 +20,152 @@ export function isNativeBarcodeAvailable(): boolean {
   return Capacitor.isNativePlatform();
 }
 
+export interface NativeScanSession {
+  stop: () => Promise<void>;
+}
+
 /**
- * Open the native ML Kit barcode scanner once. Resolves with the raw
- * decoded text, or null if the user cancelled, no barcode was read,
- * permission was denied, or we're not on a native platform.
+ * Toggle the global `.barcode-scanner-active` class on the document root.
+ * Our CSS hides the normal app chrome and makes the background transparent
+ * while this class is applied — that's what lets the native camera feed
+ * show through the WebView.
  *
- * The caller should feed the returned value into its existing lookup
- * logic the same way it would have with an html5-qrcode decode.
+ * Safe to call from SSR (becomes a no-op).
  */
-export async function scanBarcodeNative(): Promise<string | null> {
+function setScannerActive(active: boolean) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("barcode-scanner-active", active);
+  document.body.classList.toggle("barcode-scanner-active", active);
+}
+
+/**
+ * Start a live native barcode scan session (Spark-style). The camera preview
+ * shows behind your React UI. The callback fires once for each detected
+ * barcode — the caller decides whether to accept it, keep scanning, or stop.
+ *
+ * Returns a session handle with `.stop()` that restores the WebView
+ * background and releases the camera. Always call stop() in your cleanup
+ * (component unmount, success path, cancel button, navigation) so the
+ * camera light turns off.
+ */
+export async function startNativeScanSession(opts: {
+  onBarcode: (rawValue: string) => void;
+  onError?: (err: Error) => void;
+}): Promise<NativeScanSession | null> {
   if (!Capacitor.isNativePlatform()) return null;
 
-  // Dynamic import so web builds never pull ML Kit into the bundle.
-  const { BarcodeScanner } = await import("@capacitor-mlkit/barcode-scanning");
+  const { BarcodeScanner } = await import(
+    "@capacitor-mlkit/barcode-scanning"
+  );
 
-  // Android ships ML Kit as a Play Services module that the user may
-  // need to download on first use. Fire-and-check — it's idempotent.
-  try {
-    const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
-    if (!available) {
-      await BarcodeScanner.installGoogleBarcodeScannerModule();
-    }
-  } catch {
-    // iOS, older plugin versions, or module-check not supported —
-    // scan() still works, ML Kit handles its own bootstrapping.
-  }
-
-  // Verify camera permission. Plugin prompts if undecided.
+  // Permission. The plugin prompts if undecided. If the user denies we
+  // bail out so the caller can show an error or fall back to manual entry.
   try {
     const { camera } = await BarcodeScanner.checkPermissions();
     if (camera !== "granted") {
       const req = await BarcodeScanner.requestPermissions();
-      if (req.camera !== "granted") return null;
+      if (req.camera !== "granted") {
+        throw new Error("Camera permission denied");
+      }
     }
-  } catch {
-    // If the permission API isn't available just try scan() anyway.
-  }
-
-  try {
-    const { barcodes } = await BarcodeScanner.scan();
-    const raw = barcodes[0]?.rawValue;
-    return typeof raw === "string" && raw.length > 0 ? raw : null;
   } catch (err) {
-    // User cancelled the native UI, or ML Kit failed to init.
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/cancel/i.test(msg)) {
-      console.error("[scanBarcodeNative] scan error:", err);
-    }
+    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
     return null;
   }
+
+  // Listeners FIRST — otherwise startScan can fire before we subscribe
+  // on a fast device.
+  const barcodeListener = await BarcodeScanner.addListener(
+    "barcodesScanned",
+    (event) => {
+      const raw = event.barcodes[0]?.rawValue;
+      if (typeof raw === "string" && raw.length > 0) {
+        opts.onBarcode(raw);
+      }
+    },
+  );
+  const errorListener = await BarcodeScanner.addListener(
+    "scanError",
+    (event) => {
+      opts.onError?.(new Error(event.message || "Scanner error"));
+    },
+  );
+
+  // Transparent WebView → camera shows through.
+  setScannerActive(true);
+
+  try {
+    await BarcodeScanner.startScan();
+  } catch (err) {
+    setScannerActive(false);
+    await barcodeListener.remove().catch(() => {});
+    await errorListener.remove().catch(() => {});
+    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+    return null;
+  }
+
+  let stopped = false;
+  return {
+    stop: async () => {
+      if (stopped) return;
+      stopped = true;
+      try {
+        await BarcodeScanner.stopScan();
+      } catch {
+        // best-effort — plugin may already be stopped
+      }
+      await barcodeListener.remove().catch(() => {});
+      await errorListener.remove().catch(() => {});
+      setScannerActive(false);
+    },
+  };
+}
+
+/**
+ * Convenience wrapper for callers that want a one-shot scan (scan once,
+ * stop, return the value). Resolves with the first decoded barcode's raw
+ * value, or null if the user cancels / something errors. Uses the same
+ * reliable startScan() pipeline under the hood.
+ *
+ * Callers that want the Spark-style overlay UX should use
+ * `startNativeScanSession` directly and render their own overlay.
+ */
+export async function scanBarcodeNative(): Promise<string | null> {
+  if (!isNativeBarcodeAvailable()) return null;
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    let session: NativeScanSession | null = null;
+
+    const finish = async (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (session) {
+        await session.stop().catch(() => {});
+      }
+      resolve(value);
+    };
+
+    startNativeScanSession({
+      onBarcode: (raw) => finish(raw),
+      onError: () => finish(null),
+    })
+      .then((s) => {
+        if (!s) {
+          // Session setup already failed; onError resolved us.
+          if (!settled) {
+            settled = true;
+            resolve(null);
+          }
+          return;
+        }
+        session = s;
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      });
+  });
 }

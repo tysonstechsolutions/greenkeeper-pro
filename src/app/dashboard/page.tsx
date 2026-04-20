@@ -1452,11 +1452,11 @@ function LeadershipDashboardView() {
                 <Link
                   key={e.id}
                   href={`/equipment/${e.id}`}
-                  className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+                  className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
                 >
-                  <span className="font-medium text-sm">{e.name}</span>
+                  <span className="font-medium text-sm truncate min-w-0 flex-1">{e.name}</span>
                   <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                       e.status === "out_of_service"
                         ? "bg-red-500/10 text-red-600"
                         : e.status === "in_repair"
@@ -1493,9 +1493,9 @@ function LeadershipDashboardView() {
                   {briefingData.chemicals.activeREI.map((c, i) => (
                     <div
                       key={i}
-                      className="p-2.5 rounded-lg bg-red-500/5 mb-1.5 text-sm"
+                      className="p-2.5 rounded-lg bg-red-500/5 mb-1.5 text-sm min-w-0 overflow-hidden"
                     >
-                      <div className="font-medium">{c.product}</div>
+                      <div className="font-medium break-words">{c.product}</div>
                       <div className="text-xs text-red-600 mt-0.5">
                         REI expires:{" "}
                         {new Date(c.expires).toLocaleString("en-US", {
@@ -1506,7 +1506,7 @@ function LeadershipDashboardView() {
                         })}
                       </div>
                       {c.zones.length > 0 && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
+                        <div className="text-xs text-muted-foreground mt-0.5 break-words">
                           {c.zones.slice(0, 4).join(", ")}
                           {c.zones.length > 4 &&
                             ` +${c.zones.length - 4} more`}
@@ -1525,10 +1525,10 @@ function LeadershipDashboardView() {
                   {briefingData.chemicals.lowStock.map((c, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between p-2 rounded-lg bg-amber-500/5 mb-1 text-sm"
+                      className="flex items-center justify-between gap-3 p-2 rounded-lg bg-amber-500/5 mb-1 text-sm"
                     >
-                      <span>{c.name}</span>
-                      <span className="text-xs text-amber-600 font-medium">
+                      <span className="truncate min-w-0 flex-1">{c.name}</span>
+                      <span className="text-xs text-amber-600 font-medium whitespace-nowrap shrink-0">
                         {c.current} / {c.threshold} {c.unit}
                       </span>
                     </div>

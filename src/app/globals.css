@@ -501,6 +501,35 @@
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/*
+ * Native barcode scanner (Spark-for-Walmart pattern).
+ *
+ * When @capacitor-mlkit/barcode-scanning's startScan() is active, we add
+ * this class to <html> and <body> so the WebView becomes transparent and
+ * the device's camera feed (rendered BEHIND the WebView by the plugin)
+ * shows through. The scanner page renders its own minimal overlay (close
+ * button, viewfinder reticle, instructions) on top of the camera view.
+ *
+ * !important is necessary because Tailwind's utility classes on the body
+ * (set by RootLayout) have higher specificity than a plain class selector.
+ */
+html.barcode-scanner-active,
+body.barcode-scanner-active {
+  background: transparent !important;
+}
+
+body.barcode-scanner-active {
+  /* Hide everything inside the app shell except elements explicitly marked
+     as part of the scanner overlay. The scan page toggles .scanner-overlay
+     on its active surface. */
+  visibility: hidden;
+}
+
+body.barcode-scanner-active .scanner-overlay,
+body.barcode-scanner-active .scanner-overlay * {
+  visibility: visible;
+}
+
 /* Mobile-optimized horizontal scroll (for filter chips, tabs) */
 .gk-scroll-x {
   overflow-x: auto;

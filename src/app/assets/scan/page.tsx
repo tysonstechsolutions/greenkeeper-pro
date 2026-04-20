@@ -26,7 +26,11 @@ import {
   type Fy26AssetStatus,
 } from "@/types/fy26-assets";
 import { parseAssetLabel } from "@/lib/utils/parse-asset-label";
-import { isNativeBarcodeAvailable, scanBarcodeNative } from "@/lib/scan/barcode";
+import {
+  isNativeBarcodeAvailable,
+  startNativeScanSession,
+  type NativeScanSession,
+} from "@/lib/scan/barcode";
 
 // Dynamically import html5-qrcode only on client to avoid SSR issues.
 let Html5Qrcode: typeof import("html5-qrcode").Html5Qrcode | null = null;
@@ -118,6 +122,9 @@ export default function AssetScanPage() {
   const scannerRef = useRef<InstanceType<
     typeof import("html5-qrcode").Html5Qrcode
   > | null>(null);
+  // Active native (ML Kit) scan session, when on Capacitor. Held in a ref
+  // so stopScanner / unmount can tear it down even from stale-closure code.
+  const nativeSessionRef = useRef<NativeScanSession | null>(null);
   const scanContainerRef = useRef<HTMLDivElement>(null);
   // Prevents the auto-start effect from firing twice in flight (React 19
   // StrictMode / re-renders) before the first attempt finishes.
@@ -717,34 +724,67 @@ export default function AssetScanPage() {
     recentDecodesRef.current = [];
     recentMisreadsRef.current = 0;
 
-    // ── Native path (ML Kit) ──────────────────────────────────────────────
-    // One-shot full-screen scanner. ML Kit handles autofocus, low-light,
-    // and 2D/1D symbology detection natively — none of the MWRMA hack
-    // layer (reverse-substring, 2-frame confirmation, OCR fallback)
-    // applies here because ML Kit's decoder is accurate enough that we
-    // can trust a first read. We still normalize the value and route it
-    // through lookupAsset, which already handles the 12-digit no-dash
-    // form and non-exact substring matches.
+    // ── Native path (ML Kit, Spark-for-Walmart style) ─────────────────────
+    // Uses startScan() + a live camera feed rendered BEHIND our transparent
+    // WebView, with our own overlay UI on top. The plugin fires a
+    // "barcodesScanned" event each time it detects something — we accept
+    // the first valid read, tear the session down, and route the value
+    // through lookupAsset (which handles 12-digit no-dash + substring
+    // matches). Unlike the old `scan()` API, there is no full-screen
+    // native modal, so no black-screen-after-close bug.
     if (isNativeBarcodeAvailable()) {
       try {
         setScanning(true);
-        const raw = await scanBarcodeNative();
-        setScanning(false);
-        startingRef.current = false;
-        if (raw) {
-          const clean = raw.replace(/[\u0000-\u001F\u007F\s]+/g, "").trim();
-          const canonical = /^\d{12}$/.test(clean)
-            ? `${clean.slice(0, 8)}-${clean.slice(8)}`
-            : clean;
-          lookupAssetRef.current?.(canonical);
+        let handled = false;
+        const session = await startNativeScanSession({
+          onBarcode: (raw) => {
+            if (handled) return;
+            handled = true;
+            // Stop the camera + restore WebView before running the lookup
+            // so the user sees the result card (not a live camera feed).
+            nativeSessionRef.current?.stop().catch(() => {});
+            nativeSessionRef.current = null;
+            setScanning(false);
+            startingRef.current = false;
+            const clean = raw.replace(/[\u0000-\u001F\u007F\s]+/g, "").trim();
+            const canonical = /^\d{12}$/.test(clean)
+              ? `${clean.slice(0, 8)}-${clean.slice(8)}`
+              : clean;
+            lookupAssetRef.current?.(canonical);
+          },
+          onError: (err) => {
+            if (handled) return;
+            handled = true;
+            nativeSessionRef.current?.stop().catch(() => {});
+            nativeSessionRef.current = null;
+            setScanning(false);
+            startingRef.current = false;
+            console.error("[scan] native scan error:", err);
+            setCameraError(
+              err.message.includes("permission")
+                ? "Camera permission is required to scan. Tap Try again or use Manual entry."
+                : "Could not start the camera. Tap Try again or use Manual entry.",
+            );
+          },
+        });
+        if (!session) {
+          // Session setup failed (permission denied / plugin error). The
+          // onError callback already set camera state — just return so the
+          // user can retry or switch to Manual.
+          setScanning(false);
+          startingRef.current = false;
+          return;
         }
+        nativeSessionRef.current = session;
+        // Scanning continues asynchronously — a future onBarcode / onError
+        // or stopScanner() call is what finishes the flow.
         return;
       } catch (err) {
         setScanning(false);
         startingRef.current = false;
-        console.error("Native scan error:", err);
+        console.error("[scan] native scan setup failed:", err);
         setCameraError(
-          "Could not open the native barcode scanner. Use Manual entry or tap Try again."
+          "Could not open the barcode scanner. Use Manual entry or tap Try again.",
         );
         return;
       }
@@ -908,10 +948,19 @@ export default function AssetScanPage() {
 
   const stopScanner = useCallback(async () => {
     const ref = scannerRef.current;
+    const nativeSession = nativeSessionRef.current;
     scannerRef.current = null;
+    nativeSessionRef.current = null;
     setScanning(false);
     setTorchOn(false);
     setTorchSupported(false);
+    if (nativeSession) {
+      try {
+        await nativeSession.stop();
+      } catch {
+        /* already stopped — best-effort cleanup */
+      }
+    }
     if (ref) {
       try {
         await ref.stop();
@@ -949,6 +998,10 @@ export default function AssetScanPage() {
   useEffect(() => {
     return () => {
       cancelledRef.current = true;
+      if (nativeSessionRef.current) {
+        nativeSessionRef.current.stop().catch(() => {});
+        nativeSessionRef.current = null;
+      }
       if (scannerRef.current) {
         scannerRef.current.stop().catch(() => {});
       }
@@ -968,8 +1021,62 @@ export default function AssetScanPage() {
     ? fy26AssetStatusColors[match.status]
     : undefined;
 
+  // Native Spark-for-Walmart-style live scanner overlay. Visible ONLY while
+  // the native ML Kit session is active — the globals.css rule hides the
+  // rest of the app (including the header, mode toggle, and web scanner
+  // container below) when body has `.barcode-scanner-active`.
+  const nativeScanning = scanning && isNativeBarcodeAvailable() && !!nativeSessionRef.current;
+
   return (
     <div className="p-4 md:p-6 pb-24 max-w-lg mx-auto">
+      {nativeScanning && (
+        <div className="scanner-overlay fixed inset-0 z-[100] pointer-events-none">
+          {/* Dim edges so the viewfinder reticle is clearly the focus */}
+          <div className="absolute inset-0 bg-black/30" aria-hidden />
+
+          {/* Close button — top-right, safe-area-aware */}
+          <div
+            className="absolute top-0 right-0 p-4 pointer-events-auto"
+            style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                stopScanner();
+                router.push("/assets");
+              }}
+              aria-label="Close scanner"
+              className="w-11 h-11 rounded-full bg-black/60 text-white flex items-center justify-center active:scale-95 transition backdrop-blur-sm"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Viewfinder reticle — centered, with corner brackets */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="relative w-72 h-72 max-w-[80vw] max-h-[60vh]">
+              {/* Corner brackets */}
+              <span className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-white rounded-tl-2xl" />
+              <span className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-white rounded-tr-2xl" />
+              <span className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-white rounded-bl-2xl" />
+              <span className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-white rounded-br-2xl" />
+              {/* Scanning line animation */}
+              <div className="absolute inset-x-4 top-1/2 h-0.5 bg-primary shadow-[0_0_12px_var(--color-primary)] animate-pulse" />
+            </div>
+          </div>
+
+          {/* Instruction pill */}
+          <div
+            className="absolute inset-x-0 bottom-0 flex justify-center pb-8 pointer-events-none"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
+          >
+            <div className="px-4 py-2 rounded-full bg-black/70 text-white text-sm font-medium backdrop-blur-sm">
+              Point at the asset barcode
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button
