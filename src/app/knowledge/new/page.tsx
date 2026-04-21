@@ -208,7 +208,7 @@ function NewArticleContent() {
       }
 
       if (result) {
-        router.push(`/knowledge/${result.id}`);
+        router.push(`/knowledge/view?id=${result.id}`);
       } else {
         setError("Failed to save article");
       }

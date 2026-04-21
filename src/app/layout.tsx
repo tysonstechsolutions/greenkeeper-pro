@@ -3,12 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout";
 import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync-indicator";
-import { OfflineBanner } from "@/components/features/offline/offline-banner";
-import { OfflineIndicator } from "@/components/ui/offline-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { CapacitorInit } from "@/components/capacitor-init";
-import { DynamicLinkInterceptor, RouteReplay } from "@/components/dynamic-link-interceptor";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -98,13 +95,9 @@ export default function RootLayout({
         }}
       >
         <CapacitorInit />
-        <RouteReplay />
-        <DynamicLinkInterceptor />
         <AuthProvider>
           <AuthGate>
-            <OfflineIndicator />
             <AppShell>{children}</AppShell>
-            <OfflineBanner />
             <OfflineSyncIndicator />
           </AuthGate>
         </AuthProvider>

@@ -270,7 +270,7 @@ function AssetsPageContent() {
               <Card
                 key={a.id}
                 className="cursor-pointer hover:shadow-md active:bg-muted/30 transition-all rounded-xl"
-                onClick={() => router.push(`/assets/${a.id}`)}
+                onClick={() => router.push(`/assets/view?id=${a.id}`)}
               >
                 <CardContent className="p-4">
                   <div className="flex gap-3 items-start">

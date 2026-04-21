@@ -344,7 +344,7 @@ export default function KnowledgePage() {
                 {categoryArticles.map((article) => (
                   <Link
                     key={article.id}
-                    href={`/knowledge/${article.id}`}
+                    href={`/knowledge/view?id=${article.id}`}
                     className="block bg-card rounded-lg border border-border p-4 hover:border-primary/50 transition-colors group"
                   >
                     <div className="flex items-start justify-between gap-4">

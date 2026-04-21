@@ -861,7 +861,7 @@ export default function PlanPage() {
 
   // Handle goal click
   const handleGoalClick = (id: string) => {
-    router.push(`/plan/${id}`);
+    router.push(`/plan/view?id=${id}`);
   };
 
   // Handle add goal
@@ -890,7 +890,7 @@ export default function PlanPage() {
         // Refresh goals to update task counts
         fetchGoals();
         // Navigate to goal detail to see generated tasks
-        router.push(`/plan/${goalId}`);
+        router.push(`/plan/view?id=${goalId}`);
       }
     } finally {
       setGenerating(null);

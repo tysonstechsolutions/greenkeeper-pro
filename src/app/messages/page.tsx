@@ -693,7 +693,7 @@ function MessagesPageContent() {
               </a>
             ) : message.message_type === "task_ref" && message.reference_id ? (
               <Link
-                href={`/tasks/${message.reference_id}`}
+                href={`/tasks/view?id=${message.reference_id}`}
                 className="flex items-center gap-2 p-2 rounded-lg bg-background/50 hover:bg-background/80 transition-colors"
               >
                 <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center">

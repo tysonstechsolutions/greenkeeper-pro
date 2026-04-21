@@ -160,7 +160,7 @@ export default function NewEquipmentPage() {
             await updateEquipment(newEquipment.id, { photos: photoUrls });
           }
         }
-        router.push(`/equipment/${newEquipment.id}`);
+        router.push(`/equipment/view?id=${newEquipment.id}`);
       } else {
         setFormError("Failed to create equipment. Please try again.");
       }

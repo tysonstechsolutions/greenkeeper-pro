@@ -196,7 +196,7 @@ function NewGoalContent() {
       const newGoal = await createGoal(cleanData);
 
       if (newGoal) {
-        router.push(`/plan/${newGoal.id}`);
+        router.push(`/plan/view?id=${newGoal.id}`);
       } else {
         setFormError("Failed to create goal. Please try again.");
       }

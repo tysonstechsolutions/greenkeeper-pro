@@ -990,7 +990,7 @@ function LeadershipDashboardView() {
             {briefingData.tasks.overdue.slice(0, 5).map((task) => (
               <Link
                 key={task.id}
-                href={`/tasks/${task.id}`}
+                href={`/tasks/view?id=${task.id}`}
                 className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/60 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
               >
                 <div className="min-w-0 flex-1">
@@ -1231,7 +1231,7 @@ function LeadershipDashboardView() {
                 {focusGoals.map((goal) => (
                   <Link
                     key={goal.id}
-                    href={`/plan/${goal.id}`}
+                    href={`/plan/view?id=${goal.id}`}
                     className="flex items-center justify-between p-2.5 bg-muted/40 rounded-lg hover:bg-muted/70 transition-colors group"
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -1292,7 +1292,7 @@ function LeadershipDashboardView() {
               {todaysTasks.highPriority.slice(0, 4).map((task) => (
                 <Link
                   key={task.id}
-                  href={`/tasks/${task.id}`}
+                  href={`/tasks/view?id=${task.id}`}
                   className="flex items-center gap-3 p-2.5 bg-muted/40 rounded-lg hover:bg-muted/70 transition-colors group"
                 >
                   <div className="w-6 h-6 rounded-full border-2 border-red-400/60 flex items-center justify-center shrink-0 group-hover:border-red-500 transition-colors">
@@ -1433,7 +1433,7 @@ function LeadershipDashboardView() {
               {briefingData.equipment.needsService.map((e) => (
                 <Link
                   key={e.id}
-                  href={`/equipment/${e.id}`}
+                  href={`/equipment/view?id=${e.id}`}
                   className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
                 >
                   <span className="font-medium text-sm truncate min-w-0 flex-1">{e.name}</span>
@@ -1816,7 +1816,7 @@ function StaffDashboardView() {
               {todaysTasks.highPriority.slice(0, 4).map((task) => (
                 <Link
                   key={task.id}
-                  href={`/tasks/${task.id}`}
+                  href={`/tasks/view?id=${task.id}`}
                   className="flex items-center gap-3 p-2.5 bg-muted/40 rounded-lg hover:bg-muted/70 transition-colors group"
                 >
                   <div className="w-6 h-6 rounded-full border-2 border-red-400/60 flex items-center justify-center shrink-0 group-hover:border-red-500 transition-colors">

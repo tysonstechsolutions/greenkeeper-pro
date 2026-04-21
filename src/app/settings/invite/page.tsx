@@ -140,7 +140,7 @@ export default function InvitePage() {
   };
 
   const copyInviteLink = async (token: string, inviteId: string) => {
-    const link = `${window.location.origin}/invite/${token}`;
+    const link = `${window.location.origin}/invite/accept?token=${token}`;
     await navigator.clipboard.writeText(link);
     setCopiedId(inviteId);
     setTimeout(() => setCopiedId(null), 2000);

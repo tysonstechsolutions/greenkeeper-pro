@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
-  FileText,
   X,
   Plus,
   Trash2,
@@ -25,16 +25,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DetailPageHeader } from "@/components/ui/back-button";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useTasks, type CreateTaskData } from "@/lib/hooks/useTasks";
-import { useTaskTemplates } from "@/lib/hooks/useTaskTemplates";
+import { useTasks, type UpdateTaskData, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useProfiles, getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
 import { useCourseZones, formatZoneName, zoneTypeLabels } from "@/lib/hooks/useCourseZones";
-import { useCrews } from "@/lib/hooks/useCrews";
 import type {
   TaskCategory,
   TaskPriority,
-  TaskTemplate,
   ChecklistItem,
   MaterialNeeded,
   WeatherConditions,
@@ -101,11 +99,6 @@ const commonEquipment = [
   "Edger",
 ];
 
-// Get today's date in YYYY-MM-DD format
-function getTodayString(): string {
-  return new Date().toISOString().split("T")[0];
-}
-
 // Generate unique ID
 function generateId(): string {
   return Math.random().toString(36).substring(2, 9);
@@ -133,55 +126,24 @@ interface FormData {
   notes: string;
   is_recurring: boolean;
   recurring_rule: RecurringRule;
-  template_id: string | null;
 }
 
-const initialFormData: FormData = {
-  title: "",
-  description: "",
-  category: "other",
-  priority: "normal",
-  assigned_to: "",
-  assigned_crew: "",
-  due_date: getTodayString(),
-  due_time: "",
-  estimated_minutes: "",
-  zone_id: "",
-  hole_numbers: [],
-  equipment_needed: [],
-  materials_needed: [],
-  checklist: [],
-  requires_photo_before: false,
-  requires_photo_after: false,
-  weather_dependent: false,
-  weather_conditions: {},
-  notes: "",
-  is_recurring: false,
-  recurring_rule: {
-    frequency: "weekly",
-    interval: 1,
-    days_of_week: [],
-  },
-  template_id: null,
-};
-
-export default function NewTaskPage() {
+function PageContent() {
   const router = useRouter();
-  const { profile, isManager, isForeman, loading: authLoading } = useAuth();
-  const { createTask } = useTasks();
-  const { templates, loading: templatesLoading } = useTaskTemplates();
+  const searchParams = useSearchParams();
+  const taskId = searchParams.get("id") ?? "";
+
+  const { user, profile, isManager, isForeman, loading: authLoading } = useAuth();
+  const { getTask, updateTask } = useTasks();
   const { profiles, allStaff, loading: profilesLoading } = useProfiles();
   const { zones, loading: zonesLoading } = useCourseZones();
-  const { crews, loading: crewsLoading, getCrewNames } = useCrews();
 
-  const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [task, setTask] = useState<TaskWithRelations | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [formData, setFormData] = useState<FormData | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // Modal states
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [templateSearch, setTemplateSearch] = useState("");
 
   // Dropdown states
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
@@ -197,17 +159,69 @@ export default function NewTaskPage() {
   const [newMaterialUnit, setNewMaterialUnit] = useState("");
   const [newChecklistItem, setNewChecklistItem] = useState("");
 
+  // Fetch task data
+  useEffect(() => {
+    async function fetchTask() {
+      if (!taskId) return;
+
+      setLoading(true);
+      try {
+        const taskData = await getTask(taskId);
+        if (taskData) {
+          setTask(taskData);
+          // Initialize form data from task
+          setFormData({
+            title: taskData.title,
+            description: taskData.description || "",
+            category: taskData.category,
+            priority: taskData.priority,
+            assigned_to: taskData.assigned_to || "",
+            assigned_crew: taskData.assigned_crew || "",
+            due_date: taskData.due_date,
+            due_time: taskData.due_time || "",
+            estimated_minutes: taskData.estimated_minutes?.toString() || "",
+            zone_id: taskData.zone_id || "",
+            hole_numbers: taskData.hole_numbers || [],
+            equipment_needed: taskData.equipment_needed || [],
+            materials_needed: taskData.materials_needed || [],
+            checklist: taskData.checklist || [],
+            requires_photo_before: taskData.requires_photo_before,
+            requires_photo_after: taskData.requires_photo_after,
+            weather_dependent: taskData.weather_dependent,
+            weather_conditions: taskData.weather_conditions || {},
+            notes: taskData.notes || "",
+            is_recurring: !!taskData.recurring_rule,
+            recurring_rule: taskData.recurring_rule || {
+              frequency: "weekly",
+              interval: 1,
+              days_of_week: [],
+            },
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching task:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTask();
+  }, [taskId, getTask]);
+
   // Check authorization
   useEffect(() => {
-    if (!authLoading && !isManager && !isForeman) {
-      router.push("/tasks");
+    if (!authLoading && !loading && task) {
+      const canEdit = isManager || isForeman || task.assigned_to === user?.id;
+      if (!canEdit) {
+        router.push(`/tasks/view?id=${taskId}`);
+      }
     }
-  }, [authLoading, isManager, isForeman, router]);
+  }, [authLoading, loading, task, isManager, isForeman, user, taskId, router]);
 
   // Update form field
   const updateField = <K extends keyof FormData>(field: K, value: FormData[K]) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear error when field is updated
+    if (!formData) return;
+    setFormData((prev) => prev ? { ...prev, [field]: value } : null);
     if (errors[field]) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -217,30 +231,9 @@ export default function NewTaskPage() {
     }
   };
 
-  // Apply template to form
-  const applyTemplate = (template: TaskTemplate) => {
-    setFormData((prev) => ({
-      ...prev,
-      title: template.name,
-      description: template.description || "",
-      category: template.category,
-      priority: template.default_priority,
-      estimated_minutes: template.estimated_minutes?.toString() || "",
-      equipment_needed: template.equipment_needed || [],
-      materials_needed: template.materials_needed || [],
-      checklist: template.checklist.map((item) => ({ ...item, checked: false })),
-      requires_photo_before: template.requires_photo_before,
-      requires_photo_after: template.requires_photo_after,
-      weather_dependent: template.weather_dependent,
-      weather_conditions: template.weather_conditions || {},
-      template_id: template.id,
-    }));
-    setShowTemplateModal(false);
-    setTemplateSearch("");
-  };
-
   // Add equipment item
   const addEquipment = (item: string) => {
+    if (!formData) return;
     if (item && !formData.equipment_needed.includes(item)) {
       updateField("equipment_needed", [...formData.equipment_needed, item]);
     }
@@ -250,6 +243,7 @@ export default function NewTaskPage() {
 
   // Remove equipment item
   const removeEquipment = (item: string) => {
+    if (!formData) return;
     updateField(
       "equipment_needed",
       formData.equipment_needed.filter((e) => e !== item)
@@ -258,6 +252,7 @@ export default function NewTaskPage() {
 
   // Add material
   const addMaterial = () => {
+    if (!formData) return;
     if (newMaterialName && newMaterialQty) {
       const material: MaterialNeeded = {
         name: newMaterialName,
@@ -273,6 +268,7 @@ export default function NewTaskPage() {
 
   // Remove material
   const removeMaterial = (index: number) => {
+    if (!formData) return;
     updateField(
       "materials_needed",
       formData.materials_needed.filter((_, i) => i !== index)
@@ -281,6 +277,7 @@ export default function NewTaskPage() {
 
   // Add checklist item
   const addChecklistItem = () => {
+    if (!formData) return;
     if (newChecklistItem.trim()) {
       const item: ChecklistItem = {
         id: generateId(),
@@ -294,6 +291,7 @@ export default function NewTaskPage() {
 
   // Remove checklist item
   const removeChecklistItem = (id: string) => {
+    if (!formData) return;
     updateField(
       "checklist",
       formData.checklist.filter((item) => item.id !== id)
@@ -302,6 +300,7 @@ export default function NewTaskPage() {
 
   // Toggle hole number
   const toggleHole = (hole: number) => {
+    if (!formData) return;
     if (formData.hole_numbers.includes(hole)) {
       updateField(
         "hole_numbers",
@@ -314,6 +313,7 @@ export default function NewTaskPage() {
 
   // Toggle day of week for recurring
   const toggleDayOfWeek = (day: number) => {
+    if (!formData) return;
     const currentDays = formData.recurring_rule.days_of_week || [];
     const newDays = currentDays.includes(day)
       ? currentDays.filter((d) => d !== day)
@@ -323,6 +323,7 @@ export default function NewTaskPage() {
 
   // Validate form
   const validateForm = (): boolean => {
+    if (!formData) return false;
     const newErrors: Record<string, string> = {};
 
     if (!formData.title.trim()) {
@@ -346,6 +347,8 @@ export default function NewTaskPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!formData || !task) return;
+
     if (!validateForm()) {
       return;
     }
@@ -354,7 +357,7 @@ export default function NewTaskPage() {
     setSubmitError(null);
 
     try {
-      const taskData: CreateTaskData = {
+      const updateData: UpdateTaskData = {
         title: formData.title.trim(),
         description: formData.description.trim() || null,
         category: formData.category,
@@ -376,43 +379,23 @@ export default function NewTaskPage() {
         weather_dependent: formData.weather_dependent,
         weather_conditions: formData.weather_dependent ? formData.weather_conditions : null,
         recurring_rule: formData.is_recurring ? formData.recurring_rule : null,
-        template_id: formData.template_id,
         notes: formData.notes.trim() || null,
       };
 
-      const newTask = await createTask(taskData);
+      const updatedTask = await updateTask(task.id, updateData);
 
-      if (newTask) {
-        router.push(`/tasks/view?id=${newTask.id}`);
+      if (updatedTask) {
+        router.push(`/tasks/view?id=${task.id}`);
       } else {
-        setSubmitError("Failed to create task. Please try again.");
+        setSubmitError("Failed to update task. Please try again.");
       }
     } catch (err) {
-      console.error("Error creating task:", err);
+      console.error("Error updating task:", err);
       setSubmitError("An unexpected error occurred. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
-
-  // Filter templates by search
-  const filteredTemplates = templates.filter(
-    (t) =>
-      t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-      t.category.toLowerCase().includes(templateSearch.toLowerCase())
-  );
-
-  // Group templates by category
-  const templatesByCategory = filteredTemplates.reduce(
-    (acc, template) => {
-      if (!acc[template.category]) {
-        acc[template.category] = [];
-      }
-      acc[template.category].push(template);
-      return acc;
-    },
-    {} as Record<TaskCategory, TaskTemplate[]>
-  );
 
   // Filter staff by search
   const filteredStaff = allStaff.filter(
@@ -429,18 +412,20 @@ export default function NewTaskPage() {
   );
 
   // Filter equipment by input
-  const filteredEquipment = commonEquipment.filter(
-    (e) =>
-      e.toLowerCase().includes(equipmentInput.toLowerCase()) &&
-      !formData.equipment_needed.includes(e)
-  );
+  const filteredEquipment = formData
+    ? commonEquipment.filter(
+        (e) =>
+          e.toLowerCase().includes(equipmentInput.toLowerCase()) &&
+          !formData.equipment_needed.includes(e)
+      )
+    : [];
 
-  // Get selected assignee name
-  const selectedAssignee = allStaff.find((p) => p.id === formData.assigned_to);
-  const selectedZone = zones.find((z) => z.id === formData.zone_id);
+  // Get selected assignee and zone names
+  const selectedAssignee = formData ? allStaff.find((p) => p.id === formData.assigned_to) : null;
+  const selectedZone = formData ? zones.find((z) => z.id === formData.zone_id) : null;
 
   // Loading state
-  if (authLoading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -448,36 +433,29 @@ export default function NewTaskPage() {
     );
   }
 
-  // Not authorized
-  if (!isManager && !isForeman) {
-    return null;
+  // Task not found
+  if (!task || !formData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <p className="text-lg text-muted-foreground">Task not found</p>
+        <Button onClick={() => router.push("/tasks")} variant="outline">
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Tasks
+        </Button>
+      </div>
+    );
   }
 
   return (
     <div className="pb-40">
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-background border-b border-border">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <h1 className="text-lg font-semibold">New Task</h1>
-          </div>
-        </div>
-      </div>
-
-      {/* Template Button */}
-      <div className="p-4 border-b border-border">
-        <Button
-          variant="outline"
-          className="w-full justify-start gap-2"
-          onClick={() => setShowTemplateModal(true)}
-        >
-          <FileText className="w-4 h-4" />
-          Create from Template
-        </Button>
-      </div>
+      <DetailPageHeader
+        backHref={`/tasks/view?id=${taskId}`}
+        backLabel="Task"
+        title="Edit Task"
+        className="sticky top-0 z-20 bg-background border-b border-border"
+      />
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="p-4 space-y-6">
@@ -572,7 +550,7 @@ export default function NewTaskPage() {
               type="button"
               onClick={() => {
                 setShowAssigneeDropdown(!showAssigneeDropdown);
-                setFormData((prev) => ({ ...prev, assigned_crew: "" }));
+                updateField("assigned_crew", "");
               }}
               className="w-full px-3 py-2 border border-border rounded-lg bg-background text-left flex items-center justify-between"
             >
@@ -646,7 +624,8 @@ export default function NewTaskPage() {
             <Users className="w-4 h-4 inline mr-1" />
             Or Assign to Crew
           </label>
-          <select
+          <input
+            type="text"
             value={formData.assigned_crew}
             onChange={(e) => {
               updateField("assigned_crew", e.target.value);
@@ -655,14 +634,8 @@ export default function NewTaskPage() {
               }
             }}
             className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >
-            <option value="">Select a crew...</option>
-            {crews.map((crew) => (
-              <option key={crew.name} value={crew.name}>
-                {crew.name} ({crew.member_count} member{crew.member_count !== 1 ? "s" : ""})
-              </option>
-            ))}
-          </select>
+            placeholder="e.g., Morning Crew, Green Team"
+          />
           <p className="text-xs text-muted-foreground mt-1">
             If assigned to a crew, individual assignment will be cleared
           </p>
@@ -958,7 +931,7 @@ export default function NewTaskPage() {
           <label className="block text-sm font-medium mb-1.5">Checklist Items</label>
           {formData.checklist.length > 0 && (
             <div className="space-y-2 mb-3">
-              {formData.checklist.map((item, idx) => (
+              {formData.checklist.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-2 p-2 bg-muted rounded-lg"
@@ -1220,7 +1193,7 @@ export default function NewTaskPage() {
         )}
       </form>
 
-      {/* Fixed Submit Button — positioned above bottom nav (72px) on mobile */}
+      {/* Fixed Submit Button */}
       <div className="fixed bottom-20 md:bottom-0 left-0 right-0 z-40 bg-background border-t border-border p-4">
         <Button
           onClick={handleSubmit}
@@ -1230,90 +1203,21 @@ export default function NewTaskPage() {
           {submitting ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Creating Task...
+              Saving Changes...
             </>
           ) : (
-            "Create Task"
+            "Save Changes"
           )}
         </Button>
       </div>
-
-      {/* Template Modal */}
-      {showTemplateModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center">
-          <div className="bg-background w-full sm:max-w-lg sm:rounded-xl rounded-t-xl max-h-[80vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold">Select Template</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setShowTemplateModal(false);
-                  setTemplateSearch("");
-                }}
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-
-            {/* Search */}
-            <div className="p-4 border-b border-border">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={templateSearch}
-                  onChange={(e) => setTemplateSearch(e.target.value)}
-                  placeholder="Search templates..."
-                  className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {/* Template List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {templatesLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : Object.keys(templatesByCategory).length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No templates found</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {Object.entries(templatesByCategory).map(([category, categoryTemplates]) => (
-                    <div key={category}>
-                      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                        {categoryOptions.find((c) => c.value === category)?.label || category}
-                      </h3>
-                      <div className="space-y-1">
-                        {categoryTemplates.map((template) => (
-                          <button
-                            key={template.id}
-                            onClick={() => applyTemplate(template)}
-                            className="w-full p-3 text-left rounded-lg hover:bg-muted transition-colors"
-                          >
-                            <p className="font-medium text-sm">{template.name}</p>
-                            {template.description && (
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                                {template.description}
-                              </p>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="text-sm text-muted-foreground animate-pulse">Loading…</div></div>}>
+      <PageContent />
+    </Suspense>
   );
 }

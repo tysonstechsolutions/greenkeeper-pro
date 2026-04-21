@@ -611,7 +611,7 @@ export default function TasksPage() {
                     <TaskCard
                       key={task.id}
                       task={task}
-                      onClick={() => router.push(`/tasks/${task.id}`)}
+                      onClick={() => router.push(`/tasks/view?id=${task.id}`)}
                     />
                   ))}
                 </div>

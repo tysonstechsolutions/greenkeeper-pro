@@ -17,11 +17,11 @@ export function notificationToUrl(notification: {
 
   switch (reference_type) {
     case "task":
-      return reference_id ? `/tasks/${reference_id}` : "/tasks";
+      return reference_id ? `/tasks/view?id=${reference_id}` : "/tasks";
     case "channel":
       return reference_id ? `/messages?channel=${reference_id}` : "/messages";
     case "equipment":
-      return reference_id ? `/equipment/${reference_id}` : "/equipment";
+      return reference_id ? `/equipment/view?id=${reference_id}` : "/equipment";
     case "time_off_request":
       return "/schedule/time-off";
     default:

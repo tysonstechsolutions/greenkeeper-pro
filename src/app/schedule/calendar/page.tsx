@@ -298,8 +298,8 @@ export default function MaintenanceCalendarPage() {
 
   // Click event pill
   const handleEventClick = (evt: CalendarEvent) => {
-    if (evt.type === "task") router.push(`/tasks/${evt.data.id}`);
-    else if (evt.type === "equipment") router.push(`/equipment/${evt.data.id}`);
+    if (evt.type === "task") router.push(`/tasks/view?id=${evt.data.id}`);
+    else if (evt.type === "equipment") router.push(`/equipment/view?id=${evt.data.id}`);
     else if (evt.type === "irrigation") router.push("/irrigation");
   };
 

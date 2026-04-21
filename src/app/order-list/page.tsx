@@ -703,7 +703,7 @@ function OrderItemCard({
             {/* Show source link for equipment-part items */}
             {isEquipmentPart && item.equipment_id && (
               <Link
-                href={`/equipment/${item.equipment_id}`}
+                href={`/equipment/view?id=${item.equipment_id}`}
                 className="mt-1 inline-flex items-center gap-1 text-xs text-[#1B4332] hover:underline"
               >
                 <Wrench className="h-3 w-3" />

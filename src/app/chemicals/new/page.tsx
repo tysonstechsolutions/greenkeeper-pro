@@ -127,7 +127,7 @@ export default function NewChemicalProductPage() {
       const newProduct = await createProduct(cleanData);
 
       if (newProduct) {
-        router.push(`/chemicals/${newProduct.id}`);
+        router.push(`/chemicals/view?id=${newProduct.id}`);
       } else {
         setFormError("Failed to create product. Please try again.");
       }

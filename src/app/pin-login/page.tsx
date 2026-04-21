@@ -91,41 +91,39 @@ function PinLoginInner() {
       }
 
       if (data.session) {
-        // setSession persists the tokens to storage synchronously, then
-        // does a network call to fetch the user profile for the in-memory
-        // session. On flaky connections that network call can hang — the
-        // user ends up stuck on "Verifying..." even though the tokens
-        // already wrote to localStorage. Race it against a 4s timeout:
-        // if it hangs, we fall through. The session is already stored, so
-        // on the dashboard onAuthStateChange / getSession picks it up and
-        // the user is logged in — which matches the "close+reopen fixes
-        // it" symptom the user reported.
+        // Let setSession fully complete — even if it takes 4-6 seconds.
+        // Previously we raced this against a 4s timeout, but that left
+        // the auth client in a half-configured state: tokens maybe
+        // persisted, onAuthStateChange maybe fired, and every subsequent
+        // hook tried to fetch against a broken session (zero data
+        // loaded anywhere in the app). Waiting it out is better than
+        // fighting it.
         try {
-          await Promise.race([
-            supabase.auth.setSession({
-              access_token: data.session.access_token,
-              refresh_token: data.session.refresh_token,
-            }),
-            new Promise<void>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("setSession timeout")),
-                4000,
-              ),
-            ),
-          ]);
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
         } catch (err) {
-          // Non-fatal: tokens are persisted. Continue the redirect.
-          console.warn("[pin-login] setSession slow/timed out:", err);
+          console.error("[pin-login] setSession failed:", err);
         }
       }
 
       setUserName(data.user?.name || "User");
 
+      // Hard navigation (full page reload) after login. Reason: Next.js
+      // client-side router.push leaves the running AuthProvider instance
+      // with whatever state it had at login time; if onAuthStateChange
+      // fired slowly or during the router transition, hooks on the next
+      // page see a null/stale user and skip every fetch. A full reload
+      // forces AuthProvider to reinitialize from storage — which now
+      // reliably contains the session because we awaited setSession
+      // fully above.
       setTimeout(() => {
         const destination = returnTo || data.redirectPath || "/dashboard";
-        router.push(destination);
-        router.refresh();
-      }, 800);
+        window.location.href = destination.startsWith("/")
+          ? destination
+          : `/${destination}`;
+      }, 400);
     } catch {
       setError("Connection error. Please try again.");
       setPin("");

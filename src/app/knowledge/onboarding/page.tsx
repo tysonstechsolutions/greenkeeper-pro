@@ -77,7 +77,7 @@ export default function OnboardingPage() {
     );
     setReadCount((prev) => prev + 1);
     // Navigate
-    router.push(`/knowledge/${articleId}`);
+    router.push(`/knowledge/view?id=${articleId}`);
   }
 
   return (

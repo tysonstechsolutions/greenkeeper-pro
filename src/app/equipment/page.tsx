@@ -387,7 +387,7 @@ export default function EquipmentPage() {
 
   // Navigate to equipment detail
   const handleEquipmentClick = (id: string) => {
-    router.push(`/equipment/${id}`);
+    router.push(`/equipment/view?id=${id}`);
   };
 
   // Navigate to add equipment

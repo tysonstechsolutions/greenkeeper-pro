@@ -62,6 +62,13 @@ fcm-service-account*.json
 # Equipment photos (stored in Supabase)
 /equipment/
 
+# Stray frame captures from scanner OCR debugging (never committed)
+/f*.png
+/x*.png
+/y*.png
+/Turf/
+/vmgc-release.jks
+
 # Capacitor / Android build artifacts (keep android/ source, ignore build output)
 /android/app/build/
 /android/app/src/main/assets/public/

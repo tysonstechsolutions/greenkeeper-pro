@@ -51,7 +51,11 @@ const VALID_TAG_RE = /^\d{8}-\d{4}$|^\d{12}$/;
 // plenty for a healthy round-trip and short enough that the UI can
 // fall back to the next lookup strategy — or surface a real error —
 // instead of spinning indefinitely.
-const QUERY_TIMEOUT_MS = 8_000;
+// Match the Supabase client's 12s fetch timeout so we don't bail before
+// the network layer even gets a chance to complete. On mobile data a
+// Postgres query behind an RLS check + trigram ilike can easily hit
+// 8-10s; 15s is generous without being "broken".
+const QUERY_TIMEOUT_MS = 15_000;
 
 /**
  * Wrap a Supabase query (PromiseLike) in a timeout. If the query doesn't
@@ -126,6 +130,12 @@ export default function AssetScanPage() {
   // Active native (ML Kit) scan session, when on Capacitor. Held in a ref
   // so stopScanner / unmount can tear it down even from stale-closure code.
   const nativeSessionRef = useRef<NativeScanSession | null>(null);
+  // Mirrors `nativeSessionRef` as state so the overlay re-renders when
+  // the session actually starts. Without this, setting the ref doesn't
+  // trigger React, the overlay never appears, and the user sees the
+  // camera feed with no cancel button — exactly the "no way to exit"
+  // bug reported.
+  const [nativeSessionActive, setNativeSessionActive] = useState(false);
   // Prevents the auto-start effect from firing twice in flight (React 19
   // StrictMode / re-renders) before the first attempt finishes.
   const startingRef = useRef(false);
@@ -744,6 +754,7 @@ export default function AssetScanPage() {
             // so the user sees the result card (not a live camera feed).
             nativeSessionRef.current?.stop().catch(() => {});
             nativeSessionRef.current = null;
+            setNativeSessionActive(false);
             setScanning(false);
             startingRef.current = false;
             const clean = raw.replace(/[\u0000-\u001F\u007F\s]+/g, "").trim();
@@ -757,6 +768,7 @@ export default function AssetScanPage() {
             handled = true;
             nativeSessionRef.current?.stop().catch(() => {});
             nativeSessionRef.current = null;
+            setNativeSessionActive(false);
             setScanning(false);
             startingRef.current = false;
             console.error("[scan] native scan error:", err);
@@ -776,6 +788,7 @@ export default function AssetScanPage() {
           return;
         }
         nativeSessionRef.current = session;
+        setNativeSessionActive(true);
         // Scanning continues asynchronously — a future onBarcode / onError
         // or stopScanner() call is what finishes the flow.
         return;
@@ -951,6 +964,7 @@ export default function AssetScanPage() {
     const nativeSession = nativeSessionRef.current;
     scannerRef.current = null;
     nativeSessionRef.current = null;
+    setNativeSessionActive(false);
     setScanning(false);
     setTorchOn(false);
     setTorchSupported(false);
@@ -1025,7 +1039,15 @@ export default function AssetScanPage() {
   // the native ML Kit session is active — the globals.css rule hides the
   // rest of the app (including the header, mode toggle, and web scanner
   // container below) when body has `.barcode-scanner-active`.
-  const nativeScanning = scanning && isNativeBarcodeAvailable() && !!nativeSessionRef.current;
+  // Drive the overlay + web-viewport gating off STATE, not the ref. The
+  // ref is set synchronously when startNativeScanSession resolves, but a
+  // ref write alone doesn't re-render, so the overlay (with its cancel
+  // buttons) never appeared and the user had no way to exit.
+  const nativeScanning = scanning && isNativeBarcodeAvailable() && nativeSessionActive;
+  // On any native platform, we always use ML Kit — the html5-qrcode web
+  // viewport is never rendered. This removes the big black box that was
+  // appearing alongside the native camera feed.
+  const onNativePlatform = isNativeBarcodeAvailable();
 
   return (
     <div className="p-4 md:p-6 pb-24 max-w-lg mx-auto">
@@ -1230,8 +1252,13 @@ export default function AssetScanPage() {
 
       {/* Camera scanner — auto-starts on mount, hidden once a match
           lands OR an error is showing. (Effect above tears down the
-          scanner so the camera LED goes off too.) */}
-      {!manualMode && !ocrMode && !match && !matchError && (
+          scanner so the camera LED goes off too.)
+
+          On native platforms we use ML Kit's live camera via the
+          transparent-WebView overlay (above), so the html5-qrcode
+          viewport is never rendered — otherwise it shows up as a dead
+          black panel behind the real camera feed. */}
+      {!manualMode && !ocrMode && !match && !matchError && !onNativePlatform && (
         <div className="mb-4">
           <div className="relative">
             <div
@@ -1315,6 +1342,20 @@ export default function AssetScanPage() {
               </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Camera-error block for NATIVE platform — the viewport that used
+          to own the error message is hidden above when onNativePlatform,
+          so we render the error here so the user can see why scanning
+          failed and retry. */}
+      {onNativePlatform && cameraError && !manualMode && !ocrMode && !match && !matchError && (
+        <div className="mb-4 space-y-2">
+          <p className="text-sm text-red-500">{cameraError}</p>
+          <Button onClick={startScanner} size="sm" className="w-full">
+            <ScanLine className="w-4 h-4 mr-2" />
+            Try camera again
+          </Button>
         </div>
       )}
 
@@ -1463,7 +1504,7 @@ export default function AssetScanPage() {
               )}
               <Button
                 variant="outline"
-                onClick={() => router.push(`/assets/${match.id}`)}
+                onClick={() => router.push(`/assets/view?id=${match.id}`)}
               >
                 Details
               </Button>

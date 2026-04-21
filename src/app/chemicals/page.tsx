@@ -311,7 +311,7 @@ export default function ChemicalsPage() {
 
   // Navigation handlers
   const handleProductClick = (id: string) => {
-    router.push(`/chemicals/${id}`);
+    router.push(`/chemicals/view?id=${id}`);
   };
 
   const handleAddClick = () => {

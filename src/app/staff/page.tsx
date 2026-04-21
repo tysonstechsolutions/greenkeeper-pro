@@ -692,7 +692,7 @@ export default function StaffPage() {
                         {selectedStaffTasks.slice(0, 5).map((task) => (
                           <Link
                             key={task.id}
-                            href={`/tasks/${task.id}`}
+                            href={`/tasks/view?id=${task.id}`}
                             className="block p-2 rounded bg-muted/50 hover:bg-muted text-sm"
                           >
                             <div className="font-medium truncate">{task.title}</div>
@@ -795,7 +795,7 @@ export default function StaffPage() {
                         Admin Actions
                       </h3>
                       <div className="space-y-2">
-                        <Link href={`/settings/staff/${selectedStaff.id}`}>
+                        <Link href={`/settings/staff/view?id=${selectedStaff.id}`}>
                           <Button variant="outline" size="sm" className="w-full">
                             Edit Profile
                           </Button>

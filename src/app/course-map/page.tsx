@@ -378,7 +378,7 @@ export default function CourseMapPage() {
                     key={hole.holeNumber}
                     hole={hole}
                     openCount={getOpenCountForHole(hole.holeNumber)}
-                    onClick={() => router.push(`/course-map/${hole.holeNumber}`)}
+                    onClick={() => router.push(`/course-map/hole?n=${hole.holeNumber}`)}
                   />
                 ))}
             </div>
@@ -401,7 +401,7 @@ export default function CourseMapPage() {
                     key={hole.holeNumber}
                     hole={hole}
                     openCount={getOpenCountForHole(hole.holeNumber)}
-                    onClick={() => router.push(`/course-map/${hole.holeNumber}`)}
+                    onClick={() => router.push(`/course-map/hole?n=${hole.holeNumber}`)}
                   />
                 ))}
             </div>
@@ -429,7 +429,7 @@ export default function CourseMapPage() {
                     key={green.holeNumber}
                     green={green}
                     openCount={getOpenCountForGreen(green.holeNumber)}
-                    onClick={() => router.push(`/course-map/green/${green.holeNumber}`)}
+                    onClick={() => router.push(`/course-map/green/hole?n=${green.holeNumber}`)}
                   />
                 ))}
             </div>
@@ -452,7 +452,7 @@ export default function CourseMapPage() {
                     key={green.holeNumber}
                     green={green}
                     openCount={getOpenCountForGreen(green.holeNumber)}
-                    onClick={() => router.push(`/course-map/green/${green.holeNumber}`)}
+                    onClick={() => router.push(`/course-map/green/hole?n=${green.holeNumber}`)}
                   />
                 ))}
             </div>

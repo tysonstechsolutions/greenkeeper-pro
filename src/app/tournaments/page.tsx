@@ -463,7 +463,7 @@ function TournamentCard({ tournament: t }: { tournament: Tournament }) {
       : 0;
 
   return (
-    <Link href={`/tournaments/${t.id}`}>
+    <Link href={`/tournaments/view?id=${t.id}`}>
       <Card className="hover:border-primary/20 active:scale-[0.99] transition-all cursor-pointer">
         <CardContent className="pt-4 pb-4 space-y-3">
           {/* Header row */}

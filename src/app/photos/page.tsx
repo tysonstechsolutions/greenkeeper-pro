@@ -1097,7 +1097,7 @@ export default function PhotosPage() {
                   <FileText className="w-3 h-3" /> Linked Task
                 </Label>
                 <Link
-                  href={`/tasks/${currentPhoto.task_id}`}
+                  href={`/tasks/view?id=${currentPhoto.task_id}`}
                   className="text-sm text-primary flex items-center gap-1"
                 >
                   View Task <ExternalLink className="w-3 h-3" />

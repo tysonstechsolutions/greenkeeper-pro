@@ -280,7 +280,7 @@ export default function AssetInventoryPage() {
                     </div>
 
                     {/* Info */}
-                    <div className="flex-1 min-w-0" onClick={() => router.push(`/assets/${asset.id}`)}>
+                    <div className="flex-1 min-w-0" onClick={() => router.push(`/assets/view?id=${asset.id}`)}>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="text-sm font-semibold truncate">{asset.description}</p>
                         <Badge
@@ -328,7 +328,7 @@ export default function AssetInventoryPage() {
                       )}
                       <button
                         className="p-1.5 text-muted-foreground/40"
-                        onClick={() => router.push(`/assets/${asset.id}`)}
+                        onClick={() => router.push(`/assets/view?id=${asset.id}`)}
                       >
                         <ChevronRight className="w-4 h-4" />
                       </button>
