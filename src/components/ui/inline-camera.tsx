@@ -5,6 +5,7 @@ import { X, RotateCcw, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 interface InlineCameraProps {
   open: boolean;
@@ -40,34 +41,61 @@ export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
 
     (async () => {
       try {
+        recordBreadcrumb("lifecycle", "InlineCamera: opening native camera");
+        // Use DataUrl instead of Uri to avoid the fetch(webPath) conversion
+        // step. That fetch has been silently failing on Android 14/15 with
+        // Capacitor's http://localhost/_capacitor_file_/... scheme — the
+        // WebView sometimes blocks the cross-origin cache fetch, so the
+        // promise rejects and onCapture never fires. DataUrl returns the
+        // JPEG bytes inline (base64-encoded) which we decode to a Blob
+        // synchronously. No network hop, no permission edge cases.
         const photo = await Camera.getPhoto({
           quality: 85,
           allowEditing: false,
-          resultType: CameraResultType.Uri,
+          resultType: CameraResultType.DataUrl,
           source: CameraSource.Camera,
           saveToGallery: false,
           correctOrientation: true,
           width: 1920,
         });
 
-        const webPath = photo.webPath;
-        if (!webPath) {
+        const dataUrl = photo.dataUrl;
+        if (!dataUrl) {
+          recordBreadcrumb(
+            "warn",
+            "InlineCamera: native camera returned no dataUrl",
+          );
           onClose();
           return;
         }
 
-        // Convert the file:// (or blob:) URI into a File for the caller.
-        const res = await fetch(webPath);
-        const blob = await res.blob();
+        // Decode "data:image/jpeg;base64,..." into bytes then wrap as a File.
+        const commaIdx = dataUrl.indexOf(",");
+        const mimeMatch = /^data:(image\/[a-z0-9+.-]+);base64/i.exec(
+          dataUrl.slice(0, commaIdx),
+        );
+        const mime = mimeMatch?.[1] ?? "image/jpeg";
+        const base64 = dataUrl.slice(commaIdx + 1);
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: mime });
         const file = new File([blob], `photo-${Date.now()}.jpg`, {
-          type: blob.type || "image/jpeg",
+          type: mime,
         });
+        recordBreadcrumb(
+          "lifecycle",
+          `InlineCamera: captured ${Math.round(blob.size / 1024)}KB photo`,
+        );
         onCapture(file);
       } catch (err) {
         // User cancelled, or permission denied — close gracefully.
         // (Capacitor throws "User cancelled photos app" or similar.)
         const msg = err instanceof Error ? err.message : String(err);
-        if (!/cancel/i.test(msg)) {
+        if (/cancel/i.test(msg)) {
+          recordBreadcrumb("lifecycle", "InlineCamera: user cancelled");
+        } else {
+          recordBreadcrumb("error", "InlineCamera: native capture failed", msg);
           console.error("Native camera error:", err);
         }
         onClose();

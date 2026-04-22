@@ -33,6 +33,7 @@
  */
 
 import { createClient } from "./client";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 const BUCKET_NAME = "photos";
 
@@ -85,19 +86,65 @@ export async function uploadPhoto(
   const filename = generateUniqueFilename(ext);
   const storagePath = getStoragePath(userId, filename);
 
-  const { error } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(storagePath, file, {
-      cacheControl: "3600",
-      upsert: false,
-    });
+  recordBreadcrumb(
+    "lifecycle",
+    `uploadPhoto: starting (${Math.round(file.size / 1024)}KB → ${storagePath})`,
+  );
+
+  // Verify we actually have a session — the storage RLS policy requires
+  // auth.uid() = (storage.foldername(name))[1], so a missing/expired
+  // session produces a confusing 400/403 error instead of a clear
+  // "you're not signed in" message.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    recordBreadcrumb(
+      "error",
+      "uploadPhoto: no Supabase session — cannot upload",
+    );
+    throw new Error(
+      "You're not signed in. The session expired — reopen the app and sign in with your PIN.",
+    );
+  }
+  if (session.user?.id !== userId) {
+    recordBreadcrumb(
+      "warn",
+      `uploadPhoto: userId mismatch (session=${session.user?.id}, passed=${userId})`,
+    );
+  }
+
+  // Try once, retry once on transient auth-lock errors. The lock error
+  // ("Lock broken by another request with the 'steal' option") used to
+  // fire when the client's auth navigator-lock was held by a concurrent
+  // realtime subscription; we've since disabled that lock in client.ts,
+  // but this retry is cheap defense in case any other transient failure
+  // happens on a flaky mobile connection.
+  async function tryUpload(): Promise<{ error: Error | null }> {
+    return await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(storagePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      }) as { error: Error | null };
+  }
+
+  let { error } = await tryUpload();
+  if (error && /lock|timeout|network|fetch/i.test(error.message)) {
+    recordBreadcrumb(
+      "warn",
+      `uploadPhoto: transient error — retrying once (${error.message})`,
+    );
+    await new Promise((r) => setTimeout(r, 800));
+    ({ error } = await tryUpload());
+  }
 
   if (error) {
+    recordBreadcrumb("error", `uploadPhoto: failed — ${error.message}`);
     console.error("Error uploading photo:", error);
     throw new Error(`Failed to upload photo: ${error.message}`);
   }
 
   const publicUrl = getPublicUrl(storagePath);
+  recordBreadcrumb("lifecycle", `uploadPhoto: uploaded ${storagePath}`);
 
   return { storagePath, publicUrl };
 }

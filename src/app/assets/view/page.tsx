@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   CheckCircle,
   AlertTriangle,
@@ -763,19 +764,41 @@ function PageContent() {
             value={asset.serial_number ? <span className="font-mono">{asset.serial_number}</span> : null}
           />
           <DetailRow label="Original Value" value={formatMoney(asset.original_value)} />
-          {asset.equipment_id && (
-            <DetailRow
-              label="Linked Equipment"
-              value={
-                <a
+          <DetailRow
+            label="Linked Equipment"
+            value={
+              asset.equipment_id ? (
+                // Must use Next.js <Link>, not a raw <a>. A raw anchor
+                // navigates to the literal href, which in Capacitor's
+                // static-file LocalServer doesn't match `/equipment/view`
+                // (the on-disk path is `/equipment/view/index.html`).
+                // That 404 triggers the SPA fallback to /index.html,
+                // where page.tsx redirects to /dashboard — the "clicks
+                // bounce me to dashboard" bug. <Link> uses Next's router
+                // which respects trailingSlash:true and emits the
+                // correct URL.
+                <Link
                   href={`/equipment/view?id=${asset.equipment_id}`}
                   className="text-primary underline"
                 >
                   Open equipment record
-                </a>
-              }
-            />
-          )}
+                </Link>
+              ) : (
+                // No equipment record yet — the scan wizard creates one
+                // on step 2. Direct the user there instead of leaving a
+                // dead row. Scanning auto-matches the tag, then the
+                // wizard auto-links the barcode and creates the
+                // equipment record with the asset's description /
+                // manufacturer / model / serial pre-filled.
+                <Link
+                  href="/assets/scan"
+                  className="text-muted-foreground underline decoration-dotted"
+                >
+                  Scan to create equipment record
+                </Link>
+              )
+            }
+          />
           {asset.verified_at && (
             <DetailRow
               label="Last updated"

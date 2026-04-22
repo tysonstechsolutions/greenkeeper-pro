@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Fy26Asset, Fy26AssetStatus, AssetDamageRecord, ConditionPhotoAngle, ConditionPhotos } from "@/types/fy26-assets";
 import { uploadPhoto } from "@/lib/supabase/storage";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 export interface Fy26AssetFilters {
   site?: string;           // '7009' | '7010'
@@ -227,6 +228,10 @@ export function useFy26Assets(): UseFy26AssetsReturn {
       // Upload to storage — throw lets caller surface the exact error.
       const result = await uploadPhoto(file, userId);
       const url = result.publicUrl;
+      recordBreadcrumb(
+        "lifecycle",
+        `uploadConditionPhoto: storage OK, merging into fy26_assets.${angle}`,
+      );
 
       // Fetch current photos to merge
       const { data: current, error: fetchErr } = await supabase
@@ -236,6 +241,10 @@ export function useFy26Assets(): UseFy26AssetsReturn {
         .single();
 
       if (fetchErr) {
+        recordBreadcrumb(
+          "error",
+          `uploadConditionPhoto: select failed — ${fetchErr.message}`,
+        );
         throw new Error(`Could not read existing photos: ${fetchErr.message}`);
       }
 
@@ -249,9 +258,17 @@ export function useFy26Assets(): UseFy26AssetsReturn {
         .eq("id", assetId);
 
       if (updateErr) {
+        recordBreadcrumb(
+          "error",
+          `uploadConditionPhoto: update failed — ${updateErr.message}`,
+        );
         throw new Error(`Photo uploaded but DB update failed: ${updateErr.message}`);
       }
 
+      recordBreadcrumb(
+        "lifecycle",
+        `uploadConditionPhoto: ${angle} linked to asset ${assetId}`,
+      );
       return url;
     },
     [supabase]

@@ -35,6 +35,10 @@ export interface Fy26Asset {
   photo_url: string | null;
   condition_photos: ConditionPhotos;
   barcode_value: string | null;
+  /** Flag set by the scan wizard when damage is too widespread to document
+   *  photo-by-photo. Surfaces as a red "damage unassessed" badge on the
+   *  asset list so it's obvious which assets need a manual review. */
+  damage_too_extensive: boolean;
   created_at: string;
   updated_at: string;
 }

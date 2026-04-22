@@ -54,6 +54,31 @@ function maybeSignalReset() {
   window.dispatchEvent(new CustomEvent("supabase:reset-needed"));
 }
 
+/**
+ * Watchdog: if a fetch has been pending for more than this long without
+ * the full 12s timeout wrapper firing, something deeper is stuck (lock
+ * contention, wedged websocket, hung TLS handshake). Signal a reset early
+ * so the SupabaseRecovery component can reload rather than making the
+ * user wait out the full timeout. 8s is twice the healthy-query p99 (~4s
+ * on mobile) and half the hard timeout.
+ */
+const WATCHDOG_PENDING_MS = 8_000;
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+function kickWatchdog() {
+  if (typeof window === "undefined") return;
+  if (watchdogTimer !== null) clearTimeout(watchdogTimer);
+  watchdogTimer = setTimeout(() => {
+    if (requestTelemetry.pending > 0) {
+      recordBreadcrumb(
+        "warn",
+        `Watchdog: ${requestTelemetry.pending} request(s) pending for >${WATCHDOG_PENDING_MS}ms`,
+      );
+      window.dispatchEvent(new CustomEvent("supabase:reset-needed"));
+    }
+  }, WATCHDOG_PENDING_MS);
+}
+
 async function timeoutFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -82,6 +107,7 @@ async function timeoutFetch(
   const started = Date.now();
   requestTelemetry.pending++;
   recordBreadcrumb("fetch", `→ ${shortUrl}`);
+  kickWatchdog();
   try {
     const resp = await fetch(input, { ...init, signal: controller.signal });
     requestTelemetry.consecutiveTimeouts = 0;
@@ -122,6 +148,12 @@ async function timeoutFetch(
   } finally {
     clearTimeout(timer);
     requestTelemetry.pending = Math.max(0, requestTelemetry.pending - 1);
+    // If there are no more pending requests, cancel the watchdog — nothing
+    // to watch for.
+    if (requestTelemetry.pending === 0 && watchdogTimer !== null) {
+      clearTimeout(watchdogTimer);
+      watchdogTimer = null;
+    }
   }
 }
 
@@ -144,10 +176,24 @@ function buildClient() {
       // Every request goes through our timeout wrapper. Without this a
       // stalled mobile fetch could wedge the entire client: every
       // subsequent request queues behind the hung one. With the wrapper,
-      // fetch aborts at 15s, the promise rejects, downstream code gets
-      // the error, and the app remains responsive. auth-js's default
-      // 5s lockAcquireTimeout also releases orphaned locks automatically.
+      // fetch aborts at 12s, the promise rejects, downstream code gets
+      // the error, and the app remains responsive.
       fetch: timeoutFetch,
+    },
+    auth: {
+      // Disable the navigator.locks-based token-refresh lock. The lock
+      // exists to serialize auth refreshes across multiple tabs / service
+      // workers; on a single-screen Capacitor mobile app we only ever
+      // have one page at a time, so the lock provides zero benefit and
+      // caused real failures — an upload in mid-flight would wait up to
+      // 5s for the lock, then get forcibly stolen, throwing
+      //   "Lock broken by another request with the 'steal' option"
+      // right in the middle of the Storage PUT.
+      //
+      // Supabase's lock option is `(name, timeout, fn) => Promise` — we
+      // pass a no-op wrapper that just runs fn() immediately. If we ever
+      // add multi-tab support (web + native simultaneously), revisit.
+      lock: async (_name, _timeout, fn) => fn(),
     },
   });
 }

@@ -6,6 +6,7 @@ import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { CapacitorInit } from "@/components/capacitor-init";
+import { SupabaseRecovery } from "@/components/supabase-recovery";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -88,13 +89,14 @@ export default function RootLayout({
             that don't report insets, and 28px covers the typical ~24dp
             status bar height.
           */
-          paddingTop: "max(env(safe-area-inset-top, 0px), 28px)",
+          paddingTop: "max(env(safe-area-inset-top, 0px), 48px)",
           /* Bottom padding handled by bottom-nav safe-area-bottom class */
           paddingLeft: "env(safe-area-inset-left)",
           paddingRight: "env(safe-area-inset-right)",
         }}
       >
         <CapacitorInit />
+        <SupabaseRecovery />
         <AuthProvider>
           <AuthGate>
             <AppShell>{children}</AppShell>

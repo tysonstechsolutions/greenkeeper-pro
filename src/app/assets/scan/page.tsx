@@ -32,6 +32,7 @@ import {
   startNativeScanSession,
   type NativeScanSession,
 } from "@/lib/scan/barcode";
+import { ScanWizard } from "@/components/features/assets/scan-wizard";
 
 // Dynamically import html5-qrcode only on client to avoid SSR issues.
 let Html5Qrcode: typeof import("html5-qrcode").Html5Qrcode | null = null;
@@ -101,6 +102,9 @@ export default function AssetScanPage() {
   const [scanning, setScanning] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [manualInput, setManualInput] = useState("");
+  // The last raw query (scan or typed) that produced the current match.
+  // Passed to the ScanWizard so it can auto-link the barcode to the asset.
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
 
   // OCR (read label text) fallback state
   const [ocrMode, setOcrMode] = useState(false);
@@ -188,6 +192,7 @@ export default function AssetScanPage() {
       safeSetSearching(true);
       safeSetMatch(null);
       safeSetMatchError(null);
+      if (!cancelledRef.current) setLastQuery(normalized);
 
       // Escape PostgREST special chars inside a filter value. Any of
       // , ( ) % * " \ break the or/ilike syntax and cause a 400 response,
@@ -311,6 +316,94 @@ export default function AssetScanPage() {
             return;
           }
 
+          // 2b-zero. MWRMA tags for single-unit assets print a literal
+          //          "0000" sub (e.g. "11006241-0000"), but the DB row
+          //          for a no-sub asset can legitimately store
+          //          sub_number as NULL, "" (empty), "0", or "0000"
+          //          depending on how the inventory sheet was imported.
+          //          2a/2b only cover the "0" and "0000" literals. When
+          //          the scanned sub is all-zeros, also check NULL and
+          //          empty-string, and if still nothing, fall back to an
+          //          asset_number-only match — the MWRMA asset_number is
+          //          unique per physical item regardless of the sub.
+          const scannedSubIsZero = parseInt(tagMatch[2], 10) === 0;
+          if (scannedSubIsZero) {
+            // NULL sub_number in DB
+            const { data: nullSubRows } = await withTimeout(
+              supabase
+                .from("fy26_assets")
+                .select("*")
+                .eq("asset_number", assetNum)
+                .is("sub_number", null)
+                .limit(1),
+              QUERY_TIMEOUT_MS,
+              "tag null sub",
+            );
+            if (cancelledRef.current) return;
+            if (nullSubRows && nullSubRows.length > 0) {
+              const hit = nullSubRows[0] as Fy26Asset;
+              learnBarcodeIfEmpty(hit);
+              safeSetMatch(hit);
+              return;
+            }
+
+            // Empty-string sub_number in DB (also treat as no-sub)
+            const { data: emptySubRows } = await withTimeout(
+              supabase
+                .from("fy26_assets")
+                .select("*")
+                .eq("asset_number", assetNum)
+                .eq("sub_number", "")
+                .limit(1),
+              QUERY_TIMEOUT_MS,
+              "tag empty sub",
+            );
+            if (cancelledRef.current) return;
+            if (emptySubRows && emptySubRows.length > 0) {
+              const hit = emptySubRows[0] as Fy26Asset;
+              learnBarcodeIfEmpty(hit);
+              safeSetMatch(hit);
+              return;
+            }
+
+            // Asset-number-only match. This is the catch-all for scanned
+            // tags like "11006241-0000" — if there's exactly one asset
+            // with that asset_number, accept it regardless of what the
+            // DB row has in sub_number. Multiple rows → disambiguation.
+            const { data: anyRows } = await withTimeout(
+              supabase
+                .from("fy26_assets")
+                .select("*")
+                .eq("asset_number", assetNum)
+                .limit(3),
+              QUERY_TIMEOUT_MS,
+              "tag asset only",
+            );
+            if (cancelledRef.current) return;
+            if (anyRows && anyRows.length === 1) {
+              const hit = anyRows[0] as Fy26Asset;
+              learnBarcodeIfEmpty(hit);
+              safeSetMatch(hit);
+              return;
+            }
+            if (anyRows && anyRows.length > 1) {
+              // Multiple physical items share this asset_number (unusual
+              // but possible if a family of subs exists). User needs to
+              // disambiguate — surface the sub values we found.
+              const subs = (anyRows as Fy26Asset[])
+                .map((r) =>
+                  r.sub_number == null || r.sub_number === ""
+                    ? "(none)"
+                    : r.sub_number,
+                )
+                .join(", ");
+              safeSetMatchError(
+                `Asset ${assetNum} has ${anyRows.length} sub-items (${subs}). This tag's sub (${tagMatch[2]}) doesn't match any. Check the label.`,
+              );
+              return;
+            }
+          }
+
           // 2c. Scanner-misread tolerance. Scanners occasionally drop
           //     a leading or trailing digit on Code 128 tags at an
           //     angle, so "17000198-0004" decodes as "1000198-004" (as
@@ -382,6 +475,90 @@ export default function AssetScanPage() {
             learnBarcodeIfEmpty(hit);
             safeSetMatch(hit);
             return;
+          }
+
+          // 3a-zero. 12-digit raw MWRMA tag encoded without a dash —
+          //          e.g. "110062410000" on the Electric Pressure Washer
+          //          label. Standard split is 8-digit asset + 4-digit sub.
+          //          Apply the same zero-sub fallback chain as 2b-zero so
+          //          we accept a hit no matter which storage convention
+          //          the DB row uses (null / "" / "0" / "0000").
+          if (normalized.length === 12) {
+            const assetPart = normalized.slice(0, 8);
+            const subPart = normalized.slice(8);
+            const subIsZero = parseInt(subPart, 10) === 0;
+
+            // Exact with stripped-zeros sub
+            const { data: splitRows } = await withTimeout(
+              supabase
+                .from("fy26_assets")
+                .select("*")
+                .eq("asset_number", assetPart)
+                .eq("sub_number", String(parseInt(subPart, 10)))
+                .limit(1),
+              QUERY_TIMEOUT_MS,
+              "digits split exact",
+            );
+            if (cancelledRef.current) return;
+            if (splitRows && splitRows.length > 0) {
+              const hit = splitRows[0] as Fy26Asset;
+              learnBarcodeIfEmpty(hit);
+              safeSetMatch(hit);
+              return;
+            }
+
+            // Exact with raw-zeros sub
+            const { data: splitRowsRaw } = await withTimeout(
+              supabase
+                .from("fy26_assets")
+                .select("*")
+                .eq("asset_number", assetPart)
+                .eq("sub_number", subPart)
+                .limit(1),
+              QUERY_TIMEOUT_MS,
+              "digits split raw",
+            );
+            if (cancelledRef.current) return;
+            if (splitRowsRaw && splitRowsRaw.length > 0) {
+              const hit = splitRowsRaw[0] as Fy26Asset;
+              learnBarcodeIfEmpty(hit);
+              safeSetMatch(hit);
+              return;
+            }
+
+            // Zero-sub fallback: treat any matching asset_number as a
+            // hit when scanned sub is all zeros.
+            if (subIsZero) {
+              const { data: anyRows } = await withTimeout(
+                supabase
+                  .from("fy26_assets")
+                  .select("*")
+                  .eq("asset_number", assetPart)
+                  .limit(3),
+                QUERY_TIMEOUT_MS,
+                "digits split asset only",
+              );
+              if (cancelledRef.current) return;
+              if (anyRows && anyRows.length === 1) {
+                const hit = anyRows[0] as Fy26Asset;
+                learnBarcodeIfEmpty(hit);
+                safeSetMatch(hit);
+                return;
+              }
+              if (anyRows && anyRows.length > 1) {
+                const subs = (anyRows as Fy26Asset[])
+                  .map((r) =>
+                    r.sub_number == null || r.sub_number === ""
+                      ? "(none)"
+                      : r.sub_number,
+                  )
+                  .join(", ");
+                safeSetMatchError(
+                  `Asset ${assetPart} has ${anyRows.length} sub-items (${subs}). Your tag's sub (${subPart}) doesn't match any. Check the label.`,
+                );
+                return;
+              }
+            }
           }
         }
 
@@ -1412,121 +1589,29 @@ export default function AssetScanPage() {
         </Card>
       )}
 
-      {/* Match found */}
+      {/* Match found — run the full scan wizard instead of the old
+          one-tap "Mark Present" card. Every match now flows through
+          verify → link → status → 4 condition photos → damage → parts
+          → service → review → save. The wizard persists each step
+          immediately so a mid-wizard crash doesn't lose data. */}
       {match && !searching && (
-        <Card className="rounded-2xl overflow-hidden">
-          {/* Front condition photo — shown full-width at the top so you
-              can visually confirm you've scanned the right thing before
-              marking it present. Falls back to any available angle if
-              front isn't set. */}
-          {(() => {
-            const photos = match.condition_photos ?? {};
-            const frontPhoto =
-              photos.front ?? photos.back ?? photos.left ?? photos.right;
-            return frontPhoto ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={frontPhoto}
-                alt={`${match.description} — front view`}
-                className="w-full aspect-[4/3] object-cover bg-muted"
-              />
-            ) : null;
-          })()}
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <h2 className="font-semibold text-base">
-                  {match.description}
-                </h2>
-                <p className="text-xs text-muted-foreground font-mono">
-                  Asset #{match.asset_number}
-                  {match.sub_number &&
-                    match.sub_number !== "0" &&
-                    ` / sub ${match.sub_number}`}
-                </p>
-              </div>
-              <Badge
-                variant="outline"
-                style={{
-                  backgroundColor: `${statusColor}15`,
-                  borderColor: statusColor,
-                  color: statusColor,
-                }}
-              >
-                {fy26AssetStatusLabels[match.status]}
-              </Badge>
-            </div>
-
-            <div className="space-y-1 text-xs text-muted-foreground mb-4">
-              {match.serial_number && (
-                <p>
-                  <span className="font-semibold">SN:</span>{" "}
-                  <span className="font-mono">{match.serial_number}</span>
-                </p>
-              )}
-              {match.manufacturer && (
-                <p>
-                  <span className="font-semibold">Manufacturer:</span>{" "}
-                  {match.manufacturer}
-                </p>
-              )}
-              {match.model_text && (
-                <p>
-                  <span className="font-semibold">Model:</span>{" "}
-                  {match.model_text}
-                </p>
-              )}
-              <p>
-                <span className="font-semibold">Site:</span> {match.site}
-              </p>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-2">
-              {match.status !== "verified_present" ? (
-                <Button
-                  onClick={markPresent}
-                  disabled={updating}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                >
-                  {updating ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                  )}
-                  Mark Present
-                </Button>
-              ) : (
-                <div className="flex-1 flex items-center justify-center gap-2 py-2 text-green-600">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-semibold">Verified Present</span>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/assets/view?id=${match.id}`)}
-              >
-                Details
-              </Button>
-            </div>
-
-            {/* Scan next */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full mt-3 text-muted-foreground"
-              onClick={() => {
-                setMatch(null);
-                setMatchError(null);
-                setManualInput("");
-                if (!manualMode) startScanner();
-              }}
-            >
-              <ScanLine className="w-4 h-4 mr-1.5" />
-              Scan next
-            </Button>
-          </CardContent>
-        </Card>
+        <ScanWizard
+          asset={match}
+          barcode={lastQuery}
+          onDone={() => {
+            setMatch(null);
+            setMatchError(null);
+            setManualInput("");
+            setLastQuery(null);
+          }}
+          onNotThisAsset={() => {
+            setMatch(null);
+            setMatchError(null);
+            setManualInput("");
+            setLastQuery(null);
+            if (!manualMode) startScanner();
+          }}
+        />
       )}
     </div>
   );
