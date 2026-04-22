@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import type { Fy26Asset, Fy26AssetStatus, AssetDamageRecord, ConditionPhotoAngle, ConditionPhotos } from "@/types/fy26-assets";
 import { uploadPhoto } from "@/lib/supabase/storage";
+import {
+  directPatchRow,
+  directPatchRowReturning,
+  directInsertRow,
+  directSelectRow,
+  directSelectList,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 export interface Fy26AssetFilters {
@@ -31,7 +38,7 @@ interface UseFy26AssetsReturn {
   fetchAssetItem: (id: string) => Promise<Fy26Asset | null>;
   updateStatus: (id: string, status: Fy26AssetStatus, notes?: string) => Promise<Fy26Asset | null>;
   updateAsset: (id: string, data: Partial<Fy26Asset>) => Promise<Fy26Asset | null>;
-  uploadConditionPhoto: (assetId: string, angle: ConditionPhotoAngle, file: File, userId: string) => Promise<string | null>;
+  uploadConditionPhoto: (assetId: string, angle: ConditionPhotoAngle, file: File, userId: string, existing?: ConditionPhotos) => Promise<string | null>;
   fetchDamageRecords: (assetId: string) => Promise<AssetDamageRecord[]>;
   addDamageRecord: (assetId: string, record: { damage_date: string; description: string; photos: string[]; reported_by?: string }) => Promise<AssetDamageRecord | null>;
   deleteDamageRecord: (recordId: string) => Promise<boolean>;
@@ -54,7 +61,30 @@ export function useFy26Assets(): UseFy26AssetsReturn {
   // apply a result if it's still the latest when it resolves.
   const statsReqIdRef = useRef(0);
 
-  const supabase = createClient();
+  // Build PostgREST filter strings + `or=` clause for the asset list.
+  // Shared between the main query and the stats-cache side query.
+  function buildAssetFilters(filters?: Fy26AssetFilters): {
+    filters: string[];
+    or?: string;
+  } {
+    const f: string[] = [];
+    let or: string | undefined;
+    if (filters?.site) f.push(`site=eq.${encodeURIComponent(filters.site)}`);
+    if (filters?.status) f.push(`status=eq.${encodeURIComponent(filters.status)}`);
+    if (filters?.search && filters.search.trim()) {
+      const term = filters.search.trim();
+      const encTerm = encodeURIComponent(`%${term}%`);
+      or = [
+        `description.ilike.${encTerm}`,
+        `asset_number.ilike.${encTerm}`,
+        `serial_number.ilike.${encTerm}`,
+        `model_text.ilike.${encTerm}`,
+        `manufacturer.ilike.${encTerm}`,
+        `license_plate.ilike.${encTerm}`,
+      ].join(",");
+    }
+    return { filters: f, or };
+  }
 
   const fetchAssets = useCallback(
     async (filters?: Fy26AssetFilters): Promise<Fy26Asset[]> => {
@@ -62,50 +92,43 @@ export function useFy26Assets(): UseFy26AssetsReturn {
       setError(null);
 
       try {
-        let query = supabase
-          .from("fy26_assets")
-          .select("*")
-          .order("site", { ascending: true })
-          .order("asset_number", { ascending: true });
+        const { filters: rawFilters, or } = buildAssetFilters(filters);
+        const items = await directSelectList<Fy26Asset>("fy26_assets", {
+          columns: "*",
+          filters: rawFilters,
+          or,
+          orderBy: [
+            { column: "site", ascending: true },
+            { column: "asset_number", ascending: true },
+          ],
+          label: "fetchAssets",
+        });
 
-        if (filters?.site) query = query.eq("site", filters.site);
-        if (filters?.status) query = query.eq("status", filters.status);
-        if (filters?.search && filters.search.trim()) {
-          const term = `%${filters.search.trim()}%`;
-          query = query.or(
-            `description.ilike.${term},asset_number.ilike.${term},serial_number.ilike.${term},model_text.ilike.${term},manufacturer.ilike.${term},license_plate.ilike.${term}`
-          );
-        }
-
-        const { data, error: fetchError } = await query;
-        if (fetchError) throw new Error(fetchError.message);
-
-        const items = (data as Fy26Asset[]) || [];
         setAssets(items);
 
-        // If no status filter was applied, the result already covers
-        // every status under the current site/search scope — reuse it
-        // for the stats cache, no second round-trip. If a status filter
-        // IS applied, fire a separate status-agnostic query, but guard
-        // against races: rapid filter toggles can fire multiple side
-        // queries; we only accept the latest one.
+        // Stats cache: if no status filter was applied, the result
+        // already covers every status under the current site/search
+        // scope — reuse it. Otherwise fire a separate status-agnostic
+        // query for the counts, race-guarded by a monotonic id so only
+        // the latest result wins.
         if (!filters?.status) {
           setAllStatusAssets(items);
-          statsReqIdRef.current++; // invalidate any in-flight stats query
+          statsReqIdRef.current++;
         } else {
           const reqId = ++statsReqIdRef.current;
-          let statsQuery = supabase.from("fy26_assets").select("*");
-          if (filters.site) statsQuery = statsQuery.eq("site", filters.site);
-          if (filters.search && filters.search.trim()) {
-            const term = `%${filters.search.trim()}%`;
-            statsQuery = statsQuery.or(
-              `description.ilike.${term},asset_number.ilike.${term},serial_number.ilike.${term},model_text.ilike.${term},manufacturer.ilike.${term},license_plate.ilike.${term}`
-            );
-          }
-          Promise.resolve(statsQuery).then(
-            ({ data: statsData }: { data: Fy26Asset[] | null }) => {
-              if (reqId !== statsReqIdRef.current) return; // stale
-              if (statsData) setAllStatusAssets(statsData as Fy26Asset[]);
+          const { filters: statsRawFilters, or: statsOr } = buildAssetFilters({
+            site: filters.site,
+            search: filters.search,
+          });
+          directSelectList<Fy26Asset>("fy26_assets", {
+            columns: "*",
+            filters: statsRawFilters,
+            or: statsOr,
+            label: "fetchAssets:stats",
+          }).then(
+            (statsData) => {
+              if (reqId !== statsReqIdRef.current) return;
+              setAllStatusAssets(statsData);
             },
             (err) => {
               if (reqId !== statsReqIdRef.current) return;
@@ -123,35 +146,35 @@ export function useFy26Assets(): UseFy26AssetsReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    [],
   );
 
   const fetchAssetItem = useCallback(
     async (id: string): Promise<Fy26Asset | null> => {
       setError(null);
       try {
-        const { data, error: fetchError } = await supabase
-          .from("fy26_assets")
-          .select("*")
-          .eq("id", id)
-          .single();
-
-        if (fetchError) throw new Error(fetchError.message);
-        return data as Fy26Asset;
+        const row = await directSelectRow<Fy26Asset>(
+          "fy26_assets",
+          "id",
+          id,
+          "*",
+          "fetchAssetItem",
+        );
+        return row;
       } catch (err) {
         console.error("[useFy26Assets] fetchAssetItem error:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch asset");
         return null;
       }
     },
-    [supabase]
+    [],
   );
 
   const updateStatus = useCallback(
     async (
       id: string,
       status: Fy26AssetStatus,
-      notes?: string
+      notes?: string,
     ): Promise<Fy26Asset | null> => {
       setError(null);
       try {
@@ -161,16 +184,13 @@ export function useFy26Assets(): UseFy26AssetsReturn {
         };
         if (notes !== undefined) updateFields.notes = notes;
 
-        const { data, error: updateError } = await supabase
-          .from("fy26_assets")
-          .update(updateFields)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) throw new Error(updateError.message);
-
-        const updated = data as Fy26Asset;
+        const updated = await directPatchRowReturning<Fy26Asset>(
+          "fy26_assets",
+          "id",
+          id,
+          updateFields,
+          "updateStatus",
+        );
         setAssets((prev) => prev.map((a) => (a.id === id ? updated : a)));
         return updated;
       } catch (err) {
@@ -179,7 +199,7 @@ export function useFy26Assets(): UseFy26AssetsReturn {
         return null;
       }
     },
-    [supabase]
+    [],
   );
 
   const updateAsset = useCallback(
@@ -193,27 +213,26 @@ export function useFy26Assets(): UseFy26AssetsReturn {
           updated_at: _ua,
           ...updateFields
         } = data as Partial<Fy26Asset>;
-        void _id; void _ca; void _ua;
+        void _id;
+        void _ca;
+        void _ua;
 
-        const { data: updated, error: updateError } = await supabase
-          .from("fy26_assets")
-          .update(updateFields)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) throw new Error(updateError.message);
-
-        const newItem = updated as Fy26Asset;
-        setAssets((prev) => prev.map((a) => (a.id === id ? newItem : a)));
-        return newItem;
+        const updated = await directPatchRowReturning<Fy26Asset>(
+          "fy26_assets",
+          "id",
+          id,
+          updateFields,
+          "updateAsset",
+        );
+        setAssets((prev) => prev.map((a) => (a.id === id ? updated : a)));
+        return updated;
       } catch (err) {
         console.error("[useFy26Assets] updateAsset error:", err);
         setError(err instanceof Error ? err.message : "Failed to update asset");
         return null;
       }
     },
-    [supabase]
+    [],
   );
 
   // ── Condition photo upload (front/back/left/right) ─────────────────────
@@ -223,47 +242,33 @@ export function useFy26Assets(): UseFy26AssetsReturn {
       assetId: string,
       angle: ConditionPhotoAngle,
       file: File,
-      userId: string
+      userId: string,
+      existing: ConditionPhotos = {},
     ): Promise<string | null> => {
-      // Upload to storage — throw lets caller surface the exact error.
+      // Step 1: upload the image to Storage. Throws on failure so the
+      // caller can surface the real error.
       const result = await uploadPhoto(file, userId);
       const url = result.publicUrl;
       recordBreadcrumb(
         "lifecycle",
-        `uploadConditionPhoto: storage OK, merging into fy26_assets.${angle}`,
+        `uploadConditionPhoto: storage OK, updating fy26_assets.${angle}`,
       );
 
-      // Fetch current photos to merge
-      const { data: current, error: fetchErr } = await supabase
-        .from("fy26_assets")
-        .select("condition_photos")
-        .eq("id", assetId)
-        .single();
-
-      if (fetchErr) {
-        recordBreadcrumb(
-          "error",
-          `uploadConditionPhoto: select failed — ${fetchErr.message}`,
-        );
-        throw new Error(`Could not read existing photos: ${fetchErr.message}`);
-      }
-
-      const existing: ConditionPhotos =
-        (current?.condition_photos as ConditionPhotos) || {};
-      const updated = { ...existing, [angle]: url };
-
-      const { error: updateErr } = await supabase
-        .from("fy26_assets")
-        .update({ condition_photos: updated })
-        .eq("id", assetId);
-
-      if (updateErr) {
-        recordBreadcrumb(
-          "error",
-          `uploadConditionPhoto: update failed — ${updateErr.message}`,
-        );
-        throw new Error(`Photo uploaded but DB update failed: ${updateErr.message}`);
-      }
+      // Step 2: merge client-side (no pre-update SELECT round trip) and
+      // PATCH via direct PostgREST fetch. This bypasses supabase-js's
+      // query builder, which was hanging silently after Storage uploads
+      // on this WebView — the builder's internal await never fired
+      // window.fetch, so nothing timed out and nothing errored. Direct
+      // fetch + AbortController + breadcrumbs makes every failure mode
+      // visible.
+      const updated: ConditionPhotos = { ...existing, [angle]: url };
+      await directPatchRow(
+        "fy26_assets",
+        "id",
+        assetId,
+        { condition_photos: updated },
+        `uploadConditionPhoto:${angle}`,
+      );
 
       recordBreadcrumb(
         "lifecycle",
@@ -271,7 +276,7 @@ export function useFy26Assets(): UseFy26AssetsReturn {
       );
       return url;
     },
-    [supabase]
+    []
   );
 
   // ── Damage photo upload (goes to photos bucket, returns URL) ──────────
@@ -290,20 +295,21 @@ export function useFy26Assets(): UseFy26AssetsReturn {
   const fetchDamageRecords = useCallback(
     async (assetId: string): Promise<AssetDamageRecord[]> => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from("asset_damage_records")
-          .select("*")
-          .eq("asset_id", assetId)
-          .order("created_at", { ascending: false });
-
-        if (fetchError) throw new Error(fetchError.message);
-        return (data as AssetDamageRecord[]) || [];
+        return await directSelectList<AssetDamageRecord>(
+          "asset_damage_records",
+          {
+            columns: "*",
+            filters: [`asset_id=eq.${encodeURIComponent(assetId)}`],
+            orderBy: [{ column: "created_at", ascending: false }],
+            label: "fetchDamageRecords",
+          },
+        );
       } catch (err) {
         console.error("[useFy26Assets] fetchDamageRecords error:", err);
         return [];
       }
     },
-    [supabase]
+    [],
   );
 
   const addDamageRecord = useCallback(
@@ -318,45 +324,45 @@ export function useFy26Assets(): UseFy26AssetsReturn {
     ): Promise<AssetDamageRecord | null> => {
       setError(null);
       try {
-        const { data, error: insertError } = await supabase
-          .from("asset_damage_records")
-          .insert({
+        // Direct PostgREST INSERT — bypasses supabase-js query builder
+        // which has been hanging after Storage uploads on this WebView.
+        const data = await directInsertRow<AssetDamageRecord>(
+          "asset_damage_records",
+          {
             asset_id: assetId,
             damage_date: record.damage_date,
             description: record.description,
             photos: record.photos,
             reported_by: record.reported_by || null,
-          })
-          .select()
-          .single();
-
-        if (insertError) throw new Error(insertError.message);
-        return data as AssetDamageRecord;
+          },
+          "addDamageRecord",
+        );
+        return data;
       } catch (err) {
         console.error("[useFy26Assets] addDamageRecord error:", err);
         setError(err instanceof Error ? err.message : "Failed to add damage record");
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   const deleteDamageRecord = useCallback(
     async (recordId: string): Promise<boolean> => {
       try {
-        const { error: deleteError } = await supabase
-          .from("asset_damage_records")
-          .delete()
-          .eq("id", recordId);
-
-        if (deleteError) throw new Error(deleteError.message);
+        await directDeleteRow(
+          "asset_damage_records",
+          "id",
+          recordId,
+          "deleteDamageRecord",
+        );
         return true;
       } catch (err) {
         console.error("[useFy26Assets] deleteDamageRecord error:", err);
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   const refetch = useCallback(async () => {

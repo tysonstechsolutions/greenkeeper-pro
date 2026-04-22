@@ -4,6 +4,7 @@ import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Delete, Loader2, KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { persistSessionDirect } from "@/lib/supabase/persist-session";
 
 interface PinLoginResponse {
   success: boolean;
@@ -91,39 +92,48 @@ function PinLoginInner() {
       }
 
       if (data.session) {
-        // Let setSession fully complete — even if it takes 4-6 seconds.
-        // Previously we raced this against a 4s timeout, but that left
-        // the auth client in a half-configured state: tokens maybe
-        // persisted, onAuthStateChange maybe fired, and every subsequent
-        // hook tried to fetch against a broken session (zero data
-        // loaded anywhere in the app). Waiting it out is better than
-        // fighting it.
+        // Write the session to localStorage in the exact shape supabase-js
+        // expects, then skip `setSession` entirely. Previous attempts
+        // called supabase.auth.setSession which consistently hung on
+        // first login — internally it fires onAuthStateChange listeners
+        // that acquire navigator.locks and kick off realtime reconnects,
+        // and any one of those can stall for minutes. The user's symptom
+        // was "Verifying… forever, close + reopen fixes it" because the
+        // tokens WERE in storage (step 1 of setSession, synchronous),
+        // the blocking was in steps 2 and 3. Writing directly skips
+        // those entirely. On the destination page, AuthProvider's
+        // getSession() reads from storage and the user is logged in
+        // immediately.
         try {
-          await supabase.auth.setSession({
-            access_token: data.session.access_token,
-            refresh_token: data.session.refresh_token,
-          });
+          persistSessionDirect(data.session);
         } catch (err) {
-          console.error("[pin-login] setSession failed:", err);
+          // If the direct write somehow fails (quota? JSON too big?),
+          // fall back to setSession so at least something attempts to
+          // authenticate. Don't await — we still want to proceed.
+          console.error("[pin-login] persistSessionDirect failed:", err);
+          supabase.auth
+            .setSession({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            })
+            .catch((e: unknown) =>
+              console.error("[pin-login] setSession fallback failed:", e),
+            );
         }
       }
 
       setUserName(data.user?.name || "User");
 
-      // Hard navigation (full page reload) after login. Reason: Next.js
-      // client-side router.push leaves the running AuthProvider instance
-      // with whatever state it had at login time; if onAuthStateChange
-      // fired slowly or during the router transition, hooks on the next
-      // page see a null/stale user and skip every fetch. A full reload
-      // forces AuthProvider to reinitialize from storage — which now
-      // reliably contains the session because we awaited setSession
-      // fully above.
+      // Hard navigation so AuthProvider reinitializes from localStorage on
+      // the destination page. Shorter delay now (250ms) since we're not
+      // waiting on any async auth work — just giving the "Welcome, Name"
+      // UI a moment to render.
       setTimeout(() => {
         const destination = returnTo || data.redirectPath || "/dashboard";
         window.location.href = destination.startsWith("/")
           ? destination
           : `/${destination}`;
-      }, 400);
+      }, 250);
     } catch {
       setError("Connection error. Please try again.");
       setPin("");

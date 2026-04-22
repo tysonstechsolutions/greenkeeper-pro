@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { uploadPhoto } from "@/lib/supabase/storage";
+import { directPatchRow, directInsertRow } from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfiles, getDisplayName } from "@/lib/hooks/useProfiles";
 import { useEquipment } from "@/lib/hooks/useEquipment";
@@ -267,11 +268,13 @@ export function ScanWizard({
       }
 
       if (Object.keys(updates).length > 0) {
-        const { error: upErr } = await supabase
-          .from("fy26_assets")
-          .update(updates)
-          .eq("id", asset.id);
-        if (upErr) throw upErr;
+        await directPatchRow(
+          "fy26_assets",
+          "id",
+          asset.id,
+          updates,
+          "runLink:fy26_assets.barcode+equipment_id",
+        );
       }
 
       // Small delay so the "Linked ✓" screen is visible; feels better than
@@ -316,15 +319,17 @@ export function ScanWizard({
       setBusy(true);
       setError(null);
       try {
-        const { error: upErr } = await supabase
-          .from("fy26_assets")
-          .update({
+        await directPatchRow(
+          "fy26_assets",
+          "id",
+          asset.id,
+          {
             status: newStatus,
             verified_at: new Date().toISOString(),
             verified_by: user?.id ?? null,
-          })
-          .eq("id", asset.id);
-        if (upErr) throw upErr;
+          },
+          "handleStatus:fy26_assets.status",
+        );
         setStatus(newStatus);
         setStep("photo_front");
       } catch (err) {
@@ -363,11 +368,13 @@ export function ScanWizard({
         const filtered = Object.fromEntries(
           Object.entries(nextPhotos).filter(([, v]) => !!v),
         );
-        const { error: upErr } = await supabase
-          .from("fy26_assets")
-          .update({ condition_photos: filtered })
-          .eq("id", asset.id);
-        if (upErr) throw upErr;
+        await directPatchRow(
+          "fy26_assets",
+          "id",
+          asset.id,
+          { condition_photos: filtered },
+          `wizard:condition_photos.${angle}`,
+        );
 
         // Advance to the next angle (or to damage step after right).
         const currentIdx = WIZARD_PHOTO_ANGLES.indexOf(angle);
@@ -427,16 +434,17 @@ export function ScanWizard({
       setBusy(true);
       setError(null);
       try {
-        const { error: insErr } = await supabase
-          .from("asset_damage_records")
-          .insert({
+        await directInsertRow(
+          "asset_damage_records",
+          {
             asset_id: asset.id,
             damage_date: new Date().toISOString().slice(0, 10),
             description: pendingDamageNote.trim() || "(no note)",
             photos: [pendingDamagePhoto],
             reported_by: user?.id ?? null,
-          });
-        if (insErr) throw insErr;
+          },
+          "wizard:asset_damage_records.insert",
+        );
         setDamageEntries((prev) => [
           ...prev,
           { photo_url: pendingDamagePhoto, note: pendingDamageNote.trim() },
@@ -469,11 +477,13 @@ export function ScanWizard({
     setBusy(true);
     setError(null);
     try {
-      const { error: upErr } = await supabase
-        .from("fy26_assets")
-        .update({ damage_too_extensive: true })
-        .eq("id", asset.id);
-      if (upErr) throw upErr;
+      await directPatchRow(
+        "fy26_assets",
+        "id",
+        asset.id,
+        { damage_too_extensive: true },
+        "wizard:damage_too_extensive",
+      );
       setDamageTooExtensive(true);
       setStep("operational");
     } catch (err) {
@@ -490,16 +500,19 @@ export function ScanWizard({
     // Persist to the equipment record.
     if (equipmentId) {
       try {
-        await supabase
-          .from("equipment")
-          .update({ status: isOp ? "operational" : "out_of_service" })
-          .eq("id", equipmentId);
+        await directPatchRow(
+          "equipment",
+          "id",
+          equipmentId,
+          { status: isOp ? "operational" : "out_of_service" },
+          "wizard:equipment.status",
+        );
       } catch (err) {
         console.warn("[ScanWizard] equipment status update failed:", err);
       }
     }
     setStep("parts");
-  }, [equipmentId, supabase]);
+  }, [equipmentId]);
 
   // ── Step 7: Parts ──────────────────────────────────────────────────────
 
@@ -610,16 +623,76 @@ export function ScanWizard({
     return { stepNum, total, pct: Math.round((stepNum / total) * 100) };
   }, [step]);
 
+  // Map each step back to the previous one so the user can recover from
+  // any stuck state by tapping Back. Hidden on the first step ("verify")
+  // and on transient states where Back doesn't make sense ("link",
+  // "damage_capture").
+  const previousStep = useMemo((): WizardStep | null => {
+    switch (step) {
+      case "verify":
+      case "link":
+      case "damage_capture":
+      case "done":
+        return null;
+      case "status":
+        return "verify";
+      case "photo_front":
+        return "status";
+      case "photo_left":
+        return "photo_front";
+      case "photo_back":
+        return "photo_left";
+      case "photo_right":
+        return "photo_back";
+      case "damage_prompt":
+        return "photo_right";
+      case "damage_note":
+        return "damage_prompt";
+      case "operational":
+        return "damage_prompt";
+      case "parts":
+        return "operational";
+      case "service":
+        return "parts";
+      case "review":
+        return "service";
+    }
+  }, [step]);
+
+  const goBack = useCallback(() => {
+    // Bail out of any in-flight spinner so the Back tap immediately
+    // returns the user to the previous step instead of being swallowed.
+    setBusy(false);
+    setError(null);
+    if (previousStep) setStep(previousStep);
+  }, [previousStep]);
+
   // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-lg mx-auto">
-      {/* Progress bar */}
+      {/* Progress bar + Back + Cancel. Back is always present when there
+          is a previous step to return to, so a user stuck on a hanging
+          network call (e.g. "Save parts" spinner) can escape without
+          killing the app. Bound to goBack() which clears busy/error
+          flags first so the UI unsticks immediately. */}
       <div className="mb-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-          <span>
-            Step {progress.stepNum} of {progress.total}
-          </span>
+          <div className="flex items-center gap-3">
+            {previousStep && (
+              <button
+                type="button"
+                onClick={goBack}
+                className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"
+                aria-label="Go back to previous step"
+              >
+                ← Back
+              </button>
+            )}
+            <span>
+              Step {progress.stepNum} of {progress.total}
+            </span>
+          </div>
           <button
             type="button"
             onClick={onDone}

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { persistSessionDirect } from "@/lib/supabase/persist-session";
 import { Button } from "@/components/ui/button";
 import { Loader2, User, Phone, AlertCircle, CheckCircle, KeyRound } from "lucide-react";
 import type { Invite, InviteRole } from "@/types/database";
@@ -129,14 +130,28 @@ function PageContent() {
       }
 
       if (data.session) {
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
+        // Write session to localStorage directly. See pin-login for the
+        // full rationale — supabase.auth.setSession hangs on first
+        // login, writing the tokens directly works instantly.
+        try {
+          persistSessionDirect(data.session);
+        } catch (err) {
+          console.error("[invite/accept] persistSessionDirect failed:", err);
+          // Fallback, fire-and-forget.
+          supabase.auth
+            .setSession({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            })
+            .catch(() => {});
+        }
       }
 
-      router.push(data.redirectPath || "/dashboard");
-      router.refresh();
+      // Hard navigation so AuthProvider reinitializes from storage.
+      const destination = data.redirectPath || "/dashboard";
+      window.location.href = destination.startsWith("/")
+        ? destination
+        : `/${destination}`;
     } catch {
       setError("Connection error. Please try again.");
       setSubmitting(false);

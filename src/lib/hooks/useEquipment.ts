@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import type {
   Equipment,
   EquipmentLog,
@@ -16,6 +15,17 @@ import type {
   InspectionType,
   InspectionStatus,
 } from "@/types/database";
+import {
+  directSelectList,
+  directSelectRow,
+  directInsertRow,
+  directPatchRow,
+  directPatchRowReturning,
+  directDeleteRow,
+  directStorageUpload,
+  directStorageDelete,
+  publicStorageUrl,
+} from "@/lib/supabase/rest";
 
 // Utility label maps
 export const equipmentTypeLabels: Record<EquipmentType, string> = {
@@ -303,8 +313,6 @@ export function useEquipment(): UseEquipmentReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   /**
    * Fetch equipment with optional filters
    */
@@ -314,35 +322,25 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-         
-        let query = supabase.from("equipment")
-          .select("*")
-          .neq("status", "retired")
-          .order("name", { ascending: true })
-          .limit(100); // Limit equipment list
+        const rawFilters: string[] = [`status=neq.retired`];
+        if (filters?.type) rawFilters.push(`equipment_type=eq.${encodeURIComponent(filters.type)}`);
+        if (filters?.status) rawFilters.push(`status=eq.${encodeURIComponent(filters.status)}`);
 
-        if (filters?.type) {
-          query = query.eq("equipment_type", filters.type);
-        }
-
-        if (filters?.status) {
-          query = query.eq("status", filters.status);
-        }
-
+        let or: string | undefined;
         if (filters?.search) {
-          const searchTerm = `%${filters.search}%`;
-          query = query.or(
-            `name.ilike.${searchTerm},make.ilike.${searchTerm},model.ilike.${searchTerm}`
-          );
+          const encTerm = encodeURIComponent(`%${filters.search}%`);
+          or = `name.ilike.${encTerm},make.ilike.${encTerm},model.ilike.${encTerm}`;
         }
 
-        const { data, error: fetchError } = await query;
+        const items = await directSelectList<Equipment>("equipment", {
+          columns: "*",
+          filters: rawFilters,
+          or,
+          orderBy: [{ column: "name", ascending: true }],
+          limit: 100, // Limit equipment list
+          label: "fetchEquipment",
+        });
 
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
-
-        const items = (data as Equipment[]) || [];
         setEquipment(items);
         return items;
       } catch (err) {
@@ -354,7 +352,7 @@ export function useEquipment(): UseEquipmentReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -366,27 +364,29 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-         
-        const { data, error: fetchError } = await supabase.from("equipment")
-          .select("*")
-          .eq("id", id)
-          .single();
+        const item = await directSelectRow<Equipment>(
+          "equipment",
+          "id",
+          id,
+          "*",
+          "fetchEquipmentItem",
+        );
 
-        if (fetchError) {
-          throw new Error(fetchError.message);
+        if (!item) {
+          return null;
         }
 
         // Fetch logs separately
-         
-        const { data: logsData } = await supabase.from("equipment_logs")
-          .select("*")
-          .eq("equipment_id", id)
-          .order("created_at", { ascending: false });
+        const logsData = await directSelectList<EquipmentLog>("equipment_logs", {
+          columns: "*",
+          filters: [`equipment_id=eq.${encodeURIComponent(id)}`],
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "fetchEquipmentItem:logs",
+        });
 
-        const item = data as Equipment;
         return {
           ...item,
-          logs: (logsData as EquipmentLog[]) || [],
+          logs: logsData,
         };
       } catch (err) {
         console.error("Error fetching equipment item:", err);
@@ -397,7 +397,7 @@ export function useEquipment(): UseEquipmentReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -415,25 +415,21 @@ export function useEquipment(): UseEquipmentReturn {
             ? data.current_hours + data.service_interval_hours
             : undefined);
 
-        const insertData = {
+        const insertData: Record<string, unknown> = {
           ...data,
           status: data.status || "operational",
           next_service_due_hours: nextServiceHours,
         };
 
-         
-        const { data: newEquipment, error: insertError } = await supabase.from("equipment")
-          .insert(insertData)
-          .select()
-          .single();
-
-        if (insertError) {
-          throw new Error(insertError.message);
-        }
+        const newEquipment = await directInsertRow<Equipment>(
+          "equipment",
+          insertData,
+          "createEquipment",
+        );
 
         // Update local state
-        setEquipment((prev) => [...prev, newEquipment as Equipment]);
-        return newEquipment as Equipment;
+        setEquipment((prev) => [...prev, newEquipment]);
+        return newEquipment;
       } catch (err) {
         console.error("Error creating equipment:", err);
         const message = err instanceof Error ? err.message : "Failed to create equipment";
@@ -441,7 +437,7 @@ export function useEquipment(): UseEquipmentReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -459,34 +455,28 @@ export function useEquipment(): UseEquipmentReturn {
 
         console.debug("[useEquipment] Updating equipment:", id, "with fields:", Object.keys(updateFields));
 
-
-        const { data: updated, error: updateError } = await supabase.from("equipment")
-          .update(updateFields)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) {
-          console.error("[useEquipment] Supabase update error:", updateError);
-          const message = updateError.message || "Database update failed";
-          setError(message);
-          return null;
-        }
+        const updated = await directPatchRowReturning<Equipment>(
+          "equipment",
+          "id",
+          id,
+          updateFields as Record<string, unknown>,
+          "updateEquipment",
+        );
 
         console.debug("[useEquipment] Update successful:", updated?.id);
 
         // Update local state
         setEquipment((prev) =>
-          prev.map((item) => (item.id === id ? (updated as Equipment) : item))
+          prev.map((item) => (item.id === id ? updated : item))
         );
-        return updated as Equipment;
+        return updated;
       } catch (err) {
         console.error("[useEquipment] Unexpected update error:", err);
         setError(err instanceof Error ? err.message : "Update failed");
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -498,26 +488,20 @@ export function useEquipment(): UseEquipmentReturn {
 
       try {
         // First get the equipment to calculate new service due
-         
-        const { data: currentEquipment, error: fetchError } = await supabase.from("equipment")
-          .select("*")
-          .eq("id", id)
-          .single();
+        const current = await directSelectRow<Equipment>(
+          "equipment",
+          "id",
+          id,
+          "*",
+          "updateHours:fetch",
+        );
 
-        if (fetchError) {
-          throw new Error(fetchError.message);
+        if (!current) {
+          throw new Error("Equipment not found");
         }
-
-        const current = currentEquipment as Equipment;
 
         // Calculate next service due based on service interval
         const nextServiceDueHours = current.next_service_due_hours;
-        if (current.service_interval_hours && current.next_service_due_hours) {
-          // If we've passed the service due point, calculate new one from current hours
-          if (newHours >= current.next_service_due_hours) {
-            // Keep the existing next_service_due_hours - they need to do service first
-          }
-        }
 
         const updateData: Partial<Equipment> = {
           current_hours: newHours,
@@ -528,33 +512,33 @@ export function useEquipment(): UseEquipmentReturn {
           updateData.status = "needs_service";
         }
 
-         
-        const { data: updated, error: updateError } = await supabase.from("equipment")
-          .update(updateData)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        const updated = await directPatchRowReturning<Equipment>(
+          "equipment",
+          "id",
+          id,
+          updateData as Record<string, unknown>,
+          "updateHours:update",
+        );
 
         // Create hours_update log entry
-         
-        await supabase.from("equipment_logs").insert({
-          equipment_id: id,
-          log_type: "hours_update",
-          description: `Hours updated from ${current.current_hours ?? 0} to ${newHours}`,
-          hours_at_service: newHours,
-          parts_used: [],
-          photos: [],
-        });
+        await directInsertRow(
+          "equipment_logs",
+          {
+            equipment_id: id,
+            log_type: "hours_update",
+            description: `Hours updated from ${current.current_hours ?? 0} to ${newHours}`,
+            hours_at_service: newHours,
+            parts_used: [],
+            photos: [],
+          },
+          "updateHours:log",
+        );
 
         // Update local state
         setEquipment((prev) =>
-          prev.map((item) => (item.id === id ? (updated as Equipment) : item))
+          prev.map((item) => (item.id === id ? updated : item))
         );
-        return updated as Equipment;
+        return updated;
       } catch (err) {
         console.error("Error updating hours:", err);
         const message = err instanceof Error ? err.message : "Failed to update hours";
@@ -562,7 +546,7 @@ export function useEquipment(): UseEquipmentReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -573,20 +557,17 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-         
-        const { data: updated, error: updateError } = await supabase.from("equipment")
-          .update({ status: "retired" })
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        const updated = await directPatchRowReturning<Equipment>(
+          "equipment",
+          "id",
+          id,
+          { status: "retired" },
+          "retireEquipment",
+        );
 
         // Remove from local state (retired items hidden by default)
         setEquipment((prev) => prev.filter((item) => item.id !== id));
-        return updated as Equipment;
+        return updated;
       } catch (err) {
         console.error("Error retiring equipment:", err);
         const message = err instanceof Error ? err.message : "Failed to retire equipment";
@@ -594,7 +575,7 @@ export function useEquipment(): UseEquipmentReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -603,24 +584,21 @@ export function useEquipment(): UseEquipmentReturn {
   const fetchEquipmentLogs = useCallback(
     async (equipmentId: string): Promise<EquipmentLog[]> => {
       try {
-         
-        const { data, error: fetchError } = await supabase.from("equipment_logs")
-          .select("*")
-          .eq("equipment_id", equipmentId)
-          .order("created_at", { ascending: false })
-          .limit(50); // Limit logs per equipment
+        const data = await directSelectList<EquipmentLog>("equipment_logs", {
+          columns: "*",
+          filters: [`equipment_id=eq.${encodeURIComponent(equipmentId)}`],
+          orderBy: [{ column: "created_at", ascending: false }],
+          limit: 50, // Limit logs per equipment
+          label: "fetchEquipmentLogs",
+        });
 
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
-
-        return (data as EquipmentLog[]) || [];
+        return data;
       } catch (err) {
         console.error("Error fetching equipment logs:", err);
         return [];
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -631,9 +609,9 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-         
-        const { data: newLog, error: insertError } = await supabase.from("equipment_logs")
-          .insert({
+        const newLog = await directInsertRow<EquipmentLog>(
+          "equipment_logs",
+          {
             equipment_id: equipmentId,
             log_type: logData.log_type,
             description: logData.description,
@@ -643,46 +621,49 @@ export function useEquipment(): UseEquipmentReturn {
             vendor: logData.vendor,
             downtime_hours: logData.downtime_hours,
             photos: logData.photos || [],
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          throw new Error(insertError.message);
-        }
+          },
+          "createLog",
+        );
 
         // If this is a service log, update next service due hours
         if (logData.log_type === "service") {
-           
-          const { data: equipmentData } = await supabase.from("equipment")
-            .select("*")
-            .eq("id", equipmentId)
-            .single();
+          const equipmentData = await directSelectRow<Equipment>(
+            "equipment",
+            "id",
+            equipmentId,
+            "*",
+            "createLog:fetchEquipment",
+          );
 
           if (equipmentData) {
-            const eq = equipmentData as Equipment;
-            const currentHours = logData.hours_at_service ?? eq.current_hours ?? 0;
-            const interval = eq.service_interval_hours;
+            const currentHours = logData.hours_at_service ?? equipmentData.current_hours ?? 0;
+            const interval = equipmentData.service_interval_hours;
 
             if (interval) {
-               
-              await supabase.from("equipment")
-                .update({
+              await directPatchRow(
+                "equipment",
+                "id",
+                equipmentId,
+                {
                   next_service_due_hours: currentHours + interval,
                   status: "operational",
                   current_hours: currentHours,
-                })
-                .eq("id", equipmentId);
+                },
+                "createLog:updateServiceDue",
+              );
             } else {
-               
-              await supabase.from("equipment")
-                .update({ status: "operational" })
-                .eq("id", equipmentId);
+              await directPatchRow(
+                "equipment",
+                "id",
+                equipmentId,
+                { status: "operational" },
+                "createLog:updateStatus",
+              );
             }
           }
         }
 
-        return newLog as EquipmentLog;
+        return newLog;
       } catch (err) {
         console.error("Error creating log:", err);
         const message = err instanceof Error ? err.message : "Failed to create log";
@@ -690,7 +671,7 @@ export function useEquipment(): UseEquipmentReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -700,40 +681,41 @@ export function useEquipment(): UseEquipmentReturn {
     try {
       const today = new Date().toISOString().split("T")[0];
 
-      // Get equipment where current_hours >= next_service_due_hours
-       
-      const { data: hoursDue, error: hoursError } = await supabase.from("equipment")
-        .select("*")
-        .neq("status", "retired")
-        .not("current_hours", "is", null)
-        .not("next_service_due_hours", "is", null);
-
-      if (hoursError) {
-        throw new Error(hoursError.message);
-      }
+      // Get equipment where current_hours >= next_service_due_hours.
+      // PostgREST can't compare two columns directly, so we fetch all rows
+      // with both hour columns populated and filter client-side — same as
+      // the original supabase-js version did.
+      const hoursDue = await directSelectList<Equipment>("equipment", {
+        columns: "*",
+        filters: [
+          `status=neq.retired`,
+          `current_hours=not.is.null`,
+          `next_service_due_hours=not.is.null`,
+        ],
+        label: "fetchDueForService:hours",
+      });
 
       // Filter for hours-based service due
-      const hoursDueFiltered = ((hoursDue as Equipment[]) || []).filter(
-        (eq: Equipment) =>
+      const hoursDueFiltered = hoursDue.filter(
+        (eq) =>
           eq.current_hours !== null &&
           eq.next_service_due_hours !== null &&
           eq.current_hours >= eq.next_service_due_hours
       );
 
       // Get equipment where next_service_due_date <= today
-       
-      const { data: dateDue, error: dateError } = await supabase.from("equipment")
-        .select("*")
-        .neq("status", "retired")
-        .not("next_service_due_date", "is", null)
-        .lte("next_service_due_date", today);
-
-      if (dateError) {
-        throw new Error(dateError.message);
-      }
+      const dateDue = await directSelectList<Equipment>("equipment", {
+        columns: "*",
+        filters: [
+          `status=neq.retired`,
+          `next_service_due_date=not.is.null`,
+          `next_service_due_date=lte.${encodeURIComponent(today)}`,
+        ],
+        label: "fetchDueForService:date",
+      });
 
       // Combine and deduplicate
-      const combined = [...hoursDueFiltered, ...((dateDue as Equipment[]) || [])];
+      const combined = [...hoursDueFiltered, ...dateDue];
       const uniqueMap = new Map<string, Equipment>();
       combined.forEach((eq) => uniqueMap.set(eq.id, eq));
 
@@ -742,23 +724,19 @@ export function useEquipment(): UseEquipmentReturn {
       console.error("Error fetching due for service:", err);
       return [];
     }
-  }, [supabase]);
+  }, []);
 
   /**
    * Fetch equipment stats by status
    */
   const fetchEquipmentStats = useCallback(async (): Promise<EquipmentStats> => {
     try {
-       
-      const { data, error: fetchError } = await supabase.from("equipment")
-        .select("status")
-        .neq("status", "retired");
+      const items = await directSelectList<{ status: EquipmentStatus }>("equipment", {
+        columns: "status",
+        filters: [`status=neq.retired`],
+        label: "fetchEquipmentStats",
+      });
 
-      if (fetchError) {
-        throw new Error(fetchError.message);
-      }
-
-      const items = (data as { status: EquipmentStatus }[]) || [];
       const stats: EquipmentStats = {
         operational: 0,
         needs_service: 0,
@@ -784,7 +762,7 @@ export function useEquipment(): UseEquipmentReturn {
         total: 0,
       };
     }
-  }, [supabase]);
+  }, []);
 
   /**
    * Delete equipment record
@@ -794,14 +772,7 @@ export function useEquipment(): UseEquipmentReturn {
       setError(null);
 
       try {
-         
-        const { error: deleteError } = await supabase.from("equipment")
-          .delete()
-          .eq("id", id);
-
-        if (deleteError) {
-          throw new Error(deleteError.message);
-        }
+        await directDeleteRow("equipment", "id", id, "deleteEquipment");
 
         // Remove from local state
         setEquipment((prev) => prev.filter((item) => item.id !== id));
@@ -813,7 +784,7 @@ export function useEquipment(): UseEquipmentReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -828,23 +799,10 @@ export function useEquipment(): UseEquipmentReturn {
         const filename = `${timestamp}-${file.name}`;
         const filePath = `equipment/${equipmentId}/${filename}`;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: uploadError, data } = await (supabase.storage.from("photos") as any)
-          .upload(filePath, file, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (uploadError) {
-          throw new Error(uploadError.message);
-        }
+        await directStorageUpload("photos", filePath, file, "uploadEquipmentPhoto");
 
         // Get public URL for the uploaded file
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: publicUrlData } = (supabase.storage.from("photos") as any)
-          .getPublicUrl(filePath);
-
-        return publicUrlData?.publicUrl || null;
+        return publicStorageUrl("photos", filePath);
       } catch (err) {
         console.error("Error uploading photo:", err);
         const message = err instanceof Error ? err.message : "Failed to upload photo";
@@ -852,7 +810,7 @@ export function useEquipment(): UseEquipmentReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -869,29 +827,28 @@ export function useEquipment(): UseEquipmentReturn {
         const filePath = `equipment/${equipmentId}/${filename}`;
 
         // Delete from storage
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: deleteError } = await (supabase.storage.from("photos") as any)
-          .remove([filePath]);
-
-        if (deleteError) {
-          throw new Error(deleteError.message);
-        }
+        await directStorageDelete("photos", [filePath], "deleteEquipmentPhoto:storage");
 
         // Update equipment record to remove photo from photos array
-         
-        const { data: currentData } = await supabase.from("equipment")
-          .select("photos")
-          .eq("id", equipmentId)
-          .single();
+        const currentData = await directSelectRow<{ photos: string[] | null }>(
+          "equipment",
+          "id",
+          equipmentId,
+          "photos",
+          "deleteEquipmentPhoto:fetch",
+        );
 
         if (currentData) {
           const photos = (currentData.photos as string[]) || [];
           const updatedPhotos = photos.filter((url) => url !== photoUrl);
 
-           
-          await supabase.from("equipment")
-            .update({ photos: updatedPhotos })
-            .eq("id", equipmentId);
+          await directPatchRow(
+            "equipment",
+            "id",
+            equipmentId,
+            { photos: updatedPhotos },
+            "deleteEquipmentPhoto:update",
+          );
         }
 
         return true;
@@ -902,7 +859,7 @@ export function useEquipment(): UseEquipmentReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -924,17 +881,13 @@ export function useEquipment(): UseEquipmentReturn {
           status: "completed" as InspectionStatus,
         };
 
-         
-        const { data: newInspection, error: insertError } = await supabase.from("equipment_inspections")
-          .insert(inspectionData)
-          .select()
-          .single();
+        const newInspection = await directInsertRow<EquipmentInspection>(
+          "equipment_inspections",
+          inspectionData,
+          "createInspection",
+        );
 
-        if (insertError) {
-          throw new Error(insertError.message);
-        }
-
-        return newInspection as EquipmentInspection;
+        return newInspection;
       } catch (err) {
         console.error("Error creating inspection:", err);
         const message = err instanceof Error ? err.message : "Failed to create inspection";
@@ -942,7 +895,7 @@ export function useEquipment(): UseEquipmentReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -951,23 +904,20 @@ export function useEquipment(): UseEquipmentReturn {
   const fetchInspections = useCallback(
     async (equipmentId: string): Promise<EquipmentInspection[]> => {
       try {
-         
-        const { data, error: fetchError } = await supabase.from("equipment_inspections")
-          .select("*")
-          .eq("equipment_id", equipmentId)
-          .order("created_at", { ascending: false });
+        const data = await directSelectList<EquipmentInspection>("equipment_inspections", {
+          columns: "*",
+          filters: [`equipment_id=eq.${encodeURIComponent(equipmentId)}`],
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "fetchInspections",
+        });
 
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
-
-        return (data as EquipmentInspection[]) || [];
+        return data;
       } catch (err) {
         console.error("Error fetching inspections:", err);
         return [];
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -976,27 +926,24 @@ export function useEquipment(): UseEquipmentReturn {
   const fetchLatestInspection = useCallback(
     async (equipmentId: string, type: InspectionType): Promise<EquipmentInspection | null> => {
       try {
-         
-        const { data, error: fetchError } = await supabase.from("equipment_inspections")
-          .select("*")
-          .eq("equipment_id", equipmentId)
-          .eq("inspection_type", type)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
+        const data = await directSelectList<EquipmentInspection>("equipment_inspections", {
+          columns: "*",
+          filters: [
+            `equipment_id=eq.${encodeURIComponent(equipmentId)}`,
+            `inspection_type=eq.${encodeURIComponent(type)}`,
+          ],
+          orderBy: [{ column: "created_at", ascending: false }],
+          limit: 1,
+          label: "fetchLatestInspection",
+        });
 
-        if (fetchError && fetchError.code !== "PGRST116") {
-          // PGRST116 = no rows returned, which is expected
-          throw new Error(fetchError.message);
-        }
-
-        return (data as EquipmentInspection) || null;
+        return data[0] || null;
       } catch (err) {
         console.error("Error fetching latest inspection:", err);
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**

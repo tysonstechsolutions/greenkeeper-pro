@@ -234,7 +234,16 @@ function PageContent() {
     setUploadError(null);
     setUploadingAngle(angle);
     try {
-      const url = await uploadConditionPhoto(asset.id, angle, file, user.id);
+      // Pass the current in-memory photo map so uploadConditionPhoto
+      // can merge client-side and skip the pre-update SELECT that was
+      // silently hanging after storage uploads.
+      const url = await uploadConditionPhoto(
+        asset.id,
+        angle,
+        file,
+        user.id,
+        conditionPhotos,
+      );
       if (url) {
         setConditionPhotos((prev) => ({ ...prev, [angle]: url }));
       } else {

@@ -1,4 +1,4 @@
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 
 // NOTE: We intentionally don't pass a Database generic to createBrowserClient.
@@ -11,7 +11,8 @@ import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let clientInstance: any = null;
 
 // ── Diagnostics + recovery for Capacitor WebView ────────────────────────────
 // A single hung Supabase request — a stalled auth refresh on flaky mobile
@@ -169,36 +170,51 @@ function shortenUrl(url: string): string {
 
 function buildClient() {
   if (!supabaseUrl || !supabaseAnonKey) {
-    return createBrowserClient("https://placeholder.supabase.co", "placeholder-key");
+    return createSupabaseClient("https://placeholder.supabase.co", "placeholder-key");
   }
-  return createBrowserClient(supabaseUrl, supabaseAnonKey, {
+  // We deliberately use @supabase/supabase-js's createClient here, NOT
+  // @supabase/ssr's createBrowserClient. The SSR browser client forces
+  // its auth storage to be document.cookie (with base64url-encoded
+  // chunked cookies), which is the Right Thing for Next.js server/edge
+  // rendering but the Wrong Thing for a static-export Capacitor app:
+  //   • we have no server, so SSR-friendly cookies aren't needed
+  //   • cookies have a 4KB size limit and must be chunked for
+  //     anything larger (Supabase sessions are ~1.5KB base64url
+  //     encoded — borderline)
+  //   • any code that tries to manually set the session (our
+  //     persistSessionDirect) has to correctly replicate the base64url
+  //     + chunking protocol or the session won't be found on reload
+  //
+  // With @supabase/supabase-js's createClient, the default storage is
+  // window.localStorage. Sessions round-trip as plain JSON under a
+  // well-known key (`sb-<project-ref>-auth-token`) — trivial to read
+  // and write without the chunking dance.
+  return createSupabaseClient(supabaseUrl, supabaseAnonKey, {
     global: {
       // Every request goes through our timeout wrapper. Without this a
-      // stalled mobile fetch could wedge the entire client: every
-      // subsequent request queues behind the hung one. With the wrapper,
-      // fetch aborts at 12s, the promise rejects, downstream code gets
-      // the error, and the app remains responsive.
+      // stalled mobile fetch could wedge the entire client.
       fetch: timeoutFetch,
     },
     auth: {
-      // Disable the navigator.locks-based token-refresh lock. The lock
-      // exists to serialize auth refreshes across multiple tabs / service
-      // workers; on a single-screen Capacitor mobile app we only ever
-      // have one page at a time, so the lock provides zero benefit and
-      // caused real failures — an upload in mid-flight would wait up to
-      // 5s for the lock, then get forcibly stolen, throwing
-      //   "Lock broken by another request with the 'steal' option"
-      // right in the middle of the Storage PUT.
-      //
-      // Supabase's lock option is `(name, timeout, fn) => Promise` — we
-      // pass a no-op wrapper that just runs fn() immediately. If we ever
-      // add multi-tab support (web + native simultaneously), revisit.
+      // Explicit defaults — documented here for clarity; these match
+      // supabase-js's defaults but we pin them so an upgrade can't
+      // flip behavior silently.
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false, // irrelevant in native shell
+      // Disable navigator.locks-based token-refresh lock. See the
+      // lock: option docs in @supabase/auth-js — the lock exists to
+      // serialize auth refreshes across browser tabs, which a
+      // single-screen Capacitor app never has. It caused real failures
+      // — uploads would hang 5s waiting for the lock and then throw
+      // "Lock broken by another request with the 'steal' option". Disable.
       lock: async (_name, _timeout, fn) => fn(),
     },
   });
 }
 
-export function createClient() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createClient(): any {
   // During build/prerender, env vars may not be available.
   // Return a cached instance if we already have one.
   if (clientInstance) return clientInstance;

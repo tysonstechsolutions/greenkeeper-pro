@@ -10,11 +10,18 @@ import type {
   TaskCategory,
   TaskPriority,
   TaskStatus,
-  Database,
 } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { sendNotification } from "./useNotifications";
 import { translateSafe } from "@/lib/utils/translate";
+import {
+  directSelectList,
+  directSelectRow,
+  directInsertRow,
+  directPatchRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 
 // Extended task type with joined data
 export interface TaskWithRelations extends Task {
@@ -87,92 +94,89 @@ interface UseTasksReturn {
   refreshTasks: () => Promise<void>;
 }
 
+// Joined-column projection for task queries. Mirrors the original
+// buildTaskQuery's .select(...) string.
+const TASK_COLUMNS = `*, assigned_user:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url, role), zone:course_zones!tasks_zone_id_fkey(id, name, zone_type, hole_number), assigned_by_user:profiles!tasks_assigned_by_fkey(id, full_name), completed_by_user:profiles!tasks_completed_by_fkey(id, full_name), verified_by_user:profiles!tasks_verified_by_fkey(id, full_name)`;
+
+// Build PostgREST filter strings + optional or=(...) clause from a TaskFilters.
+// Replaces the old applyFilters() that mutated a supabase-js builder.
+function buildTaskFilters(filters?: TaskFilters): {
+  filters: string[];
+  or?: string;
+} {
+  const f: string[] = [];
+  let or: string | undefined;
+
+  if (filters?.status) {
+    if (Array.isArray(filters.status)) {
+      const vals = filters.status.map((s) => encodeURIComponent(s)).join(",");
+      f.push(`status=in.(${vals})`);
+    } else {
+      f.push(`status=eq.${encodeURIComponent(filters.status)}`);
+    }
+  }
+
+  if (filters?.category) {
+    if (Array.isArray(filters.category)) {
+      const vals = filters.category.map((c) => encodeURIComponent(c)).join(",");
+      f.push(`category=in.(${vals})`);
+    } else {
+      f.push(`category=eq.${encodeURIComponent(filters.category)}`);
+    }
+  }
+
+  if (filters?.priority) {
+    if (Array.isArray(filters.priority)) {
+      const vals = filters.priority.map((p) => encodeURIComponent(p)).join(",");
+      f.push(`priority=in.(${vals})`);
+    } else {
+      f.push(`priority=eq.${encodeURIComponent(filters.priority)}`);
+    }
+  }
+
+  if (filters?.assignedTo !== undefined) {
+    if (filters.assignedTo === null) {
+      f.push(`assigned_to=is.null`);
+    } else {
+      f.push(`assigned_to=eq.${encodeURIComponent(filters.assignedTo)}`);
+    }
+  }
+
+  if (filters?.zoneId) {
+    f.push(`zone_id=eq.${encodeURIComponent(filters.zoneId)}`);
+  }
+
+  if (filters?.dateRange) {
+    f.push(`due_date=gte.${encodeURIComponent(filters.dateRange.start)}`);
+    f.push(`due_date=lte.${encodeURIComponent(filters.dateRange.end)}`);
+  }
+
+  if (filters?.search) {
+    const encTerm = encodeURIComponent(`%${filters.search}%`);
+    or = `title.ilike.${encTerm},description.ilike.${encTerm}`;
+  }
+
+  if (!filters?.includeCompleted) {
+    // Exclude completed/verified/cancelled from default views.
+    f.push(`status=not.in.(completed,verified,cancelled)`);
+  }
+
+  return { filters: f, or };
+}
+
 export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
   const [tasks, setTasks] = useState<TaskWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user, profile } = useAuth();
 
+  // supabase is ONLY used for realtime channels / removeChannel — the
+  // query-builder hangs we're working around don't affect the realtime
+  // subsystem. Every .from().* call has been migrated to direct-fetch
+  // helpers in @/lib/supabase/rest.
   const supabase = createClient();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const currentFiltersRef = useRef<TaskFilters | undefined>(initialFilters);
-
-  // Build the base query with joins
-  const buildTaskQuery = useCallback(() => {
-    return supabase
-      .from("tasks")
-      .select(`
-        *,
-        assigned_user:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url, role),
-        zone:course_zones!tasks_zone_id_fkey(id, name, zone_type, hole_number),
-        assigned_by_user:profiles!tasks_assigned_by_fkey(id, full_name),
-        completed_by_user:profiles!tasks_completed_by_fkey(id, full_name),
-        verified_by_user:profiles!tasks_verified_by_fkey(id, full_name)
-      `);
-  }, [supabase]);
-
-  // Apply filters to a query
-  const applyFilters = useCallback(
-    (
-      query: ReturnType<typeof buildTaskQuery>,
-      filters?: TaskFilters
-    ) => {
-      let q = query;
-
-      if (filters?.status) {
-        if (Array.isArray(filters.status)) {
-          q = q.in("status", filters.status);
-        } else {
-          q = q.eq("status", filters.status);
-        }
-      }
-
-      if (filters?.category) {
-        if (Array.isArray(filters.category)) {
-          q = q.in("category", filters.category);
-        } else {
-          q = q.eq("category", filters.category);
-        }
-      }
-
-      if (filters?.priority) {
-        if (Array.isArray(filters.priority)) {
-          q = q.in("priority", filters.priority);
-        } else {
-          q = q.eq("priority", filters.priority);
-        }
-      }
-
-      if (filters?.assignedTo !== undefined) {
-        if (filters.assignedTo === null) {
-          q = q.is("assigned_to", null);
-        } else {
-          q = q.eq("assigned_to", filters.assignedTo);
-        }
-      }
-
-      if (filters?.zoneId) {
-        q = q.eq("zone_id", filters.zoneId);
-      }
-
-      if (filters?.dateRange) {
-        q = q
-          .gte("due_date", filters.dateRange.start)
-          .lte("due_date", filters.dateRange.end);
-      }
-
-      if (filters?.search) {
-        q = q.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
-      }
-
-      if (!filters?.includeCompleted) {
-        q = q.not("status", "in", '("completed","verified","cancelled")');
-      }
-
-      return q;
-    },
-    []
-  );
 
   // Fetch tasks with filters
   const fetchTasks = useCallback(
@@ -182,29 +186,28 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
       currentFiltersRef.current = filters;
 
       try {
-        let query = buildTaskQuery();
-        query = applyFilters(query, filters);
-        query = query.order("due_date", { ascending: true })
-          .order("priority", { ascending: true }) // critical=0, high=1, etc.
-          .limit(100); // Limit to prevent loading too many tasks
+        const { filters: rawFilters, or } = buildTaskFilters(filters);
+        const data = await directSelectList<TaskWithRelations>("tasks", {
+          columns: TASK_COLUMNS,
+          filters: rawFilters,
+          or,
+          orderBy: [
+            { column: "due_date", ascending: true },
+            { column: "priority", ascending: true }, // critical=0, high=1, etc.
+          ],
+          limit: 100, // Limit to prevent loading too many tasks
+          label: "fetchTasks",
+        });
 
-        const { data, error: fetchError } = await query;
-
-        if (fetchError) {
-          console.error("Error fetching tasks:", fetchError);
-          setError(fetchError.message);
-          return;
-        }
-
-        setTasks((data as TaskWithRelations[]) || []);
+        setTasks(data);
       } catch (err) {
         console.error("Unexpected error fetching tasks:", err);
-        setError("An unexpected error occurred");
+        setError(err instanceof Error ? err.message : "An unexpected error occurred");
       } finally {
         setLoading(false);
       }
     },
-    [buildTaskQuery, applyFilters]
+    []
   );
 
   // Fetch tasks assigned to current user for a specific date
@@ -213,52 +216,56 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
       if (!user) return [];
 
       try {
-        const { data, error: fetchError } = await buildTaskQuery()
-          .eq("assigned_to", user.id)
-          .eq("due_date", date)
-          .not("status", "in", '("cancelled")')
-          .order("priority", { ascending: true })
-          .order("due_time", { ascending: true, nullsFirst: false })
-          .limit(50); // Limit to prevent loading too many tasks
+        const data = await directSelectList<TaskWithRelations>("tasks", {
+          columns: TASK_COLUMNS,
+          filters: [
+            `assigned_to=eq.${encodeURIComponent(user.id)}`,
+            `due_date=eq.${encodeURIComponent(date)}`,
+            `status=not.in.(cancelled)`,
+          ],
+          orderBy: [
+            { column: "priority", ascending: true },
+            { column: "due_time", ascending: true, nullsFirst: false },
+          ],
+          limit: 50, // Limit to prevent loading too many tasks
+          label: "fetchMyTasks",
+        });
 
-        if (fetchError) {
-          console.error("Error fetching my tasks:", fetchError);
-          return [];
-        }
-
-        return (data as TaskWithRelations[]) || [];
+        return data;
       } catch (err) {
         console.error("Unexpected error fetching my tasks:", err);
         return [];
       }
     },
-    [user, buildTaskQuery]
+    [user]
   );
 
   // Fetch all team tasks for a specific date (super/foreman view)
   const fetchTeamTasks = useCallback(
     async (date: string): Promise<TaskWithRelations[]> => {
       try {
-        const { data, error: fetchError } = await buildTaskQuery()
-          .eq("due_date", date)
-          .not("status", "in", '("cancelled")')
-          .order("priority", { ascending: true })
-          .order("assigned_to", { ascending: true, nullsFirst: false })
-          .order("due_time", { ascending: true, nullsFirst: false })
-          .limit(100); // Limit to prevent loading too many tasks
+        const data = await directSelectList<TaskWithRelations>("tasks", {
+          columns: TASK_COLUMNS,
+          filters: [
+            `due_date=eq.${encodeURIComponent(date)}`,
+            `status=not.in.(cancelled)`,
+          ],
+          orderBy: [
+            { column: "priority", ascending: true },
+            { column: "assigned_to", ascending: true, nullsFirst: false },
+            { column: "due_time", ascending: true, nullsFirst: false },
+          ],
+          limit: 100, // Limit to prevent loading too many tasks
+          label: "fetchTeamTasks",
+        });
 
-        if (fetchError) {
-          console.error("Error fetching team tasks:", fetchError);
-          return [];
-        }
-
-        return (data as TaskWithRelations[]) || [];
+        return data;
       } catch (err) {
         console.error("Unexpected error fetching team tasks:", err);
         return [];
       }
     },
-    [buildTaskQuery]
+    []
   );
 
   // Create a new task
@@ -313,16 +320,10 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           notes: data.notes ?? null,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newTask, error: insertError } = await (supabase as any)
-          .from("tasks")
-          .insert(insertData)
-          .select()
-          .single() as { data: Task | null; error: Error | null };
+        const newTask = await directInsertRow<Task>("tasks", insertData, "createTask");
 
-        if (insertError || !newTask) {
-          console.error("Error creating task:", insertError);
-          setError(insertError?.message || "Failed to create task");
+        if (!newTask) {
+          setError("Failed to create task");
           return null;
         }
 
@@ -342,65 +343,53 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
         return newTask;
       } catch (err) {
         console.error("Unexpected error creating task:", err);
-        setError("Failed to create task");
+        setError(err instanceof Error ? err.message : "Failed to create task");
         return null;
       }
     },
-    [profile, supabase]
+    [profile]
   );
 
   // Update a task
   const updateTask = useCallback(
     async (id: string, data: UpdateTaskData): Promise<Task | null> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: updated, error: updateError } = await (supabase as any)
-          .from("tasks")
-          .update(data)
-          .eq("id", id)
-          .select()
-          .single() as { data: Task | null; error: Error | null };
-
-        if (updateError) {
-          console.error("Error updating task:", updateError);
-          setError(updateError.message);
-          return null;
-        }
-
+        const updated = await directPatchRowReturning<Task>(
+          "tasks",
+          "id",
+          id,
+          data as Record<string, unknown>,
+          "updateTask",
+        );
         return updated;
       } catch (err) {
         console.error("Unexpected error updating task:", err);
-        setError("Failed to update task");
+        setError(err instanceof Error ? err.message : "Failed to update task");
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   // Quick status change
   const updateTaskStatus = useCallback(
     async (id: string, newStatus: TaskStatus): Promise<boolean> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("tasks")
-          .update({ status: newStatus })
-          .eq("id", id) as { error: Error | null };
-
-        if (updateError) {
-          console.error("Error updating task status:", updateError);
-          setError(updateError.message);
-          return false;
-        }
-
+        await directPatchRow(
+          "tasks",
+          "id",
+          id,
+          { status: newStatus },
+          "updateTaskStatus",
+        );
         return true;
       } catch (err) {
         console.error("Unexpected error updating task status:", err);
-        setError("Failed to update task status");
+        setError(err instanceof Error ? err.message : "Failed to update task status");
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   // Mark task as complete
@@ -413,27 +402,25 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
       try {
         // Get task details first for notification
-        const { data: taskData } = await supabase
-          .from("tasks")
-          .select("title, assigned_by")
-          .eq("id", id)
-          .single() as { data: { title: string; assigned_by: string } | null };
+        const taskData = await directSelectRow<{ title: string; assigned_by: string }>(
+          "tasks",
+          "id",
+          id,
+          "title, assigned_by",
+          "completeTask:fetch",
+        );
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("tasks")
-          .update({
+        await directPatchRow(
+          "tasks",
+          "id",
+          id,
+          {
             status: "completed",
             completed_at: new Date().toISOString(),
             completed_by: user.id,
-          })
-          .eq("id", id) as { error: Error | null };
-
-        if (updateError) {
-          console.error("Error completing task:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+          },
+          "completeTask:update",
+        );
 
         // Notify the person who assigned the task
         if (taskData?.assigned_by && taskData.assigned_by !== user.id) {
@@ -451,11 +438,11 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error completing task:", err);
-        setError("Failed to complete task");
+        setError(err instanceof Error ? err.message : "Failed to complete task");
         return false;
       }
     },
-    [user, profile, supabase]
+    [user, profile]
   );
 
   // Superintendent verification/sign-off
@@ -468,27 +455,29 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
       try {
         // Get task details first for notification
-        const { data: taskData } = await supabase
-          .from("tasks")
-          .select("title, completed_by, assigned_to")
-          .eq("id", id)
-          .single() as { data: { title: string; completed_by: string | null; assigned_to: string | null } | null };
+        const taskData = await directSelectRow<{
+          title: string;
+          completed_by: string | null;
+          assigned_to: string | null;
+        }>(
+          "tasks",
+          "id",
+          id,
+          "title, completed_by, assigned_to",
+          "verifyTask:fetch",
+        );
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("tasks")
-          .update({
+        await directPatchRow(
+          "tasks",
+          "id",
+          id,
+          {
             status: "verified",
             verified_at: new Date().toISOString(),
             verified_by: user.id,
-          })
-          .eq("id", id) as { error: Error | null };
-
-        if (updateError) {
-          console.error("Error verifying task:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+          },
+          "verifyTask:update",
+        );
 
         // Notify the person who completed the task (or was assigned if different)
         const notifyUserId = taskData?.completed_by || taskData?.assigned_to;
@@ -507,60 +496,49 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error verifying task:", err);
-        setError("Failed to verify task");
+        setError(err instanceof Error ? err.message : "Failed to verify task");
         return false;
       }
     },
-    [user, profile, supabase]
+    [user, profile]
   );
 
   // Delete task (hard delete - RLS controls who can delete)
   const deleteTask = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const { error: deleteError } = await supabase
-          .from("tasks")
-          .delete()
-          .eq("id", id);
-
-        if (deleteError) {
-          console.error("Error deleting task:", deleteError);
-          setError(deleteError.message);
-          return false;
-        }
+        await directDeleteRow("tasks", "id", id, "deleteTask");
 
         // Remove from local state
         setTasks((prev) => prev.filter((t) => t.id !== id));
         return true;
       } catch (err) {
         console.error("Unexpected error deleting task:", err);
-        setError("Failed to delete task");
+        setError(err instanceof Error ? err.message : "Failed to delete task");
         return false;
       }
     },
-    [supabase]
+    []
   );
 
-  // Get a single task by ID
+  // Get a single task by ID (with joined relations)
   const getTask = useCallback(
     async (id: string): Promise<TaskWithRelations | null> => {
       try {
-        const { data, error: fetchError } = await buildTaskQuery()
-          .eq("id", id)
-          .single();
-
-        if (fetchError) {
-          console.error("Error fetching task:", fetchError);
-          return null;
-        }
-
-        return data as TaskWithRelations;
+        const data = await directSelectRow<TaskWithRelations>(
+          "tasks",
+          "id",
+          id,
+          TASK_COLUMNS,
+          "getTask",
+        );
+        return data;
       } catch (err) {
         console.error("Unexpected error fetching task:", err);
         return null;
       }
     },
-    [buildTaskQuery]
+    []
   );
 
   // Refresh tasks using current filters
@@ -568,7 +546,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
     await fetchTasks(currentFiltersRef.current);
   }, [fetchTasks]);
 
-  // Set up realtime subscription
+  // Set up realtime subscription. Channels are intentionally NOT migrated —
+  // they use a websocket path that's not subject to the query-builder hang.
   useEffect(() => {
     // Clean up previous subscription
     if (channelRef.current) {
