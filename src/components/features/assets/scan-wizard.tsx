@@ -331,6 +331,20 @@ export function ScanWizard({
           "handleStatus:fy26_assets.status",
         );
         setStatus(newStatus);
+
+        // Terminal status short-circuit: if the asset was scanned but
+        // is Missing (tag is here but the physical item isn't),
+        // there's nothing to photograph, no damage to document, no
+        // parts to order, no service to log. Jump straight to done
+        // and navigate back to /assets — the status write above is
+        // the only persistence that matters. The list page already
+        // buckets the asset under "Missing" via its status filter.
+        if (newStatus === "mia") {
+          setStep("done");
+          router.push("/assets");
+          return;
+        }
+
         setStep("photo_front");
       } catch (err) {
         safeSetError(err instanceof Error ? err.message : String(err));
@@ -338,7 +352,7 @@ export function ScanWizard({
         setBusy(false);
       }
     },
-    [asset.id, user?.id, supabase, safeSetError],
+    [asset.id, user?.id, router, safeSetError],
   );
 
   // ── Steps 4a-4d: Condition photos ──────────────────────────────────────

@@ -69,7 +69,7 @@ export const DAMAGE_DATE_PRESETS = [
 export const fy26AssetStatusLabels: Record<Fy26AssetStatus, string> = {
   unverified: "Unverified",
   verified_present: "Present",
-  mia: "MIA",
+  mia: "Missing",
   disposed: "Disposed",
   no_asset_tag: "No Asset Tag",
   needs_disposed: "Needs Disposed",

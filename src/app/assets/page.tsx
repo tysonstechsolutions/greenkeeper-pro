@@ -139,20 +139,28 @@ function AssetsPageContent() {
 
   return (
     <div className="p-4 md:p-6 pb-24">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-2">
         <PageHeader
           title="FY26 Assets"
           description={`Annual Inventory (AI) \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
           icon={Archive}
         />
-        <Button
-          onClick={() => router.push("/assets/scan")}
-          size="sm"
-          className="shrink-0"
-        >
-          <ScanLine className="w-4 h-4 mr-1.5" />
-          Scan
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            onClick={() => router.push("/assets/untracked")}
+            size="sm"
+            variant="outline"
+          >
+            Untracked
+          </Button>
+          <Button
+            onClick={() => router.push("/assets/scan")}
+            size="sm"
+          >
+            <ScanLine className="w-4 h-4 mr-1.5" />
+            Scan
+          </Button>
+        </div>
       </div>
 
       {error && (
