@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Mic, CheckCircle2, ClipboardList, Eye, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,15 @@ export default function VoiceLogPage() {
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef("");
 
-  const supported = !!getSpeechRecognition();
+  // Read SpeechRecognition presence after mount to avoid the SSR/CSR
+  // hydration mismatch (server has no `window`, so `supported` would
+  // start as `false` and the page would render the "not supported" shell;
+  // the client then mounts with `supported=true` and the trees diverge).
+  const [supported, setSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSupported(!!getSpeechRecognition());
+  }, []);
 
   function startRecording() {
     const SR = getSpeechRecognition();
@@ -155,8 +163,10 @@ export default function VoiceLogPage() {
     transcriptRef.current = "";
   }
 
-  // Unsupported browser fallback
-  if (!supported) {
+  // Unsupported browser fallback. Stay on the supported branch while
+  // `supported === null` (pre-mount) so server and client render the same
+  // tree — the actual feature-detect happens after hydration.
+  if (supported === false) {
     return (
       <div className="p-4 pb-24 max-w-lg mx-auto">
         <PageHeader title="Voice Log" icon={Mic} description="Quick-log voice notes" />

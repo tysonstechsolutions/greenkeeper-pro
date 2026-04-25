@@ -271,7 +271,7 @@ function NewUntrackedAssetContent() {
         </CardContent>
       </Card>
 
-      <div className="fixed bottom-0 inset-x-0 p-4 bg-background/95 backdrop-blur border-t border-border md:static md:p-0 md:bg-transparent md:border-0 md:backdrop-blur-none">
+      <div className="fixed bottom-20 inset-x-0 p-4 bg-background/95 backdrop-blur border-t border-border z-40 md:static md:bottom-0 md:p-0 md:bg-transparent md:border-0 md:backdrop-blur-none md:z-auto">
         <div className="max-w-lg mx-auto flex gap-2">
           <Button
             variant="outline"

@@ -726,11 +726,12 @@ export default function ManagePollsPage() {
           )}
         </div>
 
-        {/* Refresh Button */}
+        {/* Refresh Button — bottom-24 on mobile clears the 80px bottom nav.
+            Chat bubble is suppressed on /polls/manage so this corner is free. */}
         <button
           onClick={fetchPolls}
           disabled={refreshing}
-          className="fixed bottom-8 right-8 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
+          className="fixed bottom-24 right-4 md:bottom-8 md:right-8 z-30 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition disabled:opacity-50"
         >
           <RefreshCw className={`w-5 h-5 ${refreshing ? "animate-spin" : ""}`} />
         </button>

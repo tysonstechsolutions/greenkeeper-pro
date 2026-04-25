@@ -7,19 +7,22 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { stripTrailingSlash } from "@/lib/utils/page-title";
 
 /**
- * Pages where the primary "create" FAB sits at `bottom-24 right-4` — the
- * same mobile slot the chat bubble uses. Rather than layer two floating
- * buttons on top of each other, we suppress the chat bubble on these
- * routes. Users can still reach the AI assistant via the More menu.
+ * Routes (and their subroutes) whose own UI conflicts with the floating
+ * chat bubble. Matched by exact-equality OR `pathname.startsWith(route + "/")`,
+ * so adding "/tasks" suppresses the bubble on /tasks/new, /tasks/edit, etc.
+ * — those subroutes have their own bottom action bars that the bubble was
+ * landing on top of. Users can still reach the AI assistant via /more.
  */
-const ROUTES_WITH_FAB = new Set([
+const ROUTES_WITH_FAB = [
   "/tasks",
   "/schedule",
   "/equipment",
   "/chemicals",
   "/photos",
   "/assets",
-]);
+  "/parking-lot", // page-level FAB at bottom-24 right-4 — direct collision with bubble
+  "/polls/manage", // refresh FAB at bottom-8 right-8 collides with bubble on desktop
+];
 
 /**
  * Floating chat bubble that links to the AI assistant page.
@@ -33,7 +36,11 @@ export function ChatBubble() {
   // Hide on assistant page (already there)
   if (pathname === "/assistant") return null;
 
-  if (ROUTES_WITH_FAB.has(stripTrailingSlash(pathname))) return null;
+  const path = stripTrailingSlash(pathname);
+  const suppressedByOwnFAB = ROUTES_WITH_FAB.some(
+    (r) => path === r || path.startsWith(r + "/"),
+  );
+  if (suppressedByOwnFAB) return null;
 
   // Only show for roles that can access the assistant
   const allowed =
@@ -48,6 +55,7 @@ export function ChatBubble() {
   return (
     <Link
       href="/assistant"
+      data-chat-bubble
       className="fixed bottom-24 right-4 md:bottom-6 md:right-6 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
       aria-label="Open AI Assistant"
     >

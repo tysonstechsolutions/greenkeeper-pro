@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { fetchWeather, type WeatherResponse } from "./weather";
+import { fetchWeather } from "./weather";
 
 // Service role client for server-side operations
 function createServiceClient() {

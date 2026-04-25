@@ -7,7 +7,12 @@ import { createClient } from "@/lib/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
 // Routes the user can be on while logged out. Redirects skip these.
-const PUBLIC_ROUTES = ["/login", "/invite"];
+// Keep in sync with `PUBLIC_ROUTES` / `PUBLIC_PREFIXES` in
+// `src/components/layout/app-shell.tsx` and `src/components/auth/auth-gate.tsx`.
+// /pin-login MUST be here — without it, a session-expired event firing while
+// the user is on /pin-login would redirect them to /login → /pin-login,
+// looping the unauthenticated user.
+const PUBLIC_ROUTES = ["/login", "/pin-login", "/invite", "/install", "/offline", "/join"];
 
 function isPublicRoute(pathname: string | null): boolean {
   if (!pathname) return true;
