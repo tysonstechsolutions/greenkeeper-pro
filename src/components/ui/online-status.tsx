@@ -13,11 +13,13 @@ interface SyncProgress {
 }
 
 export function OnlineStatus() {
-  const [status, setStatus] = useState<ConnectionStatus>(() =>
-    typeof navigator !== "undefined"
-      ? navigator.onLine ? "online" : "offline"
-      : "online"
-  );
+  // Always start as "online" on first render. Reading `navigator.onLine` in
+  // the lazy initializer caused hydration mismatch on every page: Node 21+
+  // exposes `globalThis.navigator` (so `typeof navigator !== "undefined"` is
+  // true on the server) but `navigator.onLine` is undefined there, so the
+  // server picked "offline" while the client picked "online". Sync to the
+  // real value inside useEffect after hydration completes.
+  const [status, setStatus] = useState<ConnectionStatus>("online");
   const [queueCount, setQueueCount] = useState(0);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const [showSyncedMessage, setShowSyncedMessage] = useState(false);
@@ -29,6 +31,11 @@ export function OnlineStatus() {
   }, []);
 
   useEffect(() => {
+    // Reconcile to real connectivity now that we're past hydration. The
+    // intentional cascading render is the price of hydration safety —
+    // see the comment on the `useState("online")` initializer above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (typeof navigator !== "undefined" && "onLine" in navigator && !navigator.onLine) setStatus("offline");
     updateQueueCount(); // eslint-disable-line react-hooks/set-state-in-effect
 
     // Setup offline listeners
@@ -168,11 +175,14 @@ export function OnlineStatus() {
  */
 export function OfflineBadge() {
   const [queueCount, setQueueCount] = useState(0);
-  const [isOffline, setIsOffline] = useState(() =>
-    typeof navigator !== "undefined" ? !navigator.onLine : false
-  );
+  // Always start as `false` on first render to avoid hydration mismatch
+  // (Node 21+ exposes navigator but without `onLine`). Reconcile in effect.
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
+    // Hydration-safety reconcile — see OnlineStatus comment.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (typeof navigator !== "undefined" && "onLine" in navigator) setIsOffline(!navigator.onLine);
     const updateCount = async () => {
       const count = await getQueueCount();
       setQueueCount(count);

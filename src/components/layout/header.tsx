@@ -162,6 +162,7 @@ export function Header() {
 
   return (
     <header
+      data-app-header
       className={cn(
         // Body already applies `env(safe-area-inset-top)` so the header sits
         // below the Android status bar / notch. Header height = 56px which

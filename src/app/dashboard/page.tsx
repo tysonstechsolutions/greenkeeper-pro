@@ -566,7 +566,7 @@ function ProDashboardView() {
           </h2>
           <div className="space-y-3">
             <Link
-              href="/messages/superintendent"
+              href="/messages"
               className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
             >
               <div className="flex items-center gap-3">

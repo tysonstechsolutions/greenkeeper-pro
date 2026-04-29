@@ -58,35 +58,57 @@ export default function PinManagementPage() {
     setError(null);
 
     try {
-      // Fetch existing pins with profiles
-       
-      const { data: pinData, error: pinError } = await supabase.from("pin_codes")
-        .select("*, profile:user_id(full_name, role, email)")
-        .order("created_at", { ascending: true });
+      // No declared FK between pin_codes.user_id and profiles.id, so we
+      // can't ask PostgREST to embed the relationship — do two queries
+      // and stitch them in JS. Keeps the page working without a schema
+      // change.
+      const [pinResult, staffResult] = await Promise.all([
+        supabase
+          .from("pin_codes")
+          .select("id, user_id, pin, is_active")
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("profiles")
+          .select("id, full_name, role, email")
+          .eq("is_active", true)
+          .order("full_name"),
+      ]);
 
-      if (pinError) throw pinError;
+      if (pinResult.error) throw pinResult.error;
+      if (staffResult.error) throw staffResult.error;
 
-      // Fetch all staff profiles
-       
-      const { data: staffData, error: staffError } = await supabase.from("profiles")
-        .select("id, full_name, role, email")
-        .in("role", ["crew", "seasonal", "mechanic", "foreman", "asst_super"])
-        .eq("is_active", true)
-        .order("full_name");
+      type PinRow = { id: string; user_id: string; pin: string; is_active: boolean };
+      const pinData: PinRow[] = pinResult.data || [];
+      const allStaff: StaffMember[] = staffResult.data || [];
 
-      if (staffError) throw staffError;
-
-      const pinUserIds = new Set((pinData || []).map((p: PinEntry) => p.user_id));
-      const withoutPins = (staffData || []).filter(
-        (s: StaffMember) => !pinUserIds.has(s.id)
+      const profileById = new Map(
+        allStaff.map((s: StaffMember) => [
+          s.id,
+          { full_name: s.full_name, role: s.role, email: s.email },
+        ]),
       );
 
-      setPins(
-        (pinData || []).map((p: { id: string; user_id: string; pin: string; is_active: boolean; profile: { full_name: string; role: string; email: string } }) => ({
-          ...p,
-          profile: p.profile || undefined,
-        }))
+      const pinsWithProfile: PinEntry[] = pinData.map((p: PinRow) => ({
+        id: p.id,
+        user_id: p.user_id,
+        pin: p.pin,
+        is_active: p.is_active,
+        profile: profileById.get(p.user_id),
+      }));
+
+      const pinUserIds = new Set(pinData.map((p: PinRow) => p.user_id));
+      const candidateRoles = new Set<string>([
+        "crew",
+        "seasonal",
+        "mechanic",
+        "foreman",
+        "asst_super",
+      ]);
+      const withoutPins = allStaff.filter(
+        (s: StaffMember) => candidateRoles.has(s.role) && !pinUserIds.has(s.id),
       );
+
+      setPins(pinsWithProfile);
       setStaffWithoutPins(withoutPins);
     } catch (err) {
       console.error("Error fetching PIN data:", err);
@@ -94,7 +116,9 @@ export default function PinManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+    // `supabase` is a stable singleton, intentionally excluded from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchData();

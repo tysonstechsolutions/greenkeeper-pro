@@ -8,7 +8,6 @@ import type {
   TimeOffRequestType,
   TimeOffRequestStatus,
   Profile,
-  Database,
 } from "@/types/database";
 import { sendNotification, sendNotifications } from "./useNotifications";
 
@@ -68,7 +67,7 @@ export function useTimeOff(): UseTimeOffReturn {
   const [requests, setRequests] = useState<TimeOffRequestWithProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user, profile, isSuper, isManager } = useAuth();
+  const { user, profile, isManager } = useAuth();
 
   const supabase = createClient();
 

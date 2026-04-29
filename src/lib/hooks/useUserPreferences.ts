@@ -4,7 +4,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
-import type { UserPreferences, NotificationPreferences, CoursePreferences, UpdateTables } from "@/types/database";
+import type { UserPreferences, NotificationPreferences, CoursePreferences } from "@/types/database";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   notifications: {
@@ -28,8 +28,15 @@ interface UseUserPreferencesReturn {
   refreshPreferences: () => Promise<void>;
 }
 
+// Postgres "undefined column" error code. We special-case it because the
+// `profiles.user_preferences` column hasn't been added in every environment
+// yet, and we don't want a missing column to spam the console / wedge the
+// settings page. When the column shows up, the existing happy path takes
+// over automatically.
+const UNDEFINED_COLUMN = "42703";
+
 export function useUserPreferences(): UseUserPreferencesReturn {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +55,13 @@ export function useUserPreferences(): UseUserPreferencesReturn {
         .from("profiles")
         .select("user_preferences")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
       if (fetchError) {
+        if (fetchError.code === UNDEFINED_COLUMN) {
+          // Column not yet migrated — fall through silently with defaults.
+          return;
+        }
         console.error("Error loading preferences:", fetchError);
         setError(fetchError.message);
         return;
@@ -68,6 +79,8 @@ export function useUserPreferences(): UseUserPreferencesReturn {
     } finally {
       setLoading(false);
     }
+    // `supabase` is a stable singleton, intentionally excluded from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Initial load
@@ -98,6 +111,13 @@ export function useUserPreferences(): UseUserPreferencesReturn {
           .eq("id", user.id);
 
         if (updateError) {
+          if (updateError.code === UNDEFINED_COLUMN) {
+            // Column not yet migrated — keep the in-memory change so the UI
+            // reflects the toggle, but report the failure honestly.
+            setPreferences(newPreferences);
+            setError("Saving requires a database migration; toggles won't persist.");
+            return false;
+          }
           console.error("Error updating preferences:", updateError);
           setError(updateError.message);
           return false;
@@ -110,6 +130,8 @@ export function useUserPreferences(): UseUserPreferencesReturn {
         setError("Failed to save preferences");
         return false;
       }
+      // `supabase` is a stable singleton, intentionally excluded from deps.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [user, preferences]
   );
@@ -137,6 +159,11 @@ export function useUserPreferences(): UseUserPreferencesReturn {
           .eq("id", user.id);
 
         if (updateError) {
+          if (updateError.code === UNDEFINED_COLUMN) {
+            setPreferences(newPreferences);
+            setError("Saving requires a database migration; toggles won't persist.");
+            return false;
+          }
           console.error("Error updating preferences:", updateError);
           setError(updateError.message);
           return false;
@@ -149,6 +176,8 @@ export function useUserPreferences(): UseUserPreferencesReturn {
         setError("Failed to save preferences");
         return false;
       }
+      // `supabase` is a stable singleton, intentionally excluded from deps.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [user, preferences]
   );

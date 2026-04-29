@@ -52,7 +52,7 @@ export function BottomNav() {
   const isMoreActive = !isOnTopLevel;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/80 backdrop-blur-xl border-t border-border/50 safe-area-bottom">
+    <nav data-bottom-nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/80 backdrop-blur-xl border-t border-border/50 safe-area-bottom">
       {/* Nav content */}
       <div>
         <div className="flex items-center justify-around h-[72px] px-1 max-w-lg mx-auto">
