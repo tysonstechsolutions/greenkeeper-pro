@@ -252,20 +252,20 @@ export default function ClubhousePage() {
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-[#1B4332] to-[#0d2818] rounded-lg">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="p-2 bg-gradient-to-br from-[#1B4332] to-[#0d2818] rounded-lg shrink-0">
                 <Building className="w-8 h-8 text-white" />
               </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Clubhouse</h1>
-                <p className="text-gray-600">Issues & Maintenance Tracking</p>
+              <div className="min-w-0">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 truncate">Clubhouse</h1>
+                <p className="text-sm md:text-base text-gray-600">Issues & Maintenance Tracking</p>
               </div>
             </div>
             <Button
               onClick={() => setIsSheetOpen(true)}
-              className="bg-[#D4A853] hover:bg-[#c09640] text-gray-900 font-semibold gap-2"
+              className="bg-[#D4A853] hover:bg-[#c09640] text-gray-900 font-semibold gap-2 shrink-0"
             >
               <Plus className="w-4 h-4" />
               Add Issue

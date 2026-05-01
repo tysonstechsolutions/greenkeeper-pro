@@ -112,7 +112,7 @@ export async function getBriefingSettings(): Promise<BriefingSettings> {
     .from("app_settings")
     .select("value")
     .eq("key", "daily_briefing")
-    .single() as { data: SettingsResult | null };
+    .maybeSingle() as { data: SettingsResult | null };
 
   if (data?.value) {
     return { ...DEFAULT_BRIEFING_SETTINGS, ...(data.value as Partial<BriefingSettings>) };

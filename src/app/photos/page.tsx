@@ -495,7 +495,7 @@ export default function PhotosPage() {
       </PageHeader>
 
       {/* Stats Bar */}
-      <div className="flex gap-3 overflow-x-auto pb-2 mb-4 -mx-4 px-4 md:mx-0 md:px-0">
+      <div className="flex gap-3 overflow-x-auto pb-2 mb-4 -mx-4 pl-4 pr-8 md:mx-0 md:px-0">
         <div className="flex-shrink-0 bg-card border border-border rounded-lg p-3 min-w-[140px]">
           <p className="text-xs text-muted-foreground">Photos This Month</p>
           <p className="text-xl font-bold">{stats.thisMonth}</p>

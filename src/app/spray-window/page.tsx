@@ -67,12 +67,16 @@ function formatChartTime(iso: string): string {
 }
 
 export default function SprayWindowPage() {
-  const { profile } = useAuth();
+  const { profile, user, loading: authLoading } = useAuth();
   const [data, setData] = useState<SprayWindowResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Wait for auth to resolve so the edge function gets a valid JWT.
+    // Without this guard the WebView fires the request with no session
+    // during the pin-login redirect window and the function returns 401.
+    if (authLoading || !user) return;
     async function fetchData() {
       try {
         const json = await callApi<SprayWindowResponse>("spray-window");
@@ -84,7 +88,7 @@ export default function SprayWindowPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [user, authLoading]);
 
   if (loading) {
     return (

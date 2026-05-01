@@ -221,7 +221,7 @@ export default function OrderListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 pb-24 md:pb-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 pb-32 md:pb-6">
       {/* Toast Message */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
@@ -243,16 +243,16 @@ export default function OrderListPage() {
 
       <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div
-              className="rounded-lg p-2"
+              className="rounded-lg p-2 shrink-0"
               style={{ backgroundColor: '#1B4332' }}
             >
               <Package className="h-8 w-8 text-white" />
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 truncate">
                 Order List
               </h1>
               <p className="text-sm text-gray-600">
@@ -261,33 +261,37 @@ export default function OrderListPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               onClick={handleDownloadReport}
               disabled={isDownloading}
               variant="outline"
+              size="sm"
               className="flex items-center gap-2"
             >
               {isDownloading ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Downloading...
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="hidden sm:inline">Downloading...</span>
                 </>
               ) : (
                 <>
-                  <Download className="h-5 w-5" />
-                  Download List
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Download List</span>
+                  <span className="sm:hidden">Download</span>
                 </>
               )}
             </Button>
 
             <Button
               onClick={() => setIsSheetOpen(true)}
+              size="sm"
               style={{ backgroundColor: '#D4A853' }}
               className="flex items-center gap-2 text-gray-900 hover:opacity-90"
             >
-              <Plus className="h-5 w-5" />
-              Add Item
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Item</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </div>
         </div>

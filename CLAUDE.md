@@ -1,1 +1,1 @@
-Make sure everything works with no errors before you present it to me, 10 minutes maximum.
+Make sure everything works with no errors before you present it to me. Take as long as you need — correctness over speed.

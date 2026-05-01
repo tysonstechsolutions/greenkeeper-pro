@@ -229,7 +229,7 @@ export default function KnowledgePage() {
           </div>
 
           {/* Mobile Category Tabs */}
-          <div className="lg:hidden mb-4 overflow-x-auto">
+          <div className="lg:hidden mb-4 overflow-x-auto -mx-4 pl-4 pr-6">
             <Tabs
               value={selectedCategory}
               onValueChange={(v) => setSelectedCategory(v as KnowledgeCategory | "all")}

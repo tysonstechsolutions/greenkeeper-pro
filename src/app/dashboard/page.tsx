@@ -994,7 +994,7 @@ function LeadershipDashboardView() {
                 className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/60 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-sm truncate">{task.title}</div>
+                  <div className="font-medium text-sm line-clamp-2 break-words" title={task.title}>{task.title}</div>
                   <div className="text-xs text-red-600 dark:text-red-400">
                     Due{" "}
                     {new Date(task.due_date).toLocaleDateString("en-US", {
@@ -1299,7 +1299,7 @@ function LeadershipDashboardView() {
                     <Circle className="w-2.5 h-2.5 text-red-500/60" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <p className="text-sm font-medium line-clamp-2 break-words" title={task.title}>{task.title}</p>
                     {task.zone?.name && (
                       <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
                         <MapPin className="w-3 h-3 shrink-0" />
@@ -1823,7 +1823,7 @@ function StaffDashboardView() {
                     <Circle className="w-2.5 h-2.5 text-red-500/60" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <p className="text-sm font-medium line-clamp-2 break-words" title={task.title}>{task.title}</p>
                     {task.zone?.name && (
                       <p className="text-[11px] text-muted-foreground truncate flex items-center gap-1">
                         <MapPin className="w-3 h-3 shrink-0" />

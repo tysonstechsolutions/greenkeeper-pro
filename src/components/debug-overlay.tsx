@@ -205,7 +205,7 @@ export function DebugOverlay() {
         onClick={() => setOpen(true)}
         aria-label="Open debug panel"
         className={cn(
-          "fixed bottom-24 left-3 md:bottom-6 md:left-6 z-40 w-11 h-11 rounded-full",
+          "fixed bottom-28 left-3 md:bottom-6 md:left-6 z-40 w-11 h-11 rounded-full",
           "flex items-center justify-center shadow-lg active:scale-95 transition",
           status === "error"
             ? "bg-red-600 text-white animate-pulse"

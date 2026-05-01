@@ -84,12 +84,12 @@ export default function RootLayout({
             CapacitorInit also calls StatusBar.setOverlaysWebView({overlay:
             false}) so the WebView is actually placed below the bar; this
             env() padding is a fallback for the case where the plugin call
-            hasn't run yet (first paint) or failed. Use max() with a 28px
-            floor because env(safe-area-inset-top) is 0 on Android devices
-            that don't report insets, and 28px covers the typical ~24dp
-            status bar height.
+            hasn't run yet (first paint) or failed. 56px floor covers
+            Android 12+ status bars including center-cutout devices where
+            the safe area can be 48-56dp; devices that report a real
+            env(safe-area-inset-top) get the larger of the two values.
           */
-          paddingTop: "max(env(safe-area-inset-top, 0px), 48px)",
+          paddingTop: "max(env(safe-area-inset-top, 0px), 56px)",
           /* Bottom padding handled by bottom-nav safe-area-bottom class */
           paddingLeft: "env(safe-area-inset-left)",
           paddingRight: "env(safe-area-inset-right)",

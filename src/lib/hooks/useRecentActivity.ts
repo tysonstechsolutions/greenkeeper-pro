@@ -46,6 +46,13 @@ export function useRecentActivity(): UseRecentActivityReturn {
           .limit(limit);
 
         if (fetchError) {
+          // PGRST205 = table missing in schema cache (migration not applied
+          // yet on this DB). Fail soft: render an empty feed instead of a
+          // blocking error so the dashboard stays usable.
+          if ((fetchError as { code?: string }).code === "PGRST205") {
+            setActivities([]);
+            return;
+          }
           console.error("Error fetching activities:", fetchError);
           setError(fetchError.message);
           return;

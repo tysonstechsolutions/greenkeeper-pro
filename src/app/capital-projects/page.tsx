@@ -270,7 +270,7 @@ export default function CapitalProjectsPage() {
         </PageHeader>
 
         {/* ── Status Filter Tabs ── */}
-        <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1 -mx-4 pl-4 pr-6">
           {STATUS_TABS.map((tab) => {
             const count =
               tab.value === "all"

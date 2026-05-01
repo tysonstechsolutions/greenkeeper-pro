@@ -124,10 +124,9 @@ export default function BriefingSettingsPage() {
       const { data, error: fetchError } = await supabase.from("app_settings")
         .select("value")
         .eq("key", "daily_briefing")
-        .single();
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== "PGRST116") {
-        // PGRST116 = no rows returned, which is fine for first time
+      if (fetchError) {
         console.error("Error fetching settings:", fetchError);
       }
 

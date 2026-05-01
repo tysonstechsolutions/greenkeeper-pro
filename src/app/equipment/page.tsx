@@ -418,36 +418,33 @@ export default function EquipmentPage() {
   });
 
   return (
-    <div className="p-4 md:p-6 pb-24">
-      <div className="flex items-center justify-between mb-6">
-        <PageHeader
-          title="Equipment"
-          description="Manage fleet and monitor conditions"
-          icon={Wrench}
-        />
-        <div className="flex gap-2">
-          <Button
-            onClick={handleDownloadReport}
-            disabled={generatingReport || loading}
-            variant="outline"
-            size="sm"
-            className="border-[#1B4332] text-[#1B4332] hover:bg-[#1B4332] hover:text-white"
-          >
-            {generatingReport ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <FileText className="w-4 h-4 mr-2" />
-            )}
-            {generatingReport ? "Generating..." : "Report"}
-          </Button>
-          {canAddEquipment && (
-            <Button onClick={handleAddClick} size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add
-            </Button>
+    <div className="p-4 md:p-6 pb-32 md:pb-24">
+      <PageHeader
+        title="Equipment"
+        description="Manage fleet and monitor conditions"
+        icon={Wrench}
+      >
+        <Button
+          onClick={handleDownloadReport}
+          disabled={generatingReport || loading}
+          variant="outline"
+          size="sm"
+          className="border-[#1B4332] text-[#1B4332] hover:bg-[#1B4332] hover:text-white"
+        >
+          {generatingReport ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <FileText className="w-4 h-4 mr-2" />
           )}
-        </div>
-      </div>
+          {generatingReport ? "Generating..." : "Report"}
+        </Button>
+        {canAddEquipment && (
+          <Button onClick={handleAddClick} size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            Add
+          </Button>
+        )}
+      </PageHeader>
 
       {/* Error message */}
       {error && (
