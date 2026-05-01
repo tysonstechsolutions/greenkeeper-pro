@@ -436,7 +436,7 @@ function ProDashboardView() {
                       <Icon className="w-4 h-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">
+                      <p className="font-medium text-sm line-clamp-2 break-words" title={task.title}>
                         {task.title}
                       </p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1241,7 +1241,7 @@ function LeadershipDashboardView() {
                           backgroundColor: goalCategoryColors[goal.category],
                         }}
                       />
-                      <span className="text-sm truncate">{goal.title}</span>
+                      <span className="text-sm truncate" title={goal.title}>{goal.title}</span>
                     </div>
                     {goal.progress_percent !== undefined && (
                       <Badge
@@ -1436,7 +1436,7 @@ function LeadershipDashboardView() {
                   href={`/equipment/view?id=${e.id}`}
                   className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
                 >
-                  <span className="font-medium text-sm truncate min-w-0 flex-1">{e.name}</span>
+                  <span className="font-medium text-sm truncate min-w-0 flex-1" title={e.name}>{e.name}</span>
                   <span
                     className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                       e.status === "out_of_service"
@@ -1507,7 +1507,7 @@ function LeadershipDashboardView() {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">
+                      <p className="text-sm line-clamp-2 break-words" title={activity.description}>
                         {activity.description}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
@@ -1902,7 +1902,7 @@ function StaffDashboardView() {
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">
+                      <p className="text-sm line-clamp-2 break-words" title={activity.description}>
                         {activity.description}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
@@ -2237,7 +2237,7 @@ function GMDashboardView() {
                   return (
                     <div key={proj.id} className="p-3 bg-muted/30 rounded-lg">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-sm truncate">{proj.name}</span>
+                        <span className="font-medium text-sm truncate" title={proj.name}>{proj.name}</span>
                         <Badge variant={proj.status === "in_progress" ? "default" : "secondary"} className="text-xs ml-2">
                           {proj.status.replace("_", " ")}
                         </Badge>
@@ -2392,7 +2392,7 @@ function GMDashboardView() {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{activity.description}</p>
+                        <p className="text-sm line-clamp-2 break-words" title={activity.description}>{activity.description}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {activity.user?.full_name || "System"} &middot;{" "}
                           {formatActivityTime(activity.created_at)}

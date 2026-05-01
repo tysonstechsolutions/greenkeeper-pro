@@ -418,7 +418,7 @@ export default function EquipmentPage() {
   });
 
   return (
-    <div className="p-4 md:p-6 pb-32 md:pb-24">
+    <div className="p-4 md:p-6 pb-40 md:pb-24">
       <PageHeader
         title="Equipment"
         description="Manage fleet and monitor conditions"

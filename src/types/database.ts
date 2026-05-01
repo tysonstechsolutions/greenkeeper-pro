@@ -1463,6 +1463,165 @@ export interface BufferZoneRecord {
   updated_at: string;
 }
 
+// ── AST (Aboveground Storage Tank) Monthly Inspection ──
+
+export type AstInspectionItemStatus = "yes" | "no" | "na";
+
+export interface AstInspectionItem {
+  status: AstInspectionItemStatus | null;
+  comment: string | null;
+}
+
+export type AstInspectionItems = Record<string, AstInspectionItem>;
+
+export interface AstInspection {
+  id: string;
+  inspection_date: string;
+  prior_inspection_date: string | null;
+  retain_until_date: string;
+  inspector_id: string | null;
+  inspector_name: string;
+  inspector_title: string | null;
+  inspector_signature: string | null;
+  tank_ids: string;
+  facility_name: string | null;
+  facility_id: string | null;
+  items: AstInspectionItems;
+  additional_comments: string | null;
+  status: "draft" | "completed";
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Purchase Request (NAVMIDLANT NAF Purchase Request, FY2025) ──
+
+export interface PurchaseRequestItem {
+  /** Position in the line-item table; the form prints these 1-based. */
+  item: number;
+  site: string;
+  cost_ctr: string;
+  gl_acct: string;
+  /** Item / product name. */
+  description: string;
+  /** Vendor part number, SKU, or item number. Optional. */
+  part_number?: string;
+  qty: number;
+  unit: string;
+  unit_price: number;
+}
+
+export interface VendorWith889 {
+  id: string;
+  name: string;
+  company: string | null;
+  phone: string | null;
+  email: string | null;
+  category: string;
+  supplies: string | null;
+  notes: string | null;
+  contract_end_date: string | null;
+  address: string | null;
+  address_line2: string | null;
+  city_state_zip: string | null;
+  poc: string | null;
+  sap_vendor_no: string | null;
+  gsa_naf_other_no: string | null;
+  section_889_path: string | null;
+  section_889_filename: string | null;
+  section_889_expiration_date: string | null;
+  section_889_uploaded_at: string | null;
+}
+
+export interface PurchaseRequest {
+  id: string;
+
+  // Header
+  date_prepared: string;
+  required_delivery_date: string | null;
+  request_via: string;
+  currency: string;
+
+  // Vendor link + uploaded quote (added in 20260503 migration)
+  vendor_id: string | null;
+  quote_storage_path: string | null;
+  quote_filename: string | null;
+  quote_uploaded_at: string | null;
+
+  // Requestor
+  requestor_name: string;
+  requestor_email: string | null;
+  requestor_phone: string | null;
+
+  // Vendor 1
+  vendor1_name: string | null;
+  vendor1_address: string | null;
+  vendor1_line2: string | null;
+  vendor1_city_state_zip: string | null;
+  vendor1_poc: string | null;
+  vendor1_email: string | null;
+  vendor1_phone: string | null;
+  vendor1_sap_no: string | null;
+  vendor1_gsa_naf_no: string | null;
+
+  // Vendors 2 & 3 (just names)
+  vendor2_name: string | null;
+  vendor3_name: string | null;
+
+  // Invoice address
+  invoice_address: string | null;
+  invoice_line2: string | null;
+  invoice_city_state_zip: string | null;
+  invoice_poc: string | null;
+  invoice_phone: string | null;
+  invoice_email: string | null;
+
+  // Delivery address
+  delivery_address: string | null;
+  delivery_line2: string | null;
+  delivery_city_state_zip: string | null;
+  delivery_poc: string | null;
+  delivery_phone: string | null;
+  delivery_email: string | null;
+
+  // Accounting
+  company_code: string | null;
+  requesting_facility_code: string | null;
+  internal_order: string | null;
+  project_no: string | null;
+  program: string | null;
+
+  // Line items
+  items: PurchaseRequestItem[];
+
+  // IGE
+  ige_excess_pct: number;
+  ige_amount: number;
+  justification: string | null;
+  ige_based_on: string | null;
+
+  // Approvals
+  financial_analyst: string | null;
+  approving_authority: string | null;
+  approving_signature_date: string | null;
+  second_approval: string | null;
+  second_signature_date: string | null;
+
+  // Attached items
+  attached_ssj: boolean;
+  attached_bnj: boolean;
+  attached_pws: boolean;
+  attached_itpr: boolean;
+  attached_other: string | null;
+  attached_section_889: boolean;
+
+  status: "draft" | "submitted";
+
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Water Usage Types ──
 
 export type WaterSource = "municipal" | "well" | "reclaimed" | "pond" | "mixed";

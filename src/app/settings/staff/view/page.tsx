@@ -72,7 +72,7 @@ function PageContent() {
           .select("id, email, full_name, display_name, role, phone, hire_date, is_active")
           .eq("id", staffId)
           .single(),
-        8000,
+        15000,
         { data: null, error: { message: "Request timed out" } }
       );
 

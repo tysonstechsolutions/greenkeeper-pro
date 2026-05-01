@@ -79,16 +79,20 @@ export default function StaffPage() {
     try {
       const today = new Date().toISOString().split("T")[0];
 
-      // Run ALL four queries in parallel with timeouts
+      // Run ALL four queries in parallel with timeouts.
+      // Profiles get a longer timeout (15s) because RLS evaluation on the
+      // table can be slow on cell connections; the previous 8s frequently
+      // tripped on real-world networks even when the query eventually
+      // succeeded server-side.
       const [profilesResult, tasksResult, timeOffResult, scheduleResult] = await Promise.all([
         // 1. Get all profiles
         withTimeout(
-           
+
           supabase.from("profiles")
             .select("*")
             .order("role", { ascending: true })
             .order("full_name", { ascending: true }),
-          8000,
+          15000,
           { data: null, error: { message: "Profiles query timed out" } }
         ),
         // 2. Get task counts per user

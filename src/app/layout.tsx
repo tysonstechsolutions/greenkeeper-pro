@@ -81,15 +81,25 @@ export default function RootLayout({
             Top padding defends against Android edge-to-edge mode (API 35+)
             where the WebView would otherwise render under the status bar
             and the system clock / battery icon would cover our header.
-            CapacitorInit also calls StatusBar.setOverlaysWebView({overlay:
-            false}) so the WebView is actually placed below the bar; this
-            env() padding is a fallback for the case where the plugin call
-            hasn't run yet (first paint) or failed. 56px floor covers
-            Android 12+ status bars including center-cutout devices where
-            the safe area can be 48-56dp; devices that report a real
-            env(safe-area-inset-top) get the larger of the two values.
+
+            Defense in depth (any one of these is sufficient on its own):
+              1. android/app/src/main/res/values-v35/styles.xml opts the
+                 activity out of Android-15 edge-to-edge enforcement, so the
+                 WebView naturally sits below the system bars.
+              2. CapacitorInit calls StatusBar.setOverlaysWebView({overlay:
+                 false}) for older Android.
+              3. This env() padding catches the gap if the plugin call
+                 hasn't run yet (first paint) or is ignored on the device.
+
+            Floor is generous (80px) because devices with cutouts/punch
+            holes can report a 48-56dp safe area, and Pixel/Samsung hidden
+            status bars (call-active green pill) extend further. Devices
+            that report a real env(safe-area-inset-top) get the larger of
+            the two values, so this only adds padding on devices that
+            don't report insets — never visible on iOS or modern Android
+            Chrome where insets ARE reported.
           */
-          paddingTop: "max(env(safe-area-inset-top, 0px), 56px)",
+          paddingTop: "max(env(safe-area-inset-top, 0px), 80px)",
           /* Bottom padding handled by bottom-nav safe-area-bottom class */
           paddingLeft: "env(safe-area-inset-left)",
           paddingRight: "env(safe-area-inset-right)",

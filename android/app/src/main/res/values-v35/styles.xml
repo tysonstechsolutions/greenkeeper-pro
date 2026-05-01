@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 15 (API 35) override of the base theme.
+
+  Without windowOptOutEdgeToEdgeEnforcement, the system pulls the WebView
+  edge-to-edge regardless of StatusBar.setOverlaysWebView({overlay:false}),
+  which makes the system clock + battery overlay our app header. Opting out
+  restores the pre-Android-15 behavior of system bars sitting ABOVE the
+  WebView, so our sticky header is fully visible.
+-->
+<resources>
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Trash2, Check, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Trash2, Check, Wrench, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import {
@@ -46,6 +46,232 @@ import { downloadOrderListReport, OrderListReportError } from '@/lib/reports/ord
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 const STATUSES = ['needed', 'ordered', 'received'] as const;
+
+// ──────────────────────────────────────────────────────────────────────
+// Consolidation helpers
+//
+// Groups items by canonical key (part_number || lowercase item_name) so a
+// part needed by 3 different mowers shows up once with the total qty
+// instead of three separate rows. The user expands to see which equipment
+// needs it.
+// ──────────────────────────────────────────────────────────────────────
+
+interface ConsolidatedGroup {
+  key: string;
+  primary: DisplayOrderItem;
+  members: DisplayOrderItem[];
+  totalQty: number;
+  totalCost: number;
+}
+
+function consolidateKey(item: DisplayOrderItem): string {
+  const pn = item.part_number?.trim();
+  if (pn) return `pn:${pn.toLowerCase()}`;
+  const name = (item.item_name || '').trim().toLowerCase();
+  return `name:${name}`;
+}
+
+function parseQty(q: string | number | null | undefined): number {
+  if (q == null) return 0;
+  if (typeof q === 'number') return q;
+  const m = String(q).match(/(\d+(\.\d+)?)/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+function consolidate(items: DisplayOrderItem[]): ConsolidatedGroup[] {
+  const map = new Map<string, ConsolidatedGroup>();
+  for (const item of items) {
+    const key = consolidateKey(item);
+    const qty = parseQty(item.quantity) || 1;
+    const cost = (item.estimated_cost || 0) * qty;
+    const existing = map.get(key);
+    if (existing) {
+      existing.members.push(item);
+      existing.totalQty += qty;
+      existing.totalCost += cost;
+    } else {
+      map.set(key, {
+        key,
+        primary: item,
+        members: [item],
+        totalQty: qty,
+        totalCost: cost,
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    (a.primary.item_name || '').localeCompare(b.primary.item_name || ''),
+  );
+}
+
+function ConsolidatedCard({
+  group,
+  onMarkOrdered,
+  onMarkReceived,
+  onDelete,
+}: {
+  group: ConsolidatedGroup;
+  onMarkOrdered?: (id: string) => void;
+  onMarkReceived?: (id: string) => void;
+  onDelete?: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isMulti = group.members.length > 1;
+  const status = group.primary.status;
+  const partNum = group.primary.part_number;
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-start gap-3 p-3 text-left hover:bg-muted/30 transition-colors"
+      >
+        <div
+          className="w-1 self-stretch rounded-full shrink-0"
+          style={{ backgroundColor: orderStatusColors[status] }}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-sm leading-snug break-words">
+              {group.primary.item_name || '(no name)'}
+            </p>
+            <span className="text-base font-bold text-primary shrink-0">
+              ×{group.totalQty || group.members.length}
+            </span>
+          </div>
+          {partNum && (
+            <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+              Part #: {partNum}
+            </p>
+          )}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <Badge
+              variant="secondary"
+              style={{
+                backgroundColor: `${orderStatusColors[status]}20`,
+                color: orderStatusColors[status],
+              }}
+            >
+              {orderStatusLabels[status]}
+            </Badge>
+            {isMulti && (
+              <span className="text-[11px] text-muted-foreground">
+                {group.members.length} requests
+              </span>
+            )}
+            {group.totalCost > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                ~${group.totalCost.toFixed(2)}
+              </span>
+            )}
+          </div>
+        </div>
+        {isMulti ? (
+          open ? (
+            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+          ) : (
+            <ChevronRightIcon className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+          )
+        ) : null}
+      </button>
+
+      {open && (
+        <div className="border-t border-border bg-muted/20 divide-y divide-border">
+          {group.members.map((m) => (
+            <div key={m.id} className="px-3 py-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <span className="font-medium truncate">
+                  {m.equipment_name || m.vendor || '—'}
+                </span>
+                <span className="text-muted-foreground shrink-0">
+                  qty {parseQty(m.quantity) || 1}
+                </span>
+              </div>
+              {m.description && (
+                <p className="text-muted-foreground line-clamp-2">
+                  {m.description}
+                </p>
+              )}
+              {m.notes && (
+                <p className="text-muted-foreground line-clamp-2">{m.notes}</p>
+              )}
+              <div className="flex items-center gap-2 mt-1.5">
+                {m.source === 'order_item' &&
+                  status === 'needed' &&
+                  onMarkOrdered && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkOrdered(m.id);
+                      }}
+                      className="text-[11px] text-primary hover:underline"
+                    >
+                      Mark ordered
+                    </button>
+                  )}
+                {m.source === 'order_item' &&
+                  status === 'ordered' &&
+                  onMarkReceived && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkReceived(m.id);
+                      }}
+                      className="text-[11px] text-primary hover:underline"
+                    >
+                      Mark received
+                    </button>
+                  )}
+                {m.source === 'order_item' && onDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(m.id);
+                    }}
+                    className="text-[11px] text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilterCard({
+  label,
+  count,
+  color,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  color: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`bg-card rounded-lg border p-3 text-left transition-all hover:shadow-md active:scale-[0.98] ${
+        active ? 'ring-2 ring-primary border-primary' : 'border-border'
+      }`}
+    >
+      <div className="text-xs font-medium text-muted-foreground mb-1">
+        {label}
+      </div>
+      <div className="text-2xl font-bold" style={{ color }}>
+        {count}
+      </div>
+    </button>
+  );
+}
 
 interface FormData {
   itemName: string;
@@ -106,6 +332,18 @@ export default function OrderListPage() {
     ordered: filteredItems.filter((i) => i.status === 'ordered'),
     received: filteredItems.filter((i) => i.status === 'received'),
   };
+
+  // Consolidate within each status group: items with the same part_number
+  // (or item name when no part #) appear once with a summed qty. Tap to
+  // expand and see which equipment requested each.
+  const consolidatedByStatus = useMemo(
+    () => ({
+      needed: consolidate(itemsByStatus.needed),
+      ordered: consolidate(itemsByStatus.ordered),
+      received: consolidate(itemsByStatus.received),
+    }),
+    [itemsByStatus.needed, itemsByStatus.ordered, itemsByStatus.received],
+  );
 
   const handleFormChange = <K extends keyof FormData>(field: K, value: FormData[K]) => {
     setFormData((prev) => ({
@@ -221,7 +459,7 @@ export default function OrderListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6 pb-32 md:pb-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 pb-40 md:pb-6">
       {/* Toast Message */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
@@ -296,59 +534,42 @@ export default function OrderListPage() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Total Items
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-gray-900">
-                {stats.total}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Needed
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold" style={{ color: '#EA580C' }}>
-                {stats.needed}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Ordered
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold" style={{ color: '#CA8A04' }}>
-                {stats.ordered}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Received
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-green-600">
-                {stats.received}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Stats — clickable filter cards */}
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <FilterCard
+            label="Total"
+            count={stats.total}
+            color="#0F172A"
+            active={statusFilter === 'all'}
+            onClick={() => setStatusFilter('all')}
+          />
+          <FilterCard
+            label="Needed"
+            count={stats.needed}
+            color="#EA580C"
+            active={statusFilter === 'needed'}
+            onClick={() =>
+              setStatusFilter((prev) => (prev === 'needed' ? 'all' : 'needed'))
+            }
+          />
+          <FilterCard
+            label="Ordered"
+            count={stats.ordered}
+            color="#CA8A04"
+            active={statusFilter === 'ordered'}
+            onClick={() =>
+              setStatusFilter((prev) => (prev === 'ordered' ? 'all' : 'ordered'))
+            }
+          />
+          <FilterCard
+            label="Received"
+            count={stats.received}
+            color="#16A34A"
+            active={statusFilter === 'received'}
+            onClick={() =>
+              setStatusFilter((prev) => (prev === 'received' ? 'all' : 'received'))
+            }
+          />
         </div>
 
         {/* Filter Bar */}
@@ -435,69 +656,69 @@ export default function OrderListPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-8">
-            {/* Needed Items */}
-            {itemsByStatus.needed.length > 0 && (
+          <div className="space-y-6">
+            {consolidatedByStatus.needed.length > 0 && (
               <div>
-                <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: orderStatusColors['needed'] }}
                   ></span>
-                  Needed ({itemsByStatus.needed.length})
+                  Needed ({consolidatedByStatus.needed.length} item
+                  {consolidatedByStatus.needed.length === 1 ? '' : 's'})
                 </h2>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {itemsByStatus.needed.map((item) => (
-                    <OrderItemCard
-                      key={item.id}
-                      item={item}
-                      onMarkOrdered={() => handleMarkOrdered(item.id)}
-                      onDelete={() => handleDelete(item.id)}
+                <div className="space-y-2">
+                  {consolidatedByStatus.needed.map((g) => (
+                    <ConsolidatedCard
+                      key={g.key}
+                      group={g}
+                      onMarkOrdered={handleMarkOrdered}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Ordered Items */}
-            {itemsByStatus.ordered.length > 0 && (
+            {consolidatedByStatus.ordered.length > 0 && (
               <div>
-                <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: orderStatusColors['ordered'] }}
                   ></span>
-                  Ordered ({itemsByStatus.ordered.length})
+                  Ordered ({consolidatedByStatus.ordered.length} item
+                  {consolidatedByStatus.ordered.length === 1 ? '' : 's'})
                 </h2>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {itemsByStatus.ordered.map((item) => (
-                    <OrderItemCard
-                      key={item.id}
-                      item={item}
-                      onMarkReceived={() => handleMarkReceived(item.id)}
-                      onDelete={() => handleDelete(item.id)}
+                <div className="space-y-2">
+                  {consolidatedByStatus.ordered.map((g) => (
+                    <ConsolidatedCard
+                      key={g.key}
+                      group={g}
+                      onMarkReceived={handleMarkReceived}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Received Items */}
-            {itemsByStatus.received.length > 0 && (
+            {consolidatedByStatus.received.length > 0 && (
               <div>
-                <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: orderStatusColors['received'] }}
                   ></span>
-                  Received ({itemsByStatus.received.length})
+                  Received ({consolidatedByStatus.received.length} item
+                  {consolidatedByStatus.received.length === 1 ? '' : 's'})
                 </h2>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {itemsByStatus.received.map((item) => (
-                    <OrderItemCard
-                      key={item.id}
-                      item={item}
-                      onDelete={() => handleDelete(item.id)}
+                <div className="space-y-2">
+                  {consolidatedByStatus.received.map((g) => (
+                    <ConsolidatedCard
+                      key={g.key}
+                      group={g}
+                      onDelete={handleDelete}
                     />
                   ))}
                 </div>

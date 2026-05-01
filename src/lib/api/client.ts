@@ -21,6 +21,8 @@ const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
   // Phase 2 — deployed on Supabase Edge Functions.
   "ai-assistant",
   "drone/upload",
+  "extract-889",
+  "extract-quote",
   "fix-instructions",
   "green-fix-instructions",
   "morning-route",

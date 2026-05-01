@@ -23,6 +23,8 @@ import {
   FileText,
   Filter,
   ChevronDown,
+  FileCheck,
+  ChevronRight,
 } from "lucide-react";
 
 // ── Constants ──
@@ -840,6 +842,23 @@ export default function EnvironmentalCompliancePage() {
           <p className="text-xs text-muted-foreground">EPA/NPDES discharge monitoring &amp; buffer zones</p>
         </div>
       </div>
+
+      {/* AST inspections shortcut — quick access to the SP001 monthly form */}
+      <Link
+        href="/ast-inspections"
+        className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40 hover:bg-muted/30 transition-colors"
+      >
+        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <FileCheck className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-sm">AST Monthly Inspections</p>
+          <p className="text-xs text-muted-foreground">
+            STI SP001 fuel &amp; cooking-oil tank checklist &middot; download PDF
+          </p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+      </Link>
 
       {/* Tab Navigation */}
       <div className="flex items-center gap-1 mt-4 mb-4 p-1 rounded-xl bg-muted/50 border border-border">
