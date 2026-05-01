@@ -21,6 +21,7 @@ import {
   buildPrBundle,
   PrBundleError,
 } from "@/lib/reports/pr-bundle";
+import { formatInternalOrder } from "@/lib/pr-internal-order";
 import {
   purchaseRequestPdfFilename,
   prEmailSubject,
@@ -372,7 +373,14 @@ function ViewPurchaseRequestInner() {
       <SectionCard title="Accounting">
         <Detail label="Company Code" value={pr.company_code || "—"} />
         <Detail label="Requesting Facility" value={pr.requesting_facility_code || "—"} />
-        <Detail label="Internal Order" value={pr.internal_order || "—"} />
+        <Detail
+          label="Internal Order"
+          value={
+            formatInternalOrder(pr.pr_sequence_number, pr.date_prepared) ||
+            pr.internal_order ||
+            "—"
+          }
+        />
         <Detail label="Project No" value={pr.project_no || "—"} />
         <Detail label="Program" value={pr.program || "—"} />
       </SectionCard>

@@ -10,11 +10,22 @@ import {
   Flag,
   Map,
   Archive,
+  FilePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChannels } from "@/lib/hooks/useChannels";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useEffect } from "react";
+
+// Management roles get a "Create PR" shortcut where Map used to be — they
+// run PRs frequently and the map is one tap deeper inside More for them.
+const leadershipNavItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/tasks", label: "Tasks", icon: ClipboardList },
+  { href: "/assets", label: "Assets", icon: Archive },
+  { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus },
+  { href: "/more", label: "More", icon: MoreHorizontal },
+];
 
 const maintenanceNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -35,9 +46,19 @@ const proNavItems = [
 export function BottomNav() {
   const pathname = usePathname();
   const { totalUnread, fetchChannels } = useChannels();
-  const { isPro } = useAuth();
+  const { isPro, profile } = useAuth();
 
-  const navItems = isPro ? proNavItems : maintenanceNavItems;
+  const isManagement =
+    profile?.role === "super" ||
+    profile?.role === "asst_super" ||
+    profile?.role === "director" ||
+    profile?.role === "gm";
+
+  const navItems = isPro
+    ? proNavItems
+    : isManagement
+      ? leadershipNavItems
+      : maintenanceNavItems;
 
   useEffect(() => {
     fetchChannels();

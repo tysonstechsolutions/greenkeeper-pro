@@ -23,10 +23,16 @@ import { callApi } from "@/lib/api/client";
 import {
   PR_INVOICE_DEFAULTS,
   PR_DELIVERY_DEFAULTS,
+  PR_ACCOUNTING_DEFAULTS,
+  PR_REQUEST_VIA_DEFAULT,
+  PR_DELIVERY_DAYS,
 } from "@/lib/pr-defaults";
+import { formatInternalOrder } from "@/lib/pr-internal-order";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
+import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistory";
+import { History as HistoryIcon } from "lucide-react";
 import type {
   PurchaseRequest,
   PurchaseRequestItem,
@@ -56,6 +62,13 @@ interface ExtractedQuote {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Today + N days, ISO. */
+function plusDaysIso(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 function emptyItem(n: number): PurchaseRequestItem {
@@ -96,9 +109,12 @@ function NewPurchaseRequestPageInner() {
 
   // ── State ────────────────────────────────────────────────────────────────
   const [datePrepared, setDatePrepared] = useState(todayIso());
-  const [requiredDeliveryDate, setRequiredDeliveryDate] = useState("");
-  const [requestVia, setRequestVia] = useState("CONTRACTING OFFICE");
+  const [requiredDeliveryDate, setRequiredDeliveryDate] = useState(() =>
+    editId ? "" : plusDaysIso(PR_DELIVERY_DAYS),
+  );
+  const [requestVia, setRequestVia] = useState(PR_REQUEST_VIA_DEFAULT);
   const [currency, setCurrency] = useState("US Dollar $");
+  const [prSequenceNumber, setPrSequenceNumber] = useState<number | null>(null);
 
   const [requestorName, setRequestorName] = useState("");
   const [requestorEmail, setRequestorEmail] = useState("");
@@ -143,8 +159,12 @@ function NewPurchaseRequestPageInner() {
       : { ...PR_DELIVERY_DEFAULTS },
   );
 
-  // Accounting
-  const [companyCode, setCompanyCode] = useState("");
+  // Accounting — Company Code is set by facility default; the rest is
+  // user-editable. Internal Order is auto-generated on save and shown
+  // read-only here.
+  const [companyCode, setCompanyCode] = useState(() =>
+    editId ? "" : PR_ACCOUNTING_DEFAULTS.company_code,
+  );
   const [requestingFacility, setRequestingFacility] = useState("");
   const [internalOrder, setInternalOrder] = useState("");
   const [projectNo, setProjectNo] = useState("");
@@ -175,6 +195,11 @@ function NewPurchaseRequestPageInner() {
 
   // UI state for collapsible sections
   const [openSection, setOpenSection] = useState<string | null>("header");
+
+  // Part-history library (past line items for re-ordering).
+  const partHistory = usePartHistory();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
 
   const [loadingExisting, setLoadingExisting] = useState(!!editId);
   const [saving, setSaving] = useState(false);
@@ -277,6 +302,7 @@ function NewPurchaseRequestPageInner() {
       setRequiredDeliveryDate(row.required_delivery_date || "");
       setRequestVia(row.request_via);
       setCurrency(row.currency);
+      setPrSequenceNumber(row.pr_sequence_number);
       setVendorId(row.vendor_id);
       setExistingQuoteName(row.quote_filename);
       setRequestorName(row.requestor_name);
@@ -368,6 +394,43 @@ function NewPurchaseRequestPageInner() {
         ? [emptyItem(1)]
         : out.map((it, i) => ({ ...it, item: i + 1 }));
     });
+  }
+
+  /**
+   * Reuse a history entry. If the last line item is empty (nothing typed),
+   * we fill it in place; otherwise we add a new line. This matches the
+   * "tap a part, it appears as the next item" mental model.
+   */
+  function applyHistoryEntry(entry: PartHistoryEntry) {
+    const filled: PurchaseRequestItem = {
+      item: 0, // overwritten below
+      site: "",
+      cost_ctr: "",
+      gl_acct: "",
+      description: entry.description,
+      part_number: entry.part_number,
+      qty: entry.qty || 1,
+      unit: entry.unit,
+      unit_price: entry.unit_price,
+    };
+    setItems((prev) => {
+      const lastIdx = prev.length - 1;
+      const last = prev[lastIdx];
+      const lastIsEmpty =
+        !last.description.trim() &&
+        !(last.part_number || "").trim() &&
+        (last.qty || 0) === 0 &&
+        (last.unit_price || 0) === 0;
+      if (lastIsEmpty) {
+        const next = [...prev];
+        next[lastIdx] = { ...filled, item: lastIdx + 1 };
+        return next;
+      }
+      return [...prev, { ...filled, item: prev.length + 1 }];
+    });
+    setHistoryOpen(false);
+    setHistoryQuery("");
+    setOpenSection("items");
   }
 
   // ── Quote upload + AI extraction ─────────────────────────────────────────
@@ -627,7 +690,10 @@ function NewPurchaseRequestPageInner() {
       delivery_email: delivery.email.trim() || null,
       company_code: companyCode.trim() || null,
       requesting_facility_code: requestingFacility.trim() || null,
-      internal_order: internalOrder.trim() || null,
+      // internal_order is computed from pr_sequence_number at render time —
+      // we don't let the user type a custom value, so we just store null
+      // and the PDF/view layer formats from the sequence + date_prepared.
+      internal_order: null,
       project_no: projectNo.trim() || null,
       program: program.trim() || null,
       items: items.filter(
@@ -1167,8 +1233,23 @@ function NewPurchaseRequestPageInner() {
         <Field label="Requesting Facility / Code">
           <input type="text" value={requestingFacility} onChange={(e) => setRequestingFacility(e.target.value)} className={inputCls} />
         </Field>
-        <Field label="Internal Order">
-          <input type="text" value={internalOrder} onChange={(e) => setInternalOrder(e.target.value)} className={inputCls} />
+        <Field
+          label="Internal Order"
+          hint={
+            prSequenceNumber == null
+              ? "Auto-assigned at save (next available FY26-FM-NNNN)."
+              : "Locked once a PR is saved — used for procurement filing."
+          }
+        >
+          <input
+            type="text"
+            value={
+              formatInternalOrder(prSequenceNumber, datePrepared) ||
+              "(auto-assigned at save)"
+            }
+            readOnly
+            className={`${inputCls} bg-muted/40 text-muted-foreground font-mono`}
+          />
         </Field>
         <Field label="Project No">
           <input type="text" value={projectNo} onChange={(e) => setProjectNo(e.target.value)} className={inputCls} />
@@ -1185,6 +1266,74 @@ function NewPurchaseRequestPageInner() {
         open={openSection === "items"}
         onToggle={(k) => setOpenSection(openSection === k ? null : k)}
       >
+        {/* Reuse from history */}
+        {!partHistory.loading && partHistory.total > 0 && (
+          <div className="mb-3 rounded-lg border border-border bg-background overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(!historyOpen)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/30 transition-colors text-left"
+            >
+              <HistoryIcon className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium flex-1">
+                Reuse from history
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {partHistory.total} parts
+              </span>
+              {historyOpen ? (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+            {historyOpen && (
+              <div className="border-t border-border p-2 space-y-2">
+                <input
+                  type="text"
+                  value={historyQuery}
+                  onChange={(e) => setHistoryQuery(e.target.value)}
+                  placeholder="Search by part # or description..."
+                  className={inputCls}
+                />
+                <div className="max-h-72 overflow-y-auto space-y-1">
+                  {partHistory.search(historyQuery, 12).map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      onClick={() => applyHistoryEntry(entry)}
+                      className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium leading-snug break-words">
+                          {entry.description || "(no description)"}
+                        </p>
+                        <span className="text-xs text-primary font-semibold shrink-0">
+                          ${entry.unit_price.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
+                        {entry.part_number && (
+                          <span className="font-mono">
+                            #{entry.part_number}
+                          </span>
+                        )}
+                        {entry.vendor && <span>{entry.vendor}</span>}
+                        <span>used {entry.count}×</span>
+                      </div>
+                    </button>
+                  ))}
+                  {partHistory.search(historyQuery, 12).length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      No matches.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-3">
           {items.map((item, idx) => (
             <div

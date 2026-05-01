@@ -10,6 +10,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatInternalOrder } from "@/lib/pr-internal-order";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -188,7 +189,13 @@ export async function generatePurchaseRequestReport(
     let y3 = y;
     y3 = labelValue(col3X, y3, "Company Code", s(pr.company_code));
     y3 = labelValue(col3X, y3, "Requesting Facility / Code", s(pr.requesting_facility_code));
-    y3 = labelValue(col3X, y3, "Internal Order", s(pr.internal_order));
+    // Internal Order is auto-derived from pr_sequence_number + date_prepared.
+    // Falls back to the legacy internal_order field for old hand-edited rows.
+    const computedIO =
+      formatInternalOrder(pr.pr_sequence_number, pr.date_prepared) ||
+      pr.internal_order ||
+      "";
+    y3 = labelValue(col3X, y3, "Internal Order", computedIO);
     y3 = labelValue(col3X, y3, "Project No", s(pr.project_no));
     y3 = labelValue(col3X, y3, "Program", s(pr.program));
     // Sub-header for delivery

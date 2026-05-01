@@ -1548,6 +1548,11 @@ export interface PurchaseRequest {
   quote_filename: string | null;
   quote_uploaded_at: string | null;
 
+  // Auto-assigned monotonic sequence (added in 20260504 migration). The
+  // PDF's "Internal Order" field is rendered as `FY{YY}-FM-{NNNN}` from
+  // this number + date_prepared.
+  pr_sequence_number: number | null;
+
   // Requestor
   requestor_name: string;
   requestor_email: string | null;
