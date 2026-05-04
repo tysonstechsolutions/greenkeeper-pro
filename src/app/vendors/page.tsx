@@ -43,8 +43,23 @@ interface ExtractedVendor889 {
   city_state_zip: string | null;
   activation_date: string | null;
   expiration_date: string | null;
+  /** Only on paper merchant forms — date the rep signed by hand. */
+  date_signed: string | null;
+  form_type: "sam_gov" | "paper_merchant" | "unknown";
   compliant: boolean;
   warnings: string[];
+}
+
+/**
+ * Add 365 days to an ISO date and return ISO. Used as a fallback when a
+ * paper merchant 889 form has a date_signed but no printed expiration —
+ * CNIC NAF PC paper reps are renewed annually so date_signed + 1 year is
+ * the safe assumption.
+ */
+function addOneYear(iso: string): string {
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 interface Vendor {
@@ -181,7 +196,6 @@ export default function VendorsPage() {
     setLoading(false);
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     fetchVendors();
   }, [fetchVendors]);
@@ -320,15 +334,28 @@ export default function VendorsPage() {
 
       if (!extracted.name) {
         setError(
-          "Couldn't read the vendor name from that file. Make sure it's a SAM.gov 889 summary.",
+          "Couldn't read the vendor name from that file. Make sure it's a 889 representation document (SAM.gov summary OR a signed CNIC NAF PC merchant form).",
         );
         return;
       }
       if (!extracted.compliant) {
-        setError(
-          `${extracted.name} is NOT 889-compliant per SAM.gov. We can't add a non-compliant vendor — the procurement office won't accept PRs for them.`,
-        );
+        const reason =
+          extracted.form_type === "paper_merchant"
+            ? `${extracted.name}'s 889 form has the "does" box checked — that means they DO use covered telecom equipment, which we can't purchase from.`
+            : `${extracted.name} is NOT 889-compliant per SAM.gov.`;
+        setError(reason + " We can't add a non-compliant vendor.");
         return;
+      }
+
+      // Fallback: paper merchant forms don't print an expiration. Compute
+      // it as date_signed + 1 year (annual re-rep cycle per CNIC).
+      let expirationDate = extracted.expiration_date;
+      if (!expirationDate && extracted.date_signed) {
+        try {
+          expirationDate = addOneYear(extracted.date_signed);
+        } catch {
+          // Bad date — leave null and let the user set it manually.
+        }
       }
 
       // 3. Create the vendor row.
@@ -373,14 +400,20 @@ export default function VendorsPage() {
         .update({
           section_889_path: stored,
           section_889_filename: file.name,
-          section_889_expiration_date: extracted.expiration_date,
+          section_889_expiration_date: expirationDate,
           section_889_uploaded_at: new Date().toISOString(),
         })
         .eq("id", vendorId);
       if (linkErr) throw linkErr;
 
+      const formNote =
+        extracted.form_type === "paper_merchant"
+          ? " (signed paper form, expiration set to 1 year from signing)"
+          : extracted.form_type === "sam_gov"
+            ? " (SAM.gov summary)"
+            : "";
       setExtractInfo(
-        `Added ${extracted.name}${extracted.expiration_date ? ` (889 expires ${extracted.expiration_date})` : ""}.`,
+        `Added ${extracted.name}${expirationDate ? ` — 889 expires ${expirationDate}` : ""}${formNote}.`,
       );
       if (extracted.warnings && extracted.warnings.length > 0) {
         setExtractWarnings(extracted.warnings);

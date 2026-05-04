@@ -52,8 +52,12 @@ function NewAstInspectionPageInner() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
   const { profile, user, loading: authLoading } = useAuth();
-  const { profiles: allProfiles, fetchProfiles, loading: profilesLoading } =
-    useProfiles();
+  const {
+    profiles: allProfiles,
+    fetchProfiles,
+    loading: profilesLoading,
+    error: profilesError,
+  } = useProfiles();
 
   const isAllowed =
     profile?.role === "super" ||
@@ -78,15 +82,27 @@ function NewAstInspectionPageInner() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Resolved inspector name (from selected profile id, falls back to typed)
+  // Manual override — used when the profiles list can't be loaded or the
+  // user wants to type a name that isn't on staff (rare, but happens
+  // when an inspector is from another facility).
+  const [manualInspectorName, setManualInspectorName] = useState("");
+
+  // Resolved inspector name. Prefer the picked profile's name; fall back
+  // to whatever the user typed by hand.
   const inspectorName = useMemo(() => {
     const p = allProfiles.find((pp) => pp.id === inspectorId);
-    return p?.full_name || p?.display_name || "";
-  }, [inspectorId, allProfiles]);
+    const fromProfile = p?.full_name || p?.display_name || "";
+    return fromProfile || manualInspectorName;
+  }, [inspectorId, allProfiles, manualInspectorName]);
+
+  // If the profiles fetch failed or finished with zero rows, switch the
+  // UI into manual entry mode so the form isn't blocked.
+  const useManualInspector =
+    !profilesLoading && (!!profilesError || allProfiles.length === 0);
 
   // Load staff list once.
   useEffect(() => {
-    fetchProfiles(); // eslint-disable-line react-hooks/set-state-in-effect -- one-shot fetch
+    fetchProfiles();
   }, [fetchProfiles]);
 
   // Default the inspector to the current user as soon as profiles load.
@@ -349,11 +365,31 @@ function NewAstInspectionPageInner() {
           />
         </Field>
 
-        <Field label="Inspector">
+        <Field
+          label="Inspector"
+          hint={
+            useManualInspector
+              ? "Couldn't load the staff list — type the inspector's name instead."
+              : undefined
+          }
+        >
           {profilesLoading ? (
             <div className="w-full px-3 py-2.5 rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground">
               Loading staff...
             </div>
+          ) : useManualInspector ? (
+            <input
+              type="text"
+              value={manualInspectorName}
+              onChange={(e) => {
+                setManualInspectorName(e.target.value);
+                if (e.target.value && !inspectorSignature) {
+                  setInspectorSignature(e.target.value);
+                }
+              }}
+              placeholder="Inspector full name"
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-base"
+            />
           ) : (
             <select
               value={inspectorId}
@@ -700,6 +736,16 @@ function StatusButton({
 // Page wrapper (Suspense boundary required for useSearchParams during SSG)
 // ──────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Wrapper that re-mounts the inner page when `?id=…` changes. Without this,
+ * navigating from /new?id=A to /new (fresh) keeps the previous form state
+ * because the pathname didn't change.
+ */
+function NewAstInspectionPageKeyed() {
+  const editId = useSearchParams().get("id");
+  return <NewAstInspectionPageInner key={editId || "new"} />;
+}
+
 export default function NewAstInspectionPage() {
   return (
     <Suspense
@@ -709,7 +755,7 @@ export default function NewAstInspectionPage() {
         </div>
       }
     >
-      <NewAstInspectionPageInner />
+      <NewAstInspectionPageKeyed />
     </Suspense>
   );
 }

@@ -72,6 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_ast_inspections_status
 -- Reuse the existing updated_at trigger function. The function is defined in
 -- the initial schema migration; if your env doesn't have it, see
 -- 001_initial_schema.sql for the canonical definition.
+DROP TRIGGER IF EXISTS ast_inspections_touch_updated_at ON ast_inspections;
 CREATE TRIGGER ast_inspections_touch_updated_at
   BEFORE UPDATE ON ast_inspections
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -81,6 +82,7 @@ ALTER TABLE ast_inspections ENABLE ROW LEVEL SECURITY;
 -- All authenticated users can read the inspection roster (sup, asst sup,
 -- foreman, etc. — environmental reports often need to be reviewed by anyone
 -- on staff).
+DROP POLICY IF EXISTS "ast_inspections_select_auth" ON ast_inspections;
 CREATE POLICY "ast_inspections_select_auth"
   ON ast_inspections FOR SELECT
   TO authenticated
@@ -89,6 +91,7 @@ CREATE POLICY "ast_inspections_select_auth"
 -- Only management roles can create or modify inspections. Foreman is
 -- intentionally NOT in this set — the inspection is an SP001 owner's-rep
 -- responsibility and should be signed by a supervisor.
+DROP POLICY IF EXISTS "ast_inspections_insert_management" ON ast_inspections;
 CREATE POLICY "ast_inspections_insert_management"
   ON ast_inspections FOR INSERT
   TO authenticated
@@ -100,6 +103,7 @@ CREATE POLICY "ast_inspections_insert_management"
     )
   );
 
+DROP POLICY IF EXISTS "ast_inspections_update_management" ON ast_inspections;
 CREATE POLICY "ast_inspections_update_management"
   ON ast_inspections FOR UPDATE
   TO authenticated
@@ -118,6 +122,7 @@ CREATE POLICY "ast_inspections_update_management"
     )
   );
 
+DROP POLICY IF EXISTS "ast_inspections_delete_management" ON ast_inspections;
 CREATE POLICY "ast_inspections_delete_management"
   ON ast_inspections FOR DELETE
   TO authenticated
@@ -130,6 +135,8 @@ CREATE POLICY "ast_inspections_delete_management"
   );
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ast_inspections TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
 
 COMMENT ON TABLE ast_inspections IS
   'Monthly STI SP001 visual inspection checklist for aboveground storage tanks (fuel + used cooking oil). 36-month retention.';

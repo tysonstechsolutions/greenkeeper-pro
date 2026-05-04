@@ -1,15 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Trash2, Check, Wrench, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react';
-import Link from 'next/link';
+import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Check, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react';
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -33,14 +27,12 @@ import {
 import {
   useOrderItems,
   orderCategoryLabels,
-  orderCategoryColors,
   orderPriorityLabels,
-  orderPriorityColors,
   orderStatusLabels,
   orderStatusColors,
   type DisplayOrderItem,
 } from '@/lib/hooks/useOrderItems';
-import type { OrderItemStatus, OrderCategory } from '@/types/database';
+import type { OrderItemStatus } from '@/types/database';
 import { downloadOrderListReport, OrderListReportError } from '@/lib/reports/order-list-report';
 
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
@@ -902,177 +894,5 @@ export default function OrderListPage() {
         </SheetContent>
       </Sheet>
     </div>
-  );
-}
-
-interface OrderItemCardProps {
-  item: DisplayOrderItem;
-  onMarkOrdered?: () => void;
-  onMarkReceived?: () => void;
-  onDelete: () => void;
-}
-
-function OrderItemCard({
-  item,
-  onMarkOrdered,
-  onMarkReceived,
-  onDelete,
-}: OrderItemCardProps) {
-  const isEquipmentPart = item.source === 'equipment_part';
-  return (
-    <Card className="flex flex-col overflow-hidden transition-shadow hover:shadow-lg">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <CardTitle className="text-base">{item.item_name}</CardTitle>
-            {/* Show source link for equipment-part items */}
-            {isEquipmentPart && item.equipment_id && (
-              <Link
-                href={`/equipment/view?id=${item.equipment_id}`}
-                className="mt-1 inline-flex items-center gap-1 text-xs text-[#1B4332] hover:underline"
-              >
-                <Wrench className="h-3 w-3" />
-                {item.equipment_name || 'Equipment'}
-              </Link>
-            )}
-          </div>
-          {/* Equipment parts must be deleted from the equipment page — hide the trash icon */}
-          {!isEquipmentPart && (
-            <button
-              onClick={onDelete}
-              className="text-gray-400 hover:text-red-600 transition-colors"
-              title="Delete item"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Badges */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {isEquipmentPart ? (
-            <Badge className="bg-[#1B4332] text-white">
-              <Wrench className="mr-1 h-3 w-3" />
-              Equipment Part
-            </Badge>
-          ) : (
-            <Badge
-              style={{
-                backgroundColor: orderCategoryColors[item.category],
-                color: '#fff',
-              }}
-            >
-              {orderCategoryLabels[item.category]}
-            </Badge>
-          )}
-          <Badge
-            style={{
-              backgroundColor: orderPriorityColors[item.priority],
-              color: '#fff',
-            }}
-          >
-            {orderPriorityLabels[item.priority]}
-          </Badge>
-          <Badge
-            style={{
-              backgroundColor: orderStatusColors[item.status],
-              color: '#fff',
-            }}
-          >
-            {orderStatusLabels[item.status]}
-          </Badge>
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex-1 space-y-3">
-        {/* Quantity */}
-        {item.quantity && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Quantity</p>
-            <p className="mt-1 text-sm text-gray-900">{item.quantity}</p>
-          </div>
-        )}
-
-        {/* Vendor */}
-        {item.vendor && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Vendor</p>
-            <p className="mt-1 text-sm text-gray-900">{item.vendor}</p>
-          </div>
-        )}
-
-        {/* Description */}
-        {item.description && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Description</p>
-            <p className="mt-1 text-sm text-gray-600">{item.description}</p>
-          </div>
-        )}
-
-        {/* Cost */}
-        {item.estimated_cost != null && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Est. Cost</p>
-            <p className="mt-1 text-sm font-semibold text-gray-900">
-              ${Number(item.estimated_cost).toFixed(2)}
-            </p>
-          </div>
-        )}
-
-        {/* Notes */}
-        {item.notes && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Notes</p>
-            <p className="mt-1 text-sm text-gray-600">{item.notes}</p>
-          </div>
-        )}
-
-        {/* Dates */}
-        {item.ordered_date && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Ordered Date</p>
-            <p className="mt-1 text-sm text-gray-600">
-              {new Date(item.ordered_date).toLocaleDateString()}
-            </p>
-          </div>
-        )}
-
-        {item.received_date && (
-          <div>
-            <p className="text-xs font-semibold text-gray-700">Received Date</p>
-            <p className="mt-1 text-sm text-gray-600">
-              {new Date(item.received_date).toLocaleDateString()}
-            </p>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="space-y-2 border-t pt-3">
-          {item.status === 'needed' && onMarkOrdered && (
-            <Button
-              size="sm"
-              className="w-full"
-              style={{ backgroundColor: '#2D6A4F' }}
-              onClick={onMarkOrdered}
-            >
-              <Check className="mr-2 h-4 w-4" />
-              Mark Ordered
-            </Button>
-          )}
-
-          {item.status === 'ordered' && onMarkReceived && (
-            <Button
-              size="sm"
-              className="w-full"
-              style={{ backgroundColor: '#16A34A' }}
-              onClick={onMarkReceived}
-            >
-              <Check className="mr-2 h-4 w-4" />
-              Mark Received
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

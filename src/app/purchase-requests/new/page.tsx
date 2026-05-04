@@ -27,6 +27,11 @@ import {
   PR_REQUEST_VIA_DEFAULT,
   PR_DELIVERY_DAYS,
 } from "@/lib/pr-defaults";
+import {
+  PR_SITES,
+  PR_COST_CENTERS,
+  PR_GL_ACCOUNTS,
+} from "@/lib/pr-accounting-codes";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
@@ -161,12 +166,11 @@ function NewPurchaseRequestPageInner() {
 
   // Accounting — Company Code is set by facility default; the rest is
   // user-editable. Internal Order is auto-generated on save and shown
-  // read-only here.
+  // read-only (computed from prSequenceNumber + datePrepared).
   const [companyCode, setCompanyCode] = useState(() =>
     editId ? "" : PR_ACCOUNTING_DEFAULTS.company_code,
   );
   const [requestingFacility, setRequestingFacility] = useState("");
-  const [internalOrder, setInternalOrder] = useState("");
   const [projectNo, setProjectNo] = useState("");
   const [program, setProgram] = useState("");
 
@@ -214,7 +218,7 @@ function NewPurchaseRequestPageInner() {
   useEffect(() => {
     let cancelled = false;
     isNative().then((n) => {
-      if (!cancelled) setNative(n); // eslint-disable-line react-hooks/set-state-in-effect -- one-shot async detect
+      if (!cancelled) setNative(n);
     });
     return () => {
       cancelled = true;
@@ -226,15 +230,12 @@ function NewPurchaseRequestPageInner() {
     if (editId) return;
     if (!profile) return;
     if (!requestorName) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot prefill
       setRequestorName(profile.full_name || profile.display_name || "");
     }
     if (!requestorEmail && profile.email) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot prefill
       setRequestorEmail(profile.email);
     }
     if (!requestorPhone && profile.phone) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot prefill
       setRequestorPhone(profile.phone);
     }
   }, [profile, editId, requestorName, requestorEmail, requestorPhone]);
@@ -339,7 +340,7 @@ function NewPurchaseRequestPageInner() {
       });
       setCompanyCode(row.company_code || "");
       setRequestingFacility(row.requesting_facility_code || "");
-      setInternalOrder(row.internal_order || "");
+      // internal_order is computed from pr_sequence_number; nothing to load.
       setProjectNo(row.project_no || "");
       setProgram(row.program || "");
       setItems(row.items?.length ? row.items : [emptyItem(1)]);
@@ -632,13 +633,27 @@ function NewPurchaseRequestPageInner() {
       try {
         const ext = quoteFile.name.split(".").pop() || "bin";
         quoteStoragePath = `quotes/${editId}/quote-${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage
+        // Race the upload against a 30s timeout so a stuck connection
+        // doesn't lock the form forever.
+        const upPromise = supabase.storage
           .from("vendor-files")
           .upload(quoteStoragePath, quoteFile, {
             upsert: true,
             contentType: quoteFile.type || "application/octet-stream",
           });
-        if (upErr) throw upErr;
+        const result = (await Promise.race([
+          upPromise,
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  error: { message: "Quote upload timed out after 30s" },
+                }),
+              30_000,
+            ),
+          ),
+        ])) as { error: { message: string } | null };
+        if (result.error) throw result.error;
         quoteFilenameSaved = quoteFile.name;
         quoteUploadedAt = new Date().toISOString();
       } catch (err) {
@@ -748,13 +763,27 @@ function NewPurchaseRequestPageInner() {
         try {
           const ext = quoteFile.name.split(".").pop() || "bin";
           const path = `quotes/${newId}/quote-${Date.now()}.${ext}`;
-          const { error: upErr } = await supabase.storage
+          // 30s timeout — large quote PDFs on slow networks otherwise
+          // freeze the navigation to the view page.
+          const upPromise = supabase.storage
             .from("vendor-files")
             .upload(path, quoteFile, {
               upsert: true,
               contentType: quoteFile.type || "application/octet-stream",
             });
-          if (upErr) throw upErr;
+          const result = (await Promise.race([
+            upPromise,
+            new Promise((resolve) =>
+              setTimeout(
+                () =>
+                  resolve({
+                    error: { message: "Quote upload timed out after 30s" },
+                  }),
+                30_000,
+              ),
+            ),
+          ])) as { error: { message: string } | null };
+          if (result.error) throw result.error;
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated types
           await (supabase as any)
@@ -1375,14 +1404,47 @@ function NewPurchaseRequestPageInner() {
               </Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Site">
-                  <input type="text" value={item.site} onChange={(e) => updateItem(idx, { site: e.target.value })} className={inputCls} />
+                  <select
+                    value={item.site}
+                    onChange={(e) => updateItem(idx, { site: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="">— pick —</option>
+                    {PR_SITES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Cost Ctr">
-                  <input type="text" value={item.cost_ctr} onChange={(e) => updateItem(idx, { cost_ctr: e.target.value })} className={inputCls} />
+                  <select
+                    value={item.cost_ctr}
+                    onChange={(e) => updateItem(idx, { cost_ctr: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="">— pick —</option>
+                    {PR_COST_CENTERS.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
               </div>
               <Field label="G/L Account">
-                <input type="text" value={item.gl_acct} onChange={(e) => updateItem(idx, { gl_acct: e.target.value })} className={inputCls} />
+                <select
+                  value={item.gl_acct}
+                  onChange={(e) => updateItem(idx, { gl_acct: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">— pick —</option>
+                  {PR_GL_ACCOUNTS.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Qty">
@@ -1664,6 +1726,16 @@ function Checkbox({
 
 // ──────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Wrapper that re-mounts the inner page when `?id=…` changes (or appears /
+ * disappears). Without this, navigating from /new?id=A to /new (fresh)
+ * keeps the previous form state because the pathname didn't change.
+ */
+function NewPurchaseRequestPageKeyed() {
+  const editId = useSearchParams().get("id");
+  return <NewPurchaseRequestPageInner key={editId || "new"} />;
+}
+
 export default function NewPurchaseRequestPage() {
   return (
     <Suspense
@@ -1673,7 +1745,7 @@ export default function NewPurchaseRequestPage() {
         </div>
       }
     >
-      <NewPurchaseRequestPageInner />
+      <NewPurchaseRequestPageKeyed />
     </Suspense>
   );
 }

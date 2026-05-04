@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { withTimeout } from "@/lib/utils/resilient-fetch";
 import type { Profile, UserRole } from "@/types/database";
 
 // Lighter profile type for lists/dropdowns
@@ -59,15 +60,22 @@ export function useProfiles(): UseProfilesReturn {
           }
         }
 
-        const { data, error: fetchError } = await query;
+        // Wrap in a timeout so a stalled connection / RLS hang doesn't
+        // freeze the form forever — caller can fall back to free-text
+        // entry if profiles never arrive.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase result shape varies by query
+        const result = (await withTimeout(query as any, 15_000, {
+          data: null,
+          error: { message: "Profiles query timed out" },
+        })) as { data: ProfileSummary[] | null; error: { message: string } | null };
 
-        if (fetchError) {
-          console.error("Error fetching profiles:", fetchError);
-          setError(fetchError.message);
+        if (result.error) {
+          console.error("Error fetching profiles:", result.error);
+          setError(result.error.message);
           return;
         }
 
-        setProfiles((data as ProfileSummary[]) || []);
+        setProfiles(result.data || []);
       } catch (err) {
         console.error("Unexpected error fetching profiles:", err);
         setError("An unexpected error occurred");

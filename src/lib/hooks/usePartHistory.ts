@@ -103,9 +103,7 @@ export function usePartHistory() {
           }
         }
 
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydrate
         setEntries(Array.from(map.values()));
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot hydrate
         setLoading(false);
       } catch {
         if (!cancelled) {

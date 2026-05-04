@@ -35,6 +35,35 @@ interface ResizedImage {
 }
 
 /**
+ * Detect HEIC / HEIF — the iPhone default photo format. Browsers and
+ * Capacitor's Android WebView can't decode HEIC into a canvas, so the
+ * normal resize path silently hangs forever. We need to convert to JPEG
+ * with heic2any first.
+ *
+ * iOS sometimes reports the type as "image/heic", "image/heif", or just
+ * empty string with a `.heic` extension on the filename — check both.
+ */
+function isHeic(file: File): boolean {
+  const t = (file.type || "").toLowerCase();
+  if (t === "image/heic" || t === "image/heif") return true;
+  const n = (file.name || "").toLowerCase();
+  return n.endsWith(".heic") || n.endsWith(".heif");
+}
+
+async function convertHeicToJpeg(file: File): Promise<File> {
+  const heic2any = (await import("heic2any")).default;
+  const blob = await heic2any({
+    blob: file,
+    toType: "image/jpeg",
+    quality: 0.9,
+  });
+  // heic2any returns Blob | Blob[] (multi-image HEICs); take the first.
+  const out = Array.isArray(blob) ? blob[0] : blob;
+  const base = file.name.replace(/\.(heic|heif)$/i, "") || "photo";
+  return new File([out], `${base}.jpg`, { type: "image/jpeg" });
+}
+
+/**
  * Resize a File. If the input is already small enough OR not an image,
  * returns it unchanged (with base64 still computed for upload).
  *
@@ -46,30 +75,45 @@ export async function resizeImageFile(
 ): Promise<ResizedImage> {
   const { maxDim = 1600, quality = 0.82, outputMime = "image/jpeg" } = options;
 
+  // HEIC: convert to JPEG up-front, then continue with the normal path.
+  // The conversion can take 2-4s on a large iPhone photo; that's faster
+  // than the alternative (silent hang in the canvas decoder).
+  let workingFile = file;
+  if (isHeic(file)) {
+    try {
+      workingFile = await convertHeicToJpeg(file);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Couldn't convert HEIC photo to JPEG: ${msg}. Try a regular JPEG/PNG instead, or take a fresh photo through the in-app camera (which always saves JPEG).`,
+      );
+    }
+  }
+
   // Non-image: pass through (e.g. PDF for the quote upload path).
-  if (!file.type.startsWith("image/")) {
-    const base64 = await fileToBase64(file);
+  if (!workingFile.type.startsWith("image/")) {
+    const base64 = await fileToBase64(workingFile);
     return {
-      file,
+      file: workingFile,
       base64,
-      mediaType: file.type || "application/octet-stream",
-      size: file.size,
+      mediaType: workingFile.type || "application/octet-stream",
+      size: workingFile.size,
       originalSize: { width: 0, height: 0 },
       finalSize: { width: 0, height: 0 },
     };
   }
 
-  const img = await loadImageFromFile(file);
+  const img = await loadImageFromFile(workingFile);
   const longSide = Math.max(img.width, img.height);
 
   // Already small? Skip canvas re-encode (preserve quality, save battery).
   if (longSide <= maxDim) {
-    const base64 = await fileToBase64(file);
+    const base64 = await fileToBase64(workingFile);
     return {
-      file,
+      file: workingFile,
       base64,
-      mediaType: file.type || "image/jpeg",
-      size: file.size,
+      mediaType: workingFile.type || "image/jpeg",
+      size: workingFile.size,
       originalSize: { width: img.width, height: img.height },
       finalSize: { width: img.width, height: img.height },
     };
@@ -97,7 +141,7 @@ export async function resizeImageFile(
     );
   });
 
-  const base = file.name.replace(/\.[^.]+$/, "") || "quote";
+  const base = workingFile.name.replace(/\.[^.]+$/, "") || "quote";
   const ext = outputMime === "image/png" ? "png" : "jpg";
   const newFile = new File([blob], `${base}.${ext}`, { type: outputMime });
   const base64 = await blobToBase64(blob);

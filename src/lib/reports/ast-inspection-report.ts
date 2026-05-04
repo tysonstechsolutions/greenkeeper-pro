@@ -22,7 +22,6 @@ import { jsPDF } from "jspdf";
 import {
   AST_INSPECTION_ITEMS,
   AST_SECTIONS,
-  isNonConforming,
 } from "@/lib/ast-inspection-items";
 import type { AstInspection } from "@/types/database";
 

@@ -112,6 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_purchase_requests_date
 CREATE INDEX IF NOT EXISTS idx_purchase_requests_status
   ON purchase_requests(status);
 
+DROP TRIGGER IF EXISTS purchase_requests_touch_updated_at ON purchase_requests;
 CREATE TRIGGER purchase_requests_touch_updated_at
   BEFORE UPDATE ON purchase_requests
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -119,12 +120,14 @@ CREATE TRIGGER purchase_requests_touch_updated_at
 ALTER TABLE purchase_requests ENABLE ROW LEVEL SECURITY;
 
 -- All authenticated staff can read PRs (commonly reviewed across roles).
+DROP POLICY IF EXISTS "purchase_requests_select_auth" ON purchase_requests;
 CREATE POLICY "purchase_requests_select_auth"
   ON purchase_requests FOR SELECT
   TO authenticated
   USING ((select auth.uid()) IS NOT NULL);
 
 -- Management can create/update/delete.
+DROP POLICY IF EXISTS "purchase_requests_insert_management" ON purchase_requests;
 CREATE POLICY "purchase_requests_insert_management"
   ON purchase_requests FOR INSERT
   TO authenticated
@@ -136,6 +139,7 @@ CREATE POLICY "purchase_requests_insert_management"
     )
   );
 
+DROP POLICY IF EXISTS "purchase_requests_update_management" ON purchase_requests;
 CREATE POLICY "purchase_requests_update_management"
   ON purchase_requests FOR UPDATE
   TO authenticated
@@ -154,6 +158,7 @@ CREATE POLICY "purchase_requests_update_management"
     )
   );
 
+DROP POLICY IF EXISTS "purchase_requests_delete_management" ON purchase_requests;
 CREATE POLICY "purchase_requests_delete_management"
   ON purchase_requests FOR DELETE
   TO authenticated
