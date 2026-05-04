@@ -655,6 +655,13 @@ function NewPurchaseRequestPageInner() {
       setError("Requestor name is required.");
       return;
     }
+    if (!asDraft && !v1.name.trim()) {
+      setError(
+        "Vendor 1 is required to submit. Pick from the vendor library or fill in the name (use Save as Draft to skip).",
+      );
+      setOpenSection("vendor1");
+      return;
+    }
     if (!asDraft && !justification.trim()) {
       setError("Justification is required to submit (use Save as Draft to skip).");
       return;
