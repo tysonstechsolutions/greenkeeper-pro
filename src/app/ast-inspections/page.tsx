@@ -13,6 +13,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
 import { AST_INSPECTION_ITEMS, isNonConforming } from "@/lib/ast-inspection-items";
 import type { AstInspection } from "@/types/database";
@@ -67,6 +68,8 @@ export default function AstInspectionsListPage() {
     if (!isAllowed) return;
     fetchInspections(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
   }, [isAllowed, fetchInspections]);
+
+  useRefreshOnFocus(fetchInspections, isAllowed);
 
   if (authLoading) {
     return (

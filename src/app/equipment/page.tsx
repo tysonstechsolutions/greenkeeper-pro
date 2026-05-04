@@ -40,6 +40,7 @@ import {
   type EquipmentFilters,
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/database";
 import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
@@ -348,6 +349,14 @@ export default function EquipmentPage() {
     fetchPartsSummary();
     fetchActivityDates();
   }, [fetchPartsSummary, fetchActivityDates, equipment.length]);
+
+  // Re-fetch on tab focus / visibility so data stays fresh after editing.
+  const refreshAll = useCallback(() => {
+    fetchEquipment();
+    fetchPartsSummary();
+    fetchActivityDates();
+  }, [fetchEquipment, fetchPartsSummary, fetchActivityDates]);
+  useRefreshOnFocus(refreshAll);
 
   // Check if user can add equipment — uses profile.role from profiles table
   const equipmentRoles = ["super", "asst_super", "foreman", "mechanic", "director"];

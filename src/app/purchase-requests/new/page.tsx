@@ -104,6 +104,10 @@ function NewPurchaseRequestPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
+  // `?from=<prId>` clones an existing PR into a brand-new draft. We load the
+  // same fields as edit mode but reset dates / sequence / signatures so the
+  // result is treated as a new request on save.
+  const fromId = searchParams.get("from");
   const { profile, user, loading: authLoading } = useAuth();
 
   const isAllowed =
@@ -205,7 +209,7 @@ function NewPurchaseRequestPageInner() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
 
-  const [loadingExisting, setLoadingExisting] = useState(!!editId);
+  const [loadingExisting, setLoadingExisting] = useState(!!editId || !!fromId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -227,7 +231,9 @@ function NewPurchaseRequestPageInner() {
 
   // ── Auto-fill from profile ───────────────────────────────────────────────
   useEffect(() => {
-    if (editId) return;
+    // Edit mode loads from the row; clone mode loads from the source PR.
+    // Skip profile auto-fill in both cases so the loaded data wins.
+    if (editId || fromId) return;
     if (!profile) return;
     if (!requestorName) {
       setRequestorName(profile.full_name || profile.display_name || "");
@@ -238,7 +244,7 @@ function NewPurchaseRequestPageInner() {
     if (!requestorPhone && profile.phone) {
       setRequestorPhone(profile.phone);
     }
-  }, [profile, editId, requestorName, requestorEmail, requestorPhone]);
+  }, [profile, editId, fromId, requestorName, requestorEmail, requestorPhone]);
 
   // ── Load vendor library (for picker) ─────────────────────────────────────
   useEffect(() => {
@@ -283,14 +289,16 @@ function NewPurchaseRequestPageInner() {
 
   // ── Edit-mode load ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!editId) return;
+    const sourceId = editId || fromId;
+    if (!sourceId) return;
+    const isClone = !editId && !!fromId;
     let cancelled = false;
     async function load() {
       const supabase = createClient();
       const { data, error: fetchErr } = await supabase
         .from("purchase_requests")
         .select("*")
-        .eq("id", editId)
+        .eq("id", sourceId)
         .maybeSingle();
       if (cancelled) return;
       if (fetchErr || !data) {
@@ -299,13 +307,20 @@ function NewPurchaseRequestPageInner() {
         return;
       }
       const row = data as unknown as PurchaseRequest;
-      setDatePrepared(row.date_prepared);
-      setRequiredDeliveryDate(row.required_delivery_date || "");
+      // Edit: keep the original dates / sequence / signatures.
+      // Clone: reset to "today" and let save assign a fresh sequence number,
+      // and drop signatures so the new draft starts unsigned.
+      setDatePrepared(isClone ? todayIso() : row.date_prepared);
+      setRequiredDeliveryDate(
+        isClone ? plusDaysIso(PR_DELIVERY_DAYS) : row.required_delivery_date || "",
+      );
       setRequestVia(row.request_via);
       setCurrency(row.currency);
-      setPrSequenceNumber(row.pr_sequence_number);
+      setPrSequenceNumber(isClone ? null : row.pr_sequence_number);
       setVendorId(row.vendor_id);
-      setExistingQuoteName(row.quote_filename);
+      // Don't carry the source PR's uploaded quote file — the new request
+      // will get its own.
+      setExistingQuoteName(isClone ? null : row.quote_filename);
       setRequestorName(row.requestor_name);
       setRequestorEmail(row.requestor_email || "");
       setRequestorPhone(row.requestor_phone || "");
@@ -347,11 +362,13 @@ function NewPurchaseRequestPageInner() {
       setIgeExcessPct(Number(row.ige_excess_pct) || 0);
       setJustification(row.justification || "");
       setIgeBasedOn(row.ige_based_on || "");
-      setFinancialAnalyst(row.financial_analyst || "");
-      setApprovingAuthority(row.approving_authority || "");
-      setApprovingDate(row.approving_signature_date || "");
-      setSecondApproval(row.second_approval || "");
-      setSecondDate(row.second_signature_date || "");
+      // Clone: drop signatures and approver names so the new draft starts
+      // unsigned. Edit: keep what was there.
+      setFinancialAnalyst(isClone ? "" : row.financial_analyst || "");
+      setApprovingAuthority(isClone ? "" : row.approving_authority || "");
+      setApprovingDate(isClone ? "" : row.approving_signature_date || "");
+      setSecondApproval(isClone ? "" : row.second_approval || "");
+      setSecondDate(isClone ? "" : row.second_signature_date || "");
       setAttached({
         ssj: row.attached_ssj,
         bnj: row.attached_bnj,
@@ -366,7 +383,7 @@ function NewPurchaseRequestPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [editId]);
+  }, [editId, fromId]);
 
   // ── Computed totals ──────────────────────────────────────────────────────
   const igeAmount = useMemo(

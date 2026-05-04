@@ -33,6 +33,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { RoleGuard, GM_ROLES } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
 
@@ -168,6 +169,8 @@ export default function CapitalProjectsPage() {
     }
     load();
   }, [fetchProjects]);
+
+  useRefreshOnFocus(fetchProjects);
 
   // ── Filtered projects ──
   const filteredProjects =

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Building, Plus, AlertTriangle, ShoppingCart, Wrench, Sparkles, Camera, X, Search, Filter, MapPin, Check, Loader2, Clock, ChevronDown, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useClubhouseIssues, categoryLabels, categoryColors, clubhousePriorityLabels, clubhousePriorityColors, clubhouseStatusLabels, clubhouseStatusColors } from '@/lib/hooks/useClubhouseIssues';
+import { useRefreshOnFocus } from '@/lib/hooks/useRefreshOnFocus';
 import { ClubhouseIssue } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,8 @@ export default function ClubhousePage() {
   useEffect(() => {
     fetchIssues();
   }, [fetchIssues]);
+
+  useRefreshOnFocus(fetchIssues);
 
   useEffect(() => {
     const fetchStaff = async () => {

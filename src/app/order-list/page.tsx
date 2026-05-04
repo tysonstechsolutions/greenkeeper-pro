@@ -24,6 +24,7 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet';
 
+import { useRefreshOnFocus } from '@/lib/hooks/useRefreshOnFocus';
 import {
   useOrderItems,
   orderCategoryLabels,
@@ -306,6 +307,8 @@ export default function OrderListPage() {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  useRefreshOnFocus(fetchItems);
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =

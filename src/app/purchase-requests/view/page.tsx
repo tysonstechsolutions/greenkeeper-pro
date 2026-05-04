@@ -10,6 +10,7 @@ import {
   Trash2,
   AlertTriangle,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -270,13 +271,22 @@ function ViewPurchaseRequestInner() {
           {downloadingPdfOnly ? "Generating..." : "Download PR PDF only"}
         </button>
         {isManagement && (
-          <Link
-            href={`/purchase-requests/new?id=${pr.id}`}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border font-medium hover:bg-muted active:scale-[0.98] transition-all"
-          >
-            <Edit className="w-4 h-4" />
-            Edit
-          </Link>
+          <>
+            <Link
+              href={`/purchase-requests/new?from=${pr.id}`}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border font-medium hover:bg-muted active:scale-[0.98] transition-all"
+            >
+              <Copy className="w-4 h-4" />
+              Order Again
+            </Link>
+            <Link
+              href={`/purchase-requests/new?id=${pr.id}`}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border font-medium hover:bg-muted active:scale-[0.98] transition-all"
+            >
+              <Edit className="w-4 h-4" />
+              Edit
+            </Link>
+          </>
         )}
       </div>
 

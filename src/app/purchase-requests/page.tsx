@@ -10,8 +10,11 @@ import {
   Download,
   ChevronRight,
   ShieldAlert,
+  Copy,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
 import type { PurchaseRequest } from "@/types/database";
 
@@ -57,6 +60,33 @@ export default function PurchaseRequestsListPage() {
     if (!isAllowed) return;
     fetchRequests(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
   }, [isAllowed, fetchRequests]);
+
+  // Re-fetch on tab focus / visibility change so navigating back from /new
+  // or /view shows fresh data without a manual reload.
+  useRefreshOnFocus(fetchRequests, isAllowed);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const handleDelete = useCallback(
+    async (id: string, label: string) => {
+      if (!confirm(`Delete the purchase request for ${label}? This can't be undone.`)) {
+        return;
+      }
+      setDeletingId(id);
+      const supabase = createClient();
+      const { error: delErr } = await supabase
+        .from("purchase_requests")
+        .delete()
+        .eq("id", id);
+      setDeletingId(null);
+      if (delErr) {
+        alert(`Couldn't delete: ${delErr.message}`);
+        return;
+      }
+      // Optimistic prune so the row vanishes without a round-trip.
+      setRequests((prev) => prev.filter((r) => r.id !== id));
+    },
+    [],
+  );
 
   if (authLoading) {
     return (
@@ -141,10 +171,13 @@ export default function PurchaseRequestsListPage() {
             {requests.map((pr) => {
               const isDraft = pr.status === "draft";
               return (
-                <li key={pr.id}>
+                <li
+                  key={pr.id}
+                  className="flex items-stretch gap-2 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-colors"
+                >
                   <Link
                     href={`/purchase-requests/view?id=${pr.id}`}
-                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 hover:border-primary/40 hover:bg-muted/30 transition-colors active:scale-[0.99]"
+                    className="flex items-center gap-3 p-3 flex-1 min-w-0 active:scale-[0.99]"
                   >
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -181,6 +214,29 @@ export default function PurchaseRequestsListPage() {
                     )}
                     <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </Link>
+                  <Link
+                    href={`/purchase-requests/new?from=${pr.id}`}
+                    aria-label="Order again"
+                    title="Order again"
+                    className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-muted hover:text-foreground active:scale-[0.97] transition-all"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label="Delete"
+                    title="Delete"
+                    disabled={deletingId === pr.id}
+                    onClick={() =>
+                      handleDelete(
+                        pr.id,
+                        `${pr.vendor1_name || "this PR"} (${formatDate(pr.date_prepared)})`,
+                      )
+                    }
+                    className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </li>
               );
             })}

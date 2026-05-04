@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFy26Assets, type Fy26AssetFilters } from "@/lib/hooks/useFy26Assets";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
@@ -106,6 +107,16 @@ function AssetsPageContent() {
     }, 300);
     return () => clearTimeout(timeout);
   }, [search, siteFilter, statusFilter, fetchAssets]);
+
+  // Re-fetch on tab focus / visibility (re-applies current filters).
+  const refreshAssets = useCallback(() => {
+    const filters: Fy26AssetFilters = {};
+    if (siteFilter !== "all") filters.site = siteFilter;
+    if (statusFilter !== "all") filters.status = statusFilter;
+    if (search.trim()) filters.search = search.trim();
+    fetchAssets(filters);
+  }, [search, siteFilter, statusFilter, fetchAssets]);
+  useRefreshOnFocus(refreshAssets);
 
   const toggleStatus = (s: Fy26AssetStatus) =>
     setStatusFilter((prev) => (prev === s ? "all" : s));

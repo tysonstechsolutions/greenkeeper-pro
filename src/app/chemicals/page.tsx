@@ -39,6 +39,7 @@ import {
   type ActiveREI,
 } from "@/lib/hooks/useChemicals";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import type { ChemicalProductType, SignalWord } from "@/types/database";
 
 // Stats card component
@@ -279,6 +280,14 @@ export default function ChemicalsPage() {
     fetchInventoryStats().then(setStats).catch((err) => console.error("Failed to load inventory stats:", err));
     getActiveREIs().then(setActiveREIs).catch((err) => console.error("Failed to load active REIs:", err));
   }, [fetchInventoryStats, getActiveREIs]);
+
+  // Re-fetch on tab focus / visibility (re-applies current filters via the
+  // filters effect; covers stats and REI alerts here).
+  const refreshChemicals = useCallback(() => {
+    fetchInventoryStats().then(setStats).catch(() => {});
+    getActiveREIs().then(setActiveREIs).catch(() => {});
+  }, [fetchInventoryStats, getActiveREIs]);
+  useRefreshOnFocus(refreshChemicals);
 
   // Apply filters with debounce
   const applyFilters = useCallback(() => {

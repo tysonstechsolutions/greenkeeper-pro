@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
 import { callApi } from "@/lib/api/client";
 import { resizeImageFile } from "@/lib/utils/image-resize";
@@ -199,6 +200,8 @@ export default function VendorsPage() {
   useEffect(() => {
     fetchVendors();
   }, [fetchVendors]);
+
+  useRefreshOnFocus(fetchVendors);
 
   function startEdit(v: Vendor) {
     setEditingId(v.id);
