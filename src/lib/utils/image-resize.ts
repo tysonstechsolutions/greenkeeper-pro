@@ -160,11 +160,31 @@ function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
+    let settled = false;
+    // Some browsers (Capacitor's Android WebView in particular) silently
+    // never fire onload/onerror for huge or quirky-format files, leaving
+    // the upload "stuck". Hard-cap at 30s so the user sees an error.
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      reject(
+        new Error(
+          "Image took too long to decode (30s). The file may be too large or in an unsupported format.",
+        ),
+      );
+    }, 30_000);
     img.onload = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
       resolve(img);
     };
     img.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
       reject(new Error("Failed to decode image"));
     };

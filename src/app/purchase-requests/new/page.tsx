@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -218,6 +218,13 @@ function NewPurchaseRequestPageInner() {
   const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
   const [extractInfo, setExtractInfo] = useState<string | null>(null);
   const [native, setNative] = useState(false);
+  // Tick-counter so the spinner can show seconds elapsed — gives the user
+  // visible feedback that we haven't crashed during the 15-30s vision call.
+  const [extractElapsed, setExtractElapsed] = useState(0);
+  // Mutable cancellation flag — the supabase-js invoke() doesn't accept an
+  // AbortSignal in v2, so cancelling can't interrupt the in-flight network
+  // call, but it lets the UI bail out and stop applying the late response.
+  const cancelExtractRef = useRef<{ cancelled: boolean } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -454,9 +461,20 @@ function NewPurchaseRequestPageInner() {
   // ── Quote upload + AI extraction ─────────────────────────────────────────
   async function handleQuoteUpload(file: File) {
     setExtracting(true);
+    setExtractElapsed(0);
     setExtractWarnings([]);
     setExtractInfo(null);
     setError(null);
+
+    // New cancellation handle — replaces any prior in-flight upload's flag.
+    const cancel = { cancelled: false };
+    cancelExtractRef.current = cancel;
+
+    // 1Hz elapsed counter so the user can see vision is still working.
+    const startedAt = Date.now();
+    const tick = window.setInterval(() => {
+      setExtractElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
 
     recordBreadcrumb(
       "click",
@@ -472,6 +490,7 @@ function NewPurchaseRequestPageInner() {
           maxDim: 1600,
           quality: 0.82,
         });
+        if (cancel.cancelled) return;
         recordBreadcrumb(
           "click",
           `[quote-upload] resized: ${resized.size}B ${resized.finalSize.width}x${resized.finalSize.height}`,
@@ -493,9 +512,13 @@ function NewPurchaseRequestPageInner() {
         method: "POST",
         body: payload,
       });
+      if (cancel.cancelled) {
+        recordBreadcrumb("warn", `[quote-upload] response arrived after cancel — discarding`);
+        return;
+      }
       recordBreadcrumb(
         "click",
-        `[quote-upload] got ${result.items?.length || 0} items + ${result.vendor ? "vendor" : "no vendor"}`,
+        `[quote-upload] got ${result.items?.length || 0} items + ${result.vendor ? "vendor" : "no vendor"} in ${Math.floor((Date.now() - startedAt) / 1000)}s`,
       );
 
       // Merge vendor fields if any are present and the existing form vendor
@@ -568,6 +591,7 @@ function NewPurchaseRequestPageInner() {
         setExtractWarnings(result.warnings);
       }
     } catch (err) {
+      if (cancel.cancelled) return;
       const msg =
         err instanceof Error ? err.message : "Failed to read the quote.";
       // Log to breadcrumbs so the debug panel surfaces the real cause even
@@ -576,6 +600,10 @@ function NewPurchaseRequestPageInner() {
       console.error("[quote-upload] failed", err);
       setError(`Quote upload failed: ${msg}`);
     } finally {
+      window.clearInterval(tick);
+      if (cancelExtractRef.current === cancel) {
+        cancelExtractRef.current = null;
+      }
       setExtracting(false);
     }
   }
@@ -1057,8 +1085,33 @@ function NewPurchaseRequestPageInner() {
 
         {extracting && (
           <div className="mt-2 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Reading quote with Claude...
+            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+            <span className="flex-1">
+              Reading quote with Claude
+              {extractElapsed > 0 && ` · ${extractElapsed}s`}
+              {extractElapsed >= 25 && extractElapsed < 60 && (
+                <span className="text-muted-foreground"> (vision can take 30–45s)</span>
+              )}
+              {extractElapsed >= 60 && (
+                <span className="text-red-600 dark:text-red-400">
+                  {" "}(taking longer than usual — try Cancel)
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (cancelExtractRef.current) {
+                  cancelExtractRef.current.cancelled = true;
+                }
+                setExtracting(false);
+                setExtractElapsed(0);
+                recordBreadcrumb("click", "[quote-upload] user cancelled");
+              }}
+              className="px-2 py-0.5 rounded border border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 font-medium"
+            >
+              Cancel
+            </button>
           </div>
         )}
 
