@@ -24,6 +24,7 @@ const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
   "extract-889",
   "extract-quote",
   "fix-instructions",
+  "get-weather",
   "green-fix-instructions",
   "morning-route",
   "push/send",

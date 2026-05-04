@@ -2,31 +2,63 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { callApi } from "@/lib/api/client";
 import { COURSE } from "@/lib/constants";
 import type { WeatherLog } from "@/types/database";
 
 /**
  * Weather API Configuration
  *
- * SETUP INSTRUCTIONS:
- * 1. Go to https://www.weatherapi.com/ and sign up for a free account
- * 2. After email verification, go to your dashboard to get your API key
- * 3. Free tier includes:
- *    - 1,000,000 calls/month
- *    - Current weather, forecast, history
- *    - No credit card required
- * 4. Add to your .env.local file:
- *    NEXT_PUBLIC_WEATHER_API_KEY=your_api_key_here
+ * The browser does NOT call WeatherAPI.com directly. Calls are proxied
+ * through the `get-weather` Supabase Edge Function. This:
+ *   - Hides the API key from the client bundle
+ *   - Avoids "TypeError: Failed to fetch" caused by browser extensions,
+ *     ad/privacy blockers, or networks that block third-party domains
+ *   - Works in the Capacitor build, which has no Next.js server
+ *
+ * Deploy:
+ *   1. Sign up at https://www.weatherapi.com/ (free tier: 1M calls/month).
+ *   2. supabase secrets set WEATHER_API_KEY=<your_key>
+ *   3. supabase functions deploy get-weather
  */
 
-// Sourced from shared constants
-const LOCATION = {
-  lat: COURSE.lat,
-  lng: COURSE.lng,
-  name: `${COURSE.name}, ${COURSE.location}`,
-};
+// Sourced from shared constants — used for display labels only.
+const LOCATION_NAME = `${COURSE.name}, ${COURSE.location}`;
 
-const API_BASE_URL = "https://api.weatherapi.com/v1";
+interface WeatherApiCurrent {
+  temp_f: number;
+  feelslike_f: number;
+  humidity: number;
+  wind_mph: number;
+  wind_dir: string;
+  condition: { text: string; icon: string };
+  uv: number;
+  pressure_in: number;
+  vis_miles: number;
+  cloud: number;
+  is_day: number;
+  last_updated: string;
+}
+
+interface WeatherApiForecastDay {
+  date: string;
+  day: {
+    maxtemp_f: number;
+    mintemp_f: number;
+    condition: { text: string; icon: string };
+    daily_chance_of_rain: number;
+    maxwind_mph: number;
+    avghumidity: number;
+    uv: number;
+    totalprecip_in?: number;
+  };
+  astro: { sunrise: string; sunset: string };
+}
+
+interface WeatherApiResponse {
+  current: WeatherApiCurrent;
+  forecast: { forecastday: WeatherApiForecastDay[] };
+}
 
 // Types
 export interface CurrentWeather {
@@ -100,39 +132,19 @@ export function useWeather(): UseWeatherReturn {
 
   const supabase = createClient();
 
-  const getApiKey = () => {
-    const key = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
-    if (!key) {
-      console.warn("Weather API key not configured. See useWeather.ts for setup instructions.");
-      return null;
-    }
-    return key;
-  };
-
   /**
    * Fetch current weather conditions
    */
   const fetchCurrentWeather = useCallback(async (): Promise<CurrentWeather | null> => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setError("Weather API key not configured");
-      return null;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=1&aqi=no&alerts=no`,
-        { signal: AbortSignal.timeout(10000) }
-      );
+      const data = await callApi<WeatherApiResponse>("get-weather", {
+        method: "GET",
+        query: { days: 1 },
+      });
 
-      if (!response.ok) {
-        throw new Error(`Weather API error: ${response.status}`);
-      }
-
-      const data = await response.json();
       const current = data.current;
       const todayForecast = data.forecast?.forecastday?.[0]?.day;
 
@@ -177,40 +189,17 @@ export function useWeather(): UseWeatherReturn {
    * Fetch 7-day forecast
    */
   const fetchForecast = useCallback(async (): Promise<ForecastDay[]> => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setError("Weather API key not configured");
-      return [];
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=7&aqi=no&alerts=no`,
-        { signal: AbortSignal.timeout(10000) }
-      );
+      const data = await callApi<WeatherApiResponse>("get-weather", {
+        method: "GET",
+        query: { days: 7 },
+      });
 
-      if (!response.ok) {
-        throw new Error(`Weather API error: ${response.status}`);
-      }
-
-      const data = await response.json();
       const forecastDays: ForecastDay[] = data.forecast.forecastday.map(
-        (day: {
-          date: string;
-          day: {
-            maxtemp_f: number;
-            mintemp_f: number;
-            condition: { text: string; icon: string };
-            daily_chance_of_rain: number;
-            maxwind_mph: number;
-            avghumidity: number;
-            uv: number;
-          };
-          astro: { sunrise: string; sunset: string };
-        }) => {
+        (day: WeatherApiForecastDay) => {
           const date = new Date(day.date + "T12:00:00");
           return {
             date: day.date,
@@ -288,24 +277,13 @@ export function useWeather(): UseWeatherReturn {
    * Log today's weather to the database
    */
   const logDailyWeather = useCallback(async (): Promise<WeatherLog | null> => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setError("Weather API key not configured");
-      return null;
-    }
-
     try {
       // Fetch current conditions and today's forecast
-      const response = await fetch(
-        `${API_BASE_URL}/forecast.json?key=${apiKey}&q=${LOCATION.lat},${LOCATION.lng}&days=1&aqi=no&alerts=no`,
-        { signal: AbortSignal.timeout(10000) }
-      );
+      const data = await callApi<WeatherApiResponse>("get-weather", {
+        method: "GET",
+        query: { days: 1 },
+      });
 
-      if (!response.ok) {
-        throw new Error(`Weather API error: ${response.status}`);
-      }
-
-      const data = await response.json();
       const current = data.current;
       const todayForecast = data.forecast.forecastday[0].day;
       const today = new Date().toISOString().split("T")[0];
@@ -328,7 +306,7 @@ export function useWeather(): UseWeatherReturn {
         raw_data: {
           current,
           forecast: todayForecast,
-          location: LOCATION,
+          location: { lat: COURSE.lat, lng: COURSE.lng, name: LOCATION_NAME },
         },
       };
 

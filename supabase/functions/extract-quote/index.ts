@@ -21,7 +21,7 @@ import { handleCors, jsonError, jsonResponse } from "../_shared/cors.ts";
 import { getUser } from "../_shared/supabase.ts";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TOKENS = 4096;
 const TIMEOUT_MS = 60_000;
@@ -44,6 +44,79 @@ PRIMARY GOAL: pull every product line item with these four fields per row:
   2. part_number  — the vendor part / SKU / Item # / PN, separate from description
   3. qty          — quantity ordered (number, default 1)
   4. unit_price   — price per unit in USD as a plain number
+
+═══════════════════════════════════════════════════════════════════════════
+CRITICAL RULE — MULTI-COLUMN PRICE GRIDS (read this BEFORE anything else)
+═══════════════════════════════════════════════════════════════════════════
+
+Vendor printed quotes / invoices commonly show MULTIPLE money columns per
+line item — for example NAPA AUTO PARTS, parts-store dealer invoices, R&R
+Products quotes, John Deere Parts ADVISOR printouts, dealer DMS systems.
+
+Typical column header layout:
+
+  Part Number | Line | Description | Quantity | Price | Net | Total | Taxable
+
+When you see TWO OR MORE money columns per row, you MUST use the column that
+represents the customer's actual per-unit price — NOT the list/MSRP price.
+
+  • "Price" / "List" / "MSRP" / "Retail" / "Reg" / "Std"   → list price, IGNORE for unit_price
+  • "Net" / "Your Price" / "Customer Price" / "Sale" /
+    "Discount Price" / "Member Price" / "Net Price"        → THIS is unit_price
+  • "Total" / "Extended" / "Line Total" / "Amount" /
+    "Net Amount" / "Sub-Total"                             → line subtotal (qty × unit_price)
+
+VALIDATION (do this for every multi-column row):
+  qty × unit_price MUST equal the Total to within $0.05.
+  If 3 × 10.49 = 31.47 matches the Total column, "10.49" was the Net — correct.
+  If 3 × 17.00 = 51.00 does NOT match the Total of 31.47, you grabbed the
+  list price by mistake — back up and use the other column.
+
+If only ONE money column is visible, use that. If only Qty + Total are
+visible, divide: unit_price = Total / Qty.
+
+═══════════════════════════════════════════════════════════════════════════
+NAPA AUTO PARTS PAPER QUOTE — frequent, has its own quirks
+═══════════════════════════════════════════════════════════════════════════
+
+NAPA's printed quote (header reads "NAPA AUTO PARTS … QUOTE", letterhead
+shows the local store address) uses this exact 8-column layout:
+
+  Part Number | Line | Description | Quantity | Price | Net | Total | Taxable
+
+  • Part Number — the orderable PN (e.g. "360-1120", "48-73-2015", "ES5000",
+    "7-073811"). Use as part_number verbatim.
+  • Line — a 2-3 letter NAPA brand-line code (NSE, SME, MIL, NPP, SOR, BK,
+    NCB, NCR, BAL, ATM, NHP, …). DROP this from description — do not
+    prepend it; do not include it in part_number.
+  • Description — the actual item name. Often ends in empty parens "()"
+    or has cross-reference codes like "(220-11,221-2,4)". Strip empty "()".
+    Keep meaningful parens; drop noise.
+  • Price — LIST price per unit. IGNORE for unit_price.
+  • Net  — NET price per unit (what the customer pays). USE for unit_price.
+  • Total — qty × Net. Use to validate your unit_price choice.
+
+Sub-rows beneath an item ("Above Item on Sale", "Item on Sale") are
+annotations — skip them, they are NOT separate line items.
+
+Worked example — single NAPA row:
+
+  Part Number: 360-1120
+  Line:        NSE
+  Description: "DISPOSABLE GLOVES ()"
+  Quantity:    3.00
+  Price:       17.00
+  Net:         10.4900
+  Total:       31.47
+  Taxable:     T
+
+  → description: "DISPOSABLE GLOVES"        (drop "NSE", drop empty "()")
+  → part_number: "360-1120"
+  → qty: 3
+  → unit_price: 10.49                       (Net column, NOT Price)
+  → unit: "Each"
+
+  Math check: 3 × 10.49 = 31.47 ✓  matches Total — correct column chosen.
 
 Output ONLY valid JSON in this exact shape — no commentary, no markdown fences:
 
@@ -358,6 +431,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           model: MODEL,
           max_tokens: MAX_TOKENS,
+          temperature: 0,
           system: EXTRACTION_PROMPT,
           messages: [
             {
