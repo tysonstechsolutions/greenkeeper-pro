@@ -37,6 +37,29 @@ const FETCH_TIMEOUT_MS = 12_000;
 // any affordance — long past when they'll force-quit out of frustration.
 const STUCK_THRESHOLD = 1;
 
+// Edge functions that legitimately run for tens of seconds: AI/vision calls,
+// large multi-step report generators, file uploads. Hitting them with the
+// 8s watchdog or 12s hard timeout would abort mid-call and trigger the
+// SupabaseRecovery page-reload. These get a much longer ceiling and are
+// excluded from the pending-request watchdog entirely — slow ≠ wedged.
+const SLOW_ENDPOINT_PATTERNS: readonly string[] = [
+  "/functions/v1/extract-quote",        // Claude vision OCR — 15-30s typical
+  "/functions/v1/extract-889",          // Claude vision OCR
+  "/functions/v1/ai-assistant",         // chat completion
+  "/functions/v1/fix-instructions",     // chat completion
+  "/functions/v1/green-fix-instructions",
+  "/functions/v1/translate",
+  "/functions/v1/daily-briefing",       // multi-step report
+  "/functions/v1/morning-route",        // multi-step
+  "/functions/v1/drone-upload",         // file upload + processing
+  "/storage/v1/object/",                // storage uploads/downloads
+];
+const SLOW_FETCH_TIMEOUT_MS = 90_000;
+
+function isSlowEndpoint(url: string): boolean {
+  return SLOW_ENDPOINT_PATTERNS.some((p) => url.includes(p));
+}
+
 // Pending request counter, exposed so diagnostic UI can show "N requests
 // in flight" without reaching into Supabase internals.
 const requestTelemetry = {
@@ -91,6 +114,9 @@ async function timeoutFetch(
         ? input.toString()
         : input.url;
 
+  const slow = isSlowEndpoint(url);
+  const timeoutMs = slow ? SLOW_FETCH_TIMEOUT_MS : FETCH_TIMEOUT_MS;
+
   // Respect an upstream AbortController while layering our own timeout on top.
   const controller = new AbortController();
   const upstreamSignal = init?.signal;
@@ -102,16 +128,21 @@ async function timeoutFetch(
   }
   const timer = setTimeout(() => {
     controller.abort(new DOMException("Request timed out", "TimeoutError"));
-  }, FETCH_TIMEOUT_MS);
+  }, timeoutMs);
 
   const shortUrl = shortenUrl(url);
   const started = Date.now();
-  requestTelemetry.pending++;
-  recordBreadcrumb("fetch", `→ ${shortUrl}`);
-  kickWatchdog();
+  // Slow endpoints (AI/vision, large reports, file uploads) are excluded from
+  // both the pending counter and the watchdog. The watchdog exists to catch
+  // genuinely-wedged short requests; a 30-second AI call is not wedged.
+  if (!slow) {
+    requestTelemetry.pending++;
+    kickWatchdog();
+  }
+  recordBreadcrumb("fetch", `→ ${shortUrl}${slow ? " (slow)" : ""}`);
   try {
     const resp = await fetch(input, { ...init, signal: controller.signal });
-    requestTelemetry.consecutiveTimeouts = 0;
+    if (!slow) requestTelemetry.consecutiveTimeouts = 0;
     recordBreadcrumb(
       "fetch-done",
       `${resp.status} ${shortUrl} (${Date.now() - started}ms)`,
@@ -122,17 +153,20 @@ async function timeoutFetch(
       err instanceof DOMException &&
       (err.name === "TimeoutError" || err.name === "AbortError");
     if (isTimeout) {
-      requestTelemetry.consecutiveTimeouts++;
+      // Only short-request timeouts feed the stuck-detector. A slow endpoint
+      // hitting its 90s ceiling is a real problem (Anthropic outage, etc.)
+      // but it's not the kind of wedge that signals reset is the right cure.
+      if (!slow) requestTelemetry.consecutiveTimeouts++;
       requestTelemetry.lastError = {
-        message: `Timed out after ${FETCH_TIMEOUT_MS}ms`,
+        message: `Timed out after ${timeoutMs}ms`,
         at: Date.now(),
         url,
       };
       recordBreadcrumb(
         "timeout",
-        `Timed out after ${FETCH_TIMEOUT_MS}ms: ${shortUrl}`,
+        `Timed out after ${timeoutMs}ms: ${shortUrl}`,
       );
-      maybeSignalReset();
+      if (!slow) maybeSignalReset();
     } else {
       requestTelemetry.lastError = {
         message: err instanceof Error ? err.message : String(err),
@@ -148,12 +182,14 @@ async function timeoutFetch(
     throw err;
   } finally {
     clearTimeout(timer);
-    requestTelemetry.pending = Math.max(0, requestTelemetry.pending - 1);
-    // If there are no more pending requests, cancel the watchdog — nothing
-    // to watch for.
-    if (requestTelemetry.pending === 0 && watchdogTimer !== null) {
-      clearTimeout(watchdogTimer);
-      watchdogTimer = null;
+    if (!slow) {
+      requestTelemetry.pending = Math.max(0, requestTelemetry.pending - 1);
+      // If there are no more pending requests, cancel the watchdog — nothing
+      // to watch for.
+      if (requestTelemetry.pending === 0 && watchdogTimer !== null) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
     }
   }
 }

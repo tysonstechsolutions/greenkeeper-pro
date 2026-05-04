@@ -1295,6 +1295,72 @@ function NewPurchaseRequestPageInner() {
         open={openSection === "items"}
         onToggle={(k) => setOpenSection(openSection === k ? null : k)}
       >
+        {/* Apply to all — bulk-set Site / Cost Ctr / G/L across every line.
+            Typical use: one PR per site, so the user picks once instead of
+            setting each row. Picking a value immediately overwrites every
+            line item's matching field. */}
+        <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
+          <p className="text-xs font-semibold text-muted-foreground mb-2">
+            Apply to all line items
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Field label="Site (all)">
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  setItems((prev) => prev.map((it) => ({ ...it, site: v })));
+                }}
+                className={inputCls}
+              >
+                <option value="">— pick to apply —</option>
+                {PR_SITES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Cost Ctr (all)">
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  setItems((prev) => prev.map((it) => ({ ...it, cost_ctr: v })));
+                }}
+                className={inputCls}
+              >
+                <option value="">— pick to apply —</option>
+                {PR_COST_CENTERS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="G/L (all)">
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  setItems((prev) => prev.map((it) => ({ ...it, gl_acct: v })));
+                }}
+                className={inputCls}
+              >
+                <option value="">— pick to apply —</option>
+                {PR_GL_ACCOUNTS.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </div>
+
         {/* Reuse from history */}
         {!partHistory.loading && partHistory.total > 0 && (
           <div className="mb-3 rounded-lg border border-border bg-background overflow-hidden">
