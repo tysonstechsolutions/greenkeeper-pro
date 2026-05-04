@@ -32,7 +32,11 @@ import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
+  // Anchor date-only strings (yyyy-mm-dd) at noon local so timezone
+  // conversion doesn't flip them to the previous calendar day in
+  // negative-UTC zones (Central etc.). See same fix on the list page.
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  return new Date(anchored).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",

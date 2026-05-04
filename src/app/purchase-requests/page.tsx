@@ -19,7 +19,13 @@ import { createClient } from "@/lib/supabase/client";
 import type { PurchaseRequest } from "@/types/database";
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
+  // The DB column is a DATE (yyyy-mm-dd). new Date("2026-05-04") parses
+  // as 2026-05-04T00:00:00Z (UTC midnight); in any negative-UTC zone
+  // (Central, Pacific, etc.) toLocaleDateString then shows the day BEFORE.
+  // Anchoring at noon local keeps the calendar day correct everywhere
+  // in the US.
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  return new Date(anchored).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
