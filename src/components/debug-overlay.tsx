@@ -75,7 +75,10 @@ export function DebugOverlay() {
     const unsubscribe = subscribeBreadcrumbs(() => {
       setLogs([...getBreadcrumbs()]);
     });
-    setLogs([...getBreadcrumbs()]);
+    // Catch up on any breadcrumbs added between the useState initializer
+    // running and the subscription being installed — race window is tiny
+    // but real on slow mounts.
+    setLogs([...getBreadcrumbs()]); // eslint-disable-line react-hooks/set-state-in-effect
     return unsubscribe;
   }, []);
 

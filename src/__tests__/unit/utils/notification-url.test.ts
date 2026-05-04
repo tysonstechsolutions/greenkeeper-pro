@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import { notificationToUrl } from "@/lib/utils/notification-url";
 
 describe("notificationToUrl", () => {
-  it("maps task reference to /tasks/:id", () => {
+  // Routes use the actual Next.js page paths under /tasks/view and
+  // /equipment/view (not bare /tasks/:id / /equipment/:id).
+  it("maps task reference to /tasks/view?id=:id", () => {
     expect(
       notificationToUrl({ reference_type: "task", reference_id: "abc-123" })
-    ).toBe("/tasks/abc-123");
+    ).toBe("/tasks/view?id=abc-123");
   });
 
   it("maps channel reference to /messages?channel=:id", () => {
@@ -14,10 +16,10 @@ describe("notificationToUrl", () => {
     ).toBe("/messages?channel=chan-1");
   });
 
-  it("maps equipment reference to /equipment/:id", () => {
+  it("maps equipment reference to /equipment/view?id=:id", () => {
     expect(
       notificationToUrl({ reference_type: "equipment", reference_id: "eq-7" })
-    ).toBe("/equipment/eq-7");
+    ).toBe("/equipment/view?id=eq-7");
   });
 
   it("maps time_off_request to /schedule/time-off (ignores reference_id)", () => {

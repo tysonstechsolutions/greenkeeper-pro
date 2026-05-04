@@ -12,6 +12,34 @@
  * `supabase.functions.invoke(...)` instead.
  */
 import { createClient } from "@/lib/supabase/client";
+import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
+
+/**
+ * Long-running edge functions (AI / vision / report generators / large
+ * uploads). For these we BYPASS supabase.functions.invoke and call the
+ * function URL directly with a pre-fetched session token. The reason:
+ * `supabase.functions.invoke` always awaits `auth.getSession()` first,
+ * which sits on the navigator.locks auth lock. If that lock is held
+ * (an abandoned holder from a hot-reload, a crashed prior request, or a
+ * concurrent token refresh), the call hangs INDEFINITELY before any
+ * fetch breadcrumb fires — exactly the "stuck reading quote" symptom.
+ *
+ * Pre-fetching the token once with a short timeout, then calling fetch
+ * directly, sidesteps that. If the auth lock is held, we get a clean
+ * timeout error instead of an indefinite hang.
+ */
+const SLOW_DIRECT_ROUTES: ReadonlySet<string> = new Set<string>([
+  "extract-quote",
+  "extract-889",
+  "ai-assistant",
+  "fix-instructions",
+  "green-fix-instructions",
+  "translate",
+  "daily-briefing",
+  "morning-route",
+  "drone/upload",
+]);
+const AUTH_TOKEN_TIMEOUT_MS = 5_000;
 
 /**
  * Routes that have been migrated to Supabase Edge Functions.
@@ -102,6 +130,114 @@ export async function callApi<T = unknown>(
     // Edge function slugs use dashes; translate any slash in the route name
     // (e.g. "drone/upload" -> "drone-upload", "push/send" -> "push-send").
     const fnSlug = route.replace(/\//g, "-");
+
+    // ── Slow-route direct fetch path ────────────────────────────────────
+    // For long-running endpoints, skip supabase.functions.invoke (which
+    // awaits auth.getSession() and can hang on a held navigator.locks
+    // auth lock). Pre-fetch the token with a short timeout, then call
+    // fetch directly so timeoutFetch breadcrumbs fire.
+    if (SLOW_DIRECT_ROUTES.has(route)) {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      let accessToken = anonKey;
+      try {
+        const sessionPromise = supabase.auth.getSession();
+        const result = await Promise.race([
+          sessionPromise,
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `auth.getSession() timed out after ${AUTH_TOKEN_TIMEOUT_MS}ms (auth lock likely held by abandoned holder)`,
+                  ),
+                ),
+              AUTH_TOKEN_TIMEOUT_MS,
+            ),
+          ),
+        ]);
+        const sessionToken = (
+          result as { data?: { session?: { access_token?: string } } }
+        )?.data?.session?.access_token;
+        if (sessionToken) accessToken = sessionToken;
+      } catch (err) {
+        recordBreadcrumb(
+          "warn",
+          `[callApi] ${route}: ${err instanceof Error ? err.message : String(err)}; falling back to anon key`,
+        );
+        // Continue with anon key. The edge function will return 401 if it
+        // requires a real user, which the caller handles like any other
+        // API error.
+      }
+
+      const url = `${supabaseUrl}/functions/v1/${fnSlug}`;
+      const directHeaders: Record<string, string> = {
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        ...headers,
+      };
+      const directBody = isFormData
+        ? (payload as FormData)
+        : payload === undefined
+          ? undefined
+          : JSON.stringify(payload);
+
+      // 90s ceiling — matches the slow-endpoint timeout in the supabase
+      // client. Anthropic vision typically returns in 10-30s; the function's
+      // own internal Anthropic timeout is 60s.
+      const SLOW_ROUTE_TIMEOUT_MS = 90_000;
+      const ac = new AbortController();
+      const timer = setTimeout(
+        () => ac.abort(new DOMException("Slow route timed out", "TimeoutError")),
+        SLOW_ROUTE_TIMEOUT_MS,
+      );
+      const started = Date.now();
+      recordBreadcrumb("fetch", `→ /functions/v1/${fnSlug} (slow direct)`);
+
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: method === "GET" ? "POST" : method,
+          headers: directHeaders,
+          body: directBody,
+          signal: ac.signal,
+        });
+      } catch (err) {
+        recordBreadcrumb(
+          "error",
+          `Fetch failed: /functions/v1/${fnSlug}`,
+          err instanceof Error ? err.message : String(err),
+        );
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+      recordBreadcrumb(
+        "fetch-done",
+        `${res.status} /functions/v1/${fnSlug} (${Date.now() - started}ms)`,
+      );
+
+      if (!res.ok) {
+        let message = `Edge function ${route} failed: ${res.status} ${res.statusText}`;
+        try {
+          const errBody = (await res.json()) as { error?: string; message?: string };
+          if (errBody.error) message = errBody.error;
+          else if (errBody.message) message = errBody.message;
+        } catch {
+          /* body wasn't JSON */
+        }
+        const apiErr: ApiError = Object.assign(new Error(message), {
+          status: res.status,
+        });
+        throw apiErr;
+      }
+      // Slow routes always return JSON in this codebase. (Add raw-blob
+      // handling here if a future slow route returns binary.)
+      return (await res.json()) as T;
+    }
+
+    // ── Default path: supabase-js invoke ────────────────────────────────
     const { data, error } = await supabase.functions.invoke(fnSlug, {
       body: payload as BodyInit | Record<string, unknown> | undefined,
       headers,

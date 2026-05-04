@@ -13,13 +13,16 @@ const mockEqBand = vi.fn();
 const mockDelete = vi.fn();
 const mockDeleteEq = vi.fn();
 const mockFrom = vi.fn();
+const mockFunctionsInvoke = vi.fn();
+const mockGetSession = vi.fn();
 
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ from: mockFrom }),
+  createClient: () => ({
+    from: mockFrom,
+    functions: { invoke: mockFunctionsInvoke },
+    auth: { getSession: mockGetSession },
+  }),
 }));
-
-// Mock fetch for upload
-const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +48,10 @@ beforeEach(() => {
     delete: mockDelete,
   });
 
-  globalThis.fetch = originalFetch;
+  mockFunctionsInvoke.mockResolvedValue({ data: null, error: null });
+  mockGetSession.mockResolvedValue({
+    data: { session: { access_token: "test-token" } },
+  });
 });
 
 describe("useDroneFlights", () => {
@@ -102,7 +108,7 @@ describe("useDroneFlights", () => {
     expect(result.current.error).toBe("DB error");
   });
 
-  it("uploadFlight sends FormData to API and returns row", async () => {
+  it("uploadFlight POSTs FormData to the drone-upload edge function and returns row", async () => {
     const mockRow = {
       id: "f2",
       flight_date: "2026-04-11",
@@ -116,10 +122,16 @@ describe("useDroneFlights", () => {
       created_at: "2026-04-11T12:00:00Z",
     };
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
+    // drone/upload is in SLOW_DIRECT_ROUTES, so callApi bypasses
+    // supabase.functions.invoke and uses fetch directly with a pre-fetched
+    // session token.
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => mockRow,
-    }) as unknown as typeof fetch;
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const { useDroneFlights } = await import(
       "@/lib/hooks/useDroneFlights"
@@ -136,10 +148,17 @@ describe("useDroneFlights", () => {
     });
 
     expect(uploaded).toHaveProperty("id", "f2");
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      "/api/drone/upload",
+    expect(mockGetSession).toHaveBeenCalled();
+    // The slow-direct path hits the function URL with a Bearer token
+    // pre-fetched from getSession() (no supabase.functions.invoke call).
+    expect(mockFunctionsInvoke).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/functions/v1/drone-upload"),
       expect.objectContaining({ method: "POST" })
     );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer test-token");
   });
 
   it("deleteFlight handles success and error", async () => {

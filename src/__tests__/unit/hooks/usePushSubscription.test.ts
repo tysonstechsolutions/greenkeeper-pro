@@ -8,6 +8,17 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const g = globalThis as any;
 
+// usePushSubscription reaches the server via callApi("push/subscribe", ...),
+// which routes through supabase.functions.invoke for any route in EDGE_ROUTES.
+// Mock the supabase client so we can assert the invoke call (rather than the
+// legacy /api/push/subscribe fetch path that no longer exists).
+const mockFunctionsInvoke = vi.fn().mockResolvedValue({ data: null, error: null });
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    functions: { invoke: mockFunctionsInvoke },
+  }),
+}));
+
 describe("usePushSubscription", () => {
   const originalEnv = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
@@ -18,6 +29,8 @@ describe("usePushSubscription", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (g.navigator as any).serviceWorker = undefined;
     g.fetch = vi.fn();
+    mockFunctionsInvoke.mockClear();
+    mockFunctionsInvoke.mockResolvedValue({ data: null, error: null });
   });
 
   afterEach(() => {
@@ -57,7 +70,7 @@ describe("usePushSubscription", () => {
     expect(result.current.isSubscribed).toBe(false);
   });
 
-  it("subscribe() calls pushManager.subscribe and POSTs to /api/push/subscribe", async () => {
+  it("subscribe() calls pushManager.subscribe and invokes the push-subscribe edge function", async () => {
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY =
       "BHn9qfRQPrROE_7fPVYOsjU7FgyFsTkRfkpvHhPa1234567890abcdefGHIJKLMNOPQRSTUVWXYZ";
 
@@ -98,8 +111,10 @@ describe("usePushSubscription", () => {
 
     expect(ok).toBe(true);
     expect(subscribeMock).toHaveBeenCalledTimes(1);
-    expect(g.fetch).toHaveBeenCalledWith(
-      "/api/push/subscribe",
+    // callApi("push/subscribe", ...) translates the slash to a dash in the
+    // Supabase function slug.
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith(
+      "push-subscribe",
       expect.objectContaining({ method: "POST" })
     );
     await waitFor(() => {
