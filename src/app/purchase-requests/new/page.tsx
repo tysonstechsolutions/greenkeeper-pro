@@ -1197,6 +1197,39 @@ function NewPurchaseRequestPageInner() {
             Vendor info auto-filled below. You can still edit any field.
           </p>
         )}
+
+        {/* Request Via — gov form accepts only two values; render them
+            as a binary toggle right under the vendor picker so the user
+            picks once at the top. The values feed straight into the
+            AcroForm dropdown on the generated PR PDF. */}
+        <div className="mt-3 pt-3 border-t border-border">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+            Request Via
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {(["PURCHASE CARD", "CONTRACTING OFFICE"] as const).map((opt) => {
+              const selected = requestVia === opt;
+              const label =
+                opt === "PURCHASE CARD" ? "Purchase Card" : "Contracting Office";
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setRequestVia(opt)}
+                  aria-pressed={selected}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-semibold transition-colors active:scale-[0.98] ${
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  {selected && <CheckCircle2 className="w-4 h-4" />}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </section>
 
       {/* Running total banner */}
@@ -1520,36 +1553,6 @@ function NewPurchaseRequestPageInner() {
         <Field label="GSA / NAF / Other No">
           <input type="text" value={v1.gsa_naf_no} onChange={(e) => setV1({ ...v1, gsa_naf_no: e.target.value })} className={inputCls} />
         </Field>
-
-        {/* Request Via — gov form has only two valid values; render them
-            as a binary toggle right under vendor info so it's a one-tap
-            decision instead of free text the user has to remember to spell
-            correctly (the values feed straight into the AcroForm dropdown
-            on the generated PR PDF). */}
-        <Field label="Request Via">
-          <div className="grid grid-cols-2 gap-2">
-            {(["PURCHASE CARD", "CONTRACTING OFFICE"] as const).map((opt) => {
-              const selected = requestVia === opt;
-              const label = opt === "PURCHASE CARD" ? "Purchase Card" : "Contracting Office";
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setRequestVia(opt)}
-                  aria-pressed={selected}
-                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors active:scale-[0.98] ${
-                    selected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background hover:bg-muted"
-                  }`}
-                >
-                  {selected && <CheckCircle2 className="w-4 h-4" />}
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </Field>
       </Section>
 
       {/* Vendor 2 + 3 */}
@@ -1673,67 +1676,108 @@ function NewPurchaseRequestPageInner() {
         {/* Apply to all — bulk-set Site / Cost Ctr / G/L across every line.
             Typical use: one PR per site, so the user picks once instead of
             setting each row. Picking a value immediately overwrites every
-            line item's matching field. */}
+            line item's matching field; the dropdown then displays whatever
+            value is shared across ALL items (or "Mixed" if rows differ).
+            That way the user can see at a glance what they applied. */}
         <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
           <p className="text-xs font-semibold text-muted-foreground mb-2">
             Apply to all line items
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Field label="Site (all)">
-              <select
-                value=""
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!v) return;
-                  setItems((prev) => prev.map((it) => ({ ...it, site: v })));
-                }}
-                className={inputCls}
-              >
-                <option value="">— pick to apply —</option>
-                {PR_SITES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Cost Ctr (all)">
-              <select
-                value=""
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!v) return;
-                  setItems((prev) => prev.map((it) => ({ ...it, cost_ctr: v })));
-                }}
-                className={inputCls}
-              >
-                <option value="">— pick to apply —</option>
-                {PR_COST_CENTERS.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="G/L (all)">
-              <select
-                value=""
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!v) return;
-                  setItems((prev) => prev.map((it) => ({ ...it, gl_acct: v })));
-                }}
-                className={inputCls}
-              >
-                <option value="">— pick to apply —</option>
-                {PR_GL_ACCOUNTS.map((g) => (
-                  <option key={g.value} value={g.value}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
+          {(() => {
+            // Reflect the value back to the picker if every line item agrees.
+            // If items disagree (some 7010 / some 7009), show no selection
+            // and surface a "Mixed" option so the user knows.
+            const sharedValue = <K extends keyof PurchaseRequestItem>(
+              key: K,
+            ): string => {
+              if (items.length === 0) return "";
+              const first = items[0]?.[key];
+              const allSame = items.every((it) => it[key] === first);
+              return allSame && first ? String(first) : "";
+            };
+            const isMixed = <K extends keyof PurchaseRequestItem>(
+              key: K,
+            ): boolean => {
+              if (items.length < 2) return false;
+              const first = items[0]?.[key];
+              return items.some((it) => it[key] !== first);
+            };
+            const sharedSite = sharedValue("site");
+            const sharedCostCtr = sharedValue("cost_ctr");
+            const sharedGl = sharedValue("gl_acct");
+            const siteMixed = isMixed("site");
+            const costCtrMixed = isMixed("cost_ctr");
+            const glMixed = isMixed("gl_acct");
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Field label="Site (all)">
+                  <select
+                    value={sharedSite}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      setItems((prev) => prev.map((it) => ({ ...it, site: v })));
+                    }}
+                    className={inputCls}
+                  >
+                    <option value="">
+                      {siteMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
+                    </option>
+                    {PR_SITES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Cost Ctr (all)">
+                  <select
+                    value={sharedCostCtr}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      setItems((prev) =>
+                        prev.map((it) => ({ ...it, cost_ctr: v })),
+                      );
+                    }}
+                    className={inputCls}
+                  >
+                    <option value="">
+                      {costCtrMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
+                    </option>
+                    {PR_COST_CENTERS.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="G/L (all)">
+                  <select
+                    value={sharedGl}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      setItems((prev) =>
+                        prev.map((it) => ({ ...it, gl_acct: v })),
+                      );
+                    }}
+                    className={inputCls}
+                  >
+                    <option value="">
+                      {glMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
+                    </option>
+                    {PR_GL_ACCOUNTS.map((g) => (
+                      <option key={g.value} value={g.value}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Reuse from history */}

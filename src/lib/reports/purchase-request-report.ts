@@ -81,7 +81,13 @@ function setText(
   value: string,
   written: Set<string>,
 ): void {
-  if (!value) return;
+  // Note: we DO write empty strings. The template has user-specific
+  // pre-fill defaults baked in (e.g. "BLDG 3212A Door #3" for the
+  // delivery line 2). If a user clears that field on the form and saves,
+  // the DB stores null and we receive `""` here — early-returning would
+  // leave the stale template default visible on the rendered PDF, making
+  // it look like the edit didn't take. Writing "" explicitly clears the
+  // field to match the user's saved data.
   try {
     const f = form.getField(name);
     if (!(f instanceof PDFTextField)) return;
