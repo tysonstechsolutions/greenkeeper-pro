@@ -118,6 +118,52 @@ Worked example — single NAPA row:
 
   Math check: 3 × 10.49 = 31.47 ✓  matches Total — correct column chosen.
 
+═══════════════════════════════════════════════════════════════════════════
+USER ORG CONTEXT — TAX-FREE
+═══════════════════════════════════════════════════════════════════════════
+
+The user's organization is a TAX-EXEMPT NAF activity (US Navy MWR). They
+NEVER pay sales tax. Therefore:
+  • Skip "Sales Tax" / "Tax" / "Estimated Tax" / "Tax Estimated Using …"
+    rows entirely. Do NOT include them as items, do NOT mention them in
+    warnings ("excluded sales tax" is just noise — silently drop).
+  • If the quote shows a tax-inclusive total alongside a pre-tax subtotal,
+    use the pre-tax figures.
+  • Tax-related notes ("Subject to Sales Tax", "Tax-exempt cert required")
+    don't need warnings.
+
+═══════════════════════════════════════════════════════════════════════════
+RENTAL QUOTE FEES — INCLUDE THEM AS LINE ITEMS
+═══════════════════════════════════════════════════════════════════════════
+
+Equipment-rental quotes typically itemize fees alongside the equipment.
+INCLUDE these as separate line items on the PR (not as warnings):
+
+  • Loss Damage Waiver / LDW / Damage Waiver (typically 14% of equipment
+    subtotal — usually mandatory unless the user provides a Certificate of
+    Insurance). Description: "Loss Damage Waiver (NN%)". qty: 1, unit_price:
+    the calculated dollar amount that matches the FINAL chosen rental tier.
+  • Pickup & Delivery / P/U & DEL / Trip Charge (often a flat per-direction
+    fee, qty 2 for round-trip). Already covered in earlier examples — keep
+    using qty=2 / unit_price=<one-way fee> when the quote shows "$X each
+    way" with a 2x multiplier.
+  • Environmental / Fuel / Surcharge fees if itemized as a fixed dollar
+    amount on the quote.
+  • Optional add-ons (cleaning fee, attachment fee) ONLY when explicitly
+    on the line. If the quote says "subject to $90/hr cleaning if not
+    returned clean", that's a conditional warning, not a line item.
+
+When LDW is rental-tier-dependent, include it under the chosen tier in the
+default items[], AND include LDW in each clarification option's
+item_overrides so clicking a different tier updates the LDW too.
+
+Worked example — Burris-style 4-week default:
+  Equipment subtotal at 4-week: $3,969.00
+  LDW @ 14%: $555.66  →  items: [{ description: "Loss Damage Waiver (14%)",
+                                    qty: 1, unit_price: 555.66, unit: "fee" }]
+  Then clarifications.options[k].item_overrides should include:
+    { match_description: "Loss Damage Waiver", unit_price: <14% of that tier> }
+
 Output ONLY valid JSON in this exact shape — no commentary, no markdown fences:
 
 {
@@ -139,8 +185,126 @@ Output ONLY valid JSON in this exact shape — no commentary, no markdown fences
       "unit_price": number
     }
   ],
-  "warnings": string[]
+  "warnings": string[],
+  "clarifications": [
+    {
+      "question": string,
+      "options": [
+        {
+          "label": string,
+          "item_overrides": [
+            {
+              "match_description": string,
+              "unit_price": number,
+              "qty": number | null,
+              "unit": string | null
+            }
+          ]
+        }
+      ] | null,
+      "applies_to": string[] | null
+    }
+  ]
 }
+
+CLARIFICATIONS
+- Use this array when the quote is genuinely AMBIGUOUS and you had to make a
+  choice between multiple valid prices/quantities for the same item. Examples:
+    • RENTAL QUOTES with multiple duration tiers ("Day rate / Week rate /
+      4-week rate" — you can't know which tier the user wants).
+    • Bulk discount tiers ("1-9 units: $5.00, 10+ units: $4.50" — without
+      knowing the order qty, you can't pick).
+    • Package / service levels ("Standard / Premium / Pro" — same item,
+      different prices).
+    • Configurations or option packages ("with bagger +$200, mulching kit +$150").
+    • Quotes where the line shows BOTH a one-time and recurring price.
+    • Any case where two columns COULD plausibly be the unit_price (and the
+      math check from earlier doesn't disambiguate).
+- DO NOT clarify for:
+    • Cases the multi-column-grid rule already handles (Net vs List).
+    • Just unclear handwriting/OCR — that's a "warning", not a clarification.
+    • Standard items with one price.
+
+- Each clarification has:
+    • question: a plain-English question the user can answer in seconds.
+    • options: array of choice objects (or null for open-ended). Each option:
+        ◦ label: short human-readable choice ("1 Week", "10+ boxes", "with bagger").
+                 KEEP IT SHORT — the price impact is captured separately.
+        ◦ item_overrides: array of price/qty changes to apply if the user
+                 picks this option. Each override:
+            · match_description: a SHORT distinctive substring of the
+              affected item's description that uniquely identifies it within
+              the items[] array (e.g. "Tractor", "Rotary Cutter", "Latex
+              Gloves"). The client does a case-insensitive substring match.
+            · unit_price: the new per-unit price for this option (always
+              required when the price changes).
+            · qty: optional; only set if the option implies a qty change.
+            · unit: optional; only set if the unit label changes
+              ("rental" vs "month").
+    • applies_to: array of part numbers or short item names affected, or
+      null if global. Used as a label only — the actual matching is done
+      via match_description on each override.
+
+- When you DO add a clarification, STILL fill items with your best guess.
+  CRITICAL CONSISTENCY RULE: the default items[] MUST be the per-item
+  prices for ONE specific option (the one you defaulted to — typically
+  the longest rental tier). NEVER put a subtotal, grand total, or summed
+  value into a single item's unit_price. Each item gets its own per-unit
+  price for the chosen tier:
+    • Tractor 4-week: $2,146.50  ← this is the unit_price, NOT $3,969 (sub)
+    • Cutter 4-week:  $1,822.50  ← this is the unit_price
+  And exactly one of the options' item_overrides MUST match those default
+  unit_prices (so toggling that option is a no-op).
+
+Worked examples:
+
+  Burris-style rental quote:
+    "Skid Steer Loader  Day: $250  Week: $850  4-Week: $2,400"
+    → Pick the 4-week tier as default
+    → items: [{ description: "Skid Steer Loader", qty: 1, unit_price: 2400, unit: "rental" }]
+    → clarifications: [{
+         "question": "Which rental period is this PR for?",
+         "options": [
+           {
+             "label": "1 Day",
+             "item_overrides": [
+               { "match_description": "Skid Steer", "unit_price": 250 }
+             ]
+           },
+           {
+             "label": "1 Week",
+             "item_overrides": [
+               { "match_description": "Skid Steer", "unit_price": 850 }
+             ]
+           },
+           {
+             "label": "4 Weeks",
+             "item_overrides": [
+               { "match_description": "Skid Steer", "unit_price": 2400 }
+             ]
+           }
+         ],
+         "applies_to": ["Skid Steer Loader"]
+       }]
+
+  Bulk-discount quote:
+    "Latex Gloves Box of 100  1-9 boxes: $12.99  10+ boxes: $10.49"
+    → Pick the higher per-unit price (assumes <10 unless qty is shown)
+    → items: [{ qty: 1, unit_price: 12.99, ... }]
+    → clarifications: [{
+         "question": "How many boxes of latex gloves are you ordering?",
+         "options": [
+           { "label": "1–9 boxes",
+             "item_overrides": [{ "match_description": "Latex Gloves", "unit_price": 12.99 }]
+           },
+           { "label": "10+ boxes",
+             "item_overrides": [{ "match_description": "Latex Gloves", "unit_price": 10.49 }]
+           }
+         ],
+         "applies_to": ["Latex Gloves"]
+       }]
+
+If the quote is unambiguous, return clarifications: [] (empty array).
 
 DESCRIPTION
 - The product name and any size/color/spec text. NEVER include the part number.

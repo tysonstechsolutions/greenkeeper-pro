@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Camera,
   Sparkles,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +37,11 @@ import { formatInternalOrder } from "@/lib/pr-internal-order";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
+import {
+  generatePurchaseRequestReport,
+  PurchaseRequestReportError,
+} from "@/lib/reports/purchase-request-report";
+import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistory";
 import { History as HistoryIcon } from "lucide-react";
 import type {
@@ -63,6 +69,26 @@ interface ExtractedQuote {
     unit_price: number;
   }>;
   warnings: string[];
+  // Surfaced when the AI had to make a guess between multiple valid prices
+  // (rental tiers, bulk-discount tiers, package levels, etc.). Items are
+  // populated with the best guess; clicking an option here applies the
+  // option's overrides to the matching line items in place — no second AI
+  // call needed.
+  clarifications?: Array<{
+    question: string;
+    options?: ClarificationOption[] | null;
+    applies_to?: string[] | null;
+  }>;
+}
+
+interface ClarificationOption {
+  label: string;
+  item_overrides: Array<{
+    match_description: string;
+    unit_price: number;
+    qty?: number | null;
+    unit?: string | null;
+  }>;
 }
 
 function todayIso(): string {
@@ -211,12 +237,25 @@ function NewPurchaseRequestPageInner() {
 
   const [loadingExisting, setLoadingExisting] = useState(!!editId || !!fromId);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Quote-extraction state
   const [extracting, setExtracting] = useState(false);
   const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
   const [extractInfo, setExtractInfo] = useState<string | null>(null);
+  const [extractClarifications, setExtractClarifications] = useState<
+    Array<{
+      question: string;
+      options?: ClarificationOption[] | null;
+      applies_to?: string[] | null;
+    }>
+  >([]);
+  // Per-clarification: which option index has been applied (so the UI shows
+  // a checkmark on the chosen pill and we can let the user switch).
+  const [clarificationChoices, setClarificationChoices] = useState<
+    Record<number, number>
+  >({});
   const [native, setNative] = useState(false);
   // Tick-counter so the spinner can show seconds elapsed — gives the user
   // visible feedback that we haven't crashed during the 15-30s vision call.
@@ -458,11 +497,52 @@ function NewPurchaseRequestPageInner() {
     setOpenSection("items");
   }
 
+  /**
+   * Apply a clarification option's overrides to the line items. Each override
+   * matches an item by case-insensitive substring against `description`, then
+   * updates unit_price (always) plus qty / unit (when set in the override).
+   *
+   * Idempotent — clicking a different option just overwrites the previous one,
+   * so the user can switch between rental tiers without reloading the quote.
+   */
+  function applyClarificationOption(
+    clarificationIdx: number,
+    optionIdx: number,
+    option: ClarificationOption,
+  ) {
+    setItems((prev) =>
+      prev.map((it) => {
+        const desc = (it.description || "").toLowerCase();
+        // First override whose match_description is contained in the item's
+        // description wins. (Most quotes only have one override per item.)
+        const override = option.item_overrides.find((o) =>
+          desc.includes((o.match_description || "").toLowerCase()),
+        );
+        if (!override) return it;
+        return {
+          ...it,
+          unit_price: Number(override.unit_price) || it.unit_price,
+          ...(override.qty !== null && override.qty !== undefined
+            ? { qty: Number(override.qty) || it.qty }
+            : {}),
+          ...(override.unit ? { unit: override.unit } : {}),
+        };
+      }),
+    );
+    setClarificationChoices((prev) => ({ ...prev, [clarificationIdx]: optionIdx }));
+    recordBreadcrumb(
+      "click",
+      `[clarification] applied option "${option.label}" (${option.item_overrides.length} override${option.item_overrides.length === 1 ? "" : "s"})`,
+    );
+  }
+
   // ── Quote upload + AI extraction ─────────────────────────────────────────
   async function handleQuoteUpload(file: File) {
     setExtracting(true);
     setExtractElapsed(0);
     setExtractWarnings([]);
+    setExtractClarifications([]);
+    setClarificationChoices({});
     setExtractInfo(null);
     setError(null);
 
@@ -590,6 +670,13 @@ function NewPurchaseRequestPageInner() {
       if (result.warnings && result.warnings.length > 0) {
         setExtractWarnings(result.warnings);
       }
+      if (result.clarifications && result.clarifications.length > 0) {
+        setExtractClarifications(result.clarifications);
+        recordBreadcrumb(
+          "click",
+          `[quote-upload] ${result.clarifications.length} clarification(s) needed`,
+        );
+      }
     } catch (err) {
       if (cancel.cancelled) return;
       const msg =
@@ -642,6 +729,123 @@ function NewPurchaseRequestPageInner() {
       console.error("[quote-upload] camera failed", err);
       setError(`Camera error: ${msg}`);
       setExtracting(false);
+    }
+  }
+
+  /**
+   * Render a PR PDF from the CURRENT form state without saving anything to
+   * the database. Useful for sanity-checking AI-extracted line items, vendor
+   * blocks, and totals before committing the PR (and burning a sequence
+   * number).
+   *
+   * The preview filename is prefixed with PREVIEW- and uses today's date in
+   * place of the would-be Internal Order number, so it's obviously not a
+   * submitted PR if it ends up in a "PRs" folder by accident.
+   */
+  async function handlePreview() {
+    if (previewing || saving) return;
+    setPreviewing(true);
+    setError(null);
+    try {
+      const previewPr: PurchaseRequest = {
+        id: editId || "preview",
+        date_prepared: datePrepared,
+        required_delivery_date: requiredDeliveryDate || null,
+        request_via: requestVia.trim() || "CONTRACTING OFFICE",
+        currency: currency.trim() || "US Dollar $",
+        vendor_id: vendorId,
+        quote_storage_path: null,
+        quote_filename: existingQuoteName,
+        quote_uploaded_at: null,
+        // Sequence number isn't assigned until save; the PDF generator
+        // falls back to whatever's in `internal_order` when this is null,
+        // and we leave that null too so the IO field is just blank in the
+        // preview.
+        pr_sequence_number: prSequenceNumber,
+        requestor_name: requestorName.trim(),
+        requestor_email: requestorEmail.trim() || null,
+        requestor_phone: requestorPhone.trim() || null,
+        vendor1_name: v1.name.trim() || null,
+        vendor1_address: v1.address.trim() || null,
+        vendor1_line2: v1.line2.trim() || null,
+        vendor1_city_state_zip: v1.city_state_zip.trim() || null,
+        vendor1_poc: v1.poc.trim() || null,
+        vendor1_email: v1.email.trim() || null,
+        vendor1_phone: v1.phone.trim() || null,
+        vendor1_sap_no: v1.sap_no.trim() || null,
+        vendor1_gsa_naf_no: v1.gsa_naf_no.trim() || null,
+        vendor2_name: vendor2Name.trim() || null,
+        vendor3_name: vendor3Name.trim() || null,
+        invoice_address: invoice.address.trim() || null,
+        invoice_line2: invoice.line2.trim() || null,
+        invoice_city_state_zip: invoice.city_state_zip.trim() || null,
+        invoice_poc: invoice.poc.trim() || null,
+        invoice_phone: invoice.phone.trim() || null,
+        invoice_email: invoice.email.trim() || null,
+        delivery_address: delivery.address.trim() || null,
+        delivery_line2: delivery.line2.trim() || null,
+        delivery_city_state_zip: delivery.city_state_zip.trim() || null,
+        delivery_poc: delivery.poc.trim() || null,
+        delivery_phone: delivery.phone.trim() || null,
+        delivery_email: delivery.email.trim() || null,
+        company_code: companyCode.trim() || null,
+        requesting_facility_code: requestingFacility.trim() || null,
+        internal_order: null,
+        project_no: projectNo.trim() || null,
+        program: program.trim() || null,
+        items: items.filter(
+          (it) => it.description.trim() || it.qty > 0 || it.unit_price > 0,
+        ),
+        ige_excess_pct: igeExcessPct,
+        ige_amount: igeAmount,
+        justification: justification.trim() || null,
+        ige_based_on: igeBasedOn.trim() || null,
+        financial_analyst: financialAnalyst.trim() || null,
+        approving_authority: approvingAuthority.trim() || null,
+        approving_signature_date: approvingDate || null,
+        second_approval: secondApproval.trim() || null,
+        second_signature_date: secondDate || null,
+        attached_ssj: attached.ssj,
+        attached_bnj: attached.bnj,
+        attached_pws: attached.pws,
+        attached_itpr: attached.itpr,
+        attached_other: attachedOther.trim() || null,
+        attached_section_889: attached.section_889,
+        status: "draft",
+        created_by: user?.id ?? null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const blob = await generatePurchaseRequestReport(previewPr);
+
+      // Filename: PREVIEW prefix + date + sanitized vendor name. No
+      // sequence number here, so it can't be confused with a real PR PDF
+      // generated from the view page.
+      const dateStr = datePrepared.replace(/-/g, "");
+      const vendorSlug = (v1.name.trim() || "vendor")
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 30);
+      const filename = `PR-PREVIEW-${dateStr}-${vendorSlug}.pdf`;
+
+      await saveBlobToDevice({
+        blob,
+        filename,
+        shareTitle: "PR preview",
+      });
+      recordBreadcrumb("click", `[pr-preview] saved ${filename} (${blob.size}B)`);
+    } catch (err) {
+      const msg =
+        err instanceof PurchaseRequestReportError
+          ? `${err.step}: ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      recordBreadcrumb("error", `[pr-preview] failed: ${msg}`);
+      setError(`Preview failed: ${msg}`);
+    } finally {
+      setPreviewing(false);
     }
   }
 
@@ -1094,11 +1298,7 @@ function NewPurchaseRequestPageInner() {
           <div className="mt-2 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
             <span className="flex-1">
-              Reading quote with Claude
-              {extractElapsed > 0 && ` · ${extractElapsed}s`}
-              {extractElapsed >= 25 && extractElapsed < 60 && (
-                <span className="text-muted-foreground"> (vision can take 30–45s)</span>
-              )}
+              Reading quote
               {extractElapsed >= 60 && (
                 <span className="text-red-600 dark:text-red-400">
                   {" "}(taking longer than usual — try Cancel)
@@ -1140,6 +1340,72 @@ function NewPurchaseRequestPageInner() {
                 <span>{w}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Clarifications — surfaced when the AI saw multiple valid prices
+            (rental tiers, bulk discounts, package levels) and had to pick
+            one. Each option carries its own item_overrides; clicking an
+            option applies those overrides to matching line items. */}
+        {extractClarifications.length > 0 && (
+          <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {extractClarifications.length === 1
+                ? "Quick question about this quote"
+                : `${extractClarifications.length} quick questions about this quote`}
+            </div>
+            {extractClarifications.map((c, i) => {
+              const chosenIdx = clarificationChoices[i];
+              return (
+                <div key={i} className="space-y-1">
+                  <p className="text-xs font-medium leading-snug">{c.question}</p>
+                  {c.applies_to && c.applies_to.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Affects: {c.applies_to.join(", ")}
+                    </p>
+                  )}
+                  {c.options && c.options.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {c.options.map((opt, j) => {
+                        const isChosen = chosenIdx === j;
+                        return (
+                          <button
+                            key={j}
+                            type="button"
+                            onClick={() => applyClarificationOption(i, j, opt)}
+                            className={`text-[11px] px-2 py-1 rounded-md border font-medium transition-colors active:scale-[0.97] ${
+                              isChosen
+                                ? "border-amber-600 bg-amber-500/20 text-amber-900 dark:text-amber-200"
+                                : "border-amber-500/40 bg-background text-foreground hover:bg-amber-500/10"
+                            }`}
+                          >
+                            {isChosen && (
+                              <CheckCircle2 className="inline w-3 h-3 mr-1 -mt-0.5" />
+                            )}
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            <p className="text-[10px] text-muted-foreground pt-1 border-t border-amber-500/20">
+              Tap an answer above and the matching line items&apos; prices
+              update automatically.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setExtractClarifications([]);
+                setClarificationChoices({});
+              }}
+              className="text-[11px] font-medium text-amber-700 dark:text-amber-400 hover:underline"
+            >
+              Dismiss questions
+            </button>
           </div>
         )}
       </div>
@@ -1752,7 +2018,7 @@ function NewPurchaseRequestPageInner() {
       <div className="mt-4 flex flex-col gap-2">
         <button
           onClick={() => handleSave(false)}
-          disabled={saving}
+          disabled={saving || previewing}
           className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 active:scale-[0.98] transition-all"
         >
           {saving ? (
@@ -1762,14 +2028,28 @@ function NewPurchaseRequestPageInner() {
           )}
           {saving ? "Saving..." : editId ? "Update Request" : "Submit Request"}
         </button>
-        <button
-          onClick={() => handleSave(true)}
-          disabled={saving}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition-all"
-        >
-          <Save className="w-4 h-4" />
-          Save as Draft
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={handlePreview}
+            disabled={saving || previewing}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition-all"
+          >
+            {previewing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+            {previewing ? "Generating..." : "Preview PR"}
+          </button>
+          <button
+            onClick={() => handleSave(true)}
+            disabled={saving || previewing}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition-all"
+          >
+            <Save className="w-4 h-4" />
+            Save as Draft
+          </button>
+        </div>
       </div>
     </div>
   );

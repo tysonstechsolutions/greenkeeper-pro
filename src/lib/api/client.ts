@@ -84,6 +84,96 @@ export interface ApiError extends Error {
 }
 
 /**
+ * Find the user's current access token without going through gotrue's
+ * navigator.locks-protected getSession(). The reasons:
+ *
+ *   1. supabase-js's auth lock can be held indefinitely by an abandoned
+ *      holder (a hot-reload mid-refresh, a crashed prior call, a tab
+ *      that closed without releasing). Once held, every subsequent
+ *      auth.getSession() call hangs for the lock — including the one
+ *      inside supabase.functions.invoke(), which is what made
+ *      "Reading quote with Claude" stall indefinitely with no
+ *      breadcrumbs to indicate why.
+ *
+ *   2. The session is stored as plain JSON in localStorage under
+ *      sb-<project-ref>-auth-token (this codebase explicitly uses
+ *      @supabase/supabase-js's createClient with default localStorage
+ *      storage — see src/lib/supabase/client.ts). Reading it directly
+ *      is instant and lock-free.
+ *
+ * Strategy:
+ *   - Try localStorage first. If a non-expired session is there, use it.
+ *   - If localStorage is empty or stale, fall back to a 5s-bounded
+ *     auth.getSession() call. (The lock is usually free; only abandoned
+ *     holders cause the indefinite hang we're guarding against.)
+ *   - If both fail, return the anon key so the request still goes out.
+ *     Auth-required edge functions will return 401, which surfaces a
+ *     clean error instead of a hang.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveAccessToken(supabase: any, supabaseUrl: string, anonKey: string): Promise<string> {
+  // 1. Direct localStorage read — instant, no lock.
+  if (typeof window !== "undefined" && supabaseUrl) {
+    try {
+      const projectRef = supabaseUrl.match(/^https?:\/\/([^.]+)\./)?.[1];
+      if (projectRef) {
+        const raw = window.localStorage.getItem(`sb-${projectRef}-auth-token`);
+        if (raw) {
+          const parsed = JSON.parse(raw) as {
+            access_token?: string;
+            expires_at?: number;
+          };
+          if (parsed?.access_token) {
+            // expires_at is unix-seconds. Treat as valid if it's still in the
+            // future with a 30s safety margin. If expired, fall through so
+            // gotrue can refresh.
+            const expiresAt = (parsed.expires_at ?? 0) * 1000;
+            if (!expiresAt || expiresAt - Date.now() > 30_000) {
+              return parsed.access_token;
+            }
+          }
+        }
+      }
+    } catch {
+      // Corrupt JSON, blocked storage, etc. — fall through.
+    }
+  }
+
+  // 2. gotrue getSession() with a hard timeout — covers the case where
+  //    localStorage is empty, the session is expiring, or a refresh is
+  //    needed.
+  try {
+    const sessionPromise = supabase.auth.getSession();
+    const result = await Promise.race([
+      sessionPromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `auth.getSession() timed out after ${AUTH_TOKEN_TIMEOUT_MS}ms (auth lock likely held by abandoned holder)`,
+              ),
+            ),
+          AUTH_TOKEN_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    const sessionToken = (
+      result as { data?: { session?: { access_token?: string } } }
+    )?.data?.session?.access_token;
+    if (sessionToken) return sessionToken;
+  } catch (err) {
+    recordBreadcrumb(
+      "warn",
+      `[callApi] auth fallback: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // 3. Last resort.
+  return anonKey;
+}
+
+/**
  * Build a query string from an object. Skips undefined values.
  */
 function buildQuery(query?: Record<string, string | number | boolean | undefined>): string {
@@ -139,36 +229,7 @@ export async function callApi<T = unknown>(
     if (SLOW_DIRECT_ROUTES.has(route)) {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-      let accessToken = anonKey;
-      try {
-        const sessionPromise = supabase.auth.getSession();
-        const result = await Promise.race([
-          sessionPromise,
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    `auth.getSession() timed out after ${AUTH_TOKEN_TIMEOUT_MS}ms (auth lock likely held by abandoned holder)`,
-                  ),
-                ),
-              AUTH_TOKEN_TIMEOUT_MS,
-            ),
-          ),
-        ]);
-        const sessionToken = (
-          result as { data?: { session?: { access_token?: string } } }
-        )?.data?.session?.access_token;
-        if (sessionToken) accessToken = sessionToken;
-      } catch (err) {
-        recordBreadcrumb(
-          "warn",
-          `[callApi] ${route}: ${err instanceof Error ? err.message : String(err)}; falling back to anon key`,
-        );
-        // Continue with anon key. The edge function will return 401 if it
-        // requires a real user, which the caller handles like any other
-        // API error.
-      }
+      const accessToken = await resolveAccessToken(supabase, supabaseUrl, anonKey);
 
       const url = `${supabaseUrl}/functions/v1/${fnSlug}`;
       const directHeaders: Record<string, string> = {
