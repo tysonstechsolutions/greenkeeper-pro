@@ -1434,12 +1434,14 @@ function NewPurchaseRequestPageInner() {
           />
         </Field>
         <Field label="Request Via">
-          <input
-            type="text"
-            value={requestVia}
-            onChange={(e) => setRequestVia(e.target.value)}
-            className={inputCls}
-          />
+          {/* Set this from the toggle in the Vendor 1 section. Read-only
+              here so we don't have two places that disagree. */}
+          <div className="px-3 py-2.5 rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground">
+            {requestVia || "—"}
+            <span className="text-[10px] ml-2">
+              (set from the toggle under Vendor 1)
+            </span>
+          </div>
         </Field>
         <Field label="Currency">
           <input
@@ -1517,6 +1519,36 @@ function NewPurchaseRequestPageInner() {
         </Field>
         <Field label="GSA / NAF / Other No">
           <input type="text" value={v1.gsa_naf_no} onChange={(e) => setV1({ ...v1, gsa_naf_no: e.target.value })} className={inputCls} />
+        </Field>
+
+        {/* Request Via — gov form has only two valid values; render them
+            as a binary toggle right under vendor info so it's a one-tap
+            decision instead of free text the user has to remember to spell
+            correctly (the values feed straight into the AcroForm dropdown
+            on the generated PR PDF). */}
+        <Field label="Request Via">
+          <div className="grid grid-cols-2 gap-2">
+            {(["PURCHASE CARD", "CONTRACTING OFFICE"] as const).map((opt) => {
+              const selected = requestVia === opt;
+              const label = opt === "PURCHASE CARD" ? "Purchase Card" : "Contracting Office";
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setRequestVia(opt)}
+                  aria-pressed={selected}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors active:scale-[0.98] ${
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                >
+                  {selected && <CheckCircle2 className="w-4 h-4" />}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </Field>
       </Section>
 
