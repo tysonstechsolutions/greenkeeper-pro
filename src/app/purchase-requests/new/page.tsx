@@ -239,6 +239,14 @@ function NewPurchaseRequestPageInner() {
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tick-counter so the spinner can show seconds elapsed during save —
+  // gives the user feedback when the supabase-js auth lock or the
+  // postgrest call wedges, instead of an indefinitely-spinning button.
+  const [saveElapsed, setSaveElapsed] = useState(0);
+  // Mutable cancel flag for the save flow. Set by the Cancel button while
+  // saving; checked between async steps to bail out cleanly without
+  // half-applying state.
+  const cancelSaveRef = useRef<{ cancelled: boolean } | null>(null);
 
   // Quote-extraction state
   const [extracting, setExtracting] = useState(false);
@@ -872,9 +880,59 @@ function NewPurchaseRequestPageInner() {
     }
 
     setSaving(true);
+    setSaveElapsed(0);
     setError(null);
 
+    // Fresh cancellation handle for this save attempt.
+    const cancel = { cancelled: false };
+    cancelSaveRef.current = cancel;
+
+    // 1Hz elapsed counter so the user sees the save isn't dead.
+    const saveStartedAt = Date.now();
+    const saveTick = window.setInterval(() => {
+      setSaveElapsed(Math.floor((Date.now() - saveStartedAt) / 1000));
+    }, 1000);
+
+    /**
+     * Wrap a supabase call with a step name so a wedged auth lock or
+     * stalled postgrest call surfaces as "[pr-save] step X timed out
+     * after Ns" in breadcrumbs, instead of an indefinitely-spinning
+     * button. The timeout matches the supabase client's own 12s ceiling
+     * with a small grace window.
+     */
+    const STEP_TIMEOUT_MS = 15_000;
+    async function timedStep<T>(step: string, work: Promise<T>): Promise<T> {
+      recordBreadcrumb("click", `[pr-save] ${step} start`);
+      const result = await Promise.race([
+        work,
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`${step} timed out after ${STEP_TIMEOUT_MS / 1000}s`)),
+            STEP_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+      recordBreadcrumb(
+        "click",
+        `[pr-save] ${step} done (${Math.floor((Date.now() - saveStartedAt) / 1000)}s)`,
+      );
+      return result;
+    }
+
+    const finishSave = () => {
+      window.clearInterval(saveTick);
+      if (cancelSaveRef.current === cancel) cancelSaveRef.current = null;
+      setSaving(false);
+      setSaveElapsed(0);
+    };
+
     const supabase = createClient();
+    // Cast once — purchase_requests isn't in the generated supabase types
+    // yet, and threading `as any` through every chained .from(…).insert(…)
+    // call is just noise. Local alias keeps the rest of the function clean.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+    recordBreadcrumb("click", `[pr-save] starting (asDraft=${asDraft})`);
 
     // Upload the quote file (if a new one was attached) BEFORE saving the
     // PR, so the row points at a real storage path. We need the PR id to
@@ -915,7 +973,7 @@ function NewPurchaseRequestPageInner() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`Quote upload failed: ${msg}`);
-        setSaving(false);
+        finishSave();
         return;
       }
     }
@@ -988,75 +1046,107 @@ function NewPurchaseRequestPageInner() {
       status: asDraft ? "draft" : "submitted",
     };
 
-    if (editId) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- purchase_requests not yet in generated types
-      const { error: updateErr } = await (supabase as any)
-        .from("purchase_requests")
-        .update(payload)
-        .eq("id", editId);
-      if (updateErr) {
-        setError(updateErr.message);
-        setSaving(false);
-        return;
-      }
-      router.push(`/purchase-requests/view?id=${editId}`);
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- purchase_requests not yet in generated types
-      const { data, error: insertErr } = await (supabase as any)
-        .from("purchase_requests")
-        .insert({ ...payload, created_by: user.id })
-        .select("id")
-        .single();
-      if (insertErr || !data) {
-        setError(insertErr?.message || "Failed to save request");
-        setSaving(false);
-        return;
-      }
-      const newId = (data as { id: string }).id;
-
-      // Now that we have an id, upload the quote (if any) and link it.
-      if (quoteFile) {
-        try {
-          const ext = quoteFile.name.split(".").pop() || "bin";
-          const path = `quotes/${newId}/quote-${Date.now()}.${ext}`;
-          // 30s timeout — large quote PDFs on slow networks otherwise
-          // freeze the navigation to the view page.
-          const upPromise = supabase.storage
-            .from("vendor-files")
-            .upload(path, quoteFile, {
-              upsert: true,
-              contentType: quoteFile.type || "application/octet-stream",
-            });
-          const result = (await Promise.race([
-            upPromise,
-            new Promise((resolve) =>
-              setTimeout(
-                () =>
-                  resolve({
-                    error: { message: "Quote upload timed out after 30s" },
-                  }),
-                30_000,
-              ),
-            ),
-          ])) as { error: { message: string } | null };
-          if (result.error) throw result.error;
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated types
-          await (supabase as any)
-            .from("purchase_requests")
-            .update({
-              quote_storage_path: path,
-              quote_filename: quoteFile.name,
-              quote_uploaded_at: new Date().toISOString(),
-            })
-            .eq("id", newId);
-        } catch (err) {
-          // Non-fatal — the PR is saved, quote upload can be retried via Edit.
-          console.warn("[PR] quote upload failed:", err);
+    try {
+      if (editId) {
+        const { error: updateErr } = (await timedStep(
+          "update PR",
+          db.from("purchase_requests").update(payload).eq("id", editId),
+        )) as { error: { message: string } | null };
+        if (cancel.cancelled) return;
+        if (updateErr) {
+          recordBreadcrumb("error", `[pr-save] update failed: ${updateErr.message}`);
+          setError(updateErr.message);
+          return;
         }
-      }
+        router.push(`/purchase-requests/view?id=${editId}`);
+      } else {
+        const { data, error: insertErr } = (await timedStep(
+          "insert PR",
+          db
+            .from("purchase_requests")
+            .insert({ ...payload, created_by: user.id })
+            .select("id")
+            .single(),
+        )) as {
+          data: { id: string } | null;
+          error: { message: string } | null;
+        };
+        if (cancel.cancelled) return;
+        if (insertErr || !data) {
+          recordBreadcrumb(
+            "error",
+            `[pr-save] insert failed: ${insertErr?.message || "no data"}`,
+          );
+          setError(insertErr?.message || "Failed to save request");
+          return;
+        }
+        const newId = (data as { id: string }).id;
+        recordBreadcrumb("click", `[pr-save] inserted id=${newId.slice(-8)}`);
 
-      router.push(`/purchase-requests/view?id=${newId}`);
+        // Now that we have an id, upload the quote (if any) and link it.
+        if (quoteFile) {
+          try {
+            const ext = quoteFile.name.split(".").pop() || "bin";
+            const path = `quotes/${newId}/quote-${Date.now()}.${ext}`;
+            // 30s timeout — large quote PDFs on slow networks otherwise
+            // freeze the navigation to the view page.
+            const upPromise = supabase.storage
+              .from("vendor-files")
+              .upload(path, quoteFile, {
+                upsert: true,
+                contentType: quoteFile.type || "application/octet-stream",
+              });
+            recordBreadcrumb(
+              "click",
+              `[pr-save] quote upload start (${quoteFile.size}B)`,
+            );
+            const result = (await Promise.race([
+              upPromise,
+              new Promise((resolve) =>
+                setTimeout(
+                  () =>
+                    resolve({
+                      error: { message: "Quote upload timed out after 30s" },
+                    }),
+                  30_000,
+                ),
+              ),
+            ])) as { error: { message: string } | null };
+            if (cancel.cancelled) return;
+            if (result.error) throw result.error;
+            recordBreadcrumb("click", `[pr-save] quote upload done`);
+
+            await timedStep(
+              "link quote to PR",
+              db
+                .from("purchase_requests")
+                .update({
+                  quote_storage_path: path,
+                  quote_filename: quoteFile.name,
+                  quote_uploaded_at: new Date().toISOString(),
+                })
+                .eq("id", newId),
+            );
+            if (cancel.cancelled) return;
+          } catch (err) {
+            // Non-fatal — the PR is saved, quote upload can be retried via Edit.
+            console.warn("[PR] quote upload failed:", err);
+            recordBreadcrumb(
+              "warn",
+              `[pr-save] quote upload non-fatal failure: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        router.push(`/purchase-requests/view?id=${newId}`);
+      }
+    } catch (err) {
+      if (cancel.cancelled) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      recordBreadcrumb("error", `[pr-save] failed: ${msg}`);
+      setError(`Save failed: ${msg}`);
+    } finally {
+      finishSave();
     }
   }
 
@@ -2102,8 +2192,28 @@ function NewPurchaseRequestPageInner() {
           ) : (
             <CheckCircle2 className="w-4 h-4" />
           )}
-          {saving ? "Saving..." : editId ? "Update Request" : "Submit Request"}
+          {saving
+            ? `Saving${saveElapsed > 3 ? ` · ${saveElapsed}s` : "..."}`
+            : editId
+              ? "Update Request"
+              : "Submit Request"}
         </button>
+        {saving && saveElapsed >= 10 && (
+          <button
+            onClick={() => {
+              if (cancelSaveRef.current) cancelSaveRef.current.cancelled = true;
+              setSaving(false);
+              setSaveElapsed(0);
+              recordBreadcrumb("click", "[pr-save] user cancelled");
+              setError(
+                "Save cancelled. If this keeps happening, hard-refresh (Ctrl+Shift+R) — the auth lock is sometimes held by an abandoned tab.",
+              );
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm font-medium hover:bg-amber-500/20 active:scale-[0.98] transition-all"
+          >
+            Cancel save · taking longer than usual
+          </button>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={handlePreview}
