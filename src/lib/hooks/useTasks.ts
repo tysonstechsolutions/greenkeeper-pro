@@ -14,6 +14,7 @@ import type {
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { sendNotification } from "./useNotifications";
 import { translateSafe } from "@/lib/utils/translate";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import {
   directSelectList,
   directSelectRow,
@@ -599,8 +600,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
     // Initial fetch - use default filters to load only relevant tasks
     // This prevents loading entire task history on page load
-    const today = new Date().toISOString().split("T")[0];
-    const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const today = todayLocal();
+    const weekFromNow = formatLocalDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
     const defaultFilters: TaskFilters = initialFilters || {
       // By default, only load tasks for the next 7 days and exclude completed

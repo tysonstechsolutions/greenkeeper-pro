@@ -28,6 +28,7 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useTasks } from "@/lib/hooks/useTasks";
 import { cn } from "@/lib/utils";
+import { todayLocal } from "@/lib/utils/date";
 
 type IssueLocation =
   | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
@@ -155,7 +156,7 @@ export default function ReportIssuePage() {
         description: `Reported by: ${profile?.full_name}\n\nDescription:\n${description}`,
         category: taskCategory,
         priority: urgency === "urgent" ? "high" : urgency === "low" ? "low" : "normal",
-        due_date: new Date().toISOString().split("T")[0],
+        due_date: todayLocal(),
         hole_numbers: holeNumbers,
         requires_photo_before: false,
         requires_photo_after: false,

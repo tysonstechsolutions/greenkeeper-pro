@@ -1,0 +1,825 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { resolveAccessToken } from "@/lib/api/client";
+import {
+  directDeleteRow,
+  directInsertRow,
+  directPatchRow,
+  directSelectList,
+} from "@/lib/supabase/rest";
+import { useAuth } from "./useAuth";
+import type {
+  Profile,
+  Schedule,
+  ShiftType,
+  Task,
+  TaskTemplate,
+  TimeOffRequest,
+  UserRole,
+} from "@/types/database";
+import type { TaskWithRelations } from "./useTasks";
+import { formatLocalDate } from "@/lib/utils/date";
+
+// Re-export so existing call sites keep working — the canonical home is
+// now @/lib/utils/date.
+export { formatLocalDate };
+
+// ─── Sun-Sat week helpers ────────────────────────────────────────────────
+
+/**
+ * Get the Sunday that starts the week containing `date`. Sun-Sat is the
+ * unified board's week convention — distinct from `useSchedule.getWeekStart`
+ * which returns Monday.
+ */
+export function getSunWeekStart(date: Date | string): string {
+  const d =
+    typeof date === "string" ? new Date(date + "T00:00:00") : new Date(date);
+  const day = d.getDay(); // 0 = Sun ... 6 = Sat
+  d.setDate(d.getDate() - day);
+  return formatLocalDate(d);
+}
+
+/**
+ * 7-day array starting at the given Sunday, formatted as YYYY-MM-DD.
+ */
+export function getSunWeekDates(weekStart: string): string[] {
+  const out: string[] = [];
+  const start = new Date(weekStart + "T00:00:00");
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    out.push(formatLocalDate(d));
+  }
+  return out;
+}
+
+/**
+ * "May 5 – May 11, 2026" style label for the week header.
+ */
+export function formatSunWeekRange(weekStart: string): string {
+  const dates = getSunWeekDates(weekStart);
+  const start = new Date(dates[0] + "T00:00:00");
+  const end = new Date(dates[6] + "T00:00:00");
+  const startStr = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const endStr = end.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${startStr} – ${endStr}`;
+}
+
+/**
+ * Day-of-week labels for the grid header, Sun-first.
+ */
+export const SUN_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+// ─── Types ───────────────────────────────────────────────────────────────
+
+export type CrewProfile = Pick<
+  Profile,
+  "id" | "full_name" | "display_name" | "role" | "avatar_url" | "phone"
+>;
+
+export interface BoardCell {
+  shift: Schedule | null;
+  tasks: TaskWithRelations[];
+  isTimeOff: boolean;
+}
+
+export interface ScheduleBoard {
+  weekStart: string;
+  dates: string[]; // 7 dates, Sun..Sat
+  crew: CrewProfile[]; // sorted by role then name
+  // The backlog now shows REUSABLE TEMPLATES — dragging one onto a cell
+  // creates a new task instance (the template stays). This is what kept
+  // the user from drowning in 1,300+ duplicate "Mow Greens" rows.
+  templates: TaskTemplate[];
+  // O(1) cell lookup. Indexed by `${userId}|${date}`.
+  cells: Map<string, BoardCell>;
+}
+
+interface UseScheduleBoardReturn {
+  board: ScheduleBoard | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+
+  // Mutators — all optimistic with server-side rollback on failure.
+  assignTask: (taskId: string, userId: string, date: string) => Promise<boolean>;
+  unassignTask: (taskId: string) => Promise<boolean>;
+  /**
+   * Create a new task from a template, assigned to the given crew member
+   * and date. The template stays put for reuse. Returns the new task id
+   * on success.
+   */
+  createTaskFromTemplate: (
+    templateId: string,
+    userId: string,
+    date: string,
+  ) => Promise<string | null>;
+  setShift: (
+    userId: string,
+    date: string,
+    shift: {
+      shift_type: ShiftType | null;
+      shift_start?: string | null;
+      shift_end?: string | null;
+      crew_assignment?: string | null;
+      notes?: string | null;
+    },
+  ) => Promise<boolean>;
+  clearShift: (userId: string, date: string) => Promise<boolean>;
+  setTaskStatus: (
+    taskId: string,
+    status: TaskWithRelations["status"],
+  ) => Promise<boolean>;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────
+
+// Role sort order — same as /schedule for consistency.
+const ROLE_SORT: Record<UserRole, number> = {
+  super: 0,
+  gm: 1,
+  director: 2,
+  asst_super: 3,
+  pro: 4,
+  foreman: 5,
+  mechanic: 6,
+  crew: 7,
+  seasonal: 8,
+};
+
+// Joined-column projection for tasks. Mirrors useTasks' TASK_COLUMNS but
+// declared locally so the board hook is self-contained.
+const TASK_COLUMNS =
+  `*, assigned_user:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url, role),` +
+  ` zone:course_zones!tasks_zone_id_fkey(id, name, zone_type, hole_number),` +
+  ` assigned_by_user:profiles!tasks_assigned_by_fkey(id, full_name),` +
+  ` completed_by_user:profiles!tasks_completed_by_fkey(id, full_name),` +
+  ` verified_by_user:profiles!tasks_verified_by_fkey(id, full_name)`;
+
+const PROFILE_COLUMNS = "id,full_name,display_name,role,avatar_url,phone";
+
+const cellKey = (userId: string, date: string) => `${userId}|${date}`;
+
+// ─── Hook ────────────────────────────────────────────────────────────────
+
+/**
+ * Unified data hook for the weekly schedule board. Joins active staff,
+ * shifts, scheduled tasks, unassigned-task backlog, and approved time-off
+ * for a Sun-Sat week into a single addressable structure.
+ *
+ * Mutators are optimistic — they update the in-memory board immediately
+ * for snappy drag-drop UX, then write to the server. On failure, the
+ * board re-fetches to discard the optimistic state.
+ */
+export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
+  const { profile } = useAuth();
+  const supabase = useMemo(() => createClient(), []);
+
+  const [board, setBoard] = useState<ScheduleBoard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Track the latest fetch so a stale response doesn't clobber a fresh one
+  // (e.g. user navigates Mon week → Tue week before the first one returns).
+  const fetchSeqRef = useRef(0);
+
+  const fetchBoard = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const dates = getSunWeekDates(weekStart);
+      const weekEnd = dates[6];
+
+      // Profiles via raw REST (matches useProfiles' wedge-resistant pattern).
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      const token = await resolveAccessToken(supabase, supabaseUrl, anonKey);
+
+      const profilesUrl =
+        `${supabaseUrl}/rest/v1/profiles` +
+        `?select=${encodeURIComponent(PROFILE_COLUMNS)}` +
+        `&is_active=eq.true` +
+        `&order=role.asc,full_name.asc` +
+        `&limit=200`;
+
+      const fetchProfilesPromise = fetch(profilesUrl, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(`profiles ${r.status}`);
+        return (await r.json()) as CrewProfile[];
+      });
+
+      // Shifts for the week. Use direct REST instead of supabase.from() —
+      // the supabase-js auth wrapper has been observed to wedge after
+      // post-save navigations, leaving the page stuck at "Loading…" until
+      // a manual refresh. The `directSelectList` helper goes straight to
+      // PostgREST with the cached JWT and sidesteps that path.
+      const fetchShiftsPromise = directSelectList<Schedule>("schedules", {
+        columns: "*",
+        filters: [
+          `schedule_date=gte.${encodeURIComponent(dates[0])}`,
+          `schedule_date=lte.${encodeURIComponent(weekEnd)}`,
+        ],
+        limit: 500,
+        label: "scheduleBoard.fetchShifts",
+      });
+
+      // Tasks: anything scheduled in the week + everything in the backlog.
+      // We pull these in two parallel queries and merge — combining them
+      // into one filter expression with directSelectList's `or` clause is
+      // possible but harder to read.
+      const fetchScheduledTasksPromise = directSelectList<TaskWithRelations>(
+        "tasks",
+        {
+          columns: TASK_COLUMNS,
+          filters: [
+            `due_date=gte.${encodeURIComponent(dates[0])}`,
+            `due_date=lte.${encodeURIComponent(weekEnd)}`,
+            `status=not.in.(cancelled)`,
+          ],
+          orderBy: [
+            { column: "due_date", ascending: true },
+            { column: "priority", ascending: true },
+            { column: "due_time", ascending: true, nullsFirst: false },
+          ],
+          limit: 500,
+          label: "scheduleBoard.fetchScheduledTasks",
+        },
+      );
+
+      // Backlog = task templates (reusable). Drag a template onto a cell
+      // to create a fresh task; the template stays for next time.
+      const fetchTemplatesPromise = directSelectList<TaskTemplate>(
+        "task_templates",
+        {
+          columns: "*",
+          filters: [`is_active=eq.true`],
+          orderBy: [
+            { column: "default_priority", ascending: true },
+            { column: "name", ascending: true },
+          ],
+          limit: 500,
+          label: "scheduleBoard.fetchTemplates",
+        },
+      );
+
+      // Approved time-off overlapping the week:
+      //   start_date <= weekEnd AND end_date >= weekStart
+      // Same wedge-resistant pattern as shifts above.
+      const fetchTimeOffPromise = directSelectList<TimeOffRequest>(
+        "time_off_requests",
+        {
+          columns: "*",
+          filters: [
+            `status=eq.approved`,
+            `start_date=lte.${encodeURIComponent(weekEnd)}`,
+            `end_date=gte.${encodeURIComponent(dates[0])}`,
+          ],
+          limit: 200,
+          label: "scheduleBoard.fetchTimeOff",
+        },
+      );
+
+      const [
+        profilesData,
+        shifts,
+        scheduledTasks,
+        templates,
+        timeOffRequests,
+      ] = await Promise.all([
+        fetchProfilesPromise,
+        fetchShiftsPromise,
+        fetchScheduledTasksPromise,
+        fetchTemplatesPromise,
+        fetchTimeOffPromise,
+      ]);
+
+      // A newer request superseded us — discard.
+      if (seq !== fetchSeqRef.current) return;
+
+      // Build the cell map.
+      const cells = new Map<string, BoardCell>();
+      const ensureCell = (userId: string, date: string): BoardCell => {
+        const key = cellKey(userId, date);
+        let cell = cells.get(key);
+        if (!cell) {
+          cell = { shift: null, tasks: [], isTimeOff: false };
+          cells.set(key, cell);
+        }
+        return cell;
+      };
+
+      for (const s of shifts) {
+        ensureCell(s.user_id, s.schedule_date).shift = s;
+      }
+
+      for (const t of scheduledTasks) {
+        if (!t.assigned_to || !t.due_date) continue;
+        // Skip tasks whose due_date isn't in this week (defensive — query
+        // already filtered, but assigned_to may have been stripped server-side).
+        if (!dates.includes(t.due_date)) continue;
+        ensureCell(t.assigned_to, t.due_date).tasks.push(t);
+      }
+
+      // Time-off: explode each request into per-day flags.
+      for (const req of timeOffRequests) {
+        const start = req.start_date > dates[0] ? req.start_date : dates[0];
+        const end = req.end_date < weekEnd ? req.end_date : weekEnd;
+        const cur = new Date(start + "T00:00:00");
+        const last = new Date(end + "T00:00:00");
+        while (cur <= last) {
+          const d = formatLocalDate(cur);
+          ensureCell(req.user_id, d).isTimeOff = true;
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+
+      // Crew sorting: role rank then name (Spanish-aware compare).
+      const crew = [...profilesData].sort((a, b) => {
+        const r = (ROLE_SORT[a.role] ?? 99) - (ROLE_SORT[b.role] ?? 99);
+        if (r !== 0) return r;
+        const an = a.display_name || a.full_name || "";
+        const bn = b.display_name || b.full_name || "";
+        return an.localeCompare(bn);
+      });
+
+      setBoard({
+        weekStart,
+        dates,
+        crew,
+        templates,
+        cells,
+      });
+    } catch (err) {
+      if (seq !== fetchSeqRef.current) return;
+      console.error("[useScheduleBoard] fetch failed:", err);
+      setError(err instanceof Error ? err.message : "Failed to load schedule");
+    } finally {
+      if (seq === fetchSeqRef.current) setLoading(false);
+    }
+  }, [weekStart, supabase]);
+
+  useEffect(() => {
+    void fetchBoard();
+  }, [fetchBoard]);
+
+  // ── Mutators ──────────────────────────────────────────────────────────
+
+  /**
+   * Apply an optimistic patch to the in-memory board, returning a rollback
+   * function. We rebuild the cells map entries we touch rather than mutating
+   * shared references — React state updates need fresh object identities.
+   */
+  const applyOptimistic = useCallback(
+    (mutate: (next: ScheduleBoard) => void): (() => void) => {
+      let prev: ScheduleBoard | null = null;
+      setBoard((current) => {
+        if (!current) return current;
+        prev = current;
+        // Shallow clone of the board, plus a fresh cells map. Templates
+        // are read-only from this hook's perspective (created/edited via
+        // /tasks/templates UI), so no defensive copy needed.
+        const next: ScheduleBoard = {
+          ...current,
+          cells: new Map(current.cells),
+        };
+        mutate(next);
+        return next;
+      });
+      return () => {
+        if (prev) setBoard(prev);
+      };
+    },
+    [],
+  );
+
+  const assignTask = useCallback(
+    async (taskId: string, userId: string, date: string): Promise<boolean> => {
+      if (!profile) {
+        setError("You must be logged in");
+        return false;
+      }
+
+      const rollback = applyOptimistic((next) => {
+        // Pull from any existing cell. (The backlog now holds templates,
+        // not tasks, so re-assignment only happens between grid cells.)
+        let task: TaskWithRelations | null = null;
+        for (const [key, cell] of next.cells) {
+          const idx = cell.tasks.findIndex((t) => t.id === taskId);
+          if (idx !== -1) {
+            task = cell.tasks[idx];
+            const newCell: BoardCell = {
+              ...cell,
+              tasks: cell.tasks.filter((t) => t.id !== taskId),
+            };
+            next.cells.set(key, newCell);
+            break;
+          }
+        }
+        if (!task) return;
+        const updated: TaskWithRelations = {
+          ...task,
+          assigned_to: userId,
+          due_date: date,
+        };
+        const key = cellKey(userId, date);
+        const cell = next.cells.get(key) ?? {
+          shift: null,
+          tasks: [],
+          isTimeOff: false,
+        };
+        next.cells.set(key, { ...cell, tasks: [...cell.tasks, updated] });
+      });
+
+      try {
+        await directPatchRow(
+          "tasks",
+          "id",
+          taskId,
+          { assigned_to: userId, due_date: date, assigned_by: profile.id },
+          "scheduleBoard.assignTask",
+        );
+        return true;
+      } catch (err) {
+        rollback();
+        setError(err instanceof Error ? err.message : "Failed to assign task");
+        return false;
+      }
+    },
+    [profile, applyOptimistic],
+  );
+
+  const unassignTask = useCallback(
+    async (taskId: string): Promise<boolean> => {
+      // Templates are the source of truth for "things to do later." If the
+      // user wants to remove a task from the schedule, we delete it — the
+      // template stays available to recreate later. Tasks with completion
+      // data (photos, completed_at) should not be unassigned through this
+      // path; the inspector hides the button when status indicates work
+      // has started.
+      const rollback = applyOptimistic((next) => {
+        for (const [key, cell] of next.cells) {
+          const idx = cell.tasks.findIndex((t) => t.id === taskId);
+          if (idx === -1) continue;
+          const newCell: BoardCell = {
+            ...cell,
+            tasks: cell.tasks.filter((t) => t.id !== taskId),
+          };
+          next.cells.set(key, newCell);
+          break;
+        }
+      });
+
+      try {
+        await directDeleteRow(
+          "tasks",
+          "id",
+          taskId,
+          "scheduleBoard.unassignTask",
+        );
+        return true;
+      } catch (err) {
+        rollback();
+        setError(
+          err instanceof Error ? err.message : "Failed to remove task",
+        );
+        return false;
+      }
+    },
+    [applyOptimistic],
+  );
+
+  /**
+   * Create a new task instance from a template, assigned to a crew member
+   * on a given date. Returns the new task id, or null on failure.
+   *
+   * Optimistic: a temporary task chip appears in the cell immediately.
+   * On success the next refresh fetches the real row with its real id.
+   */
+  const createTaskFromTemplate = useCallback(
+    async (
+      templateId: string,
+      userId: string,
+      date: string,
+    ): Promise<string | null> => {
+      if (!profile) {
+        setError("You must be logged in");
+        return null;
+      }
+      // Look up the template from the in-memory board so we can build the
+      // optimistic chip without an extra round-trip.
+      const tpl = board?.templates.find((t) => t.id === templateId);
+      if (!tpl) {
+        setError("Template not found");
+        return null;
+      }
+
+      const tempId = `__pending_${templateId}_${Date.now()}__`;
+      const rollback = applyOptimistic((next) => {
+        const optimistic: TaskWithRelations = {
+          id: tempId,
+          title: tpl.name,
+          title_es: null,
+          description: tpl.description,
+          description_es: null,
+          category: tpl.category,
+          priority: tpl.default_priority,
+          status: "pending",
+          assigned_to: userId,
+          assigned_crew: null,
+          assigned_by: profile.id,
+          due_date: date,
+          due_time: null,
+          estimated_minutes: tpl.estimated_minutes,
+          actual_minutes: null,
+          zone_id: null,
+          hole_numbers: [],
+          equipment_needed: tpl.equipment_needed,
+          materials_needed: tpl.materials_needed,
+          checklist: tpl.checklist,
+          requires_photo_before: tpl.requires_photo_before,
+          requires_photo_after: tpl.requires_photo_after,
+          weather_dependent: tpl.weather_dependent,
+          weather_conditions: tpl.weather_conditions,
+          recurring_rule: null,
+          template_id: tpl.id,
+          parent_task_id: null,
+          plan_goal_id: null,
+          completed_by: null,
+          completed_at: null,
+          verified_by: null,
+          verified_at: null,
+          notes: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        const key = cellKey(userId, date);
+        const cell = next.cells.get(key) ?? {
+          shift: null,
+          tasks: [],
+          isTimeOff: false,
+        };
+        next.cells.set(key, { ...cell, tasks: [...cell.tasks, optimistic] });
+      });
+
+      try {
+        const inserted = await directInsertRow<Task>(
+          "tasks",
+          {
+            title: tpl.name,
+            description: tpl.description ?? null,
+            category: tpl.category,
+            priority: tpl.default_priority,
+            status: "pending",
+            assigned_to: userId,
+            assigned_by: profile.id,
+            due_date: date,
+            estimated_minutes: tpl.estimated_minutes ?? null,
+            equipment_needed: tpl.equipment_needed ?? [],
+            materials_needed: tpl.materials_needed ?? [],
+            checklist: tpl.checklist ?? [],
+            requires_photo_before: !!tpl.requires_photo_before,
+            requires_photo_after: !!tpl.requires_photo_after,
+            weather_dependent: !!tpl.weather_dependent,
+            weather_conditions: tpl.weather_conditions ?? null,
+            template_id: tpl.id,
+            notes: tpl.instructions ?? null,
+          },
+          "scheduleBoard.createTaskFromTemplate",
+        );
+        // Refresh so the optimistic placeholder gets replaced with the real
+        // joined row (with assigned_user / zone / etc.).
+        await fetchBoard();
+        return inserted?.id ?? null;
+      } catch (err) {
+        rollback();
+        setError(
+          err instanceof Error ? err.message : "Failed to create task",
+        );
+        return null;
+      }
+    },
+    [profile, board, applyOptimistic, fetchBoard],
+  );
+
+  const setShift: UseScheduleBoardReturn["setShift"] = useCallback(
+    async (userId, date, shiftPatch) => {
+      if (!profile) {
+        setError("You must be logged in");
+        return false;
+      }
+
+      // Optimistic local update. We don't know the final schedule.id yet
+      // for fresh inserts — store a placeholder; the next refresh fixes it.
+      const rollback = applyOptimistic((next) => {
+        const key = cellKey(userId, date);
+        const cell = next.cells.get(key) ?? {
+          shift: null,
+          tasks: [],
+          isTimeOff: false,
+        };
+        const placeholder: Schedule = {
+          id: cell.shift?.id ?? "__pending__",
+          user_id: userId,
+          schedule_date: date,
+          shift_start: shiftPatch.shift_start ?? null,
+          shift_end: shiftPatch.shift_end ?? null,
+          shift_type: shiftPatch.shift_type ?? null,
+          crew_assignment: shiftPatch.crew_assignment ?? null,
+          notes: shiftPatch.notes ?? null,
+          created_by: cell.shift?.created_by ?? profile.id,
+          created_at: cell.shift?.created_at ?? new Date().toISOString(),
+        };
+        next.cells.set(key, { ...cell, shift: placeholder });
+      });
+
+      try {
+        // Upsert via direct REST. Same wedge-resistance reasoning as the
+        // initial fetches above — supabase.from() can hang post-navigation.
+        const existing = await directSelectList<{ id: string }>("schedules", {
+          columns: "id",
+          filters: [
+            `user_id=eq.${encodeURIComponent(userId)}`,
+            `schedule_date=eq.${encodeURIComponent(date)}`,
+          ],
+          limit: 1,
+          label: "scheduleBoard.setShift.check",
+        });
+
+        const patch = {
+          shift_start: shiftPatch.shift_start ?? null,
+          shift_end: shiftPatch.shift_end ?? null,
+          shift_type: shiftPatch.shift_type ?? null,
+          crew_assignment: shiftPatch.crew_assignment ?? null,
+          notes: shiftPatch.notes ?? null,
+        };
+
+        if (existing.length > 0) {
+          await directPatchRow(
+            "schedules",
+            "id",
+            existing[0].id,
+            patch,
+            "scheduleBoard.setShift.update",
+          );
+        } else {
+          await directInsertRow(
+            "schedules",
+            {
+              ...patch,
+              user_id: userId,
+              schedule_date: date,
+              created_by: profile.id,
+            },
+            "scheduleBoard.setShift.insert",
+          );
+        }
+
+        // Refresh the cell with the real row so id is correct for later edits.
+        await fetchBoard();
+        return true;
+      } catch (err) {
+        rollback();
+        setError(err instanceof Error ? err.message : "Failed to save shift");
+        return false;
+      }
+    },
+    [profile, applyOptimistic, fetchBoard],
+  );
+
+  const clearShift = useCallback(
+    async (userId: string, date: string): Promise<boolean> => {
+      const rollback = applyOptimistic((next) => {
+        const key = cellKey(userId, date);
+        const cell = next.cells.get(key);
+        if (!cell) return;
+        next.cells.set(key, { ...cell, shift: null });
+      });
+
+      try {
+        // Look up the row id then delete via direct REST. directDeleteRow
+        // takes a single id; it's wedge-resistant where supabase.from() isn't.
+        const existing = await directSelectList<{ id: string }>("schedules", {
+          columns: "id",
+          filters: [
+            `user_id=eq.${encodeURIComponent(userId)}`,
+            `schedule_date=eq.${encodeURIComponent(date)}`,
+          ],
+          limit: 1,
+          label: "scheduleBoard.clearShift.check",
+        });
+        if (existing.length > 0) {
+          await directDeleteRow(
+            "schedules",
+            "id",
+            existing[0].id,
+            "scheduleBoard.clearShift.delete",
+          );
+        }
+        return true;
+      } catch (err) {
+        rollback();
+        setError(err instanceof Error ? err.message : "Failed to clear shift");
+        return false;
+      }
+    },
+    [applyOptimistic],
+  );
+
+  const setTaskStatus = useCallback(
+    async (
+      taskId: string,
+      status: TaskWithRelations["status"],
+    ): Promise<boolean> => {
+      if (!profile) {
+        setError("You must be logged in");
+        return false;
+      }
+
+      const rollback = applyOptimistic((next) => {
+        for (const [key, cell] of next.cells) {
+          const idx = cell.tasks.findIndex((t) => t.id === taskId);
+          if (idx === -1) continue;
+          const updated = { ...cell.tasks[idx], status };
+          const tasks = [...cell.tasks];
+          tasks[idx] = updated;
+          next.cells.set(key, { ...cell, tasks });
+          return;
+        }
+        // Tasks no longer live in the backlog (which holds templates now);
+        // every task is in some cell. If we don't find it here, it's gone.
+      });
+
+      // Build the patch — completed/verified set the actor + timestamp,
+      // matching what useTasks.completeTask / verifyTask do.
+      const patch: Record<string, unknown> = { status };
+      const now = new Date().toISOString();
+      if (status === "completed") {
+        patch.completed_by = profile.id;
+        patch.completed_at = now;
+      } else if (status === "verified") {
+        patch.verified_by = profile.id;
+        patch.verified_at = now;
+      }
+
+      try {
+        await directPatchRow(
+          "tasks",
+          "id",
+          taskId,
+          patch,
+          "scheduleBoard.setTaskStatus",
+        );
+        return true;
+      } catch (err) {
+        rollback();
+        setError(
+          err instanceof Error ? err.message : "Failed to update status",
+        );
+        return false;
+      }
+    },
+    [profile, applyOptimistic],
+  );
+
+  return {
+    board,
+    loading,
+    error,
+    refresh: fetchBoard,
+    assignTask,
+    unassignTask,
+    createTaskFromTemplate,
+    setShift,
+    clearShift,
+    setTaskStatus,
+  };
+}
+
+// ─── Cell lookup helpers (pure) ──────────────────────────────────────────
+
+/**
+ * Look up a cell. Returns an empty cell if the user/date pair has no data
+ * — saves the caller from null checks at every render site.
+ */
+export function getBoardCell(
+  board: ScheduleBoard,
+  userId: string,
+  date: string,
+): BoardCell {
+  return (
+    board.cells.get(cellKey(userId, date)) ?? {
+      shift: null,
+      tasks: [],
+      isTimeOff: false,
+    }
+  );
+}

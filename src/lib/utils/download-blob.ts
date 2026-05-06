@@ -74,6 +74,42 @@ export async function saveBlobToDevice(opts: DownloadOptions): Promise<void> {
   }
 
   // ── Browser path ───────────────────────────────────────────────────────
+  // Prefer the File System Access API so the user gets a "Save As" dialog
+  // and can pick the destination folder each time. Chromium-only (Chrome,
+  // Edge, Opera, Brave). Safari / Firefox fall through to the anchor-tag
+  // fallback, which uses the browser's default Downloads folder.
+  if (supportsSaveFilePicker()) {
+    try {
+      const ext = filename.includes(".")
+        ? filename.slice(filename.lastIndexOf("."))
+        : "";
+      const mime = blob.type || "application/octet-stream";
+      const handle = await window.showSaveFilePicker!({
+        suggestedName: filename,
+        types: ext
+          ? [
+              {
+                description: shareTitle || filename,
+                accept: { [mime]: [ext] },
+              },
+            ]
+          : undefined,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (err) {
+      // User cancelled the picker — that's expected, not a failure.
+      const name = err instanceof Error ? err.name : "";
+      if (name === "AbortError" || name === "NotAllowedError") return;
+      // Other failures (sandboxed iframe, permission denied, etc.) — fall
+      // through to the anchor-tag fallback so the user still gets the file.
+      console.warn("showSaveFilePicker failed, falling back:", err);
+    }
+  }
+
+  // Legacy fallback: anchor-tag download → browser's default Downloads folder.
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -83,6 +119,44 @@ export async function saveBlobToDevice(opts: DownloadOptions): Promise<void> {
   document.body.removeChild(a);
   // Revoke after a tick so iOS Safari finishes the download.
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Feature-detect the File System Access API. Must be in a secure context
+ * (https or localhost) and not inside a sandboxed iframe without
+ * `allow-downloads`.
+ */
+function supportsSaveFilePicker(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.showSaveFilePicker === "function"
+  );
+}
+
+// ── Types for File System Access API ────────────────────────────────────
+// TypeScript's lib.dom.d.ts doesn't include these in all versions, so
+// declare the minimal surface we use.
+type SaveFilePickerAcceptType = {
+  description?: string;
+  accept: Record<string, string | string[]>;
+};
+type SaveFilePickerOptions = {
+  suggestedName?: string;
+  types?: SaveFilePickerAcceptType[];
+};
+type SaveFileWritableStream = {
+  write: (data: Blob) => Promise<void>;
+  close: () => Promise<void>;
+};
+type SaveFileHandle = {
+  createWritable: () => Promise<SaveFileWritableStream>;
+};
+declare global {
+  interface Window {
+    showSaveFilePicker?: (
+      opts?: SaveFilePickerOptions,
+    ) => Promise<SaveFileHandle>;
+  }
 }
 
 /**

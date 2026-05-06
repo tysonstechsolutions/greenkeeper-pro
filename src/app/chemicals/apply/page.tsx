@@ -39,6 +39,7 @@ import {
 import { useWeather, type CurrentWeather } from "@/lib/hooks/useWeather";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type { ApplicationMethod, ChemicalProduct } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 // Mock zones - in production, fetch from database
 const MOCK_ZONES = [
@@ -82,7 +83,7 @@ function ChemicalApplicationPageContent() {
   // Form state
   const [formData, setFormData] = useState<CreateApplicationData>({
     product_id: preselectedProductId || "",
-    application_date: new Date().toISOString().split("T")[0],
+    application_date: todayLocal(),
     application_time: new Date().toTimeString().slice(0, 5),
     zone_ids: [],
     hole_numbers: [],

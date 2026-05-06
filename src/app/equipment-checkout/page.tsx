@@ -34,6 +34,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfiles, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
 import { createClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/utils/resilient-fetch";
+import { formatLocalDateTime } from "@/lib/utils/date";
 
 // Types
 type TabType = "active" | "available" | "my-gear" | "history";
@@ -151,7 +152,7 @@ function CheckOutModal({
   const [expectedReturn, setExpectedReturn] = useState<string>(() => {
     const now = new Date();
     now.setHours(now.getHours() + 8);
-    return now.toISOString().slice(0, 16);
+    return formatLocalDateTime(now);
   });
   const [conditionOut, setConditionOut] = useState<"good" | "fair" | "needs_attention">("good");
   const [notesOut, setNotesOut] = useState("");

@@ -7,6 +7,7 @@
 
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { todayLocal } from "@/lib/utils/date";
 
 export type ReportType =
   | "daily"
@@ -376,7 +377,7 @@ export function generateReportFilename(
   reportType: ReportType,
   dateIdentifier?: string
 ): string {
-  const date = dateIdentifier || new Date().toISOString().split("T")[0];
+  const date = dateIdentifier || todayLocal();
   return `vmgc-${reportType}-report-${date}`;
 }
 

@@ -73,6 +73,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { Equipment, EquipmentInspection, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
 import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
 import { downloadNavcompt2212Report } from "@/lib/reports/navcompt-2212-report";
+import { parseAppDate } from "@/lib/utils/date-format";
+import { todayLocal } from "@/lib/utils/date";
 
 const partStatusLabels: Record<string, string> = {
   needed: "Needed", ordered: "Ordered", received: "Received",
@@ -139,7 +141,7 @@ function PageContent() {
 
   // Service record form state
   const [addingService, setAddingService] = useState(false);
-  const [newService, setNewService] = useState({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" });
+  const [newService, setNewService] = useState({ service_date: todayLocal(), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" });
 
   // Disposal workflow state
   const [disposalReason, setDisposalReason] = useState("");
@@ -1245,7 +1247,7 @@ function PageContent() {
                       ...newService,
                       performed_by: isMfr ? "" : val,
                       sent_to_manufacturer: isMfr,
-                      pickup_date: isMfr ? newService.pickup_date || new Date().toISOString().slice(0, 10) : "",
+                      pickup_date: isMfr ? newService.pickup_date || todayLocal() : "",
                       return_date: isMfr ? newService.return_date : "",
                     });
                   }}>
@@ -1330,7 +1332,7 @@ function PageContent() {
                 </>
               )}
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" }); }}>Cancel</Button>
+                <Button variant="outline" size="sm" onClick={() => { setAddingService(false); setNewService({ service_date: todayLocal(), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" }); }}>Cancel</Button>
                 <Button size="sm" disabled={
                   !newService.performed_by.trim() ||
                   !newService.description.trim() ||
@@ -1348,7 +1350,7 @@ function PageContent() {
                     return_date: newService.sent_to_manufacturer && newService.return_date ? newService.return_date : undefined,
                   });
                   if (svcResult) {
-                    setNewService({ service_date: new Date().toISOString().slice(0, 10), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" });
+                    setNewService({ service_date: todayLocal(), description: "", performed_by: "", hours_at_service: "", cost: "", parts_used: "", sent_to_manufacturer: false, pickup_date: "", return_date: "" });
                     setAddingService(false);
                     setSaveSuccess(true);
                     setTimeout(() => setSaveSuccess(false), 2000);
@@ -1370,7 +1372,7 @@ function PageContent() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="text-sm font-medium">{new Date(record.service_date).toLocaleDateString()}</span>
+                      <span className="text-sm font-medium">{parseAppDate(record.service_date)?.toLocaleDateString()}</span>
                       <span className="text-xs text-gray-400">by</span>
                       <span className="text-sm font-medium text-green-800">{record.performed_by}</span>
                       {record.sent_to_manufacturer && (
@@ -1386,9 +1388,9 @@ function PageContent() {
                   <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{record.description}</p>
                   {record.sent_to_manufacturer && (
                     <div className="text-xs mt-1.5 flex gap-3 text-amber-700 dark:text-amber-400">
-                      {record.pickup_date && <span>Picked up: {new Date(record.pickup_date).toLocaleDateString()}</span>}
+                      {record.pickup_date && <span>Picked up: {parseAppDate(record.pickup_date)?.toLocaleDateString()}</span>}
                       {record.return_date ? (
-                        <span>Returned: {new Date(record.return_date).toLocaleDateString()}</span>
+                        <span>Returned: {parseAppDate(record.return_date)?.toLocaleDateString()}</span>
                       ) : (
                         <span className="font-semibold">Awaiting return</span>
                       )}
@@ -1474,7 +1476,7 @@ function PageContent() {
             <div>
               <Label className="text-sm font-medium">Purchase Date</Label>
               <p className="text-sm text-gray-600">
-                {new Date(equipment.purchase_date).toLocaleDateString()}
+                {parseAppDate(equipment.purchase_date)?.toLocaleDateString()}
               </p>
             </div>
           )}

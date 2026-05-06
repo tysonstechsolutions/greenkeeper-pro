@@ -49,6 +49,7 @@ import {
 } from "@/lib/hooks/usePlanGoals";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type { PlanLevel, PlanCategory, PlanStatus } from "@/types/database";
+import { formatLocalDate } from "@/lib/utils/date";
 
 // Get current year
 const CURRENT_YEAR = new Date().getFullYear();
@@ -60,7 +61,7 @@ function getWeekStart(date: Date): string {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
-  return d.toISOString().split("T")[0];
+  return formatLocalDate(d);
 }
 
 // Format week range
@@ -740,7 +741,7 @@ function WeeklyTab({
   const navigateWeek = (direction: -1 | 1) => {
     const current = new Date(weekStart + "T12:00:00");
     current.setDate(current.getDate() + direction * 7);
-    onWeekChange(current.toISOString().split("T")[0]);
+    onWeekChange(formatLocalDate(current));
   };
 
   const goToThisWeek = () => {

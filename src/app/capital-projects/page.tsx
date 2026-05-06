@@ -36,6 +36,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { RoleGuard, GM_ROLES } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 // ── Types ──
 interface CapitalProject {
@@ -217,7 +218,7 @@ export default function CapitalProjectsPage() {
       updated_at: new Date().toISOString(),
     };
     if (nextStatus === "completed") {
-      updates.actual_completion = new Date().toISOString().split("T")[0];
+      updates.actual_completion = todayLocal();
     }
 
     const { error } = await supabase

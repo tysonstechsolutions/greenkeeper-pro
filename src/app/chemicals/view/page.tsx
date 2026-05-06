@@ -150,9 +150,12 @@ function PageContent() {
     }
   };
 
-  // Format date
+  // Format date — anchor DATE-only strings at noon to avoid timezone shift.
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    const anchored = /^\d{4}-\d{2}-\d{2}$/.test(dateString)
+      ? dateString + "T12:00:00"
+      : dateString;
+    return new Date(anchored).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",

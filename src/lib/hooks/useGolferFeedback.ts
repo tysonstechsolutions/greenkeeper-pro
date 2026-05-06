@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import { todayLocal } from "@/lib/utils/date";
 
 export type FeedbackType = "compliment" | "complaint" | "suggestion";
 export type FeedbackArea =
@@ -156,7 +157,7 @@ export function useGolferFeedback() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any).from("golfer_feedback").insert({
           submitted_by: profile.id,
-          feedback_date: new Date().toISOString().split("T")[0],
+          feedback_date: todayLocal(),
           feedback_type: feedbackType,
           area,
           hole_number: holeNumber || null,

@@ -10,6 +10,7 @@ import type {
   Profile,
 } from "@/types/database";
 import { sendNotification, sendNotifications } from "./useNotifications";
+import { formatLocalDate } from "@/lib/utils/date";
 
 // Extended time-off request type with joined profile data
 export interface TimeOffRequestWithProfile extends TimeOffRequest {
@@ -56,7 +57,7 @@ function getDateRange(startDate: string, endDate: string): string[] {
   const end = new Date(endDate + "T00:00:00");
 
   while (start <= end) {
-    dates.push(start.toISOString().split("T")[0]);
+    dates.push(formatLocalDate(start));
     start.setDate(start.getDate() + 1);
   }
 

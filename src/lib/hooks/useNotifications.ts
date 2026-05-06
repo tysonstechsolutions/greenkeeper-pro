@@ -5,6 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
 import { notificationToUrl } from "@/lib/utils/notification-url";
 import { callApi } from "@/lib/api/client";
+import {
+  directDeleteByFilter,
+  directInsertRow,
+  directInsertRows,
+  directPatchByFilter,
+  directSelectCount,
+  directSelectList,
+} from "@/lib/supabase/rest";
 import type { Notification, NotificationType, Database } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -63,31 +71,27 @@ export function useNotifications(): UseNotificationsReturn {
       setError(null);
 
       try {
-        const { data, error: fetchError } = await supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (fetchError) {
-          console.error("Error fetching notifications:", fetchError);
-          setError(fetchError.message);
-          return [];
-        }
-
-        const result = (data as NotificationWithDetails[]) || [];
+        const result = await directSelectList<NotificationWithDetails>(
+          "notifications",
+          {
+            columns: "*",
+            filters: [`user_id=eq.${encodeURIComponent(user.id)}`],
+            orderBy: [{ column: "created_at", ascending: false }],
+            limit,
+            label: "useNotifications.fetchNotifications",
+          },
+        );
         setNotifications(result);
         return result;
       } catch (err) {
         console.error("Unexpected error fetching notifications:", err);
-        setError("An unexpected error occurred");
+        setError(err instanceof Error ? err.message : "An unexpected error occurred");
         return [];
       } finally {
         setLoading(false);
       }
     },
-    [user, supabase]
+    [user]
   );
 
   // Fetch unread count
@@ -95,25 +99,21 @@ export function useNotifications(): UseNotificationsReturn {
     if (!user) return 0;
 
     try {
-      const { count, error: countError } = await supabase
-        .from("notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("is_read", false);
-
-      if (countError) {
-        console.error("Error fetching unread count:", countError);
-        return 0;
-      }
-
-      const unread = count ?? 0;
+      const unread = await directSelectCount(
+        "notifications",
+        [
+          `user_id=eq.${encodeURIComponent(user.id)}`,
+          `is_read=eq.false`,
+        ],
+        "useNotifications.fetchUnreadCount",
+      );
       setUnreadCount(unread);
       return unread;
     } catch (err) {
       console.error("Unexpected error fetching unread count:", err);
       return 0;
     }
-  }, [user, supabase]);
+  }, [user]);
 
   // Mark a notification as read
   const markAsRead = useCallback(
@@ -124,18 +124,15 @@ export function useNotifications(): UseNotificationsReturn {
       }
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("notifications")
-          .update({ is_read: true })
-          .eq("id", id)
-          .eq("user_id", user.id) as { error: Error | null };
-
-        if (updateError) {
-          console.error("Error marking notification as read:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+        await directPatchByFilter(
+          "notifications",
+          [
+            `id=eq.${encodeURIComponent(id)}`,
+            `user_id=eq.${encodeURIComponent(user.id)}`,
+          ],
+          { is_read: true },
+          "useNotifications.markAsRead",
+        );
 
         // Update local state
         setNotifications((prev) =>
@@ -146,11 +143,11 @@ export function useNotifications(): UseNotificationsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error marking notification as read:", err);
-        setError("Failed to mark notification as read");
+        setError(err instanceof Error ? err.message : "Failed to mark notification as read");
         return false;
       }
     },
-    [user, supabase]
+    [user]
   );
 
   // Mark all notifications as read
@@ -161,18 +158,15 @@ export function useNotifications(): UseNotificationsReturn {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateError } = await (supabase as any)
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("user_id", user.id)
-        .eq("is_read", false) as { error: Error | null };
-
-      if (updateError) {
-        console.error("Error marking all notifications as read:", updateError);
-        setError(updateError.message);
-        return false;
-      }
+      await directPatchByFilter(
+        "notifications",
+        [
+          `user_id=eq.${encodeURIComponent(user.id)}`,
+          `is_read=eq.false`,
+        ],
+        { is_read: true },
+        "useNotifications.markAllAsRead",
+      );
 
       // Update local state
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
@@ -181,7 +175,7 @@ export function useNotifications(): UseNotificationsReturn {
       return true;
     } catch (err) {
       console.error("Unexpected error marking all as read:", err);
-      setError("Failed to mark all notifications as read");
+      setError(err instanceof Error ? err.message : "Failed to mark all notifications as read");
       return false;
     }
   }, [user, supabase]);
@@ -208,16 +202,16 @@ export function useNotifications(): UseNotificationsReturn {
           push_sent: false,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: insertError } = await (supabase as any)
-          .from("notifications")
-          .insert(insertData)
-          .select()
-          .single() as { data: Notification | null; error: Error | null };
-
-        if (insertError) {
+        let data: Notification | null = null;
+        try {
+          data = await directInsertRow<Notification>(
+            "notifications",
+            insertData,
+            "useNotifications.createNotification",
+          );
+        } catch (insertError) {
           console.error("Error creating notification:", insertError);
-          setError(insertError.message);
+          setError(insertError instanceof Error ? insertError.message : "Failed to create notification");
           return null;
         }
 
@@ -267,17 +261,14 @@ export function useNotifications(): UseNotificationsReturn {
         const notification = notifications.find((n) => n.id === id);
         const wasUnread = notification && !notification.is_read;
 
-        const { error: deleteError } = await supabase
-          .from("notifications")
-          .delete()
-          .eq("id", id)
-          .eq("user_id", user.id);
-
-        if (deleteError) {
-          console.error("Error deleting notification:", deleteError);
-          setError(deleteError.message);
-          return false;
-        }
+        await directDeleteByFilter(
+          "notifications",
+          [
+            `id=eq.${encodeURIComponent(id)}`,
+            `user_id=eq.${encodeURIComponent(user.id)}`,
+          ],
+          "useNotifications.deleteNotification",
+        );
 
         // Update local state
         setNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -450,19 +441,17 @@ export async function sendNotification(
       push_sent: false,
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error: insertError } = await (supabase as any)
-      .from("notifications")
-      .insert(insertData)
-      .select()
-      .single() as { data: Notification | null; error: Error | null };
-
-    if (insertError) {
+    try {
+      const data = await directInsertRow<Notification>(
+        "notifications",
+        insertData,
+        "sendNotification",
+      );
+      return data;
+    } catch (insertError) {
       console.error("Error sending notification:", insertError);
       return null;
     }
-
-    return data;
   } catch (err) {
     console.error("Unexpected error sending notification:", err);
     return null;
@@ -494,17 +483,17 @@ export async function sendNotifications(
       push_sent: false,
     }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: insertError } = await (supabase as any)
-      .from("notifications")
-      .insert(notifications) as { error: Error | null };
-
-    if (insertError) {
+    try {
+      await directInsertRows<Notification>(
+        "notifications",
+        notifications,
+        "sendNotifications",
+      );
+      return true;
+    } catch (insertError) {
       console.error("Error sending notifications:", insertError);
       return false;
     }
-
-    return true;
   } catch (err) {
     console.error("Unexpected error sending notifications:", err);
     return false;

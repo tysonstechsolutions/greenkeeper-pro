@@ -19,6 +19,7 @@
  */
 
 import { jsPDF } from "jspdf";
+import { findSignatureUrl } from "@/lib/staff-signatures";
 import {
   AST_INSPECTION_ITEMS,
   AST_SECTIONS,
@@ -31,9 +32,40 @@ const BLACK: [number, number, number] = [0, 0, 0];
 const GRAY_LINE: [number, number, number] = [120, 120, 120];
 const GRAY_SHADE: [number, number, number] = [220, 220, 220];
 
+/**
+ * Fetch an image asset and return a data URL suitable for jsPDF.addImage().
+ * Cached per-URL so the second inspection in a session doesn't re-fetch
+ * the same signature.
+ */
+const imageCache = new Map<string, string>();
+async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const cached = imageCache.get(url);
+  if (cached) return cached;
+  try {
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    imageCache.set(url, dataUrl);
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
 function formatDateUS(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso);
+  // Anchor date-only strings (yyyy-mm-dd) at noon local so timezone
+  // conversion doesn't flip them to the previous day in negative-UTC
+  // zones (Central / Pacific etc.).
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  const d = new Date(anchored);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", {
     year: "numeric",
@@ -211,6 +243,44 @@ export async function generateAstInspectionReport(
       CONTENT_W - 4,
       true,
     );
+
+    // Overlay a signature image if we have one mapped for the inspector.
+    // The drawn line stays underneath as a placeholder; the image sits on
+    // top of it the way a real signed paper form would look.
+    step = "signature-overlay";
+    const sigUrl = findSignatureUrl(inspection.inspector_name);
+    if (sigUrl) {
+      try {
+        const dataUrl = await loadImageAsDataUrl(sigUrl);
+        if (dataUrl) {
+          // Sized to fit comfortably above the signature line. Width is
+          // ~60mm, height auto-scales — most signatures are wider than
+          // they are tall.
+          const sigW = 55;
+          const sigH = 14;
+          // X: just past the "Inspector's Signature" label (~50mm in).
+          // Y: nudge up so the bottom of the image touches the line.
+          doc.addImage(
+            dataUrl,
+            "PNG",
+            MARGIN_X + 50,
+            boxTop + 17 - sigH + 2,
+            sigW,
+            sigH,
+            undefined,
+            "FAST",
+          );
+        }
+      } catch (err) {
+        // Best-effort: if the image is missing or fails to load, fall
+        // back to the typed signature already on the line. Don't block
+        // the whole report on a signature glitch.
+        console.warn(
+          "[ast-report] signature image failed to load:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
 
     // Row 4: Tank(s) inspected ID (full width)
     drawLabeledLine(

@@ -35,6 +35,7 @@ import { InlineCamera } from "@/components/ui/inline-camera";
 import { isNativeBarcodeAvailable, scanBarcodeNative } from "@/lib/scan/barcode";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useFy26Assets } from "@/lib/hooks/useFy26Assets";
+import { todayLocal } from "@/lib/utils/date";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
@@ -95,7 +96,7 @@ function PageContent() {
   const [damageRecords, setDamageRecords] = useState<AssetDamageRecord[]>([]);
   const [showDamageForm, setShowDamageForm] = useState(false);
   const [damageDate, setDamageDate] = useState("Prior to April 1 2026");
-  const [damageDateCustom, setDamageDateCustom] = useState(new Date().toISOString().slice(0, 10));
+  const [damageDateCustom, setDamageDateCustom] = useState(todayLocal());
   const [damageDesc, setDamageDesc] = useState("");
   const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
   const [uploadingDamagePhoto, setUploadingDamagePhoto] = useState(false);
@@ -610,7 +611,7 @@ function PageContent() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Prior to April 1 2026">Prior to April 1, 2026</SelectItem>
-                    <SelectItem value={new Date().toISOString().slice(0, 10)}>
+                    <SelectItem value={todayLocal()}>
                       Today ({new Date().toLocaleDateString()})
                     </SelectItem>
                     <SelectItem value="__custom__">Other date...</SelectItem>

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 import type {
   PlanGoal,
   PlanLevel,
@@ -696,7 +697,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
         } else if (goal.year) {
           baseDueDate = `${goal.year}-01-01`;
         } else {
-          baseDueDate = new Date().toISOString().split("T")[0];
+          baseDueDate = todayLocal();
         }
 
         // Create tasks

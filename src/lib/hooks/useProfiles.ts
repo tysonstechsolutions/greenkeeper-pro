@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { withTimeout } from "@/lib/utils/resilient-fetch";
+import { resolveAccessToken } from "@/lib/api/client";
 import type { Profile, UserRole } from "@/types/database";
 
 // Lighter profile type for lists/dropdowns
@@ -37,48 +37,63 @@ export function useProfiles(): UseProfilesReturn {
 
   const supabase = createClient();
 
-  // Fetch active profiles, optionally filtered by role
+  // Fetch active profiles, optionally filtered by role.
+  //
+  // Uses raw REST instead of supabase.from() — supabase-js's auth
+  // wrapper has been observed to wedge after a save/navigation,
+  // leaving consumers like the AST-inspection form stuck at
+  // "Loading staff..." with no breadcrumb. Going straight to PostgREST
+  // with the localStorage-cached JWT sidesteps that path.
   const fetchProfiles = useCallback(
     async (role?: UserRole | UserRole[]) => {
       setLoading(true);
       setError(null);
 
       try {
-        let query = supabase
-          .from("profiles")
-          .select("id, full_name, display_name, role, avatar_url, phone")
-          .eq("is_active", true)
-          .order("role", { ascending: true })
-          .order("full_name", { ascending: true })
-          .limit(50); // Reasonable limit for golf course staff
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        const token = await resolveAccessToken(supabase, supabaseUrl, anonKey);
 
+        const params = new URLSearchParams({
+          select: "id,full_name,display_name,role,avatar_url,phone",
+          is_active: "eq.true",
+          order: "role.asc,full_name.asc",
+          limit: "50",
+        });
         if (role) {
-          if (Array.isArray(role)) {
-            query = query.in("role", role);
-          } else {
-            query = query.eq("role", role);
-          }
+          const list = Array.isArray(role) ? role : [role];
+          // PostgREST `in()` filter syntax: in.(value1,value2)
+          params.set("role", `in.(${list.join(",")})`);
         }
 
-        // Wrap in a timeout so a stalled connection / RLS hang doesn't
-        // freeze the form forever — caller can fall back to free-text
-        // entry if profiles never arrive.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase result shape varies by query
-        const result = (await withTimeout(query as any, 15_000, {
-          data: null,
-          error: { message: "Profiles query timed out" },
-        })) as { data: ProfileSummary[] | null; error: { message: string } | null };
+        const url = `${supabaseUrl}/rest/v1/profiles?${params.toString()}`;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15_000);
+        let res: Response;
+        try {
+          res = await fetch(url, {
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${token}`,
+            },
+            signal: ctrl.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
 
-        if (result.error) {
-          console.error("Error fetching profiles:", result.error);
-          setError(result.error.message);
+        if (!res.ok) {
+          const message = `Profiles query failed: ${res.status} ${res.statusText}`;
+          console.error(message);
+          setError(message);
           return;
         }
 
-        setProfiles(result.data || []);
+        const data = (await res.json()) as ProfileSummary[];
+        setProfiles(data || []);
       } catch (err) {
         console.error("Unexpected error fetching profiles:", err);
-        setError("An unexpected error occurred");
+        setError(err instanceof Error ? err.message : "An unexpected error occurred");
       } finally {
         setLoading(false);
       }

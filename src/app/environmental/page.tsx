@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { todayLocal } from "@/lib/utils/date";
 import type {
   EnvironmentalLog,
   BufferZoneRecord,
@@ -60,7 +61,7 @@ const DEFAULT_BUFFER_ZONES: Omit<BufferZoneRecord, "id" | "created_at" | "update
 ];
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocal();
 }
 
 function categoryInfo(cat: ComplianceLogCategory) {

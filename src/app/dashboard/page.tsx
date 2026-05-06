@@ -43,6 +43,7 @@ import { PushOptInCard } from "@/components/features/notifications/push-opt-in-c
 import { QuickActionsCustomizeSheet } from "@/components/features/quick-actions/customize-sheet";
 import { useQuickActions } from "@/lib/hooks/useQuickActions";
 import { Settings2 } from "lucide-react";
+import { parseAppDate } from "@/lib/utils/date-format";
 import { useWeather } from "@/lib/hooks/useWeather";
 import type { WeatherAlert } from "@/lib/hooks/useWeather";
 import {
@@ -63,6 +64,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Task, Equipment } from "@/types/database";
 import { downloadDailyAssignmentsReport } from "@/lib/reports/daily-assignments-report";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 
 // Dynamically import MiniMapWidget to avoid SSR issues with Leaflet
 const MiniMapWidget = dynamic(
@@ -305,7 +307,7 @@ function ProDashboardView() {
 
     const loadData = async () => {
       setLoading(true);
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocal();
       const tasks = await fetchTeamTasks(today);
       const playImpactCategories = [
         "mowing",
@@ -652,7 +654,7 @@ function LeadershipDashboardView() {
     try {
       const supabase = createClient();
       const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStr = formatLocalDate(now);
 
       const [
         tasksResult,
@@ -853,7 +855,7 @@ function LeadershipDashboardView() {
     if (hasFetchedRef.current) return;
     hasFetchedRef.current = true;
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayLocal();
 
     async function loadCriticalData() {
       try {
@@ -997,7 +999,7 @@ function LeadershipDashboardView() {
                   <div className="font-medium text-sm line-clamp-2 break-words" title={task.title}>{task.title}</div>
                   <div className="text-xs text-red-600 dark:text-red-400">
                     Due{" "}
-                    {new Date(task.due_date).toLocaleDateString("en-US", {
+                    {parseAppDate(task.due_date)?.toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     })}
@@ -1574,7 +1576,7 @@ function StaffDashboardView() {
     if (hasFetchedRef.current) return;
     hasFetchedRef.current = true;
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = todayLocal();
     async function loadData() {
       try {
         const tasks = await fetchMyTasks(today);
@@ -1997,7 +1999,7 @@ function GMDashboardView() {
     [now]
   );
   const monthEnd = useMemo(
-    () => new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0],
+    () => formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
     [now]
   );
 
@@ -2245,7 +2247,7 @@ function GMDashboardView() {
                       <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
                         <span>${spent.toLocaleString()} / ${budget.toLocaleString()}</span>
                         {proj.target_completion && (
-                          <span>Target: {new Date(proj.target_completion).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                          <span>Target: {parseAppDate(proj.target_completion)?.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                         )}
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">

@@ -31,6 +31,7 @@ import { useCrews } from "@/lib/hooks/useCrews";
 import { roleLabels, roleColors, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
 import { withTimeout, isOnline } from "@/lib/utils/resilient-fetch";
 import type { Profile, UserRole, Task, TimeOffRequest, Schedule } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 // Extended profile with additional details for staff page
 interface StaffProfile extends Profile {
@@ -77,7 +78,7 @@ export default function StaffPage() {
     }
 
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocal();
 
       // Run ALL four queries in parallel with timeouts.
       // Profiles get a longer timeout (15s) because RLS evaluation on the
@@ -227,7 +228,7 @@ export default function StaffPage() {
       setLoadingDetails(true);
 
       try {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocal();
 
         // Run all three detail queries in parallel with timeouts
         const [tasksResult, timeOffResult, scheduleResult] = await Promise.all([
@@ -295,10 +296,14 @@ export default function StaffPage() {
     { value: "seasonal", label: "Seasonal" },
   ];
 
-  // Format date helper
+  // Format date helper — anchor DATE-only strings at noon to avoid the
+  // timezone off-by-one (see src/lib/utils/date-format.ts).
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "—";
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    const anchored = /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+      ? dateStr + "T12:00:00"
+      : dateStr;
+    return new Date(anchored).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",

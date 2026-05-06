@@ -14,6 +14,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -481,7 +482,13 @@ export async function generateEquipmentReport(
         by += 6;
 
         const svcRows = eqServices.slice(0, 10).map((r: any) => [
-          r.service_date ? new Date(r.service_date).toLocaleDateString("en-US") : "—",
+          r.service_date
+            ? new Date(
+                /^\d{4}-\d{2}-\d{2}$/.test(r.service_date)
+                  ? r.service_date + "T12:00:00"
+                  : r.service_date,
+              ).toLocaleDateString("en-US")
+            : "—",
           s(r.performed_by),
           s(r.description),
           s(r.parts_used),
@@ -621,7 +628,7 @@ export async function generateEquipmentReport(
           .replace(/[^a-zA-Z0-9 _-]/g, "")
           .replace(/\s+/g, "-")
           .toLowerCase() + "-report.pdf"
-      : "vmgc-equipment-report-" + new Date().toISOString().slice(0, 10) + ".pdf";
+      : "vmgc-equipment-report-" + todayLocal() + ".pdf";
 
     return { blob, filename };
   } catch (err) {

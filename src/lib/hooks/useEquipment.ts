@@ -26,6 +26,7 @@ import {
   directStorageDelete,
   publicStorageUrl,
 } from "@/lib/supabase/rest";
+import { todayLocal } from "@/lib/utils/date";
 
 // Utility label maps
 export const equipmentTypeLabels: Record<EquipmentType, string> = {
@@ -679,7 +680,7 @@ export function useEquipment(): UseEquipmentReturn {
    */
   const fetchDueForService = useCallback(async (): Promise<Equipment[]> => {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocal();
 
       // Get equipment where current_hours >= next_service_due_hours.
       // PostgREST can't compare two columns directly, so we fetch all rows

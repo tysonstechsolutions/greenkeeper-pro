@@ -33,6 +33,8 @@ import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
 import { callApi } from "@/lib/api/client";
 import { resizeImageFile } from "@/lib/utils/image-resize";
+import { parseAppDate } from "@/lib/utils/date-format";
+import { formatLocalDate } from "@/lib/utils/date";
 import { Sparkles } from "lucide-react";
 
 interface ExtractedVendor889 {
@@ -60,7 +62,7 @@ interface ExtractedVendor889 {
 function addOneYear(iso: string): string {
   const d = new Date(iso);
   d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 interface Vendor {
@@ -832,7 +834,7 @@ export default function VendorsPage() {
                     {v.section_889_expiration_date ? (
                       <p className="text-xs text-muted-foreground mb-2">
                         Expires{" "}
-                        {new Date(v.section_889_expiration_date).toLocaleDateString(
+                        {parseAppDate(v.section_889_expiration_date)?.toLocaleDateString(
                           "en-US",
                           { year: "numeric", month: "short", day: "numeric" },
                         )}

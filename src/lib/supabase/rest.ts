@@ -310,6 +310,116 @@ export async function directDeleteRow(
 }
 
 /**
+ * INSERT multiple rows in one request. Mirrors `.insert([...])`.
+ * Returns the inserted rows.
+ */
+export async function directInsertRows<T = unknown>(
+  table: string,
+  rows: Record<string, unknown>[],
+  label: string,
+): Promise<T[]> {
+  if (rows.length === 0) return [];
+  const path = `rest/v1/${table}`;
+  const result = (await directFetch("POST", path, rows, {
+    label,
+    headers: { Prefer: "return=representation" },
+  })) as T[] | T;
+  return Array.isArray(result) ? (result as T[]) : [result as T];
+}
+
+/**
+ * PATCH multiple rows by an arbitrary filter set (compound WHERE).
+ * Each filter is `column=<operator>.<value>` (PostgREST string syntax).
+ * Mirrors `supabase.from(t).update(patch).eq("a", x).eq("b", y).gte(...)`.
+ */
+export async function directPatchByFilter(
+  table: string,
+  filters: string[],
+  patch: Record<string, unknown>,
+  label: string,
+): Promise<void> {
+  if (filters.length === 0) {
+    throw new Error(
+      `directPatchByFilter(${label}): refusing to PATCH all rows — at least one filter is required`,
+    );
+  }
+  const path = `rest/v1/${table}?${filters.join("&")}`;
+  await directFetch("PATCH", path, patch, {
+    label,
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+/**
+ * DELETE multiple rows by an arbitrary filter set. Mirrors
+ * `supabase.from(t).delete().eq("a", x).eq("b", y)`.
+ */
+export async function directDeleteByFilter(
+  table: string,
+  filters: string[],
+  label: string,
+): Promise<void> {
+  if (filters.length === 0) {
+    throw new Error(
+      `directDeleteByFilter(${label}): refusing to DELETE all rows — at least one filter is required`,
+    );
+  }
+  const path = `rest/v1/${table}?${filters.join("&")}`;
+  await directFetch("DELETE", path, null, {
+    label,
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+/**
+ * Get a row count via PostgREST's `Prefer: count=exact` header.
+ * Equivalent to `supabase.from(t).select("*", { count: "exact", head: true })`.
+ *
+ * Returns 0 if the response doesn't include a parseable count.
+ */
+export async function directSelectCount(
+  table: string,
+  filters: string[],
+  label: string,
+): Promise<number> {
+  const qs = ["select=*", "limit=0", ...filters];
+  const path = `rest/v1/${table}?${qs.join("&")}`;
+  // We need access to response headers — directFetch returns parsed JSON.
+  // Replicate the auth-token + apikey handshake here for one-off count.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  // Defer to localStorage for the user JWT — same pattern useProfiles uses.
+  let token = "";
+  try {
+    const keys = Object.keys(localStorage).filter((k) => k.includes("auth-token"));
+    for (const k of keys) {
+      const v = JSON.parse(localStorage.getItem(k) ?? "null");
+      if (v?.access_token) {
+        token = v.access_token;
+        break;
+      }
+    }
+  } catch {
+    // SSR or no localStorage — token stays empty, request will use anon role.
+  }
+  const res = await fetch(`${supabaseUrl}/${path}`, {
+    method: "GET",
+    headers: {
+      apikey: anonKey,
+      Authorization: token ? `Bearer ${token}` : `Bearer ${anonKey}`,
+      Prefer: "count=exact",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`directSelectCount(${label}): ${res.status} ${res.statusText}`);
+  }
+  const range = res.headers.get("content-range");
+  if (!range) return 0;
+  const total = parseInt(range.split("/")[1] ?? "0", 10);
+  return Number.isFinite(total) ? total : 0;
+}
+
+/**
  * Upload a file to a Supabase Storage bucket via direct fetch. Bypasses
  * the supabase-js storage client, which has been occasionally leaving
  * the auth layer in a weird state after a successful upload (second

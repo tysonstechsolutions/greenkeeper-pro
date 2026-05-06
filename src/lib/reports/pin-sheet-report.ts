@@ -6,6 +6,7 @@
  */
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -58,7 +59,7 @@ export async function generatePinSheetReport(
     step = "parse-date";
     const date = options.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date)
       ? options.date
-      : new Date().toISOString().slice(0, 10);
+      : todayLocal();
 
     step = "fetch-pins";
     const { data: pinsRaw, error: fetchErr } = await supabase

@@ -59,6 +59,7 @@ import {
   type GoalWithStats,
 } from "@/lib/hooks/usePlanGoals";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { parseAppDate } from "@/lib/utils/date-format";
 import type { PlanStatus, Task } from "@/types/database";
 
 // Status icon component
@@ -650,7 +651,7 @@ function PageContent() {
                         {task.due_date && (
                           <>
                             {" • "}
-                            Due {new Date(task.due_date).toLocaleDateString()}
+                            Due {parseAppDate(task.due_date)?.toLocaleDateString()}
                           </>
                         )}
                       </div>

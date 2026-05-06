@@ -14,6 +14,7 @@
 import { jsPDF } from "jspdf";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { formatLocalDate } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -67,8 +68,8 @@ interface MonthlyBoardData {
 }
 
 function getMonthDateRange(month: number, year: number) {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+  const startDate = formatLocalDate(new Date(year, month - 1, 1));
+  const endDate = formatLocalDate(new Date(year, month, 0));
   return { startDate, endDate };
 }
 

@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
 import type { Profile, UserRole, Database } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 // Crew is stored by unique crew_assignment values across profiles
 export interface Crew {
@@ -119,7 +120,7 @@ export function useCrews(): UseCrewsReturn {
       }
 
       // Get latest schedule entries to see current crew memberships
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocal();
        
       const { data: currentSchedules } = await supabase.from("schedules")
         .select("user_id, crew_assignment")
@@ -196,7 +197,7 @@ export function useCrews(): UseCrewsReturn {
 
       // To persist the crew, we'll assign the foreman to it via a schedule entry
       if (foremanId) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocal();
          
         const { error: insertError } = await supabase.from("schedules")
           .upsert({
@@ -328,7 +329,7 @@ export function useCrews(): UseCrewsReturn {
 
       // If setting a foreman, add them to the crew
       if (foremanId) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocal();
          
         const { error: updateError } = await supabase.from("schedules")
           .upsert({
@@ -363,7 +364,7 @@ export function useCrews(): UseCrewsReturn {
       }
 
       try {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocal();
          
         const { error: upsertError } = await supabase.from("schedules")
           .upsert({
@@ -401,7 +402,7 @@ export function useCrews(): UseCrewsReturn {
       }
 
       try {
-        const today = new Date().toISOString().split("T")[0];
+        const today = todayLocal();
          
         const { error: updateError } = await supabase.from("schedules")
           .update({ crew_assignment: null })

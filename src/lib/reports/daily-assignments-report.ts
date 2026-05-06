@@ -10,6 +10,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -68,7 +69,7 @@ export async function generateDailyAssignmentsReport(
   const { data: profile } = await supabase.from("profiles")
     .select("full_name, role").eq("id", user.id).single();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const date = options.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date)
     ? options.date
     : today;

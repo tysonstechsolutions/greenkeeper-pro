@@ -69,6 +69,7 @@ import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
 import GreenDrawingCanvas, { computeCentroid } from "@/components/green-drawing-canvas";
 import TreatmentPlanView from "@/components/treatment-plan-view";
+import { todayLocal } from "@/lib/utils/date";
 import type {
   AreaPoint,
   DiagnosisResult,
@@ -402,7 +403,7 @@ function PageContent() {
           category: "greens",
           priority: obs.priority,
           status: "pending",
-          due_date: new Date().toISOString().split("T")[0],
+          due_date: todayLocal(),
           hole_numbers: [obs.hole_number],
           assigned_by: user?.id,
           equipment_needed: [],

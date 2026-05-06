@@ -56,6 +56,7 @@ import {
 } from "@/lib/hooks/useBudget";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type { BudgetCategory, ExpenseStatus } from "@/types/database";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 
 // Format currency
 function formatCurrency(amount: number): string {
@@ -66,9 +67,13 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-// Format date
+// Format date — anchor DATE-only strings at noon to avoid the timezone
+// off-by-one bug (see src/lib/utils/date-format.ts).
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(dateString)
+    ? dateString + "T12:00:00"
+    : dateString;
+  return new Date(anchored).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -114,15 +119,15 @@ export default function ExpensesListPage() {
       case "week":
         const weekAgo = new Date(now);
         weekAgo.setDate(weekAgo.getDate() - 7);
-        return weekAgo.toISOString().split("T")[0];
+        return formatLocalDate(weekAgo);
       case "month":
         const monthAgo = new Date(now);
         monthAgo.setMonth(monthAgo.getMonth() - 1);
-        return monthAgo.toISOString().split("T")[0];
+        return formatLocalDate(monthAgo);
       case "year":
         const yearAgo = new Date(now);
         yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-        return yearAgo.toISOString().split("T")[0];
+        return formatLocalDate(yearAgo);
       default:
         return undefined;
     }
@@ -222,7 +227,7 @@ export default function ExpensesListPage() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `expenses_${new Date().toISOString().split("T")[0]}.csv`;
+    link.download = `expenses_${todayLocal()}.csv`;
     link.click();
   };
 

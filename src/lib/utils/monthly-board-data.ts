@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatLocalDate } from "@/lib/utils/date";
 
 // ── Types ──
 
@@ -41,8 +42,8 @@ export interface MonthlyBoardData {
 // ── Helpers ──
 
 export function getMonthDateRange(month: number, year: number) {
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0];
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+  const startDate = formatLocalDate(new Date(year, month - 1, 1));
+  const endDate = formatLocalDate(new Date(year, month, 0));
   return { startDate, endDate };
 }
 

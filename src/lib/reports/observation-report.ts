@@ -8,6 +8,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -583,7 +584,7 @@ export async function generateObservationReport(
     step = "pdf-output";
     const surface = type === "green" ? "Green" : "Fairway";
     const scope = holeNumber ? `Hole-${holeNumber}` : `All-${surface}s`;
-    const filename = `${scope}-${surface}-Report-${new Date().toISOString().split("T")[0]}.pdf`;
+    const filename = `${scope}-${surface}-Report-${todayLocal()}.pdf`;
     const blob = doc.output("blob") as Blob;
 
     return { blob, filename };

@@ -31,6 +31,7 @@ import { useTaskTemplates } from "@/lib/hooks/useTaskTemplates";
 import { useProfiles, getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
 import { useCourseZones, formatZoneName, zoneTypeLabels } from "@/lib/hooks/useCourseZones";
 import { useCrews } from "@/lib/hooks/useCrews";
+import { todayLocal } from "@/lib/utils/date";
 import type {
   TaskCategory,
   TaskPriority,
@@ -101,9 +102,9 @@ const commonEquipment = [
   "Edger",
 ];
 
-// Get today's date in YYYY-MM-DD format
+// Get today's date in YYYY-MM-DD format (local timezone — see date.ts).
 function getTodayString(): string {
-  return new Date().toISOString().split("T")[0];
+  return todayLocal();
 }
 
 // Generate unique ID

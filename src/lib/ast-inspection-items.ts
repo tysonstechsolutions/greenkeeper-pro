@@ -10,6 +10,8 @@
  * polarity on item 16 are all dictated by the SP001 standard. Don't reorder.
  */
 
+import { formatLocalDate } from "@/lib/utils/date";
+
 export type AstSection =
   | "Tank and Piping"
   | "Equipment on tank"
@@ -217,7 +219,7 @@ export function isNonConforming(
 export function computeRetainUntilDate(inspectionDate: string): string {
   const d = new Date(inspectionDate);
   d.setMonth(d.getMonth() + 36);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 /**

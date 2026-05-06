@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { todayLocal } from "@/lib/utils/date";
 
 type Step = "record" | "edit" | "pick-hole" | "success";
 
@@ -99,7 +100,7 @@ export default function VoiceLogPage() {
     if (!user || !transcript.trim()) return;
     setSaving(true);
     const supabase = createClient();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     const { data, error } = await supabase
       .from("tasks")
       .insert({

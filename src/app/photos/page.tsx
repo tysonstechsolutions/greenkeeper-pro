@@ -54,6 +54,7 @@ import {
 } from "@/components/features/photos/camera-capture";
 import { createClient } from "@/lib/supabase/client";
 import type { PhotoType } from "@/types/database";
+import { formatLocalDate } from "@/lib/utils/date";
 
 type ViewMode = "grid" | "timeline";
 
@@ -274,15 +275,15 @@ export default function PhotosPage() {
   // Quick date filters
   const setQuickDate = (range: "today" | "week" | "month") => {
     const now = new Date();
-    const endDate = now.toISOString().split("T")[0];
+    const endDate = formatLocalDate(now);
     let startDate = endDate;
 
     if (range === "week") {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
-      startDate = weekAgo.toISOString().split("T")[0];
+      startDate = formatLocalDate(weekAgo);
     } else if (range === "month") {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+      startDate = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
     }
 
     setDateStart(startDate);

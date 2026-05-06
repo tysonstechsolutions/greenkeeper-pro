@@ -36,6 +36,7 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import type { BudgetCategory } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 export default function NewExpensePage() {
   const router = useRouter();
@@ -51,9 +52,7 @@ export default function NewExpensePage() {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [vendor, setVendor] = useState("");
-  const [expenseDate, setExpenseDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [expenseDate, setExpenseDate] = useState(todayLocal());
   const [notes, setNotes] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);

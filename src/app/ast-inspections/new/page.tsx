@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import { resolveAccessToken } from "@/lib/api/client";
 import { useProfiles, roleLabels } from "@/lib/hooks/useProfiles";
 import {
   AST_INSPECTION_ITEMS,
@@ -28,15 +29,16 @@ import type {
   AstInspectionItems,
   AstInspectionItemStatus,
 } from "@/types/database";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocal();
 }
 
 function priorMonthIso(): string {
   const d = new Date();
   d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 function emptyItems(): AstInspectionItems {
@@ -74,7 +76,10 @@ function NewAstInspectionPageInner() {
   const [tankType, setTankType] = useState<AstTankType>("fuel");
   const [tankIds, setTankIds] = useState(AST_TANK_TYPES.fuel.tankIds);
   const [facilityName, setFacilityName] = useState("");
-  const [facilityId, setFacilityId] = useState("");
+  // Facility ID is fixed at 8400 (Veterans Memorial Golf Course) for every
+  // inspection — pre-fill so the user never has to type it. The field is
+  // still editable in case a different site is ever added later.
+  const [facilityId, setFacilityId] = useState("8400");
   const [items, setItems] = useState<AstInspectionItems>(() => emptyItems());
   const [additionalComments, setAdditionalComments] = useState("");
 
@@ -253,31 +258,86 @@ function NewAstInspectionPageInner() {
       status: asDraft ? "draft" : "completed",
     };
 
+    // Direct PostgREST write — supabase.from(…).insert(…) is wrapped in
+    // supabase-js's auth path, which has been observed to wedge mid-save
+    // and stall the form indefinitely. Using fetch with a localStorage-
+    // cached JWT removes that dependency. Same pattern as PR save.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    let token: string;
+    try {
+      token = await resolveAccessToken(supabase, supabaseUrl, anonKey);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Auth lookup failed");
+      setSaving(false);
+      return;
+    }
+    const restHeaders: HeadersInit = {
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
     if (editId) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ast_inspections not yet in generated types
-      const { error: updateErr } = await (supabase as any)
-        .from("ast_inspections")
-        .update(payload)
-        .eq("id", editId);
-      if (updateErr) {
-        setError(updateErr.message);
+      try {
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/ast_inspections?id=eq.${encodeURIComponent(editId)}`,
+          {
+            method: "PATCH",
+            headers: { ...restHeaders, Prefer: "return=minimal" },
+            body: JSON.stringify(payload),
+          },
+        );
+        if (!res.ok) {
+          let message = `Update failed: ${res.status} ${res.statusText}`;
+          try {
+            const errBody = (await res.json()) as { message?: string };
+            if (errBody?.message) message = errBody.message;
+          } catch {
+            /* ignore */
+          }
+          setError(message);
+          setSaving(false);
+          return;
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update failed");
         setSaving(false);
         return;
       }
       router.push(`/ast-inspections/view?id=${editId}`);
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ast_inspections not yet in generated types
-      const { data, error: insertErr } = await (supabase as any)
-        .from("ast_inspections")
-        .insert({ ...payload, created_by: user.id })
-        .select("id")
-        .single();
-      if (insertErr || !data) {
-        setError(insertErr?.message || "Failed to save inspection");
+      try {
+        const res = await fetch(`${supabaseUrl}/rest/v1/ast_inspections`, {
+          method: "POST",
+          headers: { ...restHeaders, Prefer: "return=representation" },
+          body: JSON.stringify({ ...payload, created_by: user.id }),
+        });
+        if (!res.ok) {
+          let message = `Save failed: ${res.status} ${res.statusText}`;
+          try {
+            const errBody = (await res.json()) as { message?: string };
+            if (errBody?.message) message = errBody.message;
+          } catch {
+            /* ignore */
+          }
+          setError(message);
+          setSaving(false);
+          return;
+        }
+        const json = (await res.json()) as Array<{ id: string }>;
+        const newId = json?.[0]?.id;
+        if (!newId) {
+          setError("Saved but no id returned. Refresh the inspections list.");
+          setSaving(false);
+          return;
+        }
+        router.push(`/ast-inspections/view?id=${newId}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Save failed");
         setSaving(false);
         return;
       }
-      router.push(`/ast-inspections/view?id=${(data as { id: string }).id}`);
     }
   }
 

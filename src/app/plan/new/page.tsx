@@ -38,6 +38,7 @@ import {
 } from "@/lib/hooks/usePlanGoals";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type { PlanLevel, PlanCategory } from "@/types/database";
+import { formatLocalDate } from "@/lib/utils/date";
 
 function NewGoalContent() {
   const router = useRouter();
@@ -222,7 +223,7 @@ function NewGoalContent() {
       sunday.setDate(monday.getDate() + 6);
 
       weeks.push({
-        value: monday.toISOString().split("T")[0],
+        value: formatLocalDate(monday),
         label: `${monday.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",

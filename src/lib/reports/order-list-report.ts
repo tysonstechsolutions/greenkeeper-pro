@@ -17,6 +17,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -493,7 +494,7 @@ export async function downloadOrderListReport(): Promise<void> {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `vmgc-order-list-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+  link.download = `vmgc-order-list-report-${todayLocal()}.pdf`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

@@ -6,6 +6,7 @@
  */
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
+import { formatLocalDate } from "@/lib/utils/date";
 
 const BLACK: [number, number, number] = [0, 0, 0];
 const DARK_GRAY: [number, number, number] = [80, 80, 80];
@@ -269,7 +270,7 @@ export async function generateNavcompt2212Report(
   const safeName = String(e.name || "equipment")
     .replace(/[^a-zA-Z0-9-_]/g, "-")
     .replace(/-+/g, "-");
-  const fileDateStr = today.toISOString().split("T")[0];
+  const fileDateStr = formatLocalDate(today);
   const filename = `NAVCOMPT-2212-${safeName}-${fileDateStr}.pdf`;
 
   return { blob, filename };

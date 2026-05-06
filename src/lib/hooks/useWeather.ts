@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { callApi } from "@/lib/api/client";
 import { COURSE } from "@/lib/constants";
 import type { WeatherLog } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 /**
  * Weather API Configuration
@@ -246,7 +247,7 @@ export function useWeather(): UseWeatherReturn {
           return null;
         }
 
-        if (date === new Date().toISOString().split("T")[0]) {
+        if (date === todayLocal()) {
           setTodayLog(data as WeatherLog | null);
         }
 
@@ -286,7 +287,7 @@ export function useWeather(): UseWeatherReturn {
 
       const current = data.current;
       const todayForecast = data.forecast.forecastday[0].day;
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocal();
 
       const high = Math.round(todayForecast.maxtemp_f);
       const low = Math.round(todayForecast.mintemp_f);
@@ -508,7 +509,7 @@ export function useWeather(): UseWeatherReturn {
       await Promise.all([
         fetchCurrentWeather(),
         fetchForecast(),
-        fetchWeatherLog(new Date().toISOString().split("T")[0]),
+        fetchWeatherLog(todayLocal()),
       ]);
     } finally {
       setLoading(false);

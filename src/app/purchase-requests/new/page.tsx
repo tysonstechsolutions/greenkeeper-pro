@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
-import { callApi } from "@/lib/api/client";
+import { callApi, resolveAccessToken } from "@/lib/api/client";
 import {
   PR_INVOICE_DEFAULTS,
   PR_DELIVERY_DEFAULTS,
@@ -42,6 +42,7 @@ import {
   PurchaseRequestReportError,
 } from "@/lib/reports/purchase-request-report";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistory";
 import { History as HistoryIcon } from "lucide-react";
 import type {
@@ -92,14 +93,14 @@ interface ClarificationOption {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocal();
 }
 
 /** Today + N days, ISO. */
 function plusDaysIso(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 function emptyItem(n: number): PurchaseRequestItem {
@@ -301,17 +302,48 @@ function NewPurchaseRequestPageInner() {
   }, [profile, editId, fromId, requestorName, requestorEmail, requestorPhone]);
 
   // ── Load vendor library (for picker) ─────────────────────────────────────
+  // Uses raw REST instead of supabase.from() because this page is
+  // frequently mounted right after a save, when supabase-js's auth
+  // client has been observed to wedge — its getAccessToken() call sits
+  // forever before our timeoutFetch wrapper fires, and the user just
+  // sees "Loading vendors..." with no breadcrumb. Going straight to
+  // PostgREST with the localStorage-cached JWT sidesteps that path.
   useEffect(() => {
     let cancelled = false;
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("vendors")
-        .select("*")
-        .order("name");
-      if (cancelled) return;
-      setVendors((data as VendorWith889[] | null) || []);
-      setVendorsLoading(false);
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      try {
+        const accessToken = await resolveAccessToken(supabase, supabaseUrl, anonKey);
+        const url = `${supabaseUrl}/rest/v1/vendors?select=*&order=name`;
+        const res = await fetch(url, {
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          recordBreadcrumb(
+            "warn",
+            `[pr-new] vendor list fetch failed: ${res.status} ${res.statusText}`,
+          );
+          setVendors([]);
+        } else {
+          const data = (await res.json()) as VendorWith889[];
+          setVendors(data);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        recordBreadcrumb(
+          "warn",
+          `[pr-new] vendor list fetch error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        setVendors([]);
+      } finally {
+        if (!cancelled) setVendorsLoading(false);
+      }
     }
     load();
     return () => {
@@ -927,12 +959,70 @@ function NewPurchaseRequestPageInner() {
     };
 
     const supabase = createClient();
-    // Cast once — purchase_requests isn't in the generated supabase types
-    // yet, and threading `as any` through every chained .from(…).insert(…)
-    // call is just noise. Local alias keeps the rest of the function clean.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
     recordBreadcrumb("click", `[pr-save] starting (asDraft=${asDraft})`);
+
+    // ── Direct-to-PostgREST helper ──────────────────────────────────────
+    // supabase.from(…).insert(…) is wrapped in supabase-js's fetchWithAuth,
+    // which awaits auth.getSession() first. When the gotrue navigator.locks
+    // auth lock is held by an abandoned holder (hot-reload race, crashed
+    // prior call, expired refresh), every call hangs INDEFINITELY before
+    // our fetch wrapper fires — exactly the "PR insert timed out after 15s"
+    // breadcrumb we see in the wild. Bypassing supabase-js entirely for
+    // these writes gets us a clean failure mode (or a successful write with
+    // the cached localStorage token).
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    const accessToken = await resolveAccessToken(supabase, supabaseUrl, anonKey);
+
+    interface RestResult<T> {
+      data: T | null;
+      error: { message: string } | null;
+    }
+    async function restFetch<T = unknown>(
+      method: "POST" | "PATCH",
+      pathWithQuery: string,
+      body: unknown,
+      preferRepresentation: boolean,
+    ): Promise<RestResult<T>> {
+      try {
+        const res = await fetch(`${supabaseUrl}/rest/v1/${pathWithQuery}`, {
+          method,
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            ...(preferRepresentation
+              ? { Prefer: "return=representation" }
+              : { Prefer: "return=minimal" }),
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          let message = `${method} ${pathWithQuery} failed: ${res.status} ${res.statusText}`;
+          try {
+            const errJson = await res.json();
+            if (errJson?.message) message = errJson.message;
+          } catch {
+            /* ignore */
+          }
+          return { data: null, error: { message } };
+        }
+        if (!preferRepresentation) {
+          return { data: null, error: null };
+        }
+        // PostgREST with .single() returns an array even when only one row is
+        // expected. We fetched without ?select=* so the response is the
+        // representation array; pick the first row.
+        const json = (await res.json()) as T | T[];
+        const row = Array.isArray(json) ? (json[0] ?? null) : json;
+        return { data: row as T | null, error: null };
+      } catch (err) {
+        return {
+          data: null,
+          error: { message: err instanceof Error ? err.message : String(err) },
+        };
+      }
+    }
 
     // Upload the quote file (if a new one was attached) BEFORE saving the
     // PR, so the row points at a real storage path. We need the PR id to
@@ -1048,10 +1138,15 @@ function NewPurchaseRequestPageInner() {
 
     try {
       if (editId) {
-        const { error: updateErr } = (await timedStep(
+        const { error: updateErr } = await timedStep(
           "update PR",
-          db.from("purchase_requests").update(payload).eq("id", editId),
-        )) as { error: { message: string } | null };
+          restFetch(
+            "PATCH",
+            `purchase_requests?id=eq.${encodeURIComponent(editId)}`,
+            payload,
+            false,
+          ),
+        );
         if (cancel.cancelled) return;
         if (updateErr) {
           recordBreadcrumb("error", `[pr-save] update failed: ${updateErr.message}`);
@@ -1060,17 +1155,15 @@ function NewPurchaseRequestPageInner() {
         }
         router.push(`/purchase-requests/view?id=${editId}`);
       } else {
-        const { data, error: insertErr } = (await timedStep(
+        const { data, error: insertErr } = await timedStep(
           "insert PR",
-          db
-            .from("purchase_requests")
-            .insert({ ...payload, created_by: user.id })
-            .select("id")
-            .single(),
-        )) as {
-          data: { id: string } | null;
-          error: { message: string } | null;
-        };
+          restFetch<{ id: string }>(
+            "POST",
+            "purchase_requests",
+            { ...payload, created_by: user.id },
+            true,
+          ),
+        );
         if (cancel.cancelled) return;
         if (insertErr || !data) {
           recordBreadcrumb(
@@ -1080,7 +1173,7 @@ function NewPurchaseRequestPageInner() {
           setError(insertErr?.message || "Failed to save request");
           return;
         }
-        const newId = (data as { id: string }).id;
+        const newId = data.id;
         recordBreadcrumb("click", `[pr-save] inserted id=${newId.slice(-8)}`);
 
         // Now that we have an id, upload the quote (if any) and link it.
@@ -1118,14 +1211,16 @@ function NewPurchaseRequestPageInner() {
 
             await timedStep(
               "link quote to PR",
-              db
-                .from("purchase_requests")
-                .update({
+              restFetch(
+                "PATCH",
+                `purchase_requests?id=eq.${encodeURIComponent(newId)}`,
+                {
                   quote_storage_path: path,
                   quote_filename: quoteFile.name,
                   quote_uploaded_at: new Date().toISOString(),
-                })
-                .eq("id", newId),
+                },
+                false,
+              ),
             );
             if (cancel.cancelled) return;
           } catch (err) {

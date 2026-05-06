@@ -1,6 +1,8 @@
 // FY26 Annual Inventory Assets — from SITE 7009 (GL GOLF COURSE) and
 // SITE 7010 (GL GOLF COURSE MAINTENANCE) Flexible Asset Listings.
 
+import { todayLocal } from "@/lib/utils/date";
+
 export type Fy26AssetStatus =
   | "unverified"
   | "verified_present"
@@ -61,10 +63,14 @@ export const CONDITION_PHOTO_LABELS: Record<ConditionPhotoAngle, string> = {
   right: "Right Side",
 };
 
-export const DAMAGE_DATE_PRESETS = [
-  { label: "Prior to April 1, 2026", value: "Prior to April 1 2026" },
-  { label: "Today", value: new Date().toISOString().slice(0, 10) },
-];
+// Computed at call time so "Today" is always today's local date — using
+// a frozen module-load value would bake yesterday's date into the bundle.
+export function getDamageDatePresets() {
+  return [
+    { label: "Prior to April 1, 2026", value: "Prior to April 1 2026" },
+    { label: "Today", value: todayLocal() },
+  ];
+}
 
 export const fy26AssetStatusLabels: Record<Fy26AssetStatus, string> = {
   unverified: "Unverified",

@@ -15,11 +15,14 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
+import { resolveAccessToken } from "@/lib/api/client";
 import { AST_INSPECTION_ITEMS, isNonConforming } from "@/lib/ast-inspection-items";
 import type { AstInspection } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  const d = new Date(anchored);
   return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
@@ -53,15 +56,37 @@ export default function AstInspectionsListPage() {
     profile?.role === "director" ||
     profile?.role === "gm";
 
+  // Raw REST instead of supabase.from() — see useProfiles / vendor list
+  // for the why. Avoids supabase-js's auth path that has been observed
+  // to wedge mid-session, leaving the list stuck at "Loading...".
   const fetchInspections = useCallback(async () => {
     setLoading(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("ast_inspections")
-      .select("*")
-      .order("inspection_date", { ascending: false });
-    setInspections((data as AstInspection[] | null) || []);
-    setLoading(false);
+    try {
+      const supabase = createClient();
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      const token = await resolveAccessToken(supabase, supabaseUrl, anonKey);
+      const url = `${supabaseUrl}/rest/v1/ast_inspections?select=*&order=inspection_date.desc`;
+      const res = await fetch(url, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        console.error(
+          "[ast-inspections] list fetch failed:",
+          res.status,
+          res.statusText,
+        );
+        setInspections([]);
+        return;
+      }
+      const data = (await res.json()) as AstInspection[];
+      setInspections(data || []);
+    } catch (err) {
+      console.error("[ast-inspections] list fetch error:", err);
+      setInspections([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -101,7 +126,7 @@ export default function AstInspectionsListPage() {
 
   // Detect overdue: most recent completed inspection > 31 days old.
   const mostRecent = inspections.find((i) => i.status === "completed");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const monthsSinceLast = mostRecent
     ? monthsBetween(mostRecent.inspection_date, today)
     : null;

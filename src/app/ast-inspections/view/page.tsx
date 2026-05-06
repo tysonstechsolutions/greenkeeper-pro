@@ -29,7 +29,8 @@ import type { AstInspection } from "@/types/database";
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  return new Date(anchored).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",

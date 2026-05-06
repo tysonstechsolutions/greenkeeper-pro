@@ -35,6 +35,7 @@ import {
 } from '@/lib/hooks/useOrderItems';
 import type { OrderItemStatus } from '@/types/database';
 import { downloadOrderListReport, OrderListReportError } from '@/lib/reports/order-list-report';
+import { todayLocal } from '@/lib/utils/date';
 
 const CATEGORIES = ['clubhouse', 'cart_paths', 'turf_course', 'general'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -398,7 +399,7 @@ export default function OrderListPage() {
     try {
       const result = await updateItem(itemId, {
         status: 'ordered' as OrderItemStatus,
-        ordered_date: new Date().toISOString().slice(0, 10),
+        ordered_date: todayLocal(),
       });
       if (!result) {
         showToast('error', 'Failed to update status. Please try again.');
@@ -413,7 +414,7 @@ export default function OrderListPage() {
     try {
       const result = await updateItem(itemId, {
         status: 'received' as OrderItemStatus,
-        received_date: new Date().toISOString().slice(0, 10),
+        received_date: todayLocal(),
       });
       if (!result) {
         showToast('error', 'Failed to update status. Please try again.');

@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import { formatLocalDate } from "@/lib/utils/date";
 import type {
   Schedule,
   ShiftType,
@@ -63,7 +64,7 @@ function getWeekDates(weekStartDate: string): string[] {
   for (let i = 0; i < 7; i++) {
     const date = new Date(start);
     date.setDate(start.getDate() + i);
-    dates.push(date.toISOString().split("T")[0]);
+    dates.push(formatLocalDate(date));
   }
   return dates;
 }
@@ -72,7 +73,7 @@ function getWeekDates(weekStartDate: string): string[] {
 function addDays(dateString: string, days: number): string {
   const date = new Date(dateString + "T00:00:00");
   date.setDate(date.getDate() + days);
-  return date.toISOString().split("T")[0];
+  return formatLocalDate(date);
 }
 
 export function useSchedule(): UseScheduleReturn {
@@ -572,7 +573,7 @@ export function getWeekStart(date: Date | string): string {
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
   d.setDate(diff);
-  return d.toISOString().split("T")[0];
+  return formatLocalDate(d);
 }
 
 // Format week range for display

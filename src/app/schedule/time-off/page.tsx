@@ -36,6 +36,7 @@ import {
 import { useProfiles, getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import type { TimeOffRequestType, TimeOffRequestStatus, Profile } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 // Request type options
 const requestTypeOptions: { value: TimeOffRequestType; label: string }[] = [
@@ -54,9 +55,9 @@ const statusFilterOptions: { value: TimeOffRequestStatus | "all"; label: string 
   { value: "denied", label: "Denied" },
 ];
 
-// Get today's date as YYYY-MM-DD
+// Get today's date as YYYY-MM-DD (local timezone — see date.ts).
 function getTodayString(): string {
-  return new Date().toISOString().split("T")[0];
+  return todayLocal();
 }
 
 // Format date for display

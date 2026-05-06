@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard, GM_ROLES } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 
 // ── Types ──
 interface RevenueEntry {
@@ -93,14 +94,14 @@ function formatDate(dateStr: string): string {
 }
 
 function getToday(): string {
-  return new Date().toISOString().split("T")[0];
+  return todayLocal();
 }
 
 function getStartOfWeek(): string {
   const d = new Date();
   const day = d.getDay();
   d.setDate(d.getDate() - day);
-  return d.toISOString().split("T")[0];
+  return formatLocalDate(d);
 }
 
 function getStartOfMonth(): string {

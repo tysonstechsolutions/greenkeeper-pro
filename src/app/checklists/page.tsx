@@ -19,6 +19,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import { withTimeout } from "@/lib/utils/resilient-fetch";
 import type { Task, ChecklistItem } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 interface DailyTask extends Task {
   checklistProgress: { done: number; total: number };
@@ -35,7 +36,7 @@ export default function ChecklistsPage() {
   const [viewMode, setViewMode] = useState<"mine" | "crew">("mine");
   const supabase = createClient();
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocal();
 
   const enrichTask = (task: Task): DailyTask => {
     const checklist = (task.checklist || []) as ChecklistItem[];

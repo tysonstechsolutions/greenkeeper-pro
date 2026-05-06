@@ -26,6 +26,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Link from "next/link";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 
 interface PreviewRow {
   id: string;
@@ -44,9 +45,9 @@ export default function CompliancePage() {
   const [since, setSince] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0, 10);
+    return formatLocalDate(d);
   });
-  const [until, setUntil] = useState(() => new Date().toISOString().slice(0, 10));
+  const [until, setUntil] = useState(() => todayLocal());
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

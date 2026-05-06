@@ -13,6 +13,7 @@ import { generateEquipmentReport } from "@/lib/reports/equipment-report";
 import { generateParkingLotReport } from "@/lib/reports/parking-lot-report";
 import { generateClubhouseReport } from "@/lib/reports/clubhouse-report";
 import { generateObservationReport } from "@/lib/reports/observation-report";
+import { todayLocal } from "@/lib/utils/date";
 
 interface ReportResult {
   name: string;
@@ -47,7 +48,7 @@ export async function generateFullDownloadZip(): Promise<{ blob: Blob; filename:
     tryGenerate("order-list", () =>
       generateOrderListReport().then((blob) => ({
         blob,
-        filename: `vmgc-order-list-report-${new Date().toISOString().slice(0, 10)}.pdf`,
+        filename: `vmgc-order-list-report-${todayLocal()}.pdf`,
       })),
     ),
     tryGenerate("equipment", () => generateEquipmentReport()),
@@ -81,7 +82,7 @@ export async function generateFullDownloadZip(): Promise<{ blob: Blob; filename:
   }
 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  const filename = `vmgc-full-report-${new Date().toISOString().slice(0, 10)}.zip`;
+  const filename = `vmgc-full-report-${todayLocal()}.zip`;
   return { blob, filename };
 }
 

@@ -59,6 +59,8 @@ import { downloadParkingLotReport } from "@/lib/reports/parking-lot-report";
 import { downloadClubhouseReport } from "@/lib/reports/clubhouse-report";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { downloadFullReport } from "@/lib/reports/full-download";
+import { parseAppDate } from "@/lib/utils/date-format";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 
 const REPORT_TYPES = [
   {
@@ -151,20 +153,20 @@ export default function ReportsPage() {
     setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // Report-specific state
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  // Report-specific state — date strings use LOCAL components (see date.ts).
+  const [selectedDate, setSelectedDate] = useState(todayLocal());
   const [selectedWeekStart, setSelectedWeekStart] = useState(() => {
     const d = new Date();
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     d.setDate(diff);
-    return d.toISOString().split("T")[0];
+    return formatLocalDate(d);
   });
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [dateRange, setDateRange] = useState({
-    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    end: new Date().toISOString().split("T")[0],
+    start: formatLocalDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+    end: todayLocal(),
   });
 
   // Report data
@@ -354,7 +356,10 @@ export default function ReportsPage() {
       case "daily":
         return formatReportDate(selectedDate);
       case "weekly":
-        return formatDateRange(selectedWeekStart, new Date(new Date(selectedWeekStart).getTime() + 6 * 24 * 60 * 60 * 1000).toISOString());
+        return formatDateRange(
+          selectedWeekStart,
+          formatLocalDate(new Date(new Date(selectedWeekStart).getTime() + 6 * 24 * 60 * 60 * 1000)),
+        );
       case "monthly":
         return `${new Date(selectedYear, selectedMonth - 1).toLocaleString("default", { month: "long" })} ${selectedYear}`;
       default:
@@ -495,7 +500,7 @@ export default function ReportsPage() {
                       type="date"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
-                      max={new Date().toISOString().split("T")[0]}
+                      max={todayLocal()}
                     />
                   </div>
                 )}
@@ -508,7 +513,7 @@ export default function ReportsPage() {
                       type="date"
                       value={selectedWeekStart}
                       onChange={(e) => setSelectedWeekStart(e.target.value)}
-                      max={new Date().toISOString().split("T")[0]}
+                      max={todayLocal()}
                     />
                   </div>
                 )}
@@ -580,7 +585,7 @@ export default function ReportsPage() {
                         type="date"
                         value={dateRange.end}
                         onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                        max={new Date().toISOString().split("T")[0]}
+                        max={todayLocal()}
                       />
                     </div>
                   </div>
@@ -1013,7 +1018,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
               <tbody>
                 {report.maintenance_log.slice(0, 15).map((log, i) => (
                   <tr key={i} className="border-b">
-                    <td className="py-2 px-3">{new Date(log.date).toLocaleDateString()}</td>
+                    <td className="py-2 px-3">{parseAppDate(log.date)?.toLocaleDateString()}</td>
                     <td className="py-2 px-3">{log.equipment_name}</td>
                     <td className="py-2 px-3">
                       <Badge variant="outline" className="capitalize">{log.log_type}</Badge>
@@ -1046,7 +1051,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
                     <p className="text-sm text-muted-foreground">{item.service_type}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm">Due: {item.due_date ? new Date(item.due_date).toLocaleDateString() : "N/A"}</p>
+                    <p className="text-sm">Due: {item.due_date ? parseAppDate(item.due_date)?.toLocaleDateString() : "N/A"}</p>
                     {item.due_hours && item.current_hours && item.due_hours > item.current_hours && (
                       <p className="text-xs text-muted-foreground">{item.due_hours - item.current_hours} hours remaining</p>
                     )}
@@ -1132,7 +1137,7 @@ function ChemicalReportView({ report }: { report: ChemicalReportData }) {
               <tbody>
                 {report.applications.slice(0, 20).map((app, i) => (
                   <tr key={i} className="border-b">
-                    <td className="py-2 px-3">{new Date(app.date).toLocaleDateString()}</td>
+                    <td className="py-2 px-3">{parseAppDate(app.date)?.toLocaleDateString()}</td>
                     <td className="py-2 px-3">{app.product_name}</td>
                     <td className="py-2 px-3">{app.zones.join(", ")}</td>
                     <td className="py-2 px-3">{app.application_rate || "N/A"}</td>

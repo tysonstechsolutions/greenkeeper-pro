@@ -31,6 +31,7 @@ import { useProfiles, getInitials } from "@/lib/hooks/useProfiles";
 import { formatZoneName } from "@/lib/hooks/useCourseZones";
 import { getLocalized, type SupportedLocale } from "@/lib/utils/localized-text";
 import type { TaskCategory, TaskPriority, TaskStatus, CourseZone } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 // Tab type
 type TabType = "my" | "all" | "overdue";
@@ -144,9 +145,9 @@ function formatTime(timeString: string | null): string {
   return `${h12}:${minutes} ${ampm}`;
 }
 
-// Get today's date in YYYY-MM-DD format
+// Get today's date in YYYY-MM-DD format (local timezone — see date.ts).
 function getTodayString(): string {
-  return new Date().toISOString().split("T")[0];
+  return todayLocal();
 }
 
 // Check if a date is overdue

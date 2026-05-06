@@ -3,6 +3,14 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import {
+  directDeleteByFilter,
+  directInsertRow,
+  directInsertRows,
+  directPatchByFilter,
+  directSelectList,
+  directSelectRow,
+} from "@/lib/supabase/rest";
 import type {
   Channel,
   ChannelMember,
@@ -66,89 +74,83 @@ export function useChannels(): UseChannelsReturn {
     setError(null);
 
     try {
-      // Get channels the user is a member of
-       
-      const { data: memberData, error: memberError } = await supabase.from("channel_members")
-        .select("channel_id, last_read_at")
-        .eq("user_id", user.id);
+      // Get channels the user is a member of (direct REST — wedge-resistant)
+      const memberData = await directSelectList<{
+        channel_id: string;
+        last_read_at: string | null;
+      }>("channel_members", {
+        columns: "channel_id,last_read_at",
+        filters: [`user_id=eq.${encodeURIComponent(user.id)}`],
+        label: "useChannels.fetchMemberships",
+      });
 
-      if (memberError) {
-        console.error("Error fetching channel memberships:", memberError);
-        setError(memberError.message);
-        return [];
-      }
-
-      if (!memberData || memberData.length === 0) {
+      if (memberData.length === 0) {
         setChannels([]);
         setTotalUnread(0);
         setLoading(false);
         return [];
       }
 
-      const channelIds = memberData.map((m: { channel_id: string; last_read_at: string | null }) => m.channel_id);
-      const lastReadMap = new Map(
-        memberData.map((m: { channel_id: string; last_read_at: string | null }) => [m.channel_id, m.last_read_at])
-      );
+      const channelIds = memberData.map((m) => m.channel_id);
+      const lastReadMap = new Map(memberData.map((m) => [m.channel_id, m.last_read_at]));
 
       const topChannelIds = channelIds.slice(0, 20); // Limit to 20 channels
+      const inList = `(${topChannelIds.map((id) => encodeURIComponent(id)).join(",")})`;
 
-      // THREE PARALLEL BATCHED QUERIES instead of 3 per channel (was 60
-      // requests for 20 channels — debug log showed ~100 firing on
-      // dashboard boot). Recent messages are fetched once and partitioned
-      // client-side, and member count comes from the already-loaded
-      // membership rows for rare channels + a single aggregate query
-      // otherwise.
-      const [
-        { data: channelsData, error: channelsError },
-        { data: recentMessages },
-        { data: allMemberships },
-      ] = await Promise.all([
-        supabase.from("channels")
-          .select("*")
-          .in("id", topChannelIds)
-          .eq("is_active", true),
-        // Fetch the N most-recent messages across all visible channels in
-        // one query. 500 is well beyond what a chatty 20-channel group
-        // should need for "last message" + unread detection on the
-        // dashboard badge. If a user is severely behind, the unread count
-        // is floored at 500 — acceptable UI behavior.
-        supabase.from("messages")
-          .select("channel_id, content, created_at, sender_id")
-          .in("channel_id", topChannelIds)
-          .order("created_at", { ascending: false })
-          .limit(500),
-        // One query for every membership row across the user's channels.
-        // Rows are tiny (channel_id + user_id) so this is fast even with
-        // big channels; aggregation happens client-side below.
-        supabase.from("channel_members")
-          .select("channel_id")
-          .in("channel_id", topChannelIds),
+      // THREE PARALLEL BATCHED QUERIES — see prior comment for rationale.
+      const [channelsData, recentMessages, allMemberships] = await Promise.all([
+        directSelectList<Channel>("channels", {
+          columns: "*",
+          filters: [`id=in.${inList}`, `is_active=eq.true`],
+          label: "useChannels.fetchChannels",
+        }),
+        directSelectList<{
+          channel_id: string;
+          content: string | null;
+          created_at: string;
+          sender_id: string;
+        }>("messages", {
+          columns: "channel_id,content,created_at,sender_id",
+          filters: [`channel_id=in.${inList}`],
+          orderBy: [{ column: "created_at", ascending: false }],
+          limit: 500,
+          label: "useChannels.fetchRecentMessages",
+        }),
+        directSelectList<{ channel_id: string }>("channel_members", {
+          columns: "channel_id",
+          filters: [`channel_id=in.${inList}`],
+          label: "useChannels.fetchAllMemberships",
+        }),
       ]);
 
-      if (channelsError) {
-        console.error("Error fetching channels:", channelsError);
-        setError(channelsError.message);
-        return [];
-      }
-
       // Partition recent messages by channel_id.
-      const messagesByChannel = new Map<string, Array<{ content: string | null; created_at: string; sender_id: string }>>();
-      for (const m of (recentMessages || []) as Array<{ channel_id: string; content: string | null; created_at: string; sender_id: string }>) {
+      const messagesByChannel = new Map<
+        string,
+        Array<{ content: string | null; created_at: string; sender_id: string }>
+      >();
+      for (const m of recentMessages) {
         let list = messagesByChannel.get(m.channel_id);
         if (!list) {
           list = [];
           messagesByChannel.set(m.channel_id, list);
         }
-        list.push({ content: m.content, created_at: m.created_at, sender_id: m.sender_id });
+        list.push({
+          content: m.content,
+          created_at: m.created_at,
+          sender_id: m.sender_id,
+        });
       }
 
       // Count memberships by channel_id.
       const memberCountByChannel = new Map<string, number>();
-      for (const m of (allMemberships || []) as Array<{ channel_id: string }>) {
-        memberCountByChannel.set(m.channel_id, (memberCountByChannel.get(m.channel_id) ?? 0) + 1);
+      for (const m of allMemberships) {
+        memberCountByChannel.set(
+          m.channel_id,
+          (memberCountByChannel.get(m.channel_id) ?? 0) + 1,
+        );
       }
 
-      const channelsWithDetails: ChannelWithDetails[] = (channelsData || []).map((channel: Channel) => {
+      const channelsWithDetails: ChannelWithDetails[] = channelsData.map((channel) => {
         const msgs = messagesByChannel.get(channel.id) ?? [];
         const lastMessage = msgs[0]; // Already sorted by created_at DESC
         const lastReadAt = lastReadMap.get(channel.id);
@@ -187,12 +189,12 @@ export function useChannels(): UseChannelsReturn {
       return channelsWithDetails;
     } catch (err) {
       console.error("Unexpected error fetching channels:", err);
-      setError("An unexpected error occurred");
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
       return [];
     } finally {
       setLoading(false);
     }
-  }, [user, supabase]);
+  }, [user]);
 
   // Create a new channel
   const createChannel = useCallback(
@@ -216,17 +218,11 @@ export function useChannels(): UseChannelsReturn {
           description: null,
         };
 
-         
-        const { data: channel, error: insertError } = await supabase.from("channels")
-          .insert(insertData)
-          .select()
-          .single();
-
-        if (insertError) {
-          console.error("Error creating channel:", insertError);
-          setError(insertError.message);
-          return null;
-        }
+        const channel = await directInsertRow<Channel>(
+          "channels",
+          insertData,
+          "useChannels.createChannel",
+        );
 
         // Add creator as member
         const allMemberIds = [...new Set([user.id, ...memberIds])];
@@ -236,11 +232,13 @@ export function useChannels(): UseChannelsReturn {
           muted: false,
         }));
 
-         
-        const { error: membersError } = await supabase.from("channel_members")
-          .insert(memberInserts);
-
-        if (membersError) {
+        try {
+          await directInsertRows(
+            "channel_members",
+            memberInserts,
+            "useChannels.createChannel.addMembers",
+          );
+        } catch (membersError) {
           console.error("Error adding channel members:", membersError);
           // Don't fail the whole operation, channel was created
         }
@@ -251,11 +249,11 @@ export function useChannels(): UseChannelsReturn {
         return channel;
       } catch (err) {
         console.error("Unexpected error creating channel:", err);
-        setError("Failed to create channel");
+        setError(err instanceof Error ? err.message : "Failed to create channel");
         return null;
       }
     },
-    [user, supabase, fetchChannels]
+    [user, fetchChannels]
   );
 
   // Create or find direct message channel
@@ -268,53 +266,64 @@ export function useChannels(): UseChannelsReturn {
 
       try {
         // Check if DM channel already exists between these users
-         
-        const { data: existingChannels } = await supabase.from("channels")
-          .select("id")
-          .eq("channel_type", "direct")
-          .eq("is_active", true);
+        const existingChannels = await directSelectList<{ id: string }>(
+          "channels",
+          {
+            columns: "id",
+            filters: [`channel_type=eq.direct`, `is_active=eq.true`],
+            label: "useChannels.createDirectChannel.findExisting",
+          },
+        );
 
-        if (existingChannels) {
-          for (const channel of existingChannels as { id: string }[]) {
-            // Check if both users are members
-             
-            const { data: members } = await supabase.from("channel_members")
-              .select("user_id")
-              .eq("channel_id", channel.id);
+        for (const channel of existingChannels) {
+          // Check if both users are members
+          const members = await directSelectList<{ user_id: string }>(
+            "channel_members",
+            {
+              columns: "user_id",
+              filters: [`channel_id=eq.${encodeURIComponent(channel.id)}`],
+              label: "useChannels.createDirectChannel.checkMembers",
+            },
+          );
 
-            if (members && members.length === 2) {
-              const memberIds = (members as { user_id: string }[]).map((m) => m.user_id);
-              if (
-                memberIds.includes(user.id) &&
-                memberIds.includes(otherUserId)
-              ) {
-                // Found existing DM channel
-                const existingChannel = channels.find(
-                  (c) => c.id === channel.id
-                );
-                if (existingChannel) {
-                  return existingChannel;
-                }
-
-                // Fetch the channel details
-                 
-                const { data } = await supabase.from("channels")
-                  .select("*")
-                  .eq("id", channel.id)
-                  .single();
-
-                return data;
+          if (members.length === 2) {
+            const memberIds = members.map((m) => m.user_id);
+            if (
+              memberIds.includes(user.id) &&
+              memberIds.includes(otherUserId)
+            ) {
+              // Found existing DM channel
+              const existingChannel = channels.find(
+                (c) => c.id === channel.id
+              );
+              if (existingChannel) {
+                return existingChannel;
               }
+
+              // Fetch the channel details
+              const data = await directSelectRow<Channel>(
+                "channels",
+                "id",
+                channel.id,
+                "*",
+                "useChannels.createDirectChannel.fetchExisting",
+              );
+              return data;
             }
           }
         }
 
         // Get other user's name for channel name
-         
-        const { data: otherProfile } = await supabase.from("profiles")
-          .select("full_name, display_name")
-          .eq("id", otherUserId)
-          .single();
+        const otherProfile = await directSelectRow<{
+          full_name: string | null;
+          display_name: string | null;
+        }>(
+          "profiles",
+          "id",
+          otherUserId,
+          "full_name,display_name",
+          "useChannels.createDirectChannel.fetchOtherProfile",
+        );
 
         const otherName =
           otherProfile?.display_name || otherProfile?.full_name || "User";
@@ -330,27 +339,23 @@ export function useChannels(): UseChannelsReturn {
           description: null,
         };
 
-         
-        const { data: channel, error: insertError } = await supabase.from("channels")
-          .insert(insertData)
-          .select()
-          .single();
-
-        if (insertError) {
-          console.error("Error creating DM channel:", insertError);
-          setError(insertError.message);
-          return null;
-        }
+        const channel = await directInsertRow<Channel>(
+          "channels",
+          insertData,
+          "useChannels.createDirectChannel.create",
+        );
 
         // Add both users as members
-         
-        const { error: membersError } = await supabase.from("channel_members")
-          .insert([
-            { channel_id: channel.id, user_id: user.id, muted: false },
-            { channel_id: channel.id, user_id: otherUserId, muted: false },
-          ]);
-
-        if (membersError) {
+        try {
+          await directInsertRows(
+            "channel_members",
+            [
+              { channel_id: channel.id, user_id: user.id, muted: false },
+              { channel_id: channel.id, user_id: otherUserId, muted: false },
+            ],
+            "useChannels.createDirectChannel.addMembers",
+          );
+        } catch (membersError) {
           console.error("Error adding DM members:", membersError);
         }
 
@@ -360,11 +365,11 @@ export function useChannels(): UseChannelsReturn {
         return channel;
       } catch (err) {
         console.error("Unexpected error creating DM channel:", err);
-        setError("Failed to create direct message");
+        setError(err instanceof Error ? err.message : "Failed to create direct message");
         return null;
       }
     },
-    [user, profile, supabase, channels, fetchChannels]
+    [user, profile, channels, fetchChannels]
   );
 
   // Update channel
@@ -379,16 +384,12 @@ export function useChannels(): UseChannelsReturn {
       }
 
       try {
-         
-        const { error: updateError } = await supabase.from("channels")
-          .update(data)
-          .eq("id", id);
-
-        if (updateError) {
-          console.error("Error updating channel:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+        await directPatchByFilter(
+          "channels",
+          [`id=eq.${encodeURIComponent(id)}`],
+          data,
+          "useChannels.updateChannel",
+        );
 
         // Update local state
         setChannels((prev) =>
@@ -398,11 +399,11 @@ export function useChannels(): UseChannelsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error updating channel:", err);
-        setError("Failed to update channel");
+        setError(err instanceof Error ? err.message : "Failed to update channel");
         return false;
       }
     },
-    [user, supabase]
+    [user]
   );
 
   // Delete channel (super only)
@@ -415,16 +416,12 @@ export function useChannels(): UseChannelsReturn {
 
       try {
         // Soft delete - just mark as inactive
-         
-        const { error: deleteError } = await supabase.from("channels")
-          .update({ is_active: false })
-          .eq("id", id);
-
-        if (deleteError) {
-          console.error("Error deleting channel:", deleteError);
-          setError(deleteError.message);
-          return false;
-        }
+        await directPatchByFilter(
+          "channels",
+          [`id=eq.${encodeURIComponent(id)}`],
+          { is_active: false },
+          "useChannels.deleteChannel",
+        );
 
         // Update local state
         setChannels((prev) => prev.filter((c) => c.id !== id));
@@ -432,11 +429,11 @@ export function useChannels(): UseChannelsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error deleting channel:", err);
-        setError("Failed to delete channel");
+        setError(err instanceof Error ? err.message : "Failed to delete channel");
         return false;
       }
     },
-    [user, isSuper, supabase]
+    [user, isSuper]
   );
 
   // Add members to channel
@@ -448,22 +445,49 @@ export function useChannels(): UseChannelsReturn {
       }
 
       try {
+        // Upsert via raw POST with Prefer: resolution=merge-duplicates +
+        // an on_conflict query param. Going direct to PostgREST keeps us
+        // off supabase-js's wedge-prone auth wrapper.
         const memberInserts = userIds.map((userId) => ({
           channel_id: channelId,
           user_id: userId,
           muted: false,
         }));
-
-         
-        const { error: insertError } = await supabase.from("channel_members")
-          .upsert(memberInserts, {
-            onConflict: "channel_id,user_id",
-          });
-
-        if (insertError) {
-          console.error("Error adding members:", insertError);
-          setError(insertError.message);
-          return false;
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        let token = "";
+        try {
+          const keys = Object.keys(localStorage).filter((k) =>
+            k.includes("auth-token"),
+          );
+          for (const k of keys) {
+            const v = JSON.parse(localStorage.getItem(k) ?? "null");
+            if (v?.access_token) {
+              token = v.access_token;
+              break;
+            }
+          }
+        } catch {
+          // SSR/no localStorage — falls back to anon role.
+        }
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/channel_members?on_conflict=channel_id,user_id`,
+          {
+            method: "POST",
+            headers: {
+              apikey: anonKey,
+              Authorization: token ? `Bearer ${token}` : `Bearer ${anonKey}`,
+              "Content-Type": "application/json",
+              Prefer: "resolution=merge-duplicates,return=minimal",
+            },
+            body: JSON.stringify(memberInserts),
+          },
+        );
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(
+            `useChannels.addMembers failed: ${res.status} ${body.slice(0, 200)}`,
+          );
         }
 
         // Refresh channels to update member counts
@@ -472,11 +496,11 @@ export function useChannels(): UseChannelsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error adding members:", err);
-        setError("Failed to add members");
+        setError(err instanceof Error ? err.message : "Failed to add members");
         return false;
       }
     },
-    [user, supabase, fetchChannels]
+    [user, fetchChannels]
   );
 
   // Remove member from channel
@@ -488,17 +512,14 @@ export function useChannels(): UseChannelsReturn {
       }
 
       try {
-         
-        const { error: deleteError } = await supabase.from("channel_members")
-          .delete()
-          .eq("channel_id", channelId)
-          .eq("user_id", userId);
-
-        if (deleteError) {
-          console.error("Error removing member:", deleteError);
-          setError(deleteError.message);
-          return false;
-        }
+        await directDeleteByFilter(
+          "channel_members",
+          [
+            `channel_id=eq.${encodeURIComponent(channelId)}`,
+            `user_id=eq.${encodeURIComponent(userId)}`,
+          ],
+          "useChannels.removeMember",
+        );
 
         // If user removed themselves, refresh to remove channel from list
         if (userId === user.id) {
@@ -517,11 +538,11 @@ export function useChannels(): UseChannelsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error removing member:", err);
-        setError("Failed to remove member");
+        setError(err instanceof Error ? err.message : "Failed to remove member");
         return false;
       }
     },
-    [user, supabase, fetchChannels]
+    [user, fetchChannels]
   );
 
   // Mark channel as read
@@ -535,17 +556,15 @@ export function useChannels(): UseChannelsReturn {
       try {
         const now = new Date().toISOString();
 
-         
-        const { error: updateError } = await supabase.from("channel_members")
-          .update({ last_read_at: now })
-          .eq("channel_id", channelId)
-          .eq("user_id", user.id);
-
-        if (updateError) {
-          console.error("Error marking as read:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+        await directPatchByFilter(
+          "channel_members",
+          [
+            `channel_id=eq.${encodeURIComponent(channelId)}`,
+            `user_id=eq.${encodeURIComponent(user.id)}`,
+          ],
+          { last_read_at: now },
+          "useChannels.markAsRead",
+        );
 
         // Update local state
         setChannels((prev) => {
@@ -559,11 +578,11 @@ export function useChannels(): UseChannelsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error marking as read:", err);
-        setError("Failed to mark as read");
+        setError(err instanceof Error ? err.message : "Failed to mark as read");
         return false;
       }
     },
-    [user, supabase]
+    [user]
   );
 
   // Get channel by ID

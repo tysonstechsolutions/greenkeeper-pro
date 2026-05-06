@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
 import type { WaterMeterReading, WaterUsageTarget, WaterSource } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 // ── Constants ──
 const ALLOWED_ROLES: Array<"super" | "asst_super" | "director" | "foreman"> = [
@@ -642,9 +643,7 @@ function AddReadingForm({
   onCancel: () => void;
 }) {
   const [meterId, setMeterId] = useState("MAIN-01");
-  const [readingDate, setReadingDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [readingDate, setReadingDate] = useState(todayLocal());
   const [readingValue, setReadingValue] = useState("");
   const [source, setSource] = useState<WaterSource>("municipal");
   const [notes, setNotes] = useState("");

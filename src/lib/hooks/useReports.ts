@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useCourse } from "./useCourse";
+import { formatLocalDate } from "@/lib/utils/date";
 
 // Report data types
 export interface DailyReportData {
@@ -573,7 +574,7 @@ export function useReports() {
       const startDate = new Date(weekStart);
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + 6);
-      const weekEnd = endDate.toISOString().split("T")[0];
+      const weekEnd = formatLocalDate(endDate);
 
       const report: WeeklyReportData = {
         week_start: weekStart,
@@ -910,7 +911,7 @@ export function useReports() {
               if (task.status === "completed" || task.status === "verified") {
                 current.completed++;
                 if (task.completed_at && task.due_date) {
-                  const completedDate = new Date(task.completed_at).toISOString().split("T")[0];
+                  const completedDate = formatLocalDate(new Date(task.completed_at));
                   if (completedDate <= task.due_date) {
                     current.on_time++;
                   }
@@ -1211,7 +1212,7 @@ export function useReports() {
               report.tasks.completed++;
 
               if (task.completed_at && task.due_date) {
-                const completedDate = new Date(task.completed_at).toISOString().split("T")[0];
+                const completedDate = formatLocalDate(new Date(task.completed_at));
                 if (completedDate <= task.due_date) {
                   report.tasks.on_time++;
                 } else {
@@ -1667,5 +1668,5 @@ function getWeekStart(dateStr: string): string {
   const day = date.getDay();
   const diff = date.getDate() - day + (day === 0 ? -6 : 1);
   date.setDate(diff);
-  return date.toISOString().split("T")[0];
+  return formatLocalDate(date);
 }

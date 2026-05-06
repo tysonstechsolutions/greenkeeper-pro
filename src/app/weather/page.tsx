@@ -32,6 +32,7 @@ import {
 } from "@/lib/hooks/useWeather";
 import { createClient } from "@/lib/supabase/client";
 import type { WeatherLog } from "@/types/database";
+import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import {
   LineChart,
   Line,
@@ -102,7 +103,7 @@ export default function WeatherPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const currentYear = new Date().getFullYear();
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayLocal();
 
   const supabase = createClient();
 
@@ -127,7 +128,7 @@ export default function WeatherPage() {
         const { data, error: fetchError } = await supabase
           .from("weather_logs")
           .select("*")
-          .gte("log_date", thirtyDaysAgo.toISOString().split("T")[0])
+          .gte("log_date", formatLocalDate(thirtyDaysAgo))
           .order("log_date", { ascending: false });
 
         if (fetchError) {

@@ -111,7 +111,7 @@ export interface ApiError extends Error {
  *     clean error instead of a hang.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function resolveAccessToken(supabase: any, supabaseUrl: string, anonKey: string): Promise<string> {
+export async function resolveAccessToken(supabase: any, supabaseUrl: string, anonKey: string): Promise<string> {
   // 1. Direct localStorage read — instant, no lock.
   if (typeof window !== "undefined" && supabaseUrl) {
     try {

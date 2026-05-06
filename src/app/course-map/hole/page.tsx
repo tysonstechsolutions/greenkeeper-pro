@@ -73,6 +73,7 @@ import { createClient } from "@/lib/supabase/client";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
 import TreatmentPlanView from "@/components/treatment-plan-view";
+import { todayLocal } from "@/lib/utils/date";
 import type {
   DiagnosisResult,
   HoleIssueType,
@@ -443,7 +444,7 @@ function PageContent() {
           category: obs.issue_type === "bunker_issue" ? "bunker" : obs.issue_type === "irrigation_issue" ? "irrigation" : obs.issue_type === "mechanical_damage" ? "mechanical" : "greens",
           priority: obs.priority,
           status: "pending",
-          due_date: new Date().toISOString().split("T")[0],
+          due_date: todayLocal(),
           hole_numbers: [obs.hole_number],
           assigned_by: user?.id,
           equipment_needed: [],

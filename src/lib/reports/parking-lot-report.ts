@@ -8,6 +8,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -444,7 +445,7 @@ export async function generateParkingLotReport(
 
     step = "pdf-output";
     const blob = doc.output("blob") as Blob;
-    const filename = "vmgc-parking-lot-report-" + new Date().toISOString().slice(0, 10) + ".pdf";
+    const filename = "vmgc-parking-lot-report-" + todayLocal() + ".pdf";
 
     return { blob, filename };
   } catch (err) {

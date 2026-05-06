@@ -61,6 +61,7 @@ import {
   fy26AssetStatusColors,
 } from "@/types/fy26-assets";
 import type { EquipmentType } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 
 type WizardStep =
   | "verify"
@@ -191,7 +192,7 @@ export function ScanWizard({
   const [operational, setOperational] = useState<boolean | null>(null);
   const [parts, setParts] = useState<PartRow[]>([]);
   const [service, setService] = useState<ServiceRecordDraft>({
-    service_date: new Date().toISOString().slice(0, 10),
+    service_date: todayLocal(),
     performed_by: "",
     description: "",
   });
@@ -452,7 +453,7 @@ export function ScanWizard({
           "asset_damage_records",
           {
             asset_id: asset.id,
-            damage_date: new Date().toISOString().slice(0, 10),
+            damage_date: todayLocal(),
             description: pendingDamageNote.trim() || "(no note)",
             photos: [pendingDamagePhoto],
             reported_by: user?.id ?? null,
@@ -578,7 +579,7 @@ export function ScanWizard({
     if (
       !service.performed_by &&
       !service.description.trim() &&
-      service.service_date === new Date().toISOString().slice(0, 10)
+      service.service_date === todayLocal()
     ) {
       setStep("review");
       return;
