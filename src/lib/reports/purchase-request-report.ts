@@ -30,6 +30,7 @@ import {
   type PDFForm,
 } from "pdf-lib";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
+import { PR_ACCOUNTING_DEFAULTS } from "@/lib/pr-defaults";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 
 const TEMPLATE_URL = "/templates/naf-pr-template.pdf";
@@ -244,7 +245,15 @@ export async function generatePurchaseRequestReport(
     // ── Accounting (right-side block) ──────────────────────────────────
     step = "fill-accounting";
     setText(form, "COMPANY_CODE", pr.company_code || "", written);
-    setText(form, "REQUESTING_CODE", pr.requesting_facility_code || "", written);
+    // Default to VMGC's facility code (8400) when blank — covers older
+    // PRs saved before the "always 8400" rule was wired in. See
+    // PR_ACCOUNTING_DEFAULTS for the source of truth.
+    setText(
+      form,
+      "REQUESTING_CODE",
+      pr.requesting_facility_code || PR_ACCOUNTING_DEFAULTS.requesting_facility_code,
+      written,
+    );
     const internalOrder =
       formatInternalOrder(pr.pr_sequence_number, pr.date_prepared) ||
       pr.internal_order ||

@@ -201,7 +201,11 @@ function NewPurchaseRequestPageInner() {
   const [companyCode, setCompanyCode] = useState(() =>
     editId ? "" : PR_ACCOUNTING_DEFAULTS.company_code,
   );
-  const [requestingFacility, setRequestingFacility] = useState("");
+  // Requesting facility is always 8400 for VMGC — pre-filled on new PRs
+  // and overwritten by the loaded row in edit mode (see effect below).
+  const [requestingFacility, setRequestingFacility] = useState(() =>
+    editId ? "" : PR_ACCOUNTING_DEFAULTS.requesting_facility_code,
+  );
   const [projectNo, setProjectNo] = useState("");
   const [program, setProgram] = useState("");
 
@@ -440,7 +444,12 @@ function NewPurchaseRequestPageInner() {
         email: row.delivery_email || "",
       });
       setCompanyCode(row.company_code || "");
-      setRequestingFacility(row.requesting_facility_code || "");
+      // Backfill the facility code for older PRs that pre-date the
+      // "always 8400" rule — they otherwise come in blank and the user
+      // would have to type it again on every edit.
+      setRequestingFacility(
+        row.requesting_facility_code || PR_ACCOUNTING_DEFAULTS.requesting_facility_code,
+      );
       // internal_order is computed from pr_sequence_number; nothing to load.
       setProjectNo(row.project_no || "");
       setProgram(row.program || "");

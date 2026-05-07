@@ -36,10 +36,10 @@ import {
   directPatchRow,
   directInsertRow,
 } from "@/lib/supabase/rest";
+import { calc889ExpirationDate, format889Date } from "@/lib/section-889";
+import { computeVendorPatch } from "@/lib/vendor-defaults";
 import { callApi } from "@/lib/api/client";
 import { resizeImageFile } from "@/lib/utils/image-resize";
-import { parseAppDate } from "@/lib/utils/date-format";
-import { formatLocalDate } from "@/lib/utils/date";
 import { Sparkles } from "lucide-react";
 
 interface ExtractedVendor889 {
@@ -56,18 +56,6 @@ interface ExtractedVendor889 {
   form_type: "sam_gov" | "paper_merchant" | "unknown";
   compliant: boolean;
   warnings: string[];
-}
-
-/**
- * Add 365 days to an ISO date and return ISO. Used as a fallback when a
- * paper merchant 889 form has a date_signed but no printed expiration —
- * CNIC NAF PC paper reps are renewed annually so date_signed + 1 year is
- * the safe assumption.
- */
-function addOneYear(iso: string): string {
-  const d = new Date(iso);
-  d.setFullYear(d.getFullYear() + 1);
-  return formatLocalDate(d);
 }
 
 interface Vendor {
@@ -340,28 +328,27 @@ export default function VendorsPage() {
         });
       if (upErr) throw upErr;
 
-      // Try to extract expiration date from the PDF using the AI quote
-      // extractor — it understands SAM.gov 889 forms via a prompt tweak.
-      // Fall back to null and let the user enter it manually.
-      let expirationDate: string | null = null;
-      try {
-        const expResp = await extract889Expiration(file);
-        if (expResp) expirationDate = expResp;
-      } catch {
-        // Non-fatal — we'll just save without an expiration.
-      }
+      // 889s expire on Oct 1 of the federal fiscal year they were signed
+      // in. The "signed date" defaults to today (the upload time) — we
+      // can't reliably extract a sign date from the PDF, and the user
+      // can adjust the expiration with the date input on the card if
+      // the form was actually signed in a different fiscal year.
+      const expirationDate = calc889ExpirationDate(new Date());
 
-      const updates = {
-        section_889_path: stored,
-        section_889_filename: file.name,
-        section_889_uploaded_at: new Date().toISOString(),
-        ...(expirationDate ? { section_889_expiration_date: expirationDate } : {}),
-      };
-      const { error: updateErr } = await supabase
-        .from("vendors")
-        .update(updates)
-        .eq("id", vendorId);
-      if (updateErr) throw updateErr;
+      // Direct REST so the patch can't wedge on a stalled supabase-js
+      // auth wrapper.
+      await directPatchRow(
+        "vendors",
+        "id",
+        vendorId,
+        {
+          section_889_path: stored,
+          section_889_filename: file.name,
+          section_889_uploaded_at: new Date().toISOString(),
+          section_889_expiration_date: expirationDate,
+        },
+        "vendors.upload889",
+      );
 
       await fetchVendors();
     } catch (err) {
@@ -410,15 +397,16 @@ export default function VendorsPage() {
         return;
       }
 
-      // Fallback: paper merchant forms don't print an expiration. Compute
-      // it as date_signed + 1 year (annual re-rep cycle per CNIC).
-      let expirationDate = extracted.expiration_date;
-      if (!expirationDate && extracted.date_signed) {
-        try {
-          expirationDate = addOneYear(extracted.date_signed);
-        } catch {
-          // Bad date — leave null and let the user set it manually.
-        }
+      // 889s expire Oct 1 of the federal fiscal year they were signed in
+      // (FY = Oct 1 → Sept 30). If the form has a sign date, use it;
+      // otherwise default to today (when the file was uploaded). The
+      // user can adjust the date input on the card afterward.
+      const signedSource = extracted.date_signed || new Date().toISOString();
+      let expirationDate: string | null = null;
+      try {
+        expirationDate = calc889ExpirationDate(signedSource);
+      } catch {
+        // Bad date — leave null and let the user set it manually.
       }
 
       // 3. Create the vendor row.
@@ -491,16 +479,67 @@ export default function VendorsPage() {
   }
 
   async function handleSet889Expiration(vendorId: string, value: string) {
-    const supabase = createClient();
-    const { error: updateErr } = await supabase
-      .from("vendors")
-      .update({ section_889_expiration_date: value || null })
-      .eq("id", vendorId);
-    if (updateErr) {
-      setError(updateErr.message);
-      return;
+    try {
+      await directPatchRow(
+        "vendors",
+        "id",
+        vendorId,
+        { section_889_expiration_date: value || null },
+        "vendors.set889Expiration",
+      );
+      fetchVendors();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
-    fetchVendors();
+  }
+
+  // ── Sync vendor contacts from defaults ─────────────────────────────────
+  // Walk the loaded vendor list, find ones that match a name in
+  // VENDOR_DEFAULTS, and PATCH only the fields that are currently blank.
+  // Never overwrites a value the user already filled in. Idempotent —
+  // running it twice does nothing the second time.
+  const [syncingDefaults, setSyncingDefaults] = useState(false);
+  async function handleSyncVendorDefaults() {
+    setSyncingDefaults(true);
+    setError(null);
+    let touched = 0;
+    let skipped = 0;
+    try {
+      for (const v of vendors) {
+        const patch = computeVendorPatch(v);
+        if (!patch) {
+          skipped++;
+          continue;
+        }
+        await directPatchRow(
+          "vendors",
+          "id",
+          v.id,
+          patch as Record<string, unknown>,
+          `vendors.syncDefaults.${v.id}`,
+        );
+        touched++;
+      }
+      await fetchVendors();
+      if (touched === 0) {
+        setError(null);
+        // Surface a quick info banner via the existing error UI by reusing
+        // the slot — green-styled inline below the header would be nicer
+        // but this keeps the diff small. Treat as informational.
+        setError(
+          `All ${vendors.length} vendor records already had their default contact info filled — nothing to sync.`,
+        );
+      }
+    } catch (err) {
+      setError(
+        `Sync stopped after updating ${touched} vendors. ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    } finally {
+      void skipped;
+      setSyncingDefaults(false);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -532,20 +571,36 @@ export default function VendorsPage() {
           </p>
         </div>
         {canManage && (
-          <Button
-            size="sm"
-            onClick={() => {
-              setShowForm(!showForm);
-              if (showForm) resetForm();
-            }}
-          >
-            {showForm ? (
-              <X className="w-4 h-4 mr-1" />
-            ) : (
-              <Plus className="w-4 h-4 mr-1" />
-            )}
-            {showForm ? "Cancel" : "Add"}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSyncVendorDefaults}
+              disabled={syncingDefaults || vendors.length === 0}
+              title="Backfill blank contact info on known vendors (Russo, Toro, R&R, Uline, etc.) — never overwrites filled-in fields"
+            >
+              {syncingDefaults ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4 mr-1" />
+              )}
+              Sync contacts
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setShowForm(!showForm);
+                if (showForm) resetForm();
+              }}
+            >
+              {showForm ? (
+                <X className="w-4 h-4 mr-1" />
+              ) : (
+                <Plus className="w-4 h-4 mr-1" />
+              )}
+              {showForm ? "Cancel" : "Add"}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -890,16 +945,44 @@ export default function VendorsPage() {
                     </div>
 
                     {v.section_889_expiration_date ? (
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Expires{" "}
-                        {parseAppDate(v.section_889_expiration_date)?.toLocaleDateString(
-                          "en-US",
-                          { year: "numeric", month: "short", day: "numeric" },
-                        )}
-                      </p>
+                      // Show expiration prominently with days-remaining
+                      // hint colored to match status. Fiscal-year reminder
+                      // sits underneath as a smaller helper line.
+                      (() => {
+                        const expIso = v.section_889_expiration_date;
+                        const expDate = new Date(expIso + "T12:00:00");
+                        const daysLeft = Math.floor(
+                          (expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+                        );
+                        const dateColor =
+                          status === "expired"
+                            ? "text-red-700 dark:text-red-400"
+                            : status === "expiring_soon"
+                              ? "text-amber-700 dark:text-amber-400"
+                              : "text-foreground";
+                        const daysLabel =
+                          daysLeft < 0
+                            ? `${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} ago`
+                            : daysLeft === 0
+                              ? "today"
+                              : `in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+                        return (
+                          <div className="mb-2">
+                            <p className={`text-sm font-semibold ${dateColor}`}>
+                              Expires {format889Date(expIso)}{" "}
+                              <span className="text-xs font-normal text-muted-foreground">
+                                ({daysLabel})
+                              </span>
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              Federal FY runs Oct 1 – Sept 30. 889s expire Oct 1 of the FY they were signed in.
+                            </p>
+                          </div>
+                        );
+                      })()
                     ) : v.section_889_path ? (
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Expiration date not set
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                        Expiration date not set — defaults to next Oct 1.
                       </p>
                     ) : null}
 
@@ -975,26 +1058,6 @@ export default function VendorsPage() {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// 889 expiration extraction — calls the same edge function we use for quotes
-// ──────────────────────────────────────────────────────────────────────────────
-
-async function extract889Expiration(file: File): Promise<string | null> {
-  // Reuse the extract-quote function but point it at a 889 form. The
-  // generic prompt won't know about 889s, so we just OCR the PDF and look
-  // for an expiration-date string ourselves. Cheap heuristic: send via the
-  // Anthropic vision endpoint with a tiny purpose-built prompt.
-  //
-  // For now, parse the filename if it contains "EXPIRES <date>".
-  const m = file.name.match(/EXPIRES\s+(\d{1,2})\s+([A-Z]{3})\s+(\d{4})/i);
-  if (m) {
-    const day = m[1].padStart(2, "0");
-    const monMap: Record<string, string> = {
-      JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06",
-      JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12",
-    };
-    const mon = monMap[m[2].toUpperCase()];
-    if (mon) return `${m[3]}-${mon}-${day}`;
-  }
-  return null;
-}
+// 889 expiration is now computed via calc889ExpirationDate() (next Oct 1
+// after the date signed). The old filename-regex extractor was removed
+// when the rule changed — see src/lib/section-889.ts.

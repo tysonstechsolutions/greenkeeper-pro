@@ -34,9 +34,11 @@ export const PR_DELIVERY_DEFAULTS = {
 /** Pre-filled in the Accounting section. Rest of the row is left blank. */
 export const PR_ACCOUNTING_DEFAULTS = {
   company_code: "1353",
-  // requesting_facility_code, project_no, program — left blank for the
-  // user to fill per-PR. internal_order is auto-generated, see
-  // pr-internal-order.ts.
+  // VMGC's requesting facility never changes — bake it in so the user
+  // doesn't have to retype it on every PR.
+  requesting_facility_code: "8400",
+  // project_no, program — left blank for the user to fill per-PR.
+  // internal_order is auto-generated, see pr-internal-order.ts.
 } as const;
 
 /** Default request method. Overridable in the form. */
