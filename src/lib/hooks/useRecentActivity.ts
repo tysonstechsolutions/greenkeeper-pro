@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUserId } from "@/lib/supabase/rest";
 import type { ActivityLog, Profile, InsertTables } from "@/types/database";
 
 export interface ActivityWithUser extends ActivityLog {
@@ -78,15 +79,16 @@ export function useRecentActivity(): UseRecentActivityReturn {
       metadata?: Record<string, unknown>
     ): Promise<boolean> => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-        if (!user) {
+        if (!userId) {
           console.warn("Cannot log activity: no authenticated user");
           return false;
         }
 
         const activityData: InsertTables<"activity_log"> = {
-          user_id: user.id,
+          user_id: userId,
           action_type: actionType,
           entity_type: entityType,
           entity_id: entityId || null,

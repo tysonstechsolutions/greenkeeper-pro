@@ -70,6 +70,7 @@ import {
 import { issueTypeDescriptions, issueTypeFixTemplates } from "@/lib/hole-constants";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import { directInsertRow } from "@/lib/supabase/rest";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
 import TreatmentPlanView from "@/components/treatment-plan-view";
@@ -433,12 +434,17 @@ function PageContent() {
   // ── Create Task from Observation ──
   const handleCreateTask = useCallback(async (obs: HoleObservation) => {
     setCreatingTask(true);
-    const supabase = createClient();
 
     try {
-
-      const { data: task, error } = await supabase.from("tasks")
-        .insert({
+      // Direct REST so the insert can't wedge on a stalled supabase-js
+      // auth wrapper after the user navigates between course holes.
+      const task = await directInsertRow<{
+        id: string;
+        title: string;
+        status: string;
+      }>(
+        "tasks",
+        {
           title: `Hole ${obs.hole_number}: ${obs.title}`,
           description: `${issueTypeLabels[obs.issue_type]} reported on Hole ${obs.hole_number}.\n\n${obs.description || "No additional details."}${obs.fix_instructions ? `\n\n--- How to Fix ---\n${obs.fix_instructions}` : ""}${obs.photo_url ? `\n\nPhoto: ${obs.photo_url}` : ""}`,
           category: obs.issue_type === "bunker_issue" ? "bunker" : obs.issue_type === "irrigation_issue" ? "irrigation" : obs.issue_type === "mechanical_damage" ? "mechanical" : "greens",
@@ -450,14 +456,11 @@ function PageContent() {
           equipment_needed: [],
           materials_needed: [],
           checklist: [],
-        })
-        .select("id, title, status")
-        .single();
+        },
+        "course-map.hole.createTaskFromObservation",
+      );
 
-      if (error) {
-        console.error("Failed to create task:", error);
-        setFeedbackMsg({ type: "error", text: "Failed to create task. Please try again." });
-      } else if (task) {
+      if (task) {
         await updateObservation(obs.id, {
           task_id: task.id,
           status: "in_progress",

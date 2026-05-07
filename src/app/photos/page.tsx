@@ -52,7 +52,7 @@ import { useProfiles, getDisplayName, getInitials } from "@/lib/hooks/useProfile
 import {
   CameraCaptureModal,
 } from "@/components/features/photos/camera-capture";
-import { createClient } from "@/lib/supabase/client";
+import { directSelectList, directSelectCount } from "@/lib/supabase/rest";
 import type { PhotoType } from "@/types/database";
 import { formatLocalDate } from "@/lib/utils/date";
 
@@ -163,34 +163,50 @@ export default function PhotosPage() {
     return f;
   }, [dateStart, dateEnd, selectedZone, selectedPhotoTypes, selectedUploader, tagsInput, searchQuery]);
 
-  // Fetch stats
+  // Fetch stats — direct REST so a wedged supabase-js auth wrapper can't
+  // hang the dashboard load. The four sub-queries run in parallel since
+  // they're independent.
   const fetchStats = useCallback(async () => {
-    const supabase = createClient();
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+    ).toISOString();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    ).toISOString();
 
     try {
-      // Photos this month
-      const { count: monthCount } = await supabase
-        .from("photos")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", startOfMonth);
-
-      // Photos today
-      const { count: todayCount } = await supabase
-        .from("photos")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", startOfToday);
+      const [monthCount, todayCount, zoneStats, uploaderStats] =
+        await Promise.all([
+          directSelectCount(
+            "photos",
+            [`created_at=gte.${encodeURIComponent(startOfMonth)}`],
+            "photos.fetchStats.monthCount",
+          ),
+          directSelectCount(
+            "photos",
+            [`created_at=gte.${encodeURIComponent(startOfToday)}`],
+            "photos.fetchStats.todayCount",
+          ),
+          directSelectList<{ zone_id: string | null }>("photos", {
+            columns: "zone_id",
+            filters: [`zone_id=not.is.null`],
+            label: "photos.fetchStats.zoneStats",
+          }),
+          directSelectList<{ uploaded_by: string }>("photos", {
+            columns: "uploaded_by",
+            filters: [`created_at=gte.${encodeURIComponent(startOfMonth)}`],
+            label: "photos.fetchStats.uploaderStats",
+          }),
+        ]);
 
       // Most documented zone
-       
-      const { data: zoneStats } = await supabase.from("photos")
-        .select("zone_id")
-        .not("zone_id", "is", null);
-
       const zoneCounts: Record<string, number> = {};
-      zoneStats?.forEach((p: { zone_id: string | null }) => {
+      zoneStats.forEach((p) => {
         if (p.zone_id) {
           zoneCounts[p.zone_id] = (zoneCounts[p.zone_id] || 0) + 1;
         }
@@ -201,19 +217,14 @@ export default function PhotosPage() {
       Object.entries(zoneCounts).forEach(([zoneId, count]) => {
         if (count > maxZoneCount) {
           maxZoneCount = count;
-          const zone = zones.find(z => z.id === zoneId);
+          const zone = zones.find((z) => z.id === zoneId);
           topZone = { name: zone ? formatZoneName(zone) : "Unknown Zone", count };
         }
       });
 
       // Top contributor
-       
-      const { data: uploaderStats } = await supabase.from("photos")
-        .select("uploaded_by")
-        .gte("created_at", startOfMonth);
-
       const uploaderCounts: Record<string, number> = {};
-      uploaderStats?.forEach((p: { uploaded_by: string }) => {
+      uploaderStats.forEach((p) => {
         uploaderCounts[p.uploaded_by] = (uploaderCounts[p.uploaded_by] || 0) + 1;
       });
 
@@ -222,7 +233,7 @@ export default function PhotosPage() {
       Object.entries(uploaderCounts).forEach(([uploaderId, count]) => {
         if (count > maxUploaderCount) {
           maxUploaderCount = count;
-          const uploaderProfile = profiles.find(p => p.id === uploaderId);
+          const uploaderProfile = profiles.find((p) => p.id === uploaderId);
           topUploader = {
             name: uploaderProfile ? getDisplayName(uploaderProfile) : "Unknown",
             count,
@@ -231,8 +242,8 @@ export default function PhotosPage() {
       });
 
       setStats({
-        thisMonth: monthCount || 0,
-        today: todayCount || 0,
+        thisMonth: monthCount,
+        today: todayCount,
         mostDocumentedZone: topZone,
         topContributor: topUploader,
       });

@@ -2,8 +2,89 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { directSelectRow } from "@/lib/supabase/rest";
 import type { User, Session } from "@supabase/supabase-js";
 import type { Profile, UserRole } from "@/types/database";
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+
+// Hard ceiling on supabase.auth.getSession(). That call has been the source
+// of every "stuck on Loading..." wedge we've chased — its internal lock can
+// hang indefinitely after navigation or a stalled token refresh. If it
+// hasn't returned in this long, we give up and proceed with whatever we
+// could read from localStorage (or none at all). 4s is well above a healthy
+// localStorage round-trip but well below the user's patience threshold.
+const GET_SESSION_TIMEOUT_MS = 4_000;
+
+interface CachedSessionLike {
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: number;
+  expires_in?: number;
+  token_type?: string;
+  user?: User;
+  provider_token?: string | null;
+  provider_refresh_token?: string | null;
+}
+
+/**
+ * Read the persisted Supabase session synchronously from localStorage.
+ * Bypasses supabase.auth.getSession() entirely so we never block on an
+ * internal auth lock. Returns null when missing or unparseable; the caller
+ * decides whether to also try the slower async path.
+ *
+ * Supabase persists the session as plain JSON under
+ * `sb-<project-ref>-auth-token` (the default localStorage adapter). We
+ * derive the project ref from the URL and read directly.
+ */
+function readCachedSession(): CachedSessionLike | null {
+  if (typeof window === "undefined") return null;
+  const match = SUPABASE_URL.match(/https?:\/\/([^./]+)\.supabase\./);
+  if (!match) return null;
+  const key = `sb-${match[1]}-auth-token`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CachedSessionLike;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the cached session's access token is at or past its expiry
+ * (with a 30-second safety buffer to cover clock skew and the time it
+ * takes us to actually use the token). When false, the token is still
+ * usable for PostgREST calls; when true, we should let supabase try to
+ * refresh.
+ */
+function isCachedSessionExpired(s: CachedSessionLike): boolean {
+  if (typeof s.expires_at !== "number") return false;
+  // expires_at is unix seconds.
+  return Date.now() / 1000 >= s.expires_at - 30;
+}
+
+/**
+ * Race a promise against a hard timeout. Resolves with `null` instead of
+ * throwing on timeout, so the caller can treat "auth client is wedged" the
+ * same as "no session" — both mean: proceed without a session, let the
+ * onAuthStateChange listener pick up future events.
+ */
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race<T | null>([
+      p,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
 
 export interface UseAuthReturn {
   user: User | null;
@@ -84,25 +165,32 @@ export function useAuthInternal(): UseAuthReturn {
   const supabase = createClient();
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
+    // Direct REST instead of supabase.from("profiles") — supabase-js's
+    // auth wrapper can wedge after navigation/login, leaving the entire
+    // app stuck on "Loading..." indefinitely. Since this hook gates the
+    // header avatar AND any page that checks `loading`/`profile`, a
+    // wedge here breaks the whole UI. Going straight to PostgREST
+    // sidesteps the auth-mutex contention.
     try {
-      const { data, error: fetchError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      if (fetchError) {
-        console.error("Error fetching profile:", fetchError);
-        setError("Failed to load profile");
+      const data = await directSelectRow<Profile>(
+        "profiles",
+        "id",
+        userId,
+        "*",
+        "useAuth.fetchProfile",
+      );
+      if (!data) {
+        // Profile row missing — common briefly for brand-new accounts;
+        // the safety-net retry below picks it up after the DB trigger.
         return null;
       }
-
-      return data as Profile;
+      return data;
     } catch (err) {
       console.error("Exception fetching profile:", err);
+      setError("Failed to load profile");
       return null;
     }
-  }, [supabase]);
+  }, []);
 
   const refreshProfile = useCallback(async () => {
     if (!user) return;
@@ -112,10 +200,13 @@ export function useAuthInternal(): UseAuthReturn {
     }
   }, [user, fetchProfile]);
 
-  // Primary initialization: use getSession() for the initial load,
-  // then onAuthStateChange for subsequent events only.
-  // This avoids the navigator.locks race condition where INITIAL_SESSION
-  // can throw AbortError due to lock stealing.
+  // Primary initialization: read the persisted session from localStorage
+  // synchronously, then register onAuthStateChange for subsequent events.
+  // We deliberately AVOID supabase.auth.getSession() on the primary path —
+  // it has wedged the entire app on "Loading..." too many times, and the
+  // session JSON it would return is the same JSON we can read directly.
+  // Falls through to a timeout-bounded getSession() only when the cache
+  // is missing or expired, so a wedge can't stall the UI past 4 seconds.
   useEffect(() => {
     mountedRef.current = true;
     profileFetchedRef.current = false;
@@ -124,17 +215,51 @@ export function useAuthInternal(): UseAuthReturn {
 
     const initialize = async () => {
       try {
-        // Step 1: Get current session directly (no lock contention)
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        // Step 1: Try the synchronous localStorage path FIRST. supabase.auth.
+        // getSession() has a long history of wedging — its internal lock
+        // can hang after navigation or a stalled refresh, leaving every
+        // page that calls useAuth() stuck on "Loading..." indefinitely.
+        // Reading the persisted session JSON directly is sync, can't hang,
+        // and gives us everything we need to render the app.
+        const cached = readCachedSession();
+        let initialSession: Session | null = null;
+
+        if (cached?.user && cached.access_token && !isCachedSessionExpired(cached)) {
+          // The cached session is valid — use it immediately. Cast through
+          // unknown because the persisted shape is a subset of Session
+          // (provider_token etc. may be absent), but every field PostgREST
+          // and our hooks care about (access_token + user) is present.
+          initialSession = cached as unknown as Session;
+        } else {
+          // No cached session, or it's expired. Try the async getSession()
+          // call as a fallback — but with a hard timeout so a wedged auth
+          // lock can't keep the whole app on the loading spinner forever.
+          // If it times out we treat it the same as "no session" and let
+          // the auth-state listener catch up if/when it resolves.
+          const result = await withTimeout(
+            supabase.auth.getSession(),
+            GET_SESSION_TIMEOUT_MS,
+          );
+          if (result === null) {
+            console.warn(
+              `[useAuth] supabase.auth.getSession() timed out after ${GET_SESSION_TIMEOUT_MS}ms — proceeding without session`,
+            );
+          } else {
+            initialSession =
+              (result as { data?: { session?: Session | null } } | null)?.data
+                ?.session ?? null;
+          }
+        }
 
         if (!mountedRef.current) return;
 
-        if (currentSession?.user) {
-          setSession(currentSession);
-          setUser(currentSession.user);
+        if (initialSession?.user) {
+          setSession(initialSession);
+          setUser(initialSession.user);
 
-          // Fetch profile immediately
-          const profileData = await fetchProfile(currentSession.user.id);
+          // Fetch profile immediately. Uses direct REST so it can't wedge
+          // even if the supabase-js auth wrapper is in a bad state.
+          const profileData = await fetchProfile(initialSession.user.id);
           if (mountedRef.current && profileData) {
             setProfile(profileData);
             profileFetchedRef.current = true;

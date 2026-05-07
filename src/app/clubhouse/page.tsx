@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { createClient } from '@/lib/supabase/client';
+import { directSelectList } from '@/lib/supabase/rest';
 
 type Category = 'damage' | 'cleaning' | 'order' | 'maintenance';
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
@@ -75,12 +76,23 @@ export default function ClubhousePage() {
 
   useEffect(() => {
     const fetchStaff = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.from("profiles")
-        .select("id, full_name, role")
-        .order("role")
-        .order("full_name");
-      if (data) setStaffMembers(data);
+      // Direct REST avoids the supabase.from() wedge.
+      try {
+        const data = await directSelectList<{ id: string; full_name: string; role: string }>(
+          "profiles",
+          {
+            columns: "id, full_name, role",
+            orderBy: [
+              { column: "role", ascending: true },
+              { column: "full_name", ascending: true },
+            ],
+            label: "clubhouse.fetchStaff",
+          },
+        );
+        setStaffMembers(data);
+      } catch (err) {
+        console.error("[clubhouse] fetchStaff failed:", err);
+      }
     };
     fetchStaff();
   }, []);

@@ -3,6 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import { translateSafe } from "@/lib/utils/translate";
 import type {
   GreenObservation,
@@ -70,26 +77,25 @@ export function useGreenObservations() {
   const fetchObservations = useCallback(async () => {
     setLoading(true);
     try {
-       
-      const { data, error } = await supabase.from("green_observations")
-        .select(`
-          *,
-          reporter:profiles!reported_by(id, full_name, avatar_url, role),
-          task:tasks!task_id(id, title, status)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Failed to fetch green observations:", error);
-        return;
-      }
-      setObservations(data || []);
+      // Direct REST so the fetch can't wedge on a stalled supabase-js
+      // auth wrapper after navigation. PostgREST supports the embedded
+      // resource syntax we were using inside the select string.
+      const data = await directSelectList<GreenObservation>(
+        "green_observations",
+        {
+          columns:
+            "*, reporter:profiles!reported_by(id, full_name, avatar_url, role), task:tasks!task_id(id, title, status)",
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "useGreenObservations.fetch",
+        },
+      );
+      setObservations(data);
     } catch (err) {
       console.error("Green observations fetch error:", err);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchObservations();
@@ -113,25 +119,35 @@ export function useGreenObservations() {
     async (data: CreateGreenObservationData) => {
       if (!user) return null;
       try {
-        // Insert immediately — don't block on translation.
-        const { data: created, error } = await supabase.from("green_observations")
-          .insert({
+        // Insert immediately — don't block on translation. Direct REST
+        // returns the inserted row WITH the embedded resources we asked
+        // for (PostgREST evaluates the select on insert+representation).
+        const created = await directInsertRow<GreenObservation>(
+          "green_observations",
+          {
             ...data,
             reported_by: user.id,
             status: "open",
-          })
-          .select(`
-            *,
-            reporter:profiles!reported_by(id, full_name, avatar_url, role)
-          `)
-          .single();
+          },
+          "useGreenObservations.create",
+        );
 
-        if (error) {
-          console.error("Failed to create green observation:", error);
-          return null;
-        }
+        // The directInsertRow helper doesn't currently let us pass a
+        // custom select string. Re-fetch the row with embeds so the UI
+        // gets the reporter info immediately.
+        const enriched = await directSelectList<GreenObservation>(
+          "green_observations",
+          {
+            columns:
+              "*, reporter:profiles!reported_by(id, full_name, avatar_url, role)",
+            filters: [`id=eq.${encodeURIComponent(created.id)}`],
+            limit: 1,
+            label: "useGreenObservations.create:enrich",
+          },
+        );
+        const row = enriched[0] ?? created;
 
-        setObservations((prev) => [created, ...prev]);
+        setObservations((prev) => [row, ...prev]);
 
         // Fire-and-forget: translate and patch in background.
         Promise.all([
@@ -146,47 +162,58 @@ export function useGreenObservations() {
           const patch: Record<string, string> = {};
           if (titleEs) patch.title_es = titleEs;
           if (descriptionEs) patch.description_es = descriptionEs;
-          await supabase.from("green_observations").update(patch).eq("id", created.id);
+          await directPatchRow(
+            "green_observations",
+            "id",
+            created.id,
+            patch,
+            "useGreenObservations.create:translate",
+          );
         }).catch((err) => console.error("Background translation failed:", err));
 
-        return created as GreenObservation;
+        return row;
       } catch (err) {
         console.error("Create green observation error:", err);
         return null;
       }
     },
-    [supabase, user]
+    [user]
   );
 
   const updateObservation = useCallback(
     async (id: string, updates: Partial<Pick<GreenObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by">>) => {
       try {
-         
-        const { data: updated, error } = await supabase.from("green_observations")
-          .update(updates)
-          .eq("id", id)
-          .select(`
-            *,
-            reporter:profiles!reported_by(id, full_name, avatar_url, role),
-            task:tasks!task_id(id, title, status)
-          `)
-          .single();
-
-        if (error) {
-          console.error("Failed to update green observation:", error);
-          return null;
-        }
-
-        setObservations((prev) =>
-          prev.map((o) => (o.id === id ? updated : o))
+        await directPatchRowReturning<GreenObservation>(
+          "green_observations",
+          "id",
+          id,
+          updates,
+          "useGreenObservations.update",
         );
-        return updated as GreenObservation;
+        // Re-fetch with embeds so the UI keeps reporter/task data fresh.
+        const enriched = await directSelectList<GreenObservation>(
+          "green_observations",
+          {
+            columns:
+              "*, reporter:profiles!reported_by(id, full_name, avatar_url, role), task:tasks!task_id(id, title, status)",
+            filters: [`id=eq.${encodeURIComponent(id)}`],
+            limit: 1,
+            label: "useGreenObservations.update:enrich",
+          },
+        );
+        const updated = enriched[0];
+        if (updated) {
+          setObservations((prev) =>
+            prev.map((o) => (o.id === id ? updated : o))
+          );
+        }
+        return updated ?? null;
       } catch (err) {
         console.error("Update green observation error:", err);
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   const uploadPhoto = useCallback(
@@ -229,11 +256,12 @@ export function useGreenObservations() {
   const deleteObservation = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const { error } = await supabase.from("green_observations").delete().eq("id", id);
-        if (error) {
-          console.error("Failed to delete observation:", error);
-          return false;
-        }
+        await directDeleteRow(
+          "green_observations",
+          "id",
+          id,
+          "useGreenObservations.delete",
+        );
         setObservations((prev) => prev.filter((o) => o.id !== id));
         return true;
       } catch (err) {
@@ -241,7 +269,7 @@ export function useGreenObservations() {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   // Summary stats

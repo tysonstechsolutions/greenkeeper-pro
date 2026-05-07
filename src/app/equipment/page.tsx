@@ -42,6 +42,7 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
+import { directSelectList } from "@/lib/supabase/rest";
 import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/database";
 import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
 
@@ -283,34 +284,40 @@ export default function EquipmentPage() {
 
   // Fetch most-recent service_date and inspection timestamp per equipment so
   // the list card can show them without opening the detail page.
+  // Direct REST instead of supabase.from() — see schedule wedge note.
+  // The auth wrapper in supabase-js can hang post-navigation; going
+  // straight to PostgREST avoids that and keeps the page responsive.
   const fetchActivityDates = useCallback(async () => {
     try {
-      const supabase = createClient();
-
-      // Latest service per equipment. Sort desc so the first row we see per
-      // equipment_id is the newest.
-      const { data: services, error: serviceErr } = await supabase
-        .from("equipment_service_records")
-        .select("equipment_id, service_date")
-        .order("service_date", { ascending: false });
-      if (serviceErr) throw serviceErr;
-
+      const services = await directSelectList<{
+        equipment_id: string;
+        service_date: string;
+      }>("equipment_service_records", {
+        columns: "equipment_id,service_date",
+        orderBy: [{ column: "service_date", ascending: false }],
+        limit: 2000,
+        label: "equipment.fetchActivityDates.services",
+      });
       const serviceMap = new Map<string, string>();
-      for (const row of (services || []) as { equipment_id: string; service_date: string }[]) {
-        if (!serviceMap.has(row.equipment_id)) serviceMap.set(row.equipment_id, row.service_date);
+      for (const row of services) {
+        if (!serviceMap.has(row.equipment_id))
+          serviceMap.set(row.equipment_id, row.service_date);
       }
       setLastServicedByEquipment(serviceMap);
 
-      // Latest inspection per equipment.
-      const { data: inspections, error: inspectErr } = await supabase
-        .from("equipment_inspections")
-        .select("equipment_id, created_at")
-        .order("created_at", { ascending: false });
-      if (inspectErr) throw inspectErr;
-
+      const inspections = await directSelectList<{
+        equipment_id: string;
+        created_at: string;
+      }>("equipment_inspections", {
+        columns: "equipment_id,created_at",
+        orderBy: [{ column: "created_at", ascending: false }],
+        limit: 2000,
+        label: "equipment.fetchActivityDates.inspections",
+      });
       const inspectionMap = new Map<string, string>();
-      for (const row of (inspections || []) as { equipment_id: string; created_at: string }[]) {
-        if (!inspectionMap.has(row.equipment_id)) inspectionMap.set(row.equipment_id, row.created_at);
+      for (const row of inspections) {
+        if (!inspectionMap.has(row.equipment_id))
+          inspectionMap.set(row.equipment_id, row.created_at);
       }
       setLastInspectedByEquipment(inspectionMap);
     } catch (err) {
@@ -323,14 +330,17 @@ export default function EquipmentPage() {
   // This is the source of truth for Parts Needed / Parts Ordered stats.
   const fetchPartsSummary = useCallback(async () => {
     try {
-      const supabase = createClient();
-      const { data, error: partsErr } = await supabase
-        .from("equipment_parts")
-        .select("equipment_id, status")
-        .in("status", ["needed", "ordered"]);
-      if (partsErr) throw partsErr;
+      const data = await directSelectList<{
+        equipment_id: string;
+        status: string;
+      }>("equipment_parts", {
+        columns: "equipment_id,status",
+        filters: [`status=in.(needed,ordered)`],
+        limit: 2000,
+        label: "equipment.fetchPartsSummary",
+      });
       const map = new Map<string, PartsSummary>();
-      for (const row of (data || []) as { equipment_id: string; status: string }[]) {
+      for (const row of data) {
         const summary = map.get(row.equipment_id) || { needed: 0, ordered: 0 };
         if (row.status === "needed") summary.needed += 1;
         else if (row.status === "ordered") summary.ordered += 1;
@@ -429,8 +439,8 @@ export default function EquipmentPage() {
   return (
     <div className="p-4 md:p-6 pb-40 md:pb-24">
       <PageHeader
-        title="Equipment"
-        description="Manage fleet and monitor conditions"
+        title="Assets"
+        description="Operational assets — fleet, attachments, and tracked equipment"
         icon={Wrench}
       >
         <Button

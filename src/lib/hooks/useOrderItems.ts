@@ -2,6 +2,12 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getCachedUserId,
+  directInsertRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import type { OrderItem, OrderItemStatus } from "@/types/database";
 
 /**
@@ -173,12 +179,15 @@ export function useOrderItems() {
     notes?: string;
   }) => {
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      // Synchronous user-id read from the cached session — avoids
+      // supabase.auth.getUser() which routes through the auth manager and
+      // has wedged the app in the past. RLS still validates via JWT.
+      const userId = getCachedUserId();
+      if (!userId) throw new Error("Not authenticated");
 
-      const { data, error } = await supabase.from("order_items")
-        .insert({
+      const data = await directInsertRow<OrderItem>(
+        "order_items",
+        {
           item_name: item.name,
           description: item.description || null,
           category: item.category,
@@ -188,11 +197,10 @@ export function useOrderItems() {
           estimated_cost: item.estimated_cost || null,
           vendor: item.vendor || null,
           notes: item.notes || null,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+          created_by: userId,
+        },
+        "useOrderItems.create",
+      );
       const displayItem: DisplayOrderItem = { ...data, source: "order_item" };
       setItems((prev) => [displayItem, ...prev]);
       return displayItem;
@@ -273,13 +281,14 @@ export function useOrderItems() {
         return refreshed;
       }
 
-      // Regular order_items update.
-      const { data, error } = await supabase.from("order_items")
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq("id", itemId)
-        .select()
-        .single();
-      if (error) throw error;
+      // Regular order_items update via direct REST.
+      const data = await directPatchRowReturning<OrderItem>(
+        "order_items",
+        "id",
+        itemId,
+        { ...updates, updated_at: new Date().toISOString() },
+        "useOrderItems.update",
+      );
       const displayItem: DisplayOrderItem = { ...data, source: "order_item" };
       setItems((prev) => prev.map((i) => (i.id === itemId ? displayItem : i)));
       return displayItem;
@@ -298,11 +307,12 @@ export function useOrderItems() {
         console.warn("Refusing to delete equipment part from Order List. Delete on the equipment page instead.");
         return false;
       }
-      const supabase = createClient();
-      const { error } = await supabase.from("order_items")
-        .delete()
-        .eq("id", itemId);
-      if (error) throw error;
+      await directDeleteRow(
+        "order_items",
+        "id",
+        itemId,
+        "useOrderItems.delete",
+      );
       setItems((prev) => prev.filter((i) => i.id !== itemId));
       return true;
     } catch (err) {

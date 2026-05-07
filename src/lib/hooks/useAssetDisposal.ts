@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  getCachedUserId,
+  hasValidCachedSession,
+  directSelectList,
+  directInsertRow,
+  directPatchRowReturning,
+} from "@/lib/supabase/rest";
 import type { AssetDisposal, DisposalStatus } from "@/types/database";
 
 const SESSION_EXPIRED_MSG =
@@ -15,33 +21,39 @@ export function useAssetDisposal() {
 
   const clearError = useCallback(() => setError(null), []);
 
-  const requireSession = async () => {
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+  // Cached-session require: reads the persisted session synchronously from
+  // localStorage instead of going through supabase.auth.getSession(). The
+  // async path has wedged the app on "Loading..." too many times — the
+  // cached path is sync, can't hang, and gives us the same user.id we need
+  // for the inserts below.
+  const requireSession = (): { userId: string | null } => {
+    const userId = getCachedUserId();
+    if (!userId || !hasValidCachedSession()) {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("auth:session-expired"));
       }
-      return { supabase, session: null as null };
+      return { userId: null };
     }
-    return { supabase, session };
+    return { userId };
   };
 
   const fetchDisposal = useCallback(async (equipmentId: string) => {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createClient();
-      const { data, error: fetchError } = await supabase.from("asset_disposals")
-        .select("*")
-        .eq("equipment_id", equipmentId)
-        .neq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (fetchError) throw fetchError;
-      setDisposal(data || null);
-      return data || null;
+      const rows = await directSelectList<AssetDisposal>("asset_disposals", {
+        columns: "*",
+        filters: [
+          `equipment_id=eq.${encodeURIComponent(equipmentId)}`,
+          `status=neq.completed`,
+        ],
+        orderBy: [{ column: "created_at", ascending: false }],
+        limit: 1,
+        label: "useAssetDisposal.fetchDisposal",
+      });
+      const data = rows[0] ?? null;
+      setDisposal(data);
+      return data;
     } catch (err) {
       console.error("Error fetching asset disposal:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -56,14 +68,14 @@ export function useAssetDisposal() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createClient();
-      const { data, error: fetchError } = await supabase.from("asset_disposals")
-        .select("*")
-        .neq("status", "completed")
-        .order("created_at", { ascending: false });
-      if (fetchError) throw fetchError;
-      setAllDisposals(data || []);
-      return data || [];
+      const data = await directSelectList<AssetDisposal>("asset_disposals", {
+        columns: "*",
+        filters: [`status=neq.completed`],
+        orderBy: [{ column: "created_at", ascending: false }],
+        label: "useAssetDisposal.fetchAllDisposals",
+      });
+      setAllDisposals(data);
+      return data;
     } catch (err) {
       console.error("Error fetching all disposals:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -80,29 +92,23 @@ export function useAssetDisposal() {
   ): Promise<{ data: AssetDisposal | null; error: string | null }> => {
     setError(null);
     try {
-      const { supabase, session } = await requireSession();
-      if (!session) {
+      const { userId } = requireSession();
+      if (!userId) {
         setError(SESSION_EXPIRED_MSG);
         return { data: null, error: SESSION_EXPIRED_MSG };
       }
 
-      const { data, error: insertError } = await supabase.from("asset_disposals")
-        .insert({
+      const data = await directInsertRow<AssetDisposal>(
+        "asset_disposals",
+        {
           equipment_id: equipmentId,
           reason,
           status: "pending_request" as DisposalStatus,
-          requested_by: session.user.id,
+          requested_by: userId,
           requested_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error("Supabase insert error:", insertError);
-        const msg = insertError.message || "Database error while creating disposal";
-        setError(msg);
-        return { data: null, error: msg };
-      }
+        },
+        "useAssetDisposal.createDisposal",
+      );
 
       setDisposal(data);
       setAllDisposals((prev) => [data, ...prev]);
@@ -121,24 +127,19 @@ export function useAssetDisposal() {
   ): Promise<{ data: AssetDisposal | null; error: string | null }> => {
     setError(null);
     try {
-      const { supabase, session } = await requireSession();
-      if (!session) {
+      const { userId } = requireSession();
+      if (!userId) {
         setError(SESSION_EXPIRED_MSG);
         return { data: null, error: SESSION_EXPIRED_MSG };
       }
 
-      const { data, error: updateError } = await supabase.from("asset_disposals")
-        .update({ ...fields, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error("Supabase update error:", updateError);
-        const msg = updateError.message || "Database error while updating disposal";
-        setError(msg);
-        return { data: null, error: msg };
-      }
+      const data = await directPatchRowReturning<AssetDisposal>(
+        "asset_disposals",
+        "id",
+        id,
+        { ...fields, updated_at: new Date().toISOString() },
+        "useAssetDisposal.updateDisposal",
+      );
 
       setDisposal(data);
       setAllDisposals((prev) => prev.map((d) => (d.id === id ? data : d)));
@@ -158,28 +159,23 @@ export function useAssetDisposal() {
   ): Promise<{ data: AssetDisposal | null; error: string | null }> => {
     setError(null);
     try {
-      const { supabase, session } = await requireSession();
-      if (!session) {
+      const { userId } = requireSession();
+      if (!userId) {
         setError(SESSION_EXPIRED_MSG);
         return { data: null, error: SESSION_EXPIRED_MSG };
       }
 
-      const { data, error: updateError } = await supabase.from("asset_disposals")
-        .update({
+      const data = await directPatchRowReturning<AssetDisposal>(
+        "asset_disposals",
+        "id",
+        id,
+        {
           ...fields,
           status: nextStatus,
           updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error("Supabase advance step error:", updateError);
-        const msg = updateError.message || "Database error while advancing disposal step";
-        setError(msg);
-        return { data: null, error: msg };
-      }
+        },
+        "useAssetDisposal.advanceStep",
+      );
 
       setDisposal(data);
       setAllDisposals((prev) => prev.map((d) => (d.id === id ? data : d)));

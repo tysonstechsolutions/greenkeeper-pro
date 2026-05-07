@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,8 +56,6 @@ export default function PinManagementPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -61,25 +64,22 @@ export default function PinManagementPage() {
       // No declared FK between pin_codes.user_id and profiles.id, so we
       // can't ask PostgREST to embed the relationship — do two queries
       // and stitch them in JS. Keeps the page working without a schema
-      // change.
-      const [pinResult, staffResult] = await Promise.all([
-        supabase
-          .from("pin_codes")
-          .select("id, user_id, pin, is_active")
-          .order("created_at", { ascending: true }),
-        supabase
-          .from("profiles")
-          .select("id, full_name, role, email")
-          .eq("is_active", true)
-          .order("full_name"),
-      ]);
-
-      if (pinResult.error) throw pinResult.error;
-      if (staffResult.error) throw staffResult.error;
-
+      // change. Direct REST so the page doesn't wedge on a stalled
+      // supabase-js auth wrapper.
       type PinRow = { id: string; user_id: string; pin: string; is_active: boolean };
-      const pinData: PinRow[] = pinResult.data || [];
-      const allStaff: StaffMember[] = staffResult.data || [];
+      const [pinData, allStaff] = await Promise.all([
+        directSelectList<PinRow>("pin_codes", {
+          columns: "id, user_id, pin, is_active",
+          orderBy: [{ column: "created_at", ascending: true }],
+          label: "settings.pins.fetchPins",
+        }),
+        directSelectList<StaffMember>("profiles", {
+          columns: "id, full_name, role, email",
+          filters: [`is_active=eq.true`],
+          orderBy: [{ column: "full_name", ascending: true }],
+          label: "settings.pins.fetchStaff",
+        }),
+      ]);
 
       const profileById = new Map(
         allStaff.map((s: StaffMember) => [
@@ -116,8 +116,6 @@ export default function PinManagementPage() {
     } finally {
       setLoading(false);
     }
-    // `supabase` is a stable singleton, intentionally excluded from deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -134,28 +132,26 @@ export default function PinManagementPage() {
     try {
       // First update the user's password to match the PIN system password
       // This is handled by the setup-pin-password API
-
-       
-      const { error: insertError } = await supabase.from("pin_codes").insert({
-        user_id: staffMember.id,
-        pin: newPin,
-        is_active: true,
-      });
-
-      if (insertError) {
-        if (insertError.message?.includes("duplicate")) {
-          setError(`A PIN already exists for ${staffMember.full_name}`);
-        } else {
-          throw insertError;
-        }
-      } else {
-        setSuccess(`PIN ${newPin} created for ${staffMember.full_name}`);
-        setTimeout(() => setSuccess(null), 3000);
-        await fetchData();
-      }
+      await directInsertRow(
+        "pin_codes",
+        {
+          user_id: staffMember.id,
+          pin: newPin,
+          is_active: true,
+        },
+        "settings.pins.create",
+      );
+      setSuccess(`PIN ${newPin} created for ${staffMember.full_name}`);
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchData();
     } catch (err) {
-      console.error("Error creating PIN:", err);
-      setError("Failed to create PIN");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("duplicate")) {
+        setError(`A PIN already exists for ${staffMember.full_name}`);
+      } else {
+        console.error("Error creating PIN:", err);
+        setError("Failed to create PIN");
+      }
     } finally {
       setSaving(null);
     }
@@ -168,13 +164,13 @@ export default function PinManagementPage() {
     const newPin = generatePin();
 
     try {
-       
-      const { error: updateError } = await supabase.from("pin_codes")
-        .update({ pin: newPin })
-        .eq("id", pinEntry.id);
-
-      if (updateError) throw updateError;
-
+      await directPatchRow(
+        "pin_codes",
+        "id",
+        pinEntry.id,
+        { pin: newPin },
+        "settings.pins.regenerate",
+      );
       setSuccess(
         `New PIN ${newPin} generated for ${pinEntry.profile?.full_name || "user"}`
       );
@@ -192,12 +188,13 @@ export default function PinManagementPage() {
     setSaving(pinEntry.id);
 
     try {
-       
-      const { error: updateError } = await supabase.from("pin_codes")
-        .update({ is_active: !pinEntry.is_active })
-        .eq("id", pinEntry.id);
-
-      if (updateError) throw updateError;
+      await directPatchRow(
+        "pin_codes",
+        "id",
+        pinEntry.id,
+        { is_active: !pinEntry.is_active },
+        "settings.pins.toggle",
+      );
       await fetchData();
     } catch (err) {
       console.error("Error toggling PIN:", err);
@@ -219,12 +216,12 @@ export default function PinManagementPage() {
     setSaving(pinEntry.id);
 
     try {
-       
-      const { error: deleteError } = await supabase.from("pin_codes")
-        .delete()
-        .eq("id", pinEntry.id);
-
-      if (deleteError) throw deleteError;
+      await directDeleteRow(
+        "pin_codes",
+        "id",
+        pinEntry.id,
+        "settings.pins.delete",
+      );
       await fetchData();
     } catch (err) {
       console.error("Error deleting PIN:", err);

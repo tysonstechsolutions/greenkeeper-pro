@@ -63,6 +63,7 @@ import {
 } from '@/lib/hooks/useParkingLotIssues';
 import type { ParkingLotIssue, IssueStatus } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
+import { directSelectList } from '@/lib/supabase/rest';
 
 const ISSUE_TYPES = ['pothole', 'low_area', 'badly_cracked', 'crack', 'drainage', 'marking', 'curbing', 'other'] as const;
 const SEVERITIES = ['minor', 'moderate', 'severe', 'critical'] as const;
@@ -119,9 +120,20 @@ export default function ParkingLotPage() {
   useEffect(() => { fetchIssues(); }, [fetchIssues]);
   useEffect(() => {
     const fetchStaff = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.from("profiles").select("id, full_name, role").order("full_name");
-      if (data) setStaffMembers(data);
+      // Direct REST avoids the supabase.from() wedge.
+      try {
+        const data = await directSelectList<{ id: string; full_name: string; role: string }>(
+          "profiles",
+          {
+            columns: "id, full_name, role",
+            orderBy: [{ column: "full_name", ascending: true }],
+            label: "parking-lot.fetchStaff",
+          },
+        );
+        setStaffMembers(data);
+      } catch (err) {
+        console.error("[parking-lot] fetchStaff failed:", err);
+      }
     };
     fetchStaff();
   }, []);

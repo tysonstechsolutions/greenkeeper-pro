@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  getCachedUserId,
+  directSelectList,
+  directInsertRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import type { ClubhouseIssue } from "@/types/database";
 
 export const categoryLabels: Record<string, string> = {
@@ -62,13 +68,13 @@ export function useClubhouseIssues() {
   const fetchIssues = useCallback(async () => {
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.from("clubhouse_issues")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setIssues(data || []);
-      return data || [];
+      const data = await directSelectList<ClubhouseIssue>("clubhouse_issues", {
+        columns: "*",
+        orderBy: [{ column: "created_at", ascending: false }],
+        label: "useClubhouseIssues.fetch",
+      });
+      setIssues(data);
+      return data;
     } catch (err) {
       console.error("Error fetching clubhouse issues:", err);
       return [];
@@ -88,13 +94,14 @@ export function useClubhouseIssues() {
     assigned_to?: string;
   }) => {
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      // Cached user-id read avoids the supabase.auth.getUser() wedge.
+      const userId = getCachedUserId();
+      if (!userId) throw new Error("Not authenticated");
 
-      const { data, error } = await supabase.from("clubhouse_issues")
-        .insert({
-          reported_by: user.id,
+      const data = await directInsertRow<ClubhouseIssue>(
+        "clubhouse_issues",
+        {
+          reported_by: userId,
           title: issue.title,
           description: issue.description || null,
           location: issue.location || null,
@@ -103,10 +110,9 @@ export function useClubhouseIssues() {
           photos: issue.photos || [],
           estimated_cost: issue.estimated_cost || null,
           assigned_to: issue.assigned_to || null,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+        },
+        "useClubhouseIssues.create",
+      );
       setIssues((prev) => [data, ...prev]);
       return data;
     } catch (err) {
@@ -117,7 +123,6 @@ export function useClubhouseIssues() {
 
   const updateIssue = useCallback(async (issueId: string, updates: Partial<ClubhouseIssue>) => {
     try {
-      const supabase = createClient();
       const updateData: Partial<ClubhouseIssue> = {
         ...updates,
         updated_at: new Date().toISOString(),
@@ -125,12 +130,13 @@ export function useClubhouseIssues() {
       if (updates.status === "completed") {
         updateData.completed_at = new Date().toISOString();
       }
-      const { data, error } = await supabase.from("clubhouse_issues")
-        .update(updateData)
-        .eq("id", issueId)
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await directPatchRowReturning<ClubhouseIssue>(
+        "clubhouse_issues",
+        "id",
+        issueId,
+        updateData,
+        "useClubhouseIssues.update",
+      );
       setIssues((prev) => prev.map((i) => (i.id === issueId ? data : i)));
       return data;
     } catch (err) {
@@ -141,11 +147,12 @@ export function useClubhouseIssues() {
 
   const deleteIssue = useCallback(async (issueId: string) => {
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from("clubhouse_issues")
-        .delete()
-        .eq("id", issueId);
-      if (error) throw error;
+      await directDeleteRow(
+        "clubhouse_issues",
+        "id",
+        issueId,
+        "useClubhouseIssues.delete",
+      );
       setIssues((prev) => prev.filter((i) => i.id !== issueId));
       return true;
     } catch (err) {

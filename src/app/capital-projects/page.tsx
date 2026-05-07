@@ -35,7 +35,11 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { RoleGuard, GM_ROLES } from "@/components/auth/role-guard";
-import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+} from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 
 // ── Types ──
@@ -127,7 +131,6 @@ function formatDate(dateStr: string | null): string {
 
 export default function CapitalProjectsPage() {
   const { user } = useAuth();
-  const supabase = createClient();
 
   // State
   const [projects, setProjects] = useState<CapitalProject[]>([]);
@@ -151,16 +154,19 @@ export default function CapitalProjectsPage() {
 
   // ── Fetch projects ──
   const fetchProjects = useCallback(async () => {
-    const query = supabase
-      .from("capital_projects")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    const { data } = await query;
-    if (data) {
-      setProjects(data as CapitalProject[]);
+    // Direct REST avoids the supabase.from() wedge that has stuck other
+    // pages on "Loading..." after navigation.
+    try {
+      const data = await directSelectList<CapitalProject>("capital_projects", {
+        columns: "*",
+        orderBy: [{ column: "created_at", ascending: false }],
+        label: "capital-projects.fetchList",
+      });
+      setProjects(data);
+    } catch (err) {
+      console.error("[capital-projects] fetch failed:", err);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -184,18 +190,23 @@ export default function CapitalProjectsPage() {
     if (!formName || !user) return;
 
     setSubmitting(true);
-    const { error } = await supabase.from("capital_projects").insert({
-      name: formName,
-      description: formDescription || null,
-      category: formCategory || null,
-      budget_amount: formBudget ? parseFloat(formBudget) : null,
-      start_date: formStartDate || null,
-      target_completion: formTargetDate || null,
-      status: "proposed",
-      created_by: user.id,
-    });
-
-    if (!error) {
+    try {
+      // Direct REST so the insert can't wedge on a stalled supabase-js
+      // auth wrapper.
+      await directInsertRow(
+        "capital_projects",
+        {
+          name: formName,
+          description: formDescription || null,
+          category: formCategory || null,
+          budget_amount: formBudget ? parseFloat(formBudget) : null,
+          start_date: formStartDate || null,
+          target_completion: formTargetDate || null,
+          status: "proposed",
+          created_by: user.id,
+        },
+        "capital-projects.insert",
+      );
       setFormName("");
       setFormDescription("");
       setFormCategory("");
@@ -204,8 +215,11 @@ export default function CapitalProjectsPage() {
       setFormTargetDate("");
       setShowAddForm(false);
       await fetchProjects();
+    } catch (err) {
+      console.error("[capital-projects] add failed:", err);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   // ── Advance status ──
@@ -221,13 +235,17 @@ export default function CapitalProjectsPage() {
       updates.actual_completion = todayLocal();
     }
 
-    const { error } = await supabase
-      .from("capital_projects")
-      .update(updates)
-      .eq("id", project.id);
-
-    if (!error) {
+    try {
+      await directPatchRow(
+        "capital_projects",
+        "id",
+        project.id,
+        updates,
+        "capital-projects.advanceStatus",
+      );
       await fetchProjects();
+    } catch (err) {
+      console.error("[capital-projects] advance failed:", err);
     }
   };
 
@@ -243,20 +261,25 @@ export default function CapitalProjectsPage() {
     }
 
     const newSpent = (Number(project.spent_amount) || 0) + parseFloat(spendAmount);
-    const { error } = await supabase
-      .from("capital_projects")
-      .update({
-        spent_amount: newSpent,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", spendProjectId);
-
-    if (!error) {
+    try {
+      await directPatchRow(
+        "capital_projects",
+        "id",
+        spendProjectId,
+        {
+          spent_amount: newSpent,
+          updated_at: new Date().toISOString(),
+        },
+        "capital-projects.updateSpent",
+      );
       setSpendProjectId(null);
       setSpendAmount("");
       await fetchProjects();
+    } catch (err) {
+      console.error("[capital-projects] update spent failed:", err);
+    } finally {
+      setUpdatingSpend(false);
     }
-    setUpdatingSpend(false);
   };
 
   return (

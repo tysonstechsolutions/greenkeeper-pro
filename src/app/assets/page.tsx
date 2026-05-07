@@ -13,6 +13,7 @@ import {
   Loader2,
   ScanLine,
   Trash2,
+  Camera,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,12 +29,29 @@ import {
 } from "@/components/ui/select";
 import { useFy26Assets, type Fy26AssetFilters } from "@/lib/hooks/useFy26Assets";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
+import { directSelectList } from "@/lib/supabase/rest";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
   fy26AssetSiteLabels,
   type Fy26AssetStatus,
 } from "@/types/fy26-assets";
+
+/** First-photo lookup row from the equipment table — minimal shape so the
+ *  list query stays small. */
+interface EquipmentPhotoRow {
+  id: string;
+  photo_url: string | null;
+  photos: string[] | null;
+}
+
+/** Pick the best thumbnail URL: prefer the gallery, fall back to legacy
+ *  single-photo column. Returns null when there's nothing to show. */
+function pickThumbnail(eq: EquipmentPhotoRow | undefined): string | null {
+  if (!eq) return null;
+  if (eq.photos && eq.photos.length > 0) return eq.photos[0];
+  return eq.photo_url ?? null;
+}
 
 function StatCard({
   label,
@@ -72,6 +90,14 @@ function AssetsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { assets, loading, error, fetchAssets, stats } = useFy26Assets();
+
+  // Equipment thumbnail lookup keyed by equipment.id. We populate this
+  // after every asset fetch so the list shows the same picture the crew
+  // sees when they're working on the unit. Single batched query; missing
+  // photos fall back to the placeholder icon.
+  const [equipmentPhotos, setEquipmentPhotos] = useState<Map<string, EquipmentPhotoRow>>(
+    () => new Map(),
+  );
 
   // Initialize filter state from URL params so back-navigation restores them
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
@@ -118,6 +144,43 @@ function AssetsPageContent() {
   }, [search, siteFilter, statusFilter, fetchAssets]);
   useRefreshOnFocus(refreshAssets);
 
+  // Whenever the asset list changes, batch-fetch the linked equipment
+  // rows so each card can show its operational photo. We only request the
+  // photo columns to keep payload tiny — single PostgREST round-trip
+  // using `id=in.(...)`.
+  useEffect(() => {
+    const ids = assets
+      .map((a) => a.equipment_id)
+      .filter((v): v is string => !!v);
+    let cancelled = false;
+    (async () => {
+      // No linked equipment in the current list — clear the lookup map
+      // (only if it actually has entries, to avoid a no-op render).
+      if (ids.length === 0) {
+        setEquipmentPhotos((prev) => (prev.size === 0 ? prev : new Map()));
+        return;
+      }
+      try {
+        const rows = await directSelectList<EquipmentPhotoRow>("equipment", {
+          columns: "id,photo_url,photos",
+          filters: [`id=in.(${ids.map(encodeURIComponent).join(",")})`],
+          limit: ids.length,
+          label: "assets.list.fetchEquipmentPhotos",
+        });
+        if (cancelled) return;
+        const map = new Map<string, EquipmentPhotoRow>();
+        for (const r of rows) map.set(r.id, r);
+        setEquipmentPhotos(map);
+      } catch (err) {
+        console.error("[assets] equipment-photo lookup failed:", err);
+        // Non-fatal — cards just fall back to the placeholder icon.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assets]);
+
   const toggleStatus = (s: Fy26AssetStatus) =>
     setStatusFilter((prev) => (prev === s ? "all" : s));
 
@@ -152,8 +215,8 @@ function AssetsPageContent() {
     <div className="p-4 md:p-6 pb-24">
       <div className="flex items-center justify-between mb-6 gap-2">
         <PageHeader
-          title="FY26 Assets"
-          description={`Annual Inventory (AI) \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
+          title="Assets"
+          description={`Annual Inventory \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
           icon={Archive}
         />
         <div className="flex items-center gap-2 shrink-0">
@@ -285,6 +348,8 @@ function AssetsPageContent() {
         <div className="space-y-2">
           {visibleAssets.map((a) => {
             const statusColor = fy26AssetStatusColors[a.status];
+            const eq = a.equipment_id ? equipmentPhotos.get(a.equipment_id) : undefined;
+            const thumb = pickThumbnail(eq);
             return (
               <Card
                 key={a.id}
@@ -293,6 +358,21 @@ function AssetsPageContent() {
               >
                 <CardContent className="p-4">
                   <div className="flex gap-3 items-start">
+                    {/* Operational photo thumbnail (from linked equipment).
+                        Falls back to a Camera placeholder so layout stays
+                        steady whether or not the asset has been linked. */}
+                    <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex items-center justify-center shrink-0 self-start">
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumb}
+                          alt={a.description}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Camera className="w-6 h-6 text-muted-foreground/40" />
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <h3 className="font-semibold text-base truncate">

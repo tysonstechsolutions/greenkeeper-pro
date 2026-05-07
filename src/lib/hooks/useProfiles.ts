@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { directSelectRow } from "@/lib/supabase/rest";
 import { resolveAccessToken } from "@/lib/api/client";
 import type { Profile, UserRole } from "@/types/database";
 
@@ -109,28 +110,24 @@ export function useProfiles(): UseProfilesReturn {
     [profiles]
   );
 
-  // Get a full profile by ID from database (async)
+  // Get a full profile by ID from database (async). Direct REST so the
+  // lookup can't wedge on a stalled supabase-js auth wrapper.
   const getProfileAsync = useCallback(
     async (id: string): Promise<Profile | null> => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", id)
-          .single();
-
-        if (fetchError) {
-          console.error("Error fetching profile:", fetchError);
-          return null;
-        }
-
-        return data as Profile;
+        return await directSelectRow<Profile>(
+          "profiles",
+          "id",
+          id,
+          "*",
+          "useProfiles.getProfileAsync",
+        );
       } catch (err) {
         console.error("Unexpected error fetching profile:", err);
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   // Get profiles by role from local state

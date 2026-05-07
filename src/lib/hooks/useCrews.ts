@@ -2,6 +2,10 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directPatchByFilter,
+} from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
 import type { Profile, UserRole, Database } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
@@ -43,34 +47,36 @@ export function useCrews(): UseCrewsReturn {
     setError(null);
 
     try {
-      // Get all profiles with crew assignments
-       
-      const { data: profiles, error: fetchError } = await supabase.from("profiles")
-        .select("id, full_name, display_name, role, avatar_url, is_active")
-        .eq("is_active", true)
-        .order("full_name");
-
-      if (fetchError) {
-        console.error("Error fetching profiles for crews:", fetchError);
-        setError(fetchError.message);
+      // Direct REST so the page can't wedge on a stalled supabase-js
+      // auth wrapper after navigation. All three queries run in parallel.
+      type ProfileType = { id: string; full_name: string | null; display_name: string | null; role: string; avatar_url: string | null; is_active: boolean };
+      let profiles: ProfileType[] = [];
+      let scheduleData: { crew_assignment: string | null }[] = [];
+      let taskData: { assigned_crew: string | null }[] = [];
+      try {
+        [profiles, scheduleData, taskData] = await Promise.all([
+          directSelectList<ProfileType>("profiles", {
+            columns: "id, full_name, display_name, role, avatar_url, is_active",
+            filters: [`is_active=eq.true`],
+            orderBy: [{ column: "full_name", ascending: true }],
+            label: "useCrews.fetchCrews.profiles",
+          }),
+          directSelectList<{ crew_assignment: string | null }>("schedules", {
+            columns: "crew_assignment",
+            filters: [`crew_assignment=not.is.null`],
+            label: "useCrews.fetchCrews.schedules",
+          }),
+          directSelectList<{ assigned_crew: string | null }>("tasks", {
+            columns: "assigned_crew",
+            filters: [`assigned_crew=not.is.null`],
+            label: "useCrews.fetchCrews.tasks",
+          }),
+        ]);
+      } catch (fetchErr) {
+        console.error("Error fetching profiles for crews:", fetchErr);
+        setError(fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
         return [];
       }
-
-      // Get crew assignments from a separate crews metadata approach
-      // We'll store crew metadata in a simple JSON structure
-      // For now, derive crews from schedules.crew_assignment which has crew info
-
-      // Actually, let's check for unique crew_assignment values in schedules
-       
-      const { data: scheduleData } = await supabase.from("schedules")
-        .select("crew_assignment")
-        .not("crew_assignment", "is", null);
-
-      // Build crew list from unique crew assignments and any task crew assignments
-       
-      const { data: taskData } = await supabase.from("tasks")
-        .select("assigned_crew")
-        .not("assigned_crew", "is", null);
 
       // Combine unique crew names from schedules and tasks
       const crewNamesSet = new Set<string>();
@@ -121,24 +127,34 @@ export function useCrews(): UseCrewsReturn {
 
       // Get latest schedule entries to see current crew memberships
       const today = todayLocal();
-       
-      const { data: currentSchedules } = await supabase.from("schedules")
-        .select("user_id, crew_assignment")
-        .eq("schedule_date", today)
-        .not("crew_assignment", "is", null);
+      let currentSchedules: { user_id: string; crew_assignment: string | null }[] = [];
+      try {
+        currentSchedules = await directSelectList<{ user_id: string; crew_assignment: string | null }>(
+          "schedules",
+          {
+            columns: "user_id, crew_assignment",
+            filters: [
+              `schedule_date=eq.${today}`,
+              `crew_assignment=not.is.null`,
+            ],
+            label: "useCrews.fetchCrews.currentSchedules",
+          },
+        );
+      } catch (err) {
+        console.error("Error fetching current schedules:", err);
+      }
 
       // Map current crew members
       const userCrewMap = new Map<string, string>();
-      if (currentSchedules) {
-        for (const schedule of currentSchedules as { user_id: string; crew_assignment: string }[]) {
+      for (const schedule of currentSchedules) {
+        if (schedule.crew_assignment) {
           userCrewMap.set(schedule.user_id, schedule.crew_assignment);
         }
       }
 
       // Assign profiles to crews based on today's schedule
-      type ProfileType = { id: string; full_name: string | null; display_name: string | null; role: string; avatar_url: string | null };
       if (profiles) {
-        for (const profile of profiles as ProfileType[]) {
+        for (const profile of profiles) {
           const crewName = userCrewMap.get(profile.id);
           if (crewName && crewMap.has(crewName)) {
             const crew = crewMap.get(crewName)!;
@@ -240,34 +256,30 @@ export function useCrews(): UseCrewsReturn {
       }
 
       try {
-        // Clear crew assignments from schedules
-         
-        const { error: updateError } = await supabase.from("schedules")
-          .update({ crew_assignment: null })
-          .eq("crew_assignment", name);
-
-        if (updateError) {
-          console.error("Error deleting crew:", updateError);
-          setError(updateError.message);
-          return false;
-        }
-
-        // Clear from tasks too
-         
-        await supabase.from("tasks")
-          .update({ assigned_crew: null })
-          .eq("assigned_crew", name);
+        // Clear crew assignments from schedules + tasks via direct REST.
+        await directPatchByFilter(
+          "schedules",
+          [`crew_assignment=eq.${encodeURIComponent(name)}`],
+          { crew_assignment: null },
+          "useCrews.deleteCrew.schedules",
+        );
+        await directPatchByFilter(
+          "tasks",
+          [`assigned_crew=eq.${encodeURIComponent(name)}`],
+          { assigned_crew: null },
+          "useCrews.deleteCrew.tasks",
+        );
 
         // Update local state
         setCrews((prev) => prev.filter((c) => c.name !== name));
         return true;
       } catch (err) {
         console.error("Unexpected error deleting crew:", err);
-        setError("Failed to delete crew");
+        setError(err instanceof Error ? err.message : "Failed to delete crew");
         return false;
       }
     },
-    [isSuper, supabase]
+    [isSuper]
   );
 
   // Rename a crew
@@ -284,23 +296,19 @@ export function useCrews(): UseCrewsReturn {
       }
 
       try {
-        // Update schedules
-         
-        const { error: scheduleError } = await supabase.from("schedules")
-          .update({ crew_assignment: newName })
-          .eq("crew_assignment", oldName);
-
-        if (scheduleError) {
-          console.error("Error renaming crew in schedules:", scheduleError);
-          setError(scheduleError.message);
-          return false;
-        }
-
-        // Update tasks
-         
-        await supabase.from("tasks")
-          .update({ assigned_crew: newName })
-          .eq("assigned_crew", oldName);
+        // Update schedules + tasks via direct REST.
+        await directPatchByFilter(
+          "schedules",
+          [`crew_assignment=eq.${encodeURIComponent(oldName)}`],
+          { crew_assignment: newName },
+          "useCrews.renameCrew.schedules",
+        );
+        await directPatchByFilter(
+          "tasks",
+          [`assigned_crew=eq.${encodeURIComponent(oldName)}`],
+          { assigned_crew: newName },
+          "useCrews.renameCrew.tasks",
+        );
 
         // Update local state
         setCrews((prev) =>
@@ -312,11 +320,11 @@ export function useCrews(): UseCrewsReturn {
         return true;
       } catch (err) {
         console.error("Unexpected error renaming crew:", err);
-        setError("Failed to rename crew");
+        setError(err instanceof Error ? err.message : "Failed to rename crew");
         return false;
       }
     },
-    [isSuper, crews, supabase]
+    [isSuper, crews]
   );
 
   // Set crew foreman
@@ -403,27 +411,25 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         const today = todayLocal();
-         
-        const { error: updateError } = await supabase.from("schedules")
-          .update({ crew_assignment: null })
-          .eq("user_id", userId)
-          .eq("schedule_date", today);
-
-        if (updateError) {
-          console.error("Error removing member from crew:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+        await directPatchByFilter(
+          "schedules",
+          [
+            `user_id=eq.${encodeURIComponent(userId)}`,
+            `schedule_date=eq.${today}`,
+          ],
+          { crew_assignment: null },
+          "useCrews.removeMemberFromCrew",
+        );
 
         await fetchCrews();
         return true;
       } catch (err) {
         console.error("Unexpected error removing member:", err);
-        setError("Failed to remove member from crew");
+        setError(err instanceof Error ? err.message : "Failed to remove member from crew");
         return false;
       }
     },
-    [isSuper, supabase, fetchCrews]
+    [isSuper, fetchCrews]
   );
 
   // Get list of crew names for dropdowns

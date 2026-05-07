@@ -35,17 +35,33 @@ export interface DirectFetchOptions {
 }
 
 /**
- * Read the current Supabase session's access token directly from
- * localStorage. Bypasses `supabase.auth.getSession()` entirely — that
- * call goes through supabase-js's auth manager which has been the source
- * of the silent hangs we've been chasing. Supabase stores the session
- * JSON under the key `sb-<project-ref>-auth-token` — we derive the key
- * from NEXT_PUBLIC_SUPABASE_URL and read the JSON ourselves.
- *
- * Synchronous. No network, no navigator.locks, no auth-state event
- * propagation.
+ * Cached session shape — what supabase-js writes to localStorage. The
+ * library has additional fields we don't care about; we just declare what
+ * we read. All fields are optional because corrupt/partial caches happen.
  */
-function getAccessTokenSync(): string | null {
+interface CachedSessionShape {
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: number;
+  expires_in?: number;
+  token_type?: string;
+  user?: {
+    id?: string;
+    email?: string;
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+}
+
+/**
+ * Synchronous read of the persisted Supabase session from localStorage.
+ * The single source of truth for everything in this file that needs auth
+ * info without going through supabase-js's auth manager.
+ *
+ * Returns null on SSR, missing project URL, missing session, or parse
+ * error. Never throws. Never blocks.
+ */
+function readCachedSession(): CachedSessionShape | null {
   if (typeof window === "undefined") return null;
   const match = SUPABASE_URL.match(/https?:\/\/([^./]+)\.supabase\./);
   if (!match) return null;
@@ -53,11 +69,66 @@ function getAccessTokenSync(): string | null {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { access_token?: string };
-    return parsed.access_token ?? null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as CachedSessionShape;
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the current Supabase session's access token directly from
+ * localStorage. Bypasses `supabase.auth.getSession()` entirely — that
+ * call goes through supabase-js's auth manager which has been the source
+ * of the silent hangs we've been chasing.
+ *
+ * Synchronous. No network, no navigator.locks, no auth-state event
+ * propagation.
+ */
+function getAccessTokenSync(): string | null {
+  return readCachedSession()?.access_token ?? null;
+}
+
+/**
+ * Read the signed-in user's id from the cached session. Drop-in
+ * replacement for `(await supabase.auth.getUser()).data.user?.id` that
+ * can't wedge.
+ *
+ * Most call-sites only need the user id (for setting `created_by`,
+ * `owner_id`, etc.) — this saves them from the auth-wrapper round trip.
+ */
+export function getCachedUserId(): string | null {
+  return readCachedSession()?.user?.id ?? null;
+}
+
+/**
+ * Read the signed-in user from the cached session. Drop-in replacement
+ * for `(await supabase.auth.getUser()).data.user`.
+ *
+ * Returns the user shape supabase persisted (id + email + metadata) — not
+ * a full Supabase `User` instance, but enough for everything we use
+ * `auth.getUser()` for in this codebase.
+ */
+export function getCachedUser(): { id: string; email?: string } | null {
+  const u = readCachedSession()?.user;
+  if (!u || typeof u.id !== "string") return null;
+  return { id: u.id, email: typeof u.email === "string" ? u.email : undefined };
+}
+
+/**
+ * True when there's a non-expired cached session present. Use this in
+ * place of `await supabase.auth.getSession()` when all you need is a
+ * yes/no signed-in check (e.g. before issuing a write that requires RLS).
+ */
+export function hasValidCachedSession(): boolean {
+  const s = readCachedSession();
+  if (!s?.access_token) return false;
+  if (typeof s.expires_at === "number") {
+    // 30s safety buffer.
+    if (Date.now() / 1000 >= s.expires_at - 30) return false;
+  }
+  return true;
 }
 
 function buildHeaders(

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUserId, directSelectList } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 import type {
   PlanGoal,
@@ -234,40 +235,29 @@ export function usePlanGoals(): UsePlanGoalsReturn {
       setError(null);
 
       try {
-        let query = supabase.from("plan_goals").select("*");
+        // Direct REST so the page can't wedge on a stalled supabase-js
+        // auth wrapper after navigation. Per-goal counts below still use
+        // .from() but they only run after this outer query succeeds, so
+        // they inherit the wedge protection.
+        const restFilters: string[] = [];
+        if (filters?.planLevel) restFilters.push(`plan_level=eq.${encodeURIComponent(filters.planLevel)}`);
+        if (filters?.year) restFilters.push(`year=eq.${filters.year}`);
+        if (filters?.season) restFilters.push(`season=eq.${encodeURIComponent(filters.season)}`);
+        if (filters?.month) restFilters.push(`month=eq.${filters.month}`);
+        if (filters?.category) restFilters.push(`category=eq.${encodeURIComponent(filters.category)}`);
+        if (filters?.status) restFilters.push(`status=eq.${encodeURIComponent(filters.status)}`);
+        if (filters?.parentGoalId) restFilters.push(`parent_goal_id=eq.${encodeURIComponent(filters.parentGoalId)}`);
 
-        // Apply filters
-        if (filters?.planLevel) {
-          query = query.eq("plan_level", filters.planLevel);
-        }
-        if (filters?.year) {
-          query = query.eq("year", filters.year);
-        }
-        if (filters?.season) {
-          query = query.eq("season", filters.season);
-        }
-        if (filters?.month) {
-          query = query.eq("month", filters.month);
-        }
-        if (filters?.category) {
-          query = query.eq("category", filters.category);
-        }
-        if (filters?.status) {
-          query = query.eq("status", filters.status);
-        }
-        if (filters?.parentGoalId) {
-          query = query.eq("parent_goal_id", filters.parentGoalId);
-        }
-
-        query = query.order("sort_order", { ascending: true });
-        query = query.order("created_at", { ascending: true });
-        query = query.limit(50); // Limit goals to prevent loading too many
-
-        const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
-
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
+        const data = await directSelectList<PlanGoal>("plan_goals", {
+          columns: "*",
+          filters: restFilters,
+          orderBy: [
+            { column: "sort_order", ascending: true },
+            { column: "created_at", ascending: true },
+          ],
+          limit: 50,
+          label: "usePlanGoals.fetchGoals",
+        });
 
         // Get child counts and task stats for each goal
         const goalsWithStats: GoalWithStats[] = await Promise.all(
@@ -427,26 +417,25 @@ export function usePlanGoals(): UsePlanGoalsReturn {
   const fetchGoalTree = useCallback(
     async (planLevel?: PlanLevel): Promise<GoalTreeNode[]> => {
       try {
-        // Fetch all goals (or filter by starting level)
-        let query = supabase.from("plan_goals").select("*");
-
+        // Fetch all goals (or filter by starting level) — direct REST.
+        const restFilters: string[] = [];
         if (planLevel) {
           // Get goals at this level and all children below
           const levelIndex = planLevelOrder.indexOf(planLevel);
           const levelsToInclude = planLevelOrder.slice(levelIndex);
-          query = query.in("plan_level", levelsToInclude);
+          restFilters.push(
+            `plan_level=in.(${levelsToInclude.map(encodeURIComponent).join(",")})`,
+          );
         }
 
-        query = query.order("sort_order", { ascending: true });
+        const data = await directSelectList<PlanGoal>("plan_goals", {
+          columns: "*",
+          filters: restFilters,
+          orderBy: [{ column: "sort_order", ascending: true }],
+          label: "usePlanGoals.fetchGoalTree",
+        });
 
-        const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
-
-        if (fetchError) {
-          console.error("Error fetching goal tree:", fetchError);
-          return [];
-        }
-
-        if (!data || data.length === 0) {
+        if (data.length === 0) {
           return [];
         }
 
@@ -497,16 +486,14 @@ export function usePlanGoals(): UsePlanGoalsReturn {
       setError(null);
 
       try {
-        // Get current user
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
         const goalData = {
           ...data,
           status: data.status || "planned",
           budget_spent: 0,
-          created_by: user?.id || null,
+          created_by: userId || null,
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -664,10 +651,8 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           return [];
         }
 
-        // Get current user
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
         // Parse description for action items (lines starting with - or *)
         const description = goal.description || goal.title;
@@ -709,7 +694,7 @@ export function usePlanGoals(): UsePlanGoalsReturn {
           status: "pending" as const,
           due_date: baseDueDate,
           plan_goal_id: goalId,
-          assigned_by: user?.id || null,
+          assigned_by: userId || null,
           hole_numbers: [],
           equipment_needed: [],
           materials_needed: [],
@@ -814,20 +799,16 @@ export function usePlanGoals(): UsePlanGoalsReturn {
       };
 
       try {
-        let query = supabase.from("plan_goals").select("*");
+        const restFilters: string[] = [];
+        if (year) restFilters.push(`year=eq.${year}`);
 
-        if (year) {
-          query = query.eq("year", year);
-        }
+        const data = await directSelectList<PlanGoal>("plan_goals", {
+          columns: "*",
+          filters: restFilters,
+          label: "usePlanGoals.fetchPlanOverview",
+        });
 
-        const { data, error: fetchError } = await query as { data: PlanGoal[] | null; error: Error | null };
-
-        if (fetchError) {
-          console.error("Error fetching plan overview:", fetchError);
-          return defaultOverview;
-        }
-
-        if (!data || data.length === 0) {
+        if (data.length === 0) {
           return defaultOverview;
         }
 

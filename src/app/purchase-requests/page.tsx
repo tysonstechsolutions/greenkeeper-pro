@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
-import { createClient } from "@/lib/supabase/client";
+import {
+  directDeleteRow,
+  directSelectList,
+} from "@/lib/supabase/rest";
 import type { PurchaseRequest } from "@/types/database";
 
 function formatDate(iso: string): string {
@@ -53,13 +56,20 @@ export default function PurchaseRequestsListPage() {
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("purchase_requests")
-      .select("*")
-      .order("date_prepared", { ascending: false });
-    setRequests((data as PurchaseRequest[] | null) || []);
-    setLoading(false);
+    try {
+      const data = await directSelectList<PurchaseRequest>("purchase_requests", {
+        columns: "*",
+        orderBy: [{ column: "date_prepared", ascending: false }],
+        limit: 200,
+        label: "purchase-requests.fetchList",
+      });
+      setRequests(data);
+    } catch (err) {
+      console.error("[purchase-requests] fetch failed:", err);
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -78,16 +88,19 @@ export default function PurchaseRequestsListPage() {
         return;
       }
       setDeletingId(id);
-      const supabase = createClient();
-      const { error: delErr } = await supabase
-        .from("purchase_requests")
-        .delete()
-        .eq("id", id);
-      setDeletingId(null);
-      if (delErr) {
-        alert(`Couldn't delete: ${delErr.message}`);
+      try {
+        await directDeleteRow(
+          "purchase_requests",
+          "id",
+          id,
+          "purchase-requests.delete",
+        );
+      } catch (err) {
+        setDeletingId(null);
+        alert(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`);
         return;
       }
+      setDeletingId(null);
       // Optimistic prune so the row vanishes without a round-trip.
       setRequests((prev) => prev.filter((r) => r.id !== id));
     },

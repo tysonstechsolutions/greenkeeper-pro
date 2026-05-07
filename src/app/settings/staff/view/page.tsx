@@ -18,8 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { createClient } from "@/lib/supabase/client";
-import { withTimeout } from "@/lib/utils/resilient-fetch";
+import { directSelectRow, directPatchRow } from "@/lib/supabase/rest";
 import type { UserRole } from "@/types/database";
 
 const ROLES: { value: UserRole; label: string }[] = [
@@ -48,8 +47,11 @@ function PageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const staffId = searchParams.get("id") ?? "";
-  const { isSuper, isAsstSuper } = useAuth();
-  const supabase = createClient();
+  const { isSuper, isAsstSuper, isDirector, isGM } = useAuth();
+  // Anyone in the upper-management bucket can edit staff. Mirrors the
+  // canEditStaff gate on /staff so the Edit Profile button doesn't lead
+  // to a "Not Authorized" screen for those roles.
+  const canEdit = isSuper || isAsstSuper || isDirector || isGM;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -66,34 +68,38 @@ function PageContent() {
   useEffect(() => {
     async function fetchStaff() {
       setLoading(true);
-      const { data, error: fetchError } = await withTimeout(
-
-        supabase.from("profiles")
-          .select("id, email, full_name, display_name, role, phone, hire_date, is_active")
-          .eq("id", staffId)
-          .single(),
-        15000,
-        { data: null, error: { message: "Request timed out" } }
-      );
-
-      if (fetchError || !data) {
-        setError(fetchError?.message || "Staff member not found");
+      try {
+        // Direct REST so the page can't wedge on a stalled supabase-js
+        // auth wrapper. The previous withTimeout() wrapper raced against
+        // a 15s ceiling, but that's still a long time to stare at a
+        // spinner — the cached-token path doesn't even acquire the
+        // wrapper's lock.
+        const staff = await directSelectRow<StaffProfile>(
+          "profiles",
+          "id",
+          staffId,
+          "id, email, full_name, display_name, role, phone, hire_date, is_active",
+          "settings.staff.view.fetch",
+        );
+        if (!staff) {
+          setError("Staff member not found");
+          return;
+        }
+        setFullName(staff.full_name || "");
+        setDisplayName(staff.display_name || "");
+        setPhone(staff.phone || "");
+        setRole(staff.role);
+        setHireDate(staff.hire_date || "");
+        setIsActive(staff.is_active);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load staff");
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const staff = data as StaffProfile;
-      setFullName(staff.full_name || "");
-      setDisplayName(staff.display_name || "");
-      setPhone(staff.phone || "");
-      setRole(staff.role);
-      setHireDate(staff.hire_date || "");
-      setIsActive(staff.is_active);
-      setLoading(false);
     }
 
     if (staffId) fetchStaff();
-  }, [staffId, supabase]);
+  }, [staffId]);
 
   const handleSave = async () => {
     if (!staffId) return;
@@ -102,19 +108,22 @@ function PageContent() {
     setSuccess(false);
 
     try {
-
-      const { error: updateError } = await supabase.from("profiles")
-        .update({
+      // Direct REST so the save can't wedge on a stalled supabase-js
+      // auth wrapper. RLS still validates via JWT.
+      await directPatchRow(
+        "profiles",
+        "id",
+        staffId,
+        {
           full_name: fullName,
           display_name: displayName || null,
           phone: phone || null,
           role,
           hire_date: hireDate || null,
           is_active: isActive,
-        })
-        .eq("id", staffId);
-
-      if (updateError) throw updateError;
+        },
+        "settings.staff.view.save",
+      );
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
@@ -125,7 +134,7 @@ function PageContent() {
     }
   };
 
-  if (!isSuper && !isAsstSuper) {
+  if (!canEdit) {
     return (
       <div className="p-4 md:p-6 pb-24">
         <div className="flex items-center gap-3 mb-6">

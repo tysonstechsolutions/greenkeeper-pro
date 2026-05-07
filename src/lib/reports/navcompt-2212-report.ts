@@ -6,6 +6,7 @@
  */
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUserId } from "@/lib/supabase/rest";
 import { formatLocalDate } from "@/lib/utils/date";
 
 const BLACK: [number, number, number] = [0, 0, 0];
@@ -33,8 +34,9 @@ export async function generateNavcompt2212Report(
 
   const supabase = createClient();
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !user) throw new Navcompt2212Error("Not signed in");
+  // Cached user-id read avoids the supabase.auth.getUser() wedge.
+  const userId = getCachedUserId();
+  if (!userId) throw new Navcompt2212Error("Not signed in");
 
   const { data: equipment, error: equipError } = await supabase
     .from("equipment")

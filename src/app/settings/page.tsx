@@ -56,9 +56,9 @@ const adminSections = [
   },
   {
     title: "Staff & Permissions",
-    description: "Invite and manage team access",
+    description: "Add and manage team members",
     icon: Shield,
-    href: "/settings/invite",
+    href: "/staff",
     color: "from-red-500 to-rose-600",
   },
   {

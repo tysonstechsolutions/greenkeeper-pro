@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+} from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { todayLocal } from "@/lib/utils/date";
 import type {
@@ -102,23 +106,30 @@ function LogTab({ userId }: { userId: string }) {
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
-    const supabase = createClient();
-    let query = supabase
-      .from("environmental_logs")
-      .select("*")
-      .order("date_observed", { ascending: false });
-
-    if (filterCat !== "all") {
-      query = query.eq("category", filterCat);
+    try {
+      const filters: string[] = [];
+      if (filterCat !== "all") {
+        filters.push(`category=eq.${encodeURIComponent(filterCat)}`);
+      }
+      const data = await directSelectList<EnvironmentalLog>(
+        "environmental_logs",
+        {
+          columns: "*",
+          filters,
+          orderBy: [{ column: "date_observed", ascending: false }],
+          label: "environmental.fetchLogs",
+        },
+      );
+      setLogs(data);
+    } catch (err) {
+      console.error("[environmental] fetchLogs failed:", err);
+    } finally {
+      setLoading(false);
     }
-
-    const { data } = await query;
-    setLogs((data as EnvironmentalLog[]) || []);
-    setLoading(false);
   }, [filterCat]);
 
   useEffect(() => {
-    fetchLogs(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
+    fetchLogs();
   }, [fetchLogs]);
 
   const resetForm = () => {
@@ -144,22 +155,29 @@ function LogTab({ userId }: { userId: string }) {
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => !isNaN(n) && n > 0 && n <= 18);
 
-    const supabase = createClient();
-    await supabase.from("environmental_logs").insert({
-      category: formCategory,
-      title: formTitle.trim(),
-      description: formDescription.trim() || null,
-      severity: formSeverity,
-      date_observed: formDate,
-      location: formLocation.trim() || null,
-      hole_numbers: holeNums,
-      corrective_action: formCorrective.trim() || null,
-      corrective_deadline: formDeadline || null,
-      npdes_reportable: formNpdes,
-      notes: formNotes.trim() || null,
-      reported_by: userId,
-      photo_ids: [],
-    });
+    try {
+      await directInsertRow(
+        "environmental_logs",
+        {
+          category: formCategory,
+          title: formTitle.trim(),
+          description: formDescription.trim() || null,
+          severity: formSeverity,
+          date_observed: formDate,
+          location: formLocation.trim() || null,
+          hole_numbers: holeNums,
+          corrective_action: formCorrective.trim() || null,
+          corrective_deadline: formDeadline || null,
+          npdes_reportable: formNpdes,
+          notes: formNotes.trim() || null,
+          reported_by: userId,
+          photo_ids: [],
+        },
+        "environmental.insertLog",
+      );
+    } catch (err) {
+      console.error("[environmental] insertLog failed:", err);
+    }
 
     resetForm();
     setShowForm(false);
@@ -168,12 +186,18 @@ function LogTab({ userId }: { userId: string }) {
   };
 
   const handleResolve = async (logId: string) => {
-    const supabase = createClient();
-    await supabase
-      .from("environmental_logs")
-      .update({ resolved_at: new Date().toISOString(), resolved_by: userId })
-      .eq("id", logId);
-    fetchLogs();
+    try {
+      await directPatchRow(
+        "environmental_logs",
+        "id",
+        logId,
+        { resolved_at: new Date().toISOString(), resolved_by: userId },
+        "environmental.resolveLog",
+      );
+      fetchLogs();
+    } catch (err) {
+      console.error("[environmental] resolve failed:", err);
+    }
   };
 
   const filtered = logs;
@@ -384,28 +408,40 @@ function BufferZonesTab({ userId }: { userId: string }) {
 
   const fetchZones = useCallback(async () => {
     setLoading(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("buffer_zones")
-      .select("*")
-      .order("zone_name");
-    setZones((data as BufferZoneRecord[]) || []);
-    setLoading(false);
+    try {
+      const data = await directSelectList<BufferZoneRecord>("buffer_zones", {
+        columns: "*",
+        orderBy: [{ column: "zone_name", ascending: true }],
+        label: "environmental.fetchZones",
+      });
+      setZones(data);
+    } catch (err) {
+      console.error("[environmental] fetchZones failed:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    fetchZones(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
+    fetchZones();
   }, [fetchZones]);
 
   const seedDefaults = async () => {
-    const supabase = createClient();
     for (const zone of DEFAULT_BUFFER_ZONES) {
-      await supabase.from("buffer_zones").insert({
-        zone_name: zone.zone_name,
-        water_feature: zone.water_feature,
-        buffer_distance_ft: zone.buffer_distance_ft,
-        status: zone.status,
-      });
+      try {
+        await directInsertRow(
+          "buffer_zones",
+          {
+            zone_name: zone.zone_name,
+            water_feature: zone.water_feature,
+            buffer_distance_ft: zone.buffer_distance_ft,
+            status: zone.status,
+          },
+          "environmental.seedDefaults",
+        );
+      } catch (err) {
+        console.error("[environmental] seed buffer zone failed:", err);
+      }
     }
     fetchZones();
   };
@@ -435,7 +471,6 @@ function BufferZonesTab({ userId }: { userId: string }) {
     if (!formName.trim() || !formFeature.trim()) return;
     setSaving(true);
 
-    const supabase = createClient();
     const payload = {
       zone_name: formName.trim(),
       water_feature: formFeature.trim(),
@@ -446,16 +481,26 @@ function BufferZonesTab({ userId }: { userId: string }) {
       updated_at: new Date().toISOString(),
     };
 
-    if (editId) {
-      await supabase.from("buffer_zones").update(payload).eq("id", editId);
-    } else {
-      await supabase.from("buffer_zones").insert(payload);
+    try {
+      if (editId) {
+        await directPatchRow(
+          "buffer_zones",
+          "id",
+          editId,
+          payload,
+          "environmental.updateZone",
+        );
+      } else {
+        await directInsertRow("buffer_zones", payload, "environmental.insertZone");
+      }
+      resetForm();
+      setShowForm(false);
+      fetchZones();
+    } catch (err) {
+      console.error("[environmental] zone save failed:", err);
+    } finally {
+      setSaving(false);
     }
-
-    resetForm();
-    setShowForm(false);
-    setSaving(false);
-    fetchZones();
   };
 
   const handleStatusToggle = async (zone: BufferZoneRecord) => {
@@ -463,17 +508,23 @@ function BufferZonesTab({ userId }: { userId: string }) {
     const idx = order.indexOf(zone.status);
     const next = order[(idx + 1) % order.length];
 
-    const supabase = createClient();
-    await supabase
-      .from("buffer_zones")
-      .update({
-        status: next,
-        last_inspected: today(),
-        inspected_by: userId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", zone.id);
-    fetchZones();
+    try {
+      await directPatchRow(
+        "buffer_zones",
+        "id",
+        zone.id,
+        {
+          status: next,
+          last_inspected: today(),
+          inspected_by: userId,
+          updated_at: new Date().toISOString(),
+        },
+        "environmental.toggleStatus",
+      );
+      fetchZones();
+    } catch (err) {
+      console.error("[environmental] toggleStatus failed:", err);
+    }
   };
 
   return (
@@ -609,23 +660,37 @@ function SummaryTab() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const supabase = createClient();
-    const [logsRes, zonesRes] = await Promise.all([
-      supabase
-        .from("environmental_logs")
-        .select("*")
-        .gte("date_observed", dateFrom)
-        .lte("date_observed", dateTo)
-        .order("date_observed", { ascending: false }),
-      supabase.from("buffer_zones").select("*"),
-    ]);
-    setLogs((logsRes.data as EnvironmentalLog[]) || []);
-    setZones((zonesRes.data as BufferZoneRecord[]) || []);
-    setLoading(false);
+    // Direct REST avoids the supabase.from() wedge that has stuck other
+    // pages on "Loading..." after navigation.
+    try {
+      const [logs, zones] = await Promise.all([
+        directSelectList<EnvironmentalLog>("environmental_logs", {
+          columns: "*",
+          filters: [
+            `date_observed=gte.${encodeURIComponent(dateFrom)}`,
+            `date_observed=lte.${encodeURIComponent(dateTo)}`,
+          ],
+          orderBy: [{ column: "date_observed", ascending: false }],
+          label: "environmental.fetchLogs",
+        }),
+        directSelectList<BufferZoneRecord>("buffer_zones", {
+          columns: "*",
+          label: "environmental.fetchZones",
+        }),
+      ]);
+      setLogs(logs);
+      setZones(zones);
+    } catch (err) {
+      console.error("[environmental] fetchData failed:", err);
+      setLogs([]);
+      setZones([]);
+    } finally {
+      setLoading(false);
+    }
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    fetchData(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
+    fetchData();
   }, [fetchData]);
 
   const totalEntries = logs.length;

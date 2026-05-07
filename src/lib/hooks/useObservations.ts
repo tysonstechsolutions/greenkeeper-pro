@@ -1,9 +1,13 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "./useAuth";
-import { withTimeout } from "@/lib/utils/resilient-fetch";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import { translateSafe } from "@/lib/utils/translate";
 import type {
   CourseObservation,
@@ -46,7 +50,6 @@ export function useObservations(): UseObservationsReturn {
   const [planLoading, setPlanLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
-  const supabase = createClient();
 
   const fetchObservations = useCallback(async () => {
     if (!user) return;
@@ -54,66 +57,53 @@ export function useObservations(): UseObservationsReturn {
     setError(null);
 
     try {
-      const result = await withTimeout(
-         
-        supabase.from("course_observations")
-          .select("*")
-          .order("created_at", { ascending: false }),
-        8000,
-        { data: null, error: { message: "Request timed out" } }
+      // Direct REST so the fetch can't wedge on a stalled supabase-js
+      // auth wrapper after navigation.
+      const data = await directSelectList<CourseObservation>(
+        "course_observations",
+        {
+          columns: "*",
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "useObservations.fetchObservations",
+        },
       );
-
-      if (result.error) {
-        setError(typeof result.error === "object" && "message" in result.error ? (result.error as { message: string }).message : "Failed to load observations");
-      } else {
-        setObservations((result.data as unknown as CourseObservation[]) || []);
-      }
+      setObservations(data);
     } catch (err) {
       console.error("Error fetching observations:", err);
       setError("Failed to load observations");
     } finally {
       setLoading(false);
     }
-  }, [user, supabase]);
+  }, [user]);
 
   const fetchPlan = useCallback(async () => {
     if (!user) return;
     setPlanLoading(true);
 
     try {
-      // Get current plan and its items in parallel
-      const [planResult, itemsResult] = await Promise.all([
-        withTimeout(
-           
-          supabase.from("improvement_plans")
-            .select("*")
-            .eq("is_current", true)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single(),
-          8000,
-          { data: null, error: null }
-        ),
-        withTimeout(
-           
-          supabase.from("improvement_plan_items")
-            .select("*")
-            .order("sort_order", { ascending: true }),
-          8000,
-          { data: null, error: null }
-        ),
+      const [planList, items] = await Promise.all([
+        directSelectList<ImprovementPlan>("improvement_plans", {
+          columns: "*",
+          filters: [`is_current=eq.true`],
+          orderBy: [{ column: "created_at", ascending: false }],
+          limit: 1,
+          label: "useObservations.fetchPlan",
+        }),
+        directSelectList<ImprovementPlanItem>("improvement_plan_items", {
+          columns: "*",
+          orderBy: [{ column: "sort_order", ascending: true }],
+          label: "useObservations.fetchPlanItems",
+        }),
       ]);
 
-      if (planResult.data) {
-        setCurrentPlan(planResult.data as unknown as ImprovementPlan);
-      }
-      setPlanItems((itemsResult.data as unknown as ImprovementPlanItem[]) || []);
+      if (planList[0]) setCurrentPlan(planList[0]);
+      setPlanItems(items);
     } catch (err) {
       console.error("Error fetching plan:", err);
     } finally {
       setPlanLoading(false);
     }
-  }, [user, supabase]);
+  }, [user]);
 
   const addObservation = useCallback(
     async (
@@ -123,25 +113,17 @@ export function useObservations(): UseObservationsReturn {
 
       try {
         // Insert immediately — don't block on translation.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: insertError } = await (supabase as any)
-          .from("course_observations")
-          .insert({
+        const newObs = await directInsertRow<CourseObservation>(
+          "course_observations",
+          {
             ...obs,
             created_by: user.id,
             is_addressed: false,
             linked_plan_item_id: null,
-          })
-          .select()
-          .single();
+          },
+          "useObservations.addObservation",
+        );
 
-        if (insertError) {
-          console.error("Error adding observation:", insertError);
-          setError(insertError.message);
-          return null;
-        }
-
-        const newObs = data as CourseObservation;
         setObservations((prev) => [newObs, ...prev]);
 
         // Fire-and-forget: translate and patch in background.
@@ -157,8 +139,13 @@ export function useObservations(): UseObservationsReturn {
           const patch: Record<string, string> = {};
           if (titleEs) patch.title_es = titleEs;
           if (descriptionEs) patch.description_es = descriptionEs;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).from("course_observations").update(patch).eq("id", newObs.id);
+          await directPatchRow(
+            "course_observations",
+            "id",
+            newObs.id,
+            patch,
+            "useObservations.translatePatch",
+          );
         }).catch((err) => console.error("Background translation failed:", err));
 
         return newObs;
@@ -168,23 +155,19 @@ export function useObservations(): UseObservationsReturn {
         return null;
       }
     },
-    [user, supabase]
+    [user]
   );
 
   const updateObservation = useCallback(
     async (id: string, updates: Partial<CourseObservation>): Promise<boolean> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("course_observations")
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq("id", id);
-
-        if (updateError) {
-          console.error("Error updating observation:", updateError);
-          return false;
-        }
-
+        await directPatchRow(
+          "course_observations",
+          "id",
+          id,
+          { ...updates, updated_at: new Date().toISOString() },
+          "useObservations.updateObservation",
+        );
         setObservations((prev) =>
           prev.map((o) => (o.id === id ? { ...o, ...updates } : o))
         );
@@ -194,22 +177,18 @@ export function useObservations(): UseObservationsReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   const deleteObservation = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const { error: deleteError } = await supabase
-          .from("course_observations")
-          .delete()
-          .eq("id", id);
-
-        if (deleteError) {
-          console.error("Error deleting observation:", deleteError);
-          return false;
-        }
-
+        await directDeleteRow(
+          "course_observations",
+          "id",
+          id,
+          "useObservations.deleteObservation",
+        );
         setObservations((prev) => prev.filter((o) => o.id !== id));
         return true;
       } catch (err) {
@@ -217,23 +196,19 @@ export function useObservations(): UseObservationsReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   const updatePlanItem = useCallback(
     async (id: string, updates: Partial<ImprovementPlanItem>): Promise<boolean> => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("improvement_plan_items")
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq("id", id);
-
-        if (updateError) {
-          console.error("Error updating plan item:", updateError);
-          return false;
-        }
-
+        await directPatchRow(
+          "improvement_plan_items",
+          "id",
+          id,
+          { ...updates, updated_at: new Date().toISOString() },
+          "useObservations.updatePlanItem",
+        );
         setPlanItems((prev) =>
           prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
         );
@@ -243,7 +218,7 @@ export function useObservations(): UseObservationsReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   // Compute stats

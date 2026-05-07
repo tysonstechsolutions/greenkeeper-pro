@@ -69,7 +69,11 @@ import { useEquipmentParts } from "@/lib/hooks/useEquipmentParts";
 import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecords";
 import { useAssetDisposal } from "@/lib/hooks/useAssetDisposal";
 import type { DisposalStatus } from "@/types/database";
-import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directPatchByFilter,
+  directPatchRowReturning,
+} from "@/lib/supabase/rest";
 import type { Equipment, EquipmentInspection, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
 import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
 import { downloadNavcompt2212Report } from "@/lib/reports/navcompt-2212-report";
@@ -253,31 +257,45 @@ function PageContent() {
     void loadEquipment();
   }, [loadEquipment]);
 
-  // Fetch staff members for dropdown
+  // Fetch staff members for dropdown — direct REST so the supabase-js
+  // auth wrapper can't wedge the page on load.
   useEffect(() => {
     async function loadStaff() {
-      const supabase = createClient();
-      const { data, error } = await supabase.from("profiles")
-        .select("id, full_name, role")
-        .order("role")
-        .order("full_name");
-      if (!error && data) {
+      try {
+        const data = await directSelectList<StaffMember>("profiles", {
+          columns: "id, full_name, role",
+          orderBy: [
+            { column: "role", ascending: true },
+            { column: "full_name", ascending: true },
+          ],
+          label: "equipment.view.loadStaff",
+        });
         setStaffMembers(data);
+      } catch (err) {
+        console.error("[equipment/view] loadStaff failed:", err);
       }
     }
     void loadStaff();
   }, []);
 
-  // Fetch linked FY26 asset on load
+  // Fetch linked FY26 asset on load (direct REST).
   useEffect(() => {
     async function loadLinkedAsset() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("fy26_assets")
-        .select("*")
-        .eq("equipment_id", equipmentId)
-        .maybeSingle();
-      if (data) setLinkedAsset(data);
+      if (!equipmentId) return;
+      try {
+        const rows = await directSelectList<Record<string, unknown>>(
+          "fy26_assets",
+          {
+            columns: "*",
+            filters: [`equipment_id=eq.${encodeURIComponent(equipmentId)}`],
+            limit: 1,
+            label: "equipment.view.loadLinkedAsset",
+          },
+        );
+        if (rows[0]) setLinkedAsset(rows[0]);
+      } catch (err) {
+        console.error("[equipment/view] loadLinkedAsset failed:", err);
+      }
     }
     void loadLinkedAsset();
   }, [equipmentId]);
@@ -286,7 +304,8 @@ function PageContent() {
   const mechanicStaff = staffMembers.filter((s) => s.role === "mechanic");
   const allStaff = staffMembers;
 
-  // Search FY26 assets
+  // Search FY26 assets — direct REST so the supabase-js auth wrapper
+  // can't wedge the search after navigation.
   const handleAssetSearch = useCallback(async (query: string) => {
     setAssetSearchQuery(query);
     if (!query.trim()) {
@@ -294,43 +313,66 @@ function PageContent() {
       return;
     }
     setSearchingAssets(true);
-    const supabase = createClient();
-    const q = `%${query.trim()}%`;
-    const { data } = await supabase
-      .from("fy26_assets")
-      .select("*")
-      .or(`description.ilike.${q},asset_number.ilike.${q},serial_number.ilike.${q},manufacturer.ilike.${q}`)
-      .limit(20);
-    setAssetSearchResults(data || []);
-    setSearchingAssets(false);
+    try {
+      const term = encodeURIComponent(`%${query.trim()}%`);
+      const data = await directSelectList<Record<string, unknown>>(
+        "fy26_assets",
+        {
+          columns: "*",
+          or: [
+            `description.ilike.${term}`,
+            `asset_number.ilike.${term}`,
+            `serial_number.ilike.${term}`,
+            `manufacturer.ilike.${term}`,
+          ].join(","),
+          limit: 20,
+          label: "equipment.view.searchAssets",
+        },
+      );
+      setAssetSearchResults(data);
+    } catch (err) {
+      console.error("[equipment/view] handleAssetSearch failed:", err);
+      setAssetSearchResults([]);
+    } finally {
+      setSearchingAssets(false);
+    }
   }, []);
 
-  // Link an FY26 asset to this equipment
+  // Link an FY26 asset to this equipment (direct REST PATCH+returning).
   const handleLinkAsset = async (assetId: string) => {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("fy26_assets")
-      .update({ equipment_id: equipmentId })
-      .eq("id", assetId)
-      .select("*")
-      .single();
-    if (data) {
-      setLinkedAsset(data);
-      setAssetLinkOpen(false);
-      setAssetSearchQuery("");
-      setAssetSearchResults([]);
+    try {
+      const data = await directPatchRowReturning<Record<string, unknown>>(
+        "fy26_assets",
+        "id",
+        assetId,
+        { equipment_id: equipmentId },
+        "equipment.view.linkAsset",
+      );
+      if (data) {
+        setLinkedAsset(data);
+        setAssetLinkOpen(false);
+        setAssetSearchQuery("");
+        setAssetSearchResults([]);
+      }
+    } catch (err) {
+      console.error("[equipment/view] handleLinkAsset failed:", err);
     }
   };
 
-  // Unlink the FY26 asset
+  // Unlink the FY26 asset (direct REST PATCH).
   const handleUnlinkAsset = async () => {
     if (!linkedAsset) return;
-    const supabase = createClient();
-    await supabase
-      .from("fy26_assets")
-      .update({ equipment_id: null })
-      .eq("id", linkedAsset.id);
-    setLinkedAsset(null);
+    try {
+      await directPatchByFilter(
+        "fy26_assets",
+        [`id=eq.${encodeURIComponent(linkedAsset.id)}`],
+        { equipment_id: null },
+        "equipment.view.unlinkAsset",
+      );
+      setLinkedAsset(null);
+    } catch (err) {
+      console.error("[equipment/view] handleUnlinkAsset failed:", err);
+    }
   };
 
   // Handle photo upload

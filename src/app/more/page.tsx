@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  Wrench,
   Camera,
   Map,
   BookOpen,
@@ -53,7 +52,11 @@ const leadershipApps: AppItem[] = [
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
-  { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
+  // Assets is the unified entry — operational data (photos, parts,
+  // service) is surfaced inline on /assets/view, and the FY26 inventory
+  // workflow lives there too. The standalone "Equipment" entry was
+  // removed when these were merged.
+  { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
   { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
@@ -62,7 +65,6 @@ const leadershipApps: AppItem[] = [
   { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-blue-600 to-indigo-700" },
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-green-600 to-emerald-700" },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
-  { href: "/assets", label: "FY26 Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
   { href: "/vendors", label: "Vendors", icon: Phone, color: "from-purple-500 to-fuchsia-700" },
   { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
 ];
@@ -73,7 +75,7 @@ const foremanApps: AppItem[] = [
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
-  { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
+  { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
   { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
@@ -85,7 +87,7 @@ const foremanApps: AppItem[] = [
 ];
 
 const mechanicApps: AppItem[] = [
-  { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-amber-600" },
+  { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },

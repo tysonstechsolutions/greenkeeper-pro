@@ -2,6 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
 import { translateSafe } from "@/lib/utils/translate";
 import type {
@@ -80,26 +87,24 @@ export function useHoleObservations() {
   const fetchObservations = useCallback(async () => {
     setLoading(true);
     try {
-       
-      const { data, error } = await supabase.from("hole_observations")
-        .select(`
-          *,
-          reporter:profiles!reported_by(id, full_name, avatar_url, role),
-          task:tasks!task_id(id, title, status)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Failed to fetch hole observations:", error);
-        return;
-      }
-      setObservations(data || []);
+      // Direct REST so the fetch can't wedge on a stalled supabase-js
+      // auth wrapper after navigation.
+      const data = await directSelectList<HoleObservation>(
+        "hole_observations",
+        {
+          columns:
+            "*, reporter:profiles!reported_by(id, full_name, avatar_url, role), task:tasks!task_id(id, title, status)",
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "useHoleObservations.fetch",
+        },
+      );
+      setObservations(data);
     } catch (err) {
       console.error("Hole observations fetch error:", err);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchObservations();
@@ -123,28 +128,32 @@ export function useHoleObservations() {
     async (data: CreateHoleObservationData) => {
       if (!user) return null;
       try {
-        // Insert immediately — don't block on translation.
-        const { data: created, error } = await supabase.from("hole_observations")
-          .insert({
+        const created = await directInsertRow<HoleObservation>(
+          "hole_observations",
+          {
             ...data,
             reported_by: user.id,
             status: "open",
-          })
-          .select(`
-            *,
-            reporter:profiles!reported_by(id, full_name, avatar_url, role)
-          `)
-          .single();
+          },
+          "useHoleObservations.create",
+        );
 
-        if (error) {
-          console.error("Failed to create observation:", error);
-          return null;
-        }
+        // Re-fetch with embeds so the UI gets reporter info.
+        const enriched = await directSelectList<HoleObservation>(
+          "hole_observations",
+          {
+            columns:
+              "*, reporter:profiles!reported_by(id, full_name, avatar_url, role)",
+            filters: [`id=eq.${encodeURIComponent(created.id)}`],
+            limit: 1,
+            label: "useHoleObservations.create:enrich",
+          },
+        );
+        const row = enriched[0] ?? created;
 
-        setObservations((prev) => [created, ...prev]);
+        setObservations((prev) => [row, ...prev]);
 
         // Fire-and-forget: translate and patch in background.
-        // This never blocks the UI or the returned result.
         Promise.all([
           data.title && data.title.trim()
             ? translateSafe({ text: data.title, from: "en", to: "es" })
@@ -157,47 +166,57 @@ export function useHoleObservations() {
           const patch: Record<string, string> = {};
           if (titleEs) patch.title_es = titleEs;
           if (descriptionEs) patch.description_es = descriptionEs;
-          await supabase.from("hole_observations").update(patch).eq("id", created.id);
+          await directPatchRow(
+            "hole_observations",
+            "id",
+            created.id,
+            patch,
+            "useHoleObservations.create:translate",
+          );
         }).catch((err) => console.error("Background translation failed:", err));
 
-        return created as HoleObservation;
+        return row;
       } catch (err) {
         console.error("Create observation error:", err);
         return null;
       }
     },
-    [supabase, user]
+    [user]
   );
 
   const updateObservation = useCallback(
     async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by" | "pin_x" | "pin_y">>) => {
       try {
-         
-        const { data: updated, error } = await supabase.from("hole_observations")
-          .update(updates)
-          .eq("id", id)
-          .select(`
-            *,
-            reporter:profiles!reported_by(id, full_name, avatar_url, role),
-            task:tasks!task_id(id, title, status)
-          `)
-          .single();
-
-        if (error) {
-          console.error("Failed to update observation:", error);
-          return null;
-        }
-
-        setObservations((prev) =>
-          prev.map((o) => (o.id === id ? updated : o))
+        await directPatchRowReturning<HoleObservation>(
+          "hole_observations",
+          "id",
+          id,
+          updates,
+          "useHoleObservations.update",
         );
-        return updated as HoleObservation;
+        const enriched = await directSelectList<HoleObservation>(
+          "hole_observations",
+          {
+            columns:
+              "*, reporter:profiles!reported_by(id, full_name, avatar_url, role), task:tasks!task_id(id, title, status)",
+            filters: [`id=eq.${encodeURIComponent(id)}`],
+            limit: 1,
+            label: "useHoleObservations.update:enrich",
+          },
+        );
+        const updated = enriched[0];
+        if (updated) {
+          setObservations((prev) =>
+            prev.map((o) => (o.id === id ? updated : o))
+          );
+        }
+        return updated ?? null;
       } catch (err) {
         console.error("Update observation error:", err);
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   const uploadPhoto = useCallback(
@@ -240,11 +259,12 @@ export function useHoleObservations() {
   const deleteObservation = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const { error } = await supabase.from("hole_observations").delete().eq("id", id);
-        if (error) {
-          console.error("Failed to delete observation:", error);
-          return false;
-        }
+        await directDeleteRow(
+          "hole_observations",
+          "id",
+          id,
+          "useHoleObservations.delete",
+        );
         setObservations((prev) => prev.filter((o) => o.id !== id));
         return true;
       } catch (err) {
@@ -252,7 +272,7 @@ export function useHoleObservations() {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   // Summary stats

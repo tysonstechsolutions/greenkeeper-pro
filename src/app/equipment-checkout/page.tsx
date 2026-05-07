@@ -32,8 +32,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfiles, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
-import { createClient } from "@/lib/supabase/client";
-import { withTimeout } from "@/lib/utils/resilient-fetch";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+} from "@/lib/supabase/rest";
 import { formatLocalDateTime } from "@/lib/utils/date";
 
 // Types
@@ -524,78 +527,58 @@ export default function EquipmentCheckoutPage() {
   const [selectedCheckout, setSelectedCheckout] = useState<EquipmentCheckout | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const supabase = createClient();
-
   // Fetch all data
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const [activeResult, historyResult, allEquipmentResult] = await Promise.all([
-        withTimeout(
-           
-          supabase.from("equipment_checkouts")
-            .select(
-              "*, equipment:equipment_id(id, name, equipment_type, make, model, status, current_hours, location, photo_url), profile:checked_out_by(full_name, display_name, avatar_url)"
-            )
-            .is("returned_at", null)
-            .order("checked_out_at", { ascending: false }),
-          8000,
-          { data: null, error: null }
-        ),
-        withTimeout(
-           
-          supabase.from("equipment_checkouts")
-            .select(
-              "*, equipment:equipment_id(id, name, equipment_type, make, model), profile:checked_out_by(full_name, display_name, avatar_url)"
-            )
-            .not("returned_at", "is", null)
-            .order("returned_at", { ascending: false })
-            .limit(50),
-          8000,
-          { data: null, error: null }
-        ),
-        withTimeout(
-           
-          supabase.from("equipment")
-            .select("id, name, equipment_type, make, model, status, current_hours, location, photo_url")
-            .eq("status", "operational"),
-          8000,
-          { data: null, error: null }
-        ),
+      // Direct REST so the page can't wedge on a stalled supabase-js
+      // auth wrapper. PostgREST supports embedded resources via the
+      // `select=*,relname:fk(cols)` syntax — we pass the same columns
+      // string that supabase-js was using.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const [active, hist, allEquip] = await Promise.all<any[]>([
+        directSelectList<EquipmentCheckout>("equipment_checkouts", {
+          columns:
+            "*, equipment:equipment_id(id, name, equipment_type, make, model, status, current_hours, location, photo_url), profile:checked_out_by(full_name, display_name, avatar_url)",
+          filters: [`returned_at=is.null`],
+          orderBy: [{ column: "checked_out_at", ascending: false }],
+          label: "equipment-checkout.fetchActive",
+        }),
+        directSelectList<EquipmentCheckout>("equipment_checkouts", {
+          columns:
+            "*, equipment:equipment_id(id, name, equipment_type, make, model), profile:checked_out_by(full_name, display_name, avatar_url)",
+          filters: [`returned_at=not.is.null`],
+          orderBy: [{ column: "returned_at", ascending: false }],
+          limit: 50,
+          label: "equipment-checkout.fetchHistory",
+        }),
+        directSelectList<Equipment>("equipment", {
+          columns:
+            "id, name, equipment_type, make, model, status, current_hours, location, photo_url",
+          filters: [`status=eq.operational`],
+          label: "equipment-checkout.fetchAvailable",
+        }),
       ]);
-
-      if (activeResult.error) {
-        throw activeResult.error;
-      }
-      if (historyResult.error) {
-        throw historyResult.error;
-      }
-      if (allEquipmentResult.error) {
-        throw allEquipmentResult.error;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const active = (activeResult.data as any) || [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const hist = (historyResult.data as any) || [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const allEquip = (allEquipmentResult.data as any) || [];
 
       setActiveCheckouts(active);
       setHistory(hist);
 
-      // Filter to only available equipment (not currently checked out)
-      const checkedOutIds = new Set(active.map((c: EquipmentCheckout) => c.equipment_id));
-      setAvailableEquipment(allEquip.filter((e: Equipment) => !checkedOutIds.has(e.id)));
+      // Filter to only available equipment (not currently checked out).
+      const checkedOutIds = new Set(
+        active.map((c: EquipmentCheckout) => c.equipment_id),
+      );
+      setAvailableEquipment(
+        allEquip.filter((e: Equipment) => !checkedOutIds.has(e.id)),
+      );
     } catch (err) {
       console.error("Error fetching equipment data:", err);
       setError(err instanceof Error ? err.message : "Failed to load equipment data");
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   // Initial fetch
   useEffect(() => {
@@ -615,16 +598,19 @@ export default function EquipmentCheckoutPage() {
 
       setSubmitting(true);
       try {
-         
-        const { error: insertError } = await supabase.from("equipment_checkouts").insert({
-          equipment_id: selectedEquipment.id,
-          checked_out_by: currentUser.id,
-          expected_return: data.expectedReturn,
-          condition_out: data.conditionOut,
-          notes_out: data.notesOut,
-        });
-
-        if (insertError) throw insertError;
+        // Direct REST so the insert can't wedge on a stalled
+        // supabase-js auth wrapper after navigation.
+        await directInsertRow(
+          "equipment_checkouts",
+          {
+            equipment_id: selectedEquipment.id,
+            checked_out_by: currentUser.id,
+            expected_return: data.expectedReturn,
+            condition_out: data.conditionOut,
+            notes_out: data.notesOut,
+          },
+          "equipment-checkout.checkOut",
+        );
 
         setSelectedEquipment(null);
         setShowCheckOutModal(false);
@@ -635,7 +621,7 @@ export default function EquipmentCheckoutPage() {
         setSubmitting(false);
       }
     },
-    [selectedEquipment, currentUser, supabase, fetchData]
+    [selectedEquipment, currentUser, fetchData]
   );
 
   // Handle return
@@ -648,17 +634,19 @@ export default function EquipmentCheckoutPage() {
 
       setSubmitting(true);
       try {
-        const { error: updateError } = await (supabase
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .from("equipment_checkouts") as any)
-          .update({
+        // Direct REST so the return-PATCH can't wedge on a stalled
+        // supabase-js auth wrapper.
+        await directPatchRow(
+          "equipment_checkouts",
+          "id",
+          selectedCheckout.id,
+          {
             returned_at: new Date().toISOString(),
             condition_in: data.conditionIn,
             notes_in: data.notesIn,
-          })
-          .eq("id", selectedCheckout.id);
-
-        if (updateError) throw updateError;
+          },
+          "equipment-checkout.return",
+        );
 
         setSelectedCheckout(null);
         setShowReturnModal(false);
@@ -669,7 +657,7 @@ export default function EquipmentCheckoutPage() {
         setSubmitting(false);
       }
     },
-    [selectedCheckout, supabase, fetchData]
+    [selectedCheckout, fetchData]
   );
 
   // Filter available equipment by search

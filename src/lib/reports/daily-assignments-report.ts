@@ -10,6 +10,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUser } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -63,8 +64,9 @@ export async function generateDailyAssignmentsReport(
 ): Promise<{ blob: Blob; filename: string }> {
   const supabase = createClient();
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !user) throw new DailyAssignmentsReportError("Not signed in");
+  // Cached user read avoids the supabase.auth.getUser() wedge.
+  const user = getCachedUser();
+  if (!user) throw new DailyAssignmentsReportError("Not signed in");
 
   const { data: profile } = await supabase.from("profiles")
     .select("full_name, role").eq("id", user.id).single();

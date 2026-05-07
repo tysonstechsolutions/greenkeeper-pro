@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { directSelectList, directDeleteRow } from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import type {
   InspectionChecklist,
@@ -378,34 +379,48 @@ export default function InspectionsPage() {
     profile?.role === "director" ||
     profile?.role === "gm";
 
-  // ── Fetch active checklist ──
+  // ── Fetch active checklist (direct REST so a wedged auth wrapper
+  // can't trap the page on "Loading…") ──
   const fetchChecklist = useCallback(async () => {
-    const supabase = createClient();
-    const { data: checklists } = await supabase
-      .from("inspection_checklists")
-      .select("*")
-      .in("status", ["draft", "in_progress"])
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    const active = checklists?.[0] as InspectionChecklist | undefined;
-    if (active) {
-      setChecklist(active);
-      const { data: itemsData } = await supabase
-        .from("inspection_items")
-        .select("*")
-        .eq("checklist_id", active.id)
-        .order("sort_order", { ascending: true });
-      setItems((itemsData || []) as InspectionItem[]);
-    } else {
-      setChecklist(null);
-      setItems([]);
+    try {
+      const checklists = await directSelectList<InspectionChecklist>(
+        "inspection_checklists",
+        {
+          columns: "*",
+          filters: [
+            `status=in.(${["draft", "in_progress"].map(encodeURIComponent).join(",")})`,
+          ],
+          orderBy: [{ column: "created_at", ascending: false }],
+          limit: 1,
+          label: "inspections.fetchActive",
+        },
+      );
+      const active = checklists[0];
+      if (active) {
+        setChecklist(active);
+        const itemsData = await directSelectList<InspectionItem>(
+          "inspection_items",
+          {
+            columns: "*",
+            filters: [`checklist_id=eq.${encodeURIComponent(active.id)}`],
+            orderBy: [{ column: "sort_order", ascending: true }],
+            label: "inspections.fetchItems",
+          },
+        );
+        setItems(itemsData);
+      } else {
+        setChecklist(null);
+        setItems([]);
+      }
+    } catch (err) {
+      console.error("[inspections] fetchChecklist failed:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    if (!authLoading) fetchChecklist(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
+    if (!authLoading) fetchChecklist();
   }, [authLoading, fetchChecklist]);
 
   // ── Create new inspection ──
@@ -456,11 +471,20 @@ export default function InspectionsPage() {
   const deleteChecklist = async () => {
     if (!checklist) return;
     setDeleting(true);
-    const supabase = createClient();
-    await supabase.from("inspection_checklists").delete().eq("id", checklist.id);
-    setChecklist(null);
-    setItems([]);
-    setDeleting(false);
+    try {
+      await directDeleteRow(
+        "inspection_checklists",
+        "id",
+        checklist.id,
+        "inspections.deleteChecklist",
+      );
+      setChecklist(null);
+      setItems([]);
+    } catch (err) {
+      console.error("[inspections] deleteChecklist failed:", err);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // ── Toggle item status (optimistic) ──

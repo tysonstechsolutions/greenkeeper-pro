@@ -2,6 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getCachedUserId,
+  directSelectList,
+  directSelectCount,
+  directInsertRow,
+  directPatchRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import type {
   BudgetItem,
   Expense,
@@ -182,29 +191,36 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-        // Fetch budget items
-         
-        const { data: items, error: itemsError } = await supabase.from("budget_items")
-          .select("*")
-          .eq("fiscal_year", fiscalYear)
-          .order("category", { ascending: true })
-          .order("month", { ascending: true, nullsFirst: true })
-          .limit(100); // Limit budget items
-
-        if (itemsError) {
-          throw new Error(itemsError.message);
-        }
+        // Fetch budget items via direct REST. Subsequent per-item
+        // expense lookups inherit the wedge protection since they only
+        // run after the outer query succeeds.
+        const items = await directSelectList<BudgetItem>("budget_items", {
+          columns: "*",
+          filters: [`fiscal_year=eq.${fiscalYear}`],
+          orderBy: [
+            { column: "category", ascending: true },
+            { column: "month", ascending: true, nullsFirst: true },
+          ],
+          limit: 100,
+          label: "useBudget.fetchBudget.items",
+        });
 
         // For each item, calculate spent amount from expenses
         const itemsWithSpent: BudgetItemWithSpent[] = await Promise.all(
-          (items || []).map(async (item: BudgetItem) => {
-             
-            const { data: expenseData } = await supabase.from("expenses")
-              .select("amount")
-              .eq("budget_item_id", item.id)
-              .in("status", ["approved", "paid"]);
+          items.map(async (item: BudgetItem) => {
+            const expenseData = await directSelectList<{ amount: number }>(
+              "expenses",
+              {
+                columns: "amount",
+                filters: [
+                  `budget_item_id=eq.${encodeURIComponent(item.id)}`,
+                  `status=in.(approved,paid)`,
+                ],
+                label: "useBudget.fetchBudget.itemExpenses",
+              },
+            );
 
-            const spent = expenseData?.reduce((sum: number, e: { amount: number }) => sum + e.amount, 0) || 0;
+            const spent = expenseData.reduce((sum, e) => sum + e.amount, 0);
             const remaining = item.budgeted_amount - spent;
             const percent_used = item.budgeted_amount > 0
               ? Math.round((spent / item.budgeted_amount) * 100)
@@ -244,43 +260,49 @@ export function useBudget(): UseBudgetReturn {
       };
 
       try {
-        // Fetch all budget items for the year
-         
-        const { data: items, error: itemsError } = await supabase.from("budget_items")
-          .select("*")
-          .eq("fiscal_year", fiscalYear);
-
-        if (itemsError) {
-          console.error("Error fetching budget items:", itemsError);
-          return defaultSummary;
-        }
+        // Fetch all budget items for the year via direct REST.
+        const items = await directSelectList<BudgetItem>("budget_items", {
+          columns: "*",
+          filters: [`fiscal_year=eq.${fiscalYear}`],
+          label: "useBudget.fetchBudgetSummary.items",
+        });
 
         // Fetch all approved/paid expenses for these items
-        const itemIds = (items || []).map((i: BudgetItem) => i.id);
+        const itemIds = items.map((i: BudgetItem) => i.id);
         let expenses: { budget_item_id: string; amount: number }[] = [];
 
         if (itemIds.length > 0) {
-           
-          const { data: expenseData } = await supabase.from("expenses")
-            .select("budget_item_id, amount")
-            .in("budget_item_id", itemIds)
-            .in("status", ["approved", "paid"]);
-
-          expenses = expenseData || [];
+          expenses = await directSelectList<{ budget_item_id: string; amount: number }>(
+            "expenses",
+            {
+              columns: "budget_item_id, amount",
+              filters: [
+                `budget_item_id=in.(${itemIds.map(encodeURIComponent).join(",")})`,
+                `status=in.(approved,paid)`,
+              ],
+              label: "useBudget.fetchBudgetSummary.expenses",
+            },
+          );
         }
 
         // Also fetch expenses without budget items (for the fiscal year date range)
         const fiscalYearStart = `${fiscalYear}-01-01`;
         const fiscalYearEnd = `${fiscalYear}-12-31`;
-         
-        const { data: unbucketedExpenses } = await supabase.from("expenses")
-          .select("amount")
-          .is("budget_item_id", null)
-          .gte("expense_date", fiscalYearStart)
-          .lte("expense_date", fiscalYearEnd)
-          .in("status", ["approved", "paid"]);
+        const unbucketedExpenses = await directSelectList<{ amount: number }>(
+          "expenses",
+          {
+            columns: "amount",
+            filters: [
+              `budget_item_id=is.null`,
+              `expense_date=gte.${fiscalYearStart}`,
+              `expense_date=lte.${fiscalYearEnd}`,
+              `status=in.(approved,paid)`,
+            ],
+            label: "useBudget.fetchBudgetSummary.unbucketed",
+          },
+        );
 
-        const unbucketedTotal = unbucketedExpenses?.reduce((sum: number, e: { amount: number }) => sum + e.amount, 0) || 0;
+        const unbucketedTotal = unbucketedExpenses.reduce((sum, e) => sum + e.amount, 0);
 
         // Group by category
         const categoryMap = new Map<BudgetCategory, { budgeted: number; spent: number }>();
@@ -363,25 +385,29 @@ export function useBudget(): UseBudgetReturn {
         const fiscalYearStart = `${fiscalYear}-01-01`;
         const fiscalYearEnd = `${fiscalYear}-12-31`;
 
-        // Fetch all approved/paid expenses for the year
-         
-        const { data: expenses, error: expenseError } = await supabase.from("expenses")
-          .select("expense_date, amount")
-          .gte("expense_date", fiscalYearStart)
-          .lte("expense_date", fiscalYearEnd)
-          .in("status", ["approved", "paid"]);
-
-        if (expenseError) {
-          console.error("Error fetching expenses:", expenseError);
-          return [];
-        }
+        // Fetch all approved/paid expenses for the year via direct REST.
+        const expenses = await directSelectList<{ expense_date: string; amount: number }>(
+          "expenses",
+          {
+            columns: "expense_date, amount",
+            filters: [
+              `expense_date=gte.${fiscalYearStart}`,
+              `expense_date=lte.${fiscalYearEnd}`,
+              `status=in.(approved,paid)`,
+            ],
+            label: "useBudget.fetchMonthlySpend.expenses",
+          },
+        );
 
         // Fetch monthly budget allocations if any
-         
-        const { data: monthlyBudgets } = await supabase.from("budget_items")
-          .select("month, budgeted_amount")
-          .eq("fiscal_year", fiscalYear)
-          .not("month", "is", null);
+        const monthlyBudgets = await directSelectList<{
+          month: number | null;
+          budgeted_amount: number;
+        }>("budget_items", {
+          columns: "month, budgeted_amount",
+          filters: [`fiscal_year=eq.${fiscalYear}`, `month=not.is.null`],
+          label: "useBudget.fetchMonthlySpend.monthlyBudgets",
+        });
 
         // Group expenses by month
         const monthlyTotals = new Map<number, number>();
@@ -394,14 +420,14 @@ export function useBudget(): UseBudgetReturn {
         }
 
         // Sum expenses by month
-        (expenses || []).forEach((expense: { expense_date: string; amount: number }) => {
+        expenses.forEach((expense) => {
           const month = new Date(expense.expense_date).getMonth() + 1;
           const current = monthlyTotals.get(month) || 0;
           monthlyTotals.set(month, current + expense.amount);
         });
 
         // Sum budgets by month
-        (monthlyBudgets || []).forEach((item: { month: number | null; budgeted_amount: number }) => {
+        monthlyBudgets.forEach((item) => {
           if (item.month) {
             const current = monthlyBudgetTotals.get(item.month) || 0;
             monthlyBudgetTotals.set(item.month, current + item.budgeted_amount);
@@ -438,16 +464,11 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-         
-        const { data: newItem, error: createError } = await supabase.from("budget_items")
-          .insert(data)
-          .select()
-          .single();
-
-        if (createError) {
-          throw new Error(createError.message);
-        }
-
+        const newItem = await directInsertRow<BudgetItem>(
+          "budget_items",
+          data as unknown as Record<string, unknown>,
+          "useBudget.createBudgetItem",
+        );
         return newItem;
       } catch (err) {
         console.error("Error creating budget item:", err);
@@ -457,7 +478,7 @@ export function useBudget(): UseBudgetReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -469,16 +490,13 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-         
-        const { data: updatedItem, error: updateError } = await supabase.from("budget_items")
-          .update(data)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        const updatedItem = await directPatchRowReturning<BudgetItem>(
+          "budget_items",
+          "id",
+          id,
+          data as unknown as Record<string, unknown>,
+          "useBudget.updateBudgetItem",
+        );
 
         // Update local state
         setBudgetItems((prev) =>
@@ -498,7 +516,7 @@ export function useBudget(): UseBudgetReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -507,25 +525,24 @@ export function useBudget(): UseBudgetReturn {
   const deleteBudgetItem = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        // Check if there are linked expenses
-         
-        const { count } = await supabase.from("expenses")
-          .select("*", { count: "exact", head: true })
-          .eq("budget_item_id", id);
+        // Check if there are linked expenses via direct REST count.
+        const count = await directSelectCount(
+          "expenses",
+          [`budget_item_id=eq.${encodeURIComponent(id)}`],
+          "useBudget.deleteBudgetItem.count",
+        );
 
-        if (count && count > 0) {
+        if (count > 0) {
           setError("Cannot delete budget item with linked expenses");
           return false;
         }
 
-         
-        const { error: deleteError } = await supabase.from("budget_items")
-          .delete()
-          .eq("id", id);
-
-        if (deleteError) {
-          throw new Error(deleteError.message);
-        }
+        await directDeleteRow(
+          "budget_items",
+          "id",
+          id,
+          "useBudget.deleteBudgetItem",
+        );
 
         // Update local state
         setBudgetItems((prev) => prev.filter((item) => item.id !== id));
@@ -549,57 +566,49 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-         
-        let query = supabase.from("expenses").select("*");
+        // Direct REST so the expense list can't wedge on a stalled
+        // supabase-js auth wrapper.
+        const restFilters: string[] = [];
+        if (filters?.budgetItemId)
+          restFilters.push(`budget_item_id=eq.${encodeURIComponent(filters.budgetItemId)}`);
+        if (filters?.status)
+          restFilters.push(`status=eq.${encodeURIComponent(filters.status)}`);
+        if (filters?.vendor)
+          restFilters.push(`vendor=ilike.${encodeURIComponent(`%${filters.vendor}%`)}`);
+        if (filters?.startDate)
+          restFilters.push(`expense_date=gte.${filters.startDate}`);
+        if (filters?.endDate)
+          restFilters.push(`expense_date=lte.${filters.endDate}`);
+        if (filters?.submittedBy)
+          restFilters.push(`submitted_by=eq.${encodeURIComponent(filters.submittedBy)}`);
 
-        // Apply filters
-        if (filters?.budgetItemId) {
-          query = query.eq("budget_item_id", filters.budgetItemId);
-        }
-        if (filters?.status) {
-          query = query.eq("status", filters.status);
-        }
-        if (filters?.vendor) {
-          query = query.ilike("vendor", `%${filters.vendor}%`);
-        }
-        if (filters?.startDate) {
-          query = query.gte("expense_date", filters.startDate);
-        }
-        if (filters?.endDate) {
-          query = query.lte("expense_date", filters.endDate);
-        }
-        if (filters?.submittedBy) {
-          query = query.eq("submitted_by", filters.submittedBy);
-        }
-
-        query = query.order("expense_date", { ascending: false });
-        query = query.limit(200); // Limit expenses list
-
-        const { data, error: fetchError } = await query as { data: Expense[] | null; error: { message: string } | null };
-
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
+        const data = await directSelectList<Expense>("expenses", {
+          columns: "*",
+          filters: restFilters,
+          orderBy: [{ column: "expense_date", ascending: false }],
+          limit: 200,
+          label: "useBudget.fetchExpenses",
+        });
 
         // Fetch budget items for these expenses
-        const budgetItemIds = [...new Set((data || [])
+        const budgetItemIds = [...new Set(data
           .map((e) => e.budget_item_id)
           .filter(Boolean))] as string[];
 
         const budgetItemsMap = new Map<string, BudgetItem>();
         if (budgetItemIds.length > 0) {
-           
-          const { data: items } = await supabase.from("budget_items")
-            .select("*")
-            .in("id", budgetItemIds);
-
-          (items || []).forEach((item: BudgetItem) => {
+          const items = await directSelectList<BudgetItem>("budget_items", {
+            columns: "*",
+            filters: [`id=in.(${budgetItemIds.map(encodeURIComponent).join(",")})`],
+            label: "useBudget.fetchExpenses.budgetItems",
+          });
+          items.forEach((item: BudgetItem) => {
             budgetItemsMap.set(item.id, item);
           });
         }
 
         // Filter by category if specified (requires budget item lookup)
-        let filteredData = data || [];
+        let filteredData = data;
         if (filters?.category) {
           filteredData = filteredData.filter((expense) => {
             if (!expense.budget_item_id) return false;
@@ -615,10 +624,11 @@ export function useBudget(): UseBudgetReturn {
 
         const profilesMap = new Map<string, Profile>();
         if (submitterIds.length > 0) {
-           
-          const { data: profiles } = await supabase.from("profiles")
-            .select("*")
-            .in("id", submitterIds);
+          const profiles = await directSelectList<Profile>("profiles", {
+            columns: "*",
+            filters: [`id=in.(${submitterIds.map(encodeURIComponent).join(",")})`],
+            label: "useBudget.fetchExpenses.profiles",
+          });
 
           (profiles || []).forEach((profile: Profile) => {
             profilesMap.set(profile.id, profile);
@@ -656,31 +666,24 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-        // Get current user
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
         // Auto-approve if amount is <= $500, otherwise pending
         const status: ExpenseStatus = data.amount > 500 ? "pending" : "approved";
 
         const expenseData = {
           ...data,
-          submitted_by: user?.id || null,
+          submitted_by: userId || null,
           status,
-          approved_by: status === "approved" ? user?.id : null,
+          approved_by: status === "approved" ? userId : null,
         };
 
-         
-        const { data: newExpense, error: createError } = await supabase.from("expenses")
-          .insert(expenseData)
-          .select()
-          .single();
-
-        if (createError) {
-          throw new Error(createError.message);
-        }
-
+        const newExpense = await directInsertRow<Expense>(
+          "expenses",
+          expenseData as unknown as Record<string, unknown>,
+          "useBudget.createExpense",
+        );
         return newExpense;
       } catch (err) {
         console.error("Error creating expense:", err);
@@ -690,7 +693,7 @@ export function useBudget(): UseBudgetReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -702,16 +705,13 @@ export function useBudget(): UseBudgetReturn {
       setError(null);
 
       try {
-         
-        const { data: updatedExpense, error: updateError } = await supabase.from("expenses")
-          .update(data)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        const updatedExpense = await directPatchRowReturning<Expense>(
+          "expenses",
+          "id",
+          id,
+          data as unknown as Record<string, unknown>,
+          "useBudget.updateExpense",
+        );
 
         // Update local state
         setExpenses((prev) =>
@@ -731,7 +731,7 @@ export function useBudget(): UseBudgetReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -740,27 +740,25 @@ export function useBudget(): UseBudgetReturn {
   const approveExpense = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-         
-        const { error: updateError } = await supabase.from("expenses")
-          .update({
+        await directPatchRow(
+          "expenses",
+          "id",
+          id,
+          {
             status: "approved",
-            approved_by: user?.id,
-          })
-          .eq("id", id);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+            approved_by: userId,
+          },
+          "useBudget.approveExpense",
+        );
 
         // Update local state
         setExpenses((prev) =>
           prev.map((expense) =>
             expense.id === id
-              ? { ...expense, status: "approved" as ExpenseStatus, approved_by: user?.id ?? null }
+              ? { ...expense, status: "approved" as ExpenseStatus, approved_by: userId ?? null }
               : expense
           )
         );
@@ -772,7 +770,7 @@ export function useBudget(): UseBudgetReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -781,27 +779,25 @@ export function useBudget(): UseBudgetReturn {
   const denyExpense = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-         
-        const { error: updateError } = await supabase.from("expenses")
-          .update({
+        await directPatchRow(
+          "expenses",
+          "id",
+          id,
+          {
             status: "denied",
-            approved_by: user?.id,
-          })
-          .eq("id", id);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+            approved_by: userId,
+          },
+          "useBudget.denyExpense",
+        );
 
         // Update local state
         setExpenses((prev) =>
           prev.map((expense) =>
             expense.id === id
-              ? { ...expense, status: "denied" as ExpenseStatus, approved_by: user?.id ?? null }
+              ? { ...expense, status: "denied" as ExpenseStatus, approved_by: userId ?? null }
               : expense
           )
         );
@@ -813,7 +809,7 @@ export function useBudget(): UseBudgetReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   /**

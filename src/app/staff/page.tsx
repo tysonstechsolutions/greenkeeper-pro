@@ -32,6 +32,7 @@ import { roleLabels, roleColors, getDisplayName, getInitials } from "@/lib/hooks
 import { withTimeout, isOnline } from "@/lib/utils/resilient-fetch";
 import type { Profile, UserRole, Task, TimeOffRequest, Schedule } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
+import { AddStaffSheet } from "@/components/features/staff/add-staff-sheet";
 
 // Extended profile with additional details for staff page
 interface StaffProfile extends Profile {
@@ -42,8 +43,12 @@ interface StaffProfile extends Profile {
 
 export default function StaffPage() {
   const router = useRouter();
-  const { profile: currentUser, loading: authLoading, isSuper, isAsstSuper } = useAuth();
+  const { profile: currentUser, loading: authLoading, isSuper, isAsstSuper, isDirector, isGM } = useAuth();
   const { crews, loading: crewsLoading } = useCrews();
+  // Anyone in the upper-management bucket can open the per-staff edit
+  // page. Mirrors the role gate inside /settings/staff/view so the
+  // button doesn't lead to a "Not Authorized" screen for the same role.
+  const canEditStaff = isSuper || isAsstSuper || isDirector || isGM;
 
   const [profiles, setProfiles] = useState<StaffProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +67,11 @@ export default function StaffPage() {
   const [selectedStaffTimeOff, setSelectedStaffTimeOff] = useState<TimeOffRequest[]>([]);
   const [selectedStaffSchedule, setSelectedStaffSchedule] = useState<Schedule[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // "Add Staff" sheet — replaces the old email-based invite flow.
+  // Opening it doesn't navigate anywhere; the form lives inline so the
+  // manager stays on the staff list and the new row pops in on success.
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -354,12 +364,10 @@ export default function StaffPage() {
               Manage Crews
             </Button>
           </Link>
-          <Link href="/settings/invite">
-            <Button className="gap-2">
-              <UserPlus className="w-4 h-4" />
-              Invite Staff
-            </Button>
-          </Link>
+          <Button className="gap-2" onClick={() => setAddStaffOpen(true)}>
+            <UserPlus className="w-4 h-4" />
+            Add Staff
+          </Button>
         </div>
       </div>
 
@@ -477,8 +485,11 @@ export default function StaffPage() {
               <EmptyState
                 icon={Users}
                 title="No staff members"
-                description="Invite team members to start managing your crew."
-                action={{ label: "Invite Staff", href: "/settings/invite" }}
+                description="Add team members manually to start managing your crew."
+                action={{
+                  label: "Add Staff",
+                  onClick: () => setAddStaffOpen(true),
+                }}
               />
             )
           ) : (
@@ -796,8 +807,10 @@ export default function StaffPage() {
                     )}
                   </div>
 
-                  {/* Admin actions */}
-                  {isSuper && (
+                  {/* Admin actions — visible to any management role that can
+                      actually edit the underlying record (matches the role
+                      gate on /settings/staff/view). */}
+                  {canEditStaff && (
                     <div className="pt-4 border-t border-border">
                       <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
                         <Shield className="w-4 h-4" />
@@ -818,6 +831,16 @@ export default function StaffPage() {
           </div>
         )}
       </div>
+
+      {/* Add Staff sheet — opens from the header button or empty state.
+          On success, refetch the list so the new row shows up immediately. */}
+      <AddStaffSheet
+        open={addStaffOpen}
+        onOpenChange={setAddStaffOpen}
+        onAdded={() => {
+          fetchStaff();
+        }}
+      />
     </div>
       )}
     </RoleGuard>

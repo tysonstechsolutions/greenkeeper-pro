@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { createClient } from "@/lib/supabase/client";
+import { directPatchRow } from "@/lib/supabase/rest";
 
 export default function ProfileSettingsPage() {
   const router = useRouter();
@@ -22,8 +22,6 @@ export default function ProfileSettingsPage() {
     (profile?.language_preference as "en" | "es" | undefined) || "en"
   );
 
-  const supabase = createClient();
-
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
@@ -31,17 +29,20 @@ export default function ProfileSettingsPage() {
     setSaveSuccess(false);
 
     try {
-       
-      const { error } = await supabase.from("profiles")
-        .update({
+      // Direct REST so the save can't wedge if the supabase-js auth
+      // wrapper is in a bad state. RLS still validates via JWT.
+      await directPatchRow(
+        "profiles",
+        "id",
+        profile.id,
+        {
           full_name: fullName,
           display_name: displayName,
           phone: phone,
           language_preference: languagePreference,
-        })
-        .eq("id", profile.id);
-
-      if (error) throw error;
+        },
+        "settings.profile.save",
+      );
       await refreshProfile();
       setSaveSuccess(true);
       setTimeout(() => {

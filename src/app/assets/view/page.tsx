@@ -17,6 +17,12 @@ import {
   ScanLine,
   Link2,
   Unlink,
+  Wrench,
+  Clock,
+  Package,
+  ShoppingCart,
+  PackageCheck,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +41,17 @@ import { InlineCamera } from "@/components/ui/inline-camera";
 import { isNativeBarcodeAvailable, scanBarcodeNative } from "@/lib/scan/barcode";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useFy26Assets } from "@/lib/hooks/useFy26Assets";
+import {
+  conditionStatusLabels,
+  conditionStatusColors,
+  equipmentTypeLabels,
+  equipmentStatusLabels,
+  equipmentStatusColors,
+  fuelTypeLabels,
+} from "@/lib/hooks/useEquipment";
+import { directSelectRow, directSelectList } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
+import type { Equipment } from "@/types/database";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
@@ -110,6 +126,20 @@ function PageContent() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const barcodeScannerRef = useRef<any>(null);
 
+  // Linked equipment (operational) data — photos, condition, parts,
+  // service history, hours. Loaded only when asset.equipment_id is set.
+  // The user wants ALL the operational info on the asset page, so we
+  // surface this inline rather than punting them to a separate route.
+  const [linkedEquipment, setLinkedEquipment] = useState<Equipment | null>(null);
+  const [partsSummary, setPartsSummary] = useState<{ needed: number; ordered: number; received: number }>({
+    needed: 0,
+    ordered: 0,
+    received: 0,
+  });
+  const [lastServiceDate, setLastServiceDate] = useState<string | null>(null);
+  const [serviceCount, setServiceCount] = useState(0);
+  const [equipmentLoading, setEquipmentLoading] = useState(false);
+
   // ── Load ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -129,6 +159,63 @@ function PageContent() {
       if (a) {
         const records = await fetchDamageRecords(a.id);
         if (!cancelled) setDamageRecords(records);
+      }
+
+      // Load linked operational data (photos, parts, service) when an
+      // equipment record is wired up. Direct REST so it can't wedge.
+      if (a?.equipment_id) {
+        setEquipmentLoading(true);
+        try {
+          const eqId = a.equipment_id;
+          const [eq, partsRows, serviceRows] = await Promise.all([
+            directSelectRow<Equipment>(
+              "equipment",
+              "id",
+              eqId,
+              "*",
+              "assets.view.fetchEquipment",
+            ),
+            directSelectList<{ status: string }>("equipment_parts", {
+              columns: "status",
+              filters: [`equipment_id=eq.${encodeURIComponent(eqId)}`],
+              label: "assets.view.fetchPartsCounts",
+            }),
+            directSelectList<{ service_date: string }>(
+              "equipment_service_records",
+              {
+                columns: "service_date",
+                filters: [`equipment_id=eq.${encodeURIComponent(eqId)}`],
+                orderBy: [{ column: "service_date", ascending: false }],
+                limit: 50,
+                label: "assets.view.fetchServiceRecords",
+              },
+            ),
+          ]);
+          if (cancelled) return;
+          setLinkedEquipment(eq);
+          // Roll up parts counts client-side — one round-trip is cheaper
+          // than three separate count queries.
+          const counts = { needed: 0, ordered: 0, received: 0 };
+          for (const p of partsRows) {
+            if (p.status === "needed") counts.needed += 1;
+            else if (p.status === "ordered") counts.ordered += 1;
+            else if (p.status === "received") counts.received += 1;
+          }
+          setPartsSummary(counts);
+          setServiceCount(serviceRows.length);
+          setLastServiceDate(serviceRows[0]?.service_date ?? null);
+        } catch (err) {
+          console.error("[assets.view] failed to load linked equipment:", err);
+          // Non-fatal — the inventory side still works.
+        } finally {
+          if (!cancelled) setEquipmentLoading(false);
+        }
+      } else {
+        // Reset operational data when there's no link.
+        setLinkedEquipment(null);
+        setPartsSummary({ needed: 0, ordered: 0, received: 0 });
+        setLastServiceDate(null);
+        setServiceCount(0);
       }
     })();
     return () => {
@@ -433,6 +520,235 @@ function PageContent() {
               );
             })}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Operational Information (linked equipment) ═══
+          Shows the day-to-day operational data — photos the crew sees,
+          condition, parts ordered, service history, hours. When the asset
+          isn't linked to an equipment record yet, offer to scan/create one
+          so the user can start tracking that side of things from here. */}
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold">
+              <Wrench className="w-4 h-4 inline mr-1.5" />
+              Operational Information
+            </p>
+            {linkedEquipment && asset.equipment_id && (
+              // Quick link to the full operational view (parts add/remove,
+              // inspections, service records, edit equipment fields).
+              // Until that view fully migrates onto this page, the deep
+              // workflows live there.
+              <Link
+                href={`/equipment/view?id=${asset.equipment_id}`}
+                className="text-xs text-primary inline-flex items-center gap-1 hover:underline"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Manage
+              </Link>
+            )}
+          </div>
+
+          {equipmentLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : !linkedEquipment ? (
+            <div className="text-center py-4 border border-dashed border-border/60 rounded-lg">
+              <Wrench className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground mb-1">
+                No operational record linked yet.
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Link this asset to track photos, parts, inspections, and service.
+              </p>
+              <Link
+                href="/assets/scan"
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border hover:bg-muted transition-colors"
+              >
+                <ScanLine className="w-3.5 h-3.5" />
+                Scan to link
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Operational photos gallery */}
+              {(linkedEquipment.photos && linkedEquipment.photos.length > 0) ||
+              linkedEquipment.photo_url ? (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Photos
+                  </p>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {(linkedEquipment.photos && linkedEquipment.photos.length > 0
+                      ? linkedEquipment.photos
+                      : [linkedEquipment.photo_url].filter((u): u is string => !!u)
+                    ).map((url, i) => (
+                      <div
+                        key={i}
+                        className="aspect-square rounded-lg overflow-hidden border border-border bg-muted"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={`${linkedEquipment.name} photo ${i + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-3 border border-dashed border-border/60 rounded-lg">
+                  <Camera className="w-6 h-6 text-muted-foreground/40 mx-auto mb-1" />
+                  <p className="text-xs text-muted-foreground mb-2">No operational photos yet</p>
+                  <Link
+                    href={`/equipment/view?id=${asset.equipment_id}`}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Add photos
+                  </Link>
+                </div>
+              )}
+
+              {/* Status + condition badges */}
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant="outline"
+                  style={{
+                    backgroundColor: `${equipmentStatusColors[linkedEquipment.status]}15`,
+                    borderColor: equipmentStatusColors[linkedEquipment.status],
+                    color: equipmentStatusColors[linkedEquipment.status],
+                  }}
+                  className="text-xs"
+                >
+                  {equipmentStatusLabels[linkedEquipment.status]}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  style={{
+                    backgroundColor: `${conditionStatusColors[linkedEquipment.condition_status]}15`,
+                    borderColor: conditionStatusColors[linkedEquipment.condition_status],
+                    color: conditionStatusColors[linkedEquipment.condition_status],
+                  }}
+                  className="text-xs"
+                >
+                  {conditionStatusLabels[linkedEquipment.condition_status]}
+                </Badge>
+                {linkedEquipment.equipment_type && (
+                  <Badge variant="secondary" className="text-xs">
+                    {equipmentTypeLabels[linkedEquipment.equipment_type]}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Quick stats grid */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {linkedEquipment.current_hours !== null && (
+                  <div className="p-2 rounded-md bg-muted/40">
+                    <div className="flex items-center gap-1 text-muted-foreground mb-0.5">
+                      <Clock className="w-3 h-3" /> Hours
+                    </div>
+                    <p className="font-semibold text-sm">
+                      {linkedEquipment.current_hours.toLocaleString()}
+                    </p>
+                  </div>
+                )}
+                {lastServiceDate && (
+                  <div className="p-2 rounded-md bg-muted/40">
+                    <div className="flex items-center gap-1 text-muted-foreground mb-0.5">
+                      <Wrench className="w-3 h-3" /> Last serviced
+                    </div>
+                    <p className="font-semibold text-sm">
+                      {new Date(`${lastServiceDate}T12:00:00`).toLocaleDateString(
+                        undefined,
+                        { year: "numeric", month: "short", day: "numeric" },
+                      )}
+                    </p>
+                  </div>
+                )}
+                {serviceCount > 0 && (
+                  <div className="p-2 rounded-md bg-muted/40">
+                    <div className="flex items-center gap-1 text-muted-foreground mb-0.5">
+                      <Package className="w-3 h-3" /> Service records
+                    </div>
+                    <p className="font-semibold text-sm">{serviceCount}</p>
+                  </div>
+                )}
+                {linkedEquipment.fuel_type && (
+                  <div className="p-2 rounded-md bg-muted/40">
+                    <div className="text-muted-foreground mb-0.5">Fuel</div>
+                    <p className="font-semibold text-sm">
+                      {fuelTypeLabels[linkedEquipment.fuel_type]}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Parts summary */}
+              {(partsSummary.needed > 0 ||
+                partsSummary.ordered > 0 ||
+                partsSummary.received > 0) && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Parts
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 rounded-md border border-orange-200 dark:border-orange-900 bg-orange-50/50 dark:bg-orange-950/20">
+                      <div className="flex items-center gap-1 text-orange-700 dark:text-orange-400 text-[10px] uppercase tracking-wide mb-0.5">
+                        <ShoppingCart className="w-3 h-3" /> Needed
+                      </div>
+                      <p className="font-bold text-base">{partsSummary.needed}</p>
+                    </div>
+                    <div className="p-2 rounded-md border border-yellow-200 dark:border-yellow-900 bg-yellow-50/50 dark:bg-yellow-950/20">
+                      <div className="flex items-center gap-1 text-yellow-700 dark:text-yellow-400 text-[10px] uppercase tracking-wide mb-0.5">
+                        <PackageCheck className="w-3 h-3" /> Ordered
+                      </div>
+                      <p className="font-bold text-base">{partsSummary.ordered}</p>
+                    </div>
+                    <div className="p-2 rounded-md border border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+                      <div className="flex items-center gap-1 text-green-700 dark:text-green-400 text-[10px] uppercase tracking-wide mb-0.5">
+                        <CheckCircle className="w-3 h-3" /> Received
+                      </div>
+                      <p className="font-bold text-base">{partsSummary.received}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Parts needed text (legacy field) */}
+              {linkedEquipment.parts_needed && (
+                <div className="p-2 rounded-md bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200/50 dark:border-orange-900/50">
+                  <p className="text-[10px] uppercase tracking-wide text-orange-700 dark:text-orange-400 mb-0.5">
+                    Parts notes
+                  </p>
+                  <p className="text-xs">{linkedEquipment.parts_needed}</p>
+                </div>
+              )}
+
+              {/* Notes from operational record */}
+              {linkedEquipment.notes && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    Operational notes
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {linkedEquipment.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Manage button to open full operational workflow */}
+              <Link
+                href={`/equipment/view?id=${asset.equipment_id}`}
+                className="block w-full text-center px-3 py-2 rounded-md border border-border hover:bg-muted transition-colors text-sm font-medium"
+              >
+                <Wrench className="w-4 h-4 inline mr-1.5" />
+                Manage parts, service, & inspections
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
 

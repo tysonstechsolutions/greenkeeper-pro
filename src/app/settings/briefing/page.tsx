@@ -22,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
+import { directSelectList } from "@/lib/supabase/rest";
 import { cn } from "@/lib/utils";
 
 interface BriefingSettings {
@@ -117,28 +118,29 @@ export default function BriefingSettingsPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch current settings
+  // Fetch current settings — direct REST so a wedged supabase-js auth
+  // wrapper can't trap the page on "Loading…".
   const fetchSettings = useCallback(async () => {
     try {
-       
-      const { data, error: fetchError } = await supabase.from("app_settings")
-        .select("value")
-        .eq("key", "daily_briefing")
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error("Error fetching settings:", fetchError);
-      }
-
-      if (data?.value) {
-        setSettings({ ...DEFAULT_SETTINGS, ...(data.value as Partial<BriefingSettings>) });
+      const rows = await directSelectList<{ value: Partial<BriefingSettings> }>(
+        "app_settings",
+        {
+          columns: "value",
+          filters: [`key=eq.daily_briefing`],
+          limit: 1,
+          label: "settings.briefing.fetch",
+        },
+      );
+      const value = rows[0]?.value;
+      if (value) {
+        setSettings({ ...DEFAULT_SETTINGS, ...value });
       }
     } catch (err) {
       console.error("Error loading settings:", err);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchSettings();

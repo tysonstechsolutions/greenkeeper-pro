@@ -37,6 +37,12 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -198,34 +204,38 @@ export default function IrrigationPage() {
 
   // ── Data loading ─────────────────────────────────────────────────────────
 
+  // Direct REST so the page can't wedge on a stalled supabase-js auth
+  // wrapper. Three independent queries fire in parallel.
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [zonesRes, schedulesRes, runsRes] = await Promise.all([
-        supabase
-          .from("irrigation_zones")
-          .select("*")
-          .order("zone_number", { ascending: true }),
-        supabase
-          .from("irrigation_schedules")
-          .select("*")
-          .order("start_time", { ascending: true }),
-        supabase
-          .from("irrigation_runs")
-          .select("*")
-          .order("started_at", { ascending: false })
-          .limit(100),
+      const [zonesData, schedulesData, runsData] = await Promise.all([
+        directSelectList<IrrigationZone>("irrigation_zones", {
+          columns: "*",
+          orderBy: [{ column: "zone_number", ascending: true }],
+          label: "irrigation.loadZones",
+        }),
+        directSelectList<IrrigationSchedule>("irrigation_schedules", {
+          columns: "*",
+          orderBy: [{ column: "start_time", ascending: true }],
+          label: "irrigation.loadSchedules",
+        }),
+        directSelectList<IrrigationRun>("irrigation_runs", {
+          columns: "*",
+          orderBy: [{ column: "started_at", ascending: false }],
+          limit: 100,
+          label: "irrigation.loadRuns",
+        }),
       ]);
 
-      if (zonesRes.data) setZones(zonesRes.data);
-      if (schedulesRes.data) setSchedules(schedulesRes.data);
-      if (runsRes.data) setRuns(runsRes.data);
+      setZones(zonesData);
+      setSchedules(schedulesData);
+      setRuns(runsData);
     } catch (err) {
       console.error("Failed to load irrigation data:", err);
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -282,18 +292,21 @@ export default function IrrigationPage() {
       ? newZone.hole_numbers.split(",").map((h) => parseInt(h.trim(), 10)).filter((n) => !isNaN(n))
       : null;
 
-    const { error } = await supabase.from("irrigation_zones").insert({
-      name: newZone.name,
-      zone_number: newZone.zone_number ? parseInt(newZone.zone_number, 10) : null,
-      zone_type: newZone.zone_type,
-      area: newZone.area,
-      hole_numbers: holes && holes.length > 0 ? holes : null,
-      gpm: newZone.gpm ? parseFloat(newZone.gpm) : null,
-      head_count: newZone.head_count ? parseInt(newZone.head_count, 10) : null,
-      notes: newZone.notes || null,
-    });
-
-    if (!error) {
+    try {
+      await directInsertRow(
+        "irrigation_zones",
+        {
+          name: newZone.name,
+          zone_number: newZone.zone_number ? parseInt(newZone.zone_number, 10) : null,
+          zone_type: newZone.zone_type,
+          area: newZone.area,
+          hole_numbers: holes && holes.length > 0 ? holes : null,
+          gpm: newZone.gpm ? parseFloat(newZone.gpm) : null,
+          head_count: newZone.head_count ? parseInt(newZone.head_count, 10) : null,
+          notes: newZone.notes || null,
+        },
+        "irrigation.addZone",
+      );
       setShowAddZone(false);
       setNewZone({
         name: "",
@@ -306,24 +319,30 @@ export default function IrrigationPage() {
         notes: "",
       });
       await loadData();
+    } catch (err) {
+      console.error("[irrigation] addZone failed:", err);
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const addSchedule = async () => {
     if (!selectedZone || newSchedule.day_of_week.length === 0) return;
     setActionLoading(true);
 
-    const { error } = await supabase.from("irrigation_schedules").insert({
-      zone_id: selectedZone.id,
-      day_of_week: newSchedule.day_of_week,
-      start_time: newSchedule.start_time,
-      run_minutes: parseInt(newSchedule.run_minutes, 10),
-      season: newSchedule.season,
-      notes: newSchedule.notes || null,
-    });
-
-    if (!error) {
+    try {
+      await directInsertRow(
+        "irrigation_schedules",
+        {
+          zone_id: selectedZone.id,
+          day_of_week: newSchedule.day_of_week,
+          start_time: newSchedule.start_time,
+          run_minutes: parseInt(newSchedule.run_minutes, 10),
+          season: newSchedule.season,
+          notes: newSchedule.notes || null,
+        },
+        "irrigation.addSchedule",
+      );
       setShowAddSchedule(false);
       setNewSchedule({
         day_of_week: [],
@@ -333,8 +352,11 @@ export default function IrrigationPage() {
         notes: "",
       });
       await loadData();
+    } catch (err) {
+      console.error("[irrigation] addSchedule failed:", err);
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const startQuickRun = async () => {
@@ -344,44 +366,59 @@ export default function IrrigationPage() {
     const minutes = parseInt(quickRunMinutes, 10);
     const gallons = showQuickRun.gpm ? showQuickRun.gpm * minutes : null;
 
-    const { error } = await supabase.from("irrigation_runs").insert({
-      zone_id: showQuickRun.id,
-      started_at: new Date().toISOString(),
-      ended_at: new Date(Date.now() + minutes * 60000).toISOString(),
-      run_minutes: minutes,
-      gallons_used: gallons,
-      run_type: "manual",
-      notes: quickRunNotes || null,
-    });
-
-    if (!error) {
+    try {
+      await directInsertRow(
+        "irrigation_runs",
+        {
+          zone_id: showQuickRun.id,
+          started_at: new Date().toISOString(),
+          ended_at: new Date(Date.now() + minutes * 60000).toISOString(),
+          run_minutes: minutes,
+          gallons_used: gallons,
+          run_type: "manual",
+          notes: quickRunNotes || null,
+        },
+        "irrigation.startQuickRun",
+      );
       setShowQuickRun(null);
       setQuickRunMinutes("10");
       setQuickRunNotes("");
       await loadData();
+    } catch (err) {
+      console.error("[irrigation] startQuickRun failed:", err);
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const toggleScheduleEnabled = async (schedule: IrrigationSchedule) => {
-    const { error } = await supabase
-      .from("irrigation_schedules")
-      .update({ enabled: !schedule.enabled, updated_at: new Date().toISOString() })
-      .eq("id", schedule.id);
-    if (!error) {
+    try {
+      await directPatchRow(
+        "irrigation_schedules",
+        "id",
+        schedule.id,
+        { enabled: !schedule.enabled, updated_at: new Date().toISOString() },
+        "irrigation.toggleSchedule",
+      );
       setSchedules((prev) =>
         prev.map((s) => (s.id === schedule.id ? { ...s, enabled: !s.enabled } : s))
       );
+    } catch (err) {
+      console.error("[irrigation] toggleScheduleEnabled failed:", err);
     }
   };
 
   const deleteSchedule = async (scheduleId: string) => {
-    const { error } = await supabase
-      .from("irrigation_schedules")
-      .delete()
-      .eq("id", scheduleId);
-    if (!error) {
+    try {
+      await directDeleteRow(
+        "irrigation_schedules",
+        "id",
+        scheduleId,
+        "irrigation.deleteSchedule",
+      );
       setSchedules((prev) => prev.filter((s) => s.id !== scheduleId));
+    } catch (err) {
+      console.error("[irrigation] deleteSchedule failed:", err);
     }
   };
 

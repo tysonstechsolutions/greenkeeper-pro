@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import {
+  getCachedUserId,
+  directSelectList,
+  directInsertRow,
+  directPatchRowReturning,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import type { ParkingLotIssue } from "@/types/database";
 
 export const issueTypeLabels: Record<string, string> = {
@@ -75,13 +81,16 @@ export function useParkingLotIssues() {
   const fetchIssues = useCallback(async () => {
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.from("parking_lot_issues")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setIssues(data || []);
-      return data || [];
+      const data = await directSelectList<ParkingLotIssue>(
+        "parking_lot_issues",
+        {
+          columns: "*",
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "useParkingLotIssues.fetch",
+        },
+      );
+      setIssues(data);
+      return data;
     } catch (err) {
       console.error("Error fetching parking lot issues:", err);
       return [];
@@ -103,13 +112,14 @@ export function useParkingLotIssues() {
     assigned_to?: string;
   }) => {
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      // Cached user-id read avoids the supabase.auth.getUser() wedge.
+      const userId = getCachedUserId();
+      if (!userId) throw new Error("Not authenticated");
 
-      const { data, error } = await supabase.from("parking_lot_issues")
-        .insert({
-          reported_by: user.id,
+      const data = await directInsertRow<ParkingLotIssue>(
+        "parking_lot_issues",
+        {
+          reported_by: userId,
           title: issue.title,
           description: issue.description || null,
           location: issue.location || null,
@@ -120,10 +130,9 @@ export function useParkingLotIssues() {
           photos: issue.photos || [],
           estimated_cost: issue.estimated_cost || null,
           assigned_to: issue.assigned_to || null,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+        },
+        "useParkingLotIssues.create",
+      );
       setIssues((prev) => [data, ...prev]);
       return data;
     } catch (err) {
@@ -134,7 +143,6 @@ export function useParkingLotIssues() {
 
   const updateIssue = useCallback(async (issueId: string, updates: Partial<ParkingLotIssue>) => {
     try {
-      const supabase = createClient();
       const updateData: Partial<ParkingLotIssue> = {
         ...updates,
         updated_at: new Date().toISOString(),
@@ -142,12 +150,13 @@ export function useParkingLotIssues() {
       if (updates.status === "completed") {
         updateData.completed_at = new Date().toISOString();
       }
-      const { data, error } = await supabase.from("parking_lot_issues")
-        .update(updateData)
-        .eq("id", issueId)
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await directPatchRowReturning<ParkingLotIssue>(
+        "parking_lot_issues",
+        "id",
+        issueId,
+        updateData,
+        "useParkingLotIssues.update",
+      );
       setIssues((prev) => prev.map((i) => (i.id === issueId ? data : i)));
       return data;
     } catch (err) {
@@ -158,11 +167,12 @@ export function useParkingLotIssues() {
 
   const deleteIssue = useCallback(async (issueId: string) => {
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from("parking_lot_issues")
-        .delete()
-        .eq("id", issueId);
-      if (error) throw error;
+      await directDeleteRow(
+        "parking_lot_issues",
+        "id",
+        issueId,
+        "useParkingLotIssues.delete",
+      );
       setIssues((prev) => prev.filter((i) => i.id !== issueId));
       return true;
     } catch (err) {

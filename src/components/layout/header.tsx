@@ -7,7 +7,6 @@ import {
   Bell,
   LogOut,
   Settings,
-  UserPlus,
   ChevronDown,
   ChevronLeft,
   Check,
@@ -58,7 +57,7 @@ const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { profile, signOut, canCreateInvites, loading, refreshProfile } = useAuth();
+  const { profile, signOut, loading, refreshProfile } = useAuth();
   const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
   const {
@@ -420,16 +419,9 @@ export function Header() {
                 Settings
               </Link>
 
-              {canCreateInvites && (
-                <Link
-                  href="/settings/invite"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/50 active:bg-muted/70 transition-colors"
-                >
-                  <UserPlus className="w-4 h-4 text-muted-foreground" />
-                  Invite Team Members
-                </Link>
-              )}
+              {/* Email-based invites have been removed — managers add staff
+                  manually from the /staff page using the "Add Staff" button.
+                  See AddStaffSheet for the new flow. */}
 
               <button
                 onClick={handleToggleLanguage}

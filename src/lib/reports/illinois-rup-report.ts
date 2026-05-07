@@ -7,6 +7,7 @@
  */
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUser } from "@/lib/supabase/rest";
 import {
   mapToILRupRecord,
   validateILRupRecord,
@@ -50,8 +51,9 @@ export async function generateIllinoisRupReport(
 
   const supabase = createClient();
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !user) throw new IllinoisRupReportError("Not signed in");
+  // Cached user read avoids the supabase.auth.getUser() wedge.
+  const user = getCachedUser();
+  if (!user) throw new IllinoisRupReportError("Not signed in");
 
   const { data: profile } = await supabase
     .from("profiles")

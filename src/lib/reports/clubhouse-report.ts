@@ -8,6 +8,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUserId } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -99,12 +100,13 @@ export async function generateClubhouseReport(): Promise<{ blob: Blob; filename:
     const supabase = createClient();
 
     step = "auth";
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) throw new ClubhouseReportError(step, "Not signed in");
+    // Cached user-id read avoids the supabase.auth.getUser() wedge.
+    const userId = getCachedUserId();
+    if (!userId) throw new ClubhouseReportError(step, "Not signed in");
 
     step = "profile";
     const { data: profile } = await supabase.from("profiles")
-      .select("full_name, role").eq("id", user.id).single();
+      .select("full_name, role").eq("id", userId).single();
 
     step = "fetch-issues";
     const { data: items, error: fetchErr } = await supabase.from("clubhouse_issues")

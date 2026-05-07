@@ -2,6 +2,15 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  getCachedUserId,
+  directSelectList,
+  directSelectRow,
+  directSelectCount,
+  directInsertRow,
+  directPatchRow,
+  directPatchRowReturning,
+} from "@/lib/supabase/rest";
 import type {
   ChemicalProduct,
   ChemicalApplication,
@@ -178,36 +187,34 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-         
-        let query = supabase.from("chemical_products").select("*");
+        // Direct REST so the page can't wedge on a stalled supabase-js
+        // auth wrapper after navigation.
+        const restFilters: string[] = [];
+        if (filters?.type) restFilters.push(`product_type=eq.${encodeURIComponent(filters.type)}`);
+        if (filters?.signalWord) restFilters.push(`signal_word=eq.${encodeURIComponent(filters.signalWord)}`);
+        if (filters?.activeOnly !== false) restFilters.push(`is_active=eq.true`);
 
-        // Apply filters
-        if (filters?.type) {
-          query = query.eq("product_type", filters.type);
-        }
-        if (filters?.signalWord) {
-          query = query.eq("signal_word", filters.signalWord);
-        }
-        if (filters?.activeOnly !== false) {
-          query = query.eq("is_active", true);
-        }
+        let or: string | undefined;
         if (filters?.search) {
-          query = query.or(
-            `product_name.ilike.%${filters.search}%,manufacturer.ilike.%${filters.search}%,active_ingredient.ilike.%${filters.search}%`
-          );
+          const term = encodeURIComponent(`%${filters.search}%`);
+          or = [
+            `product_name.ilike.${term}`,
+            `manufacturer.ilike.${term}`,
+            `active_ingredient.ilike.${term}`,
+          ].join(",");
         }
 
-        query = query.order("product_name", { ascending: true });
-        query = query.limit(100); // Limit products list
-
-        const { data, error: fetchError } = await query as { data: ChemicalProduct[] | null; error: { message: string } | null };
-
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
+        const data = await directSelectList<ChemicalProduct>("chemical_products", {
+          columns: "*",
+          filters: restFilters,
+          or,
+          orderBy: [{ column: "product_name", ascending: true }],
+          limit: 100,
+          label: "useChemicals.fetchProducts",
+        });
 
         // Compute low stock flag
-        const productsWithStats: ChemicalProductWithStats[] = (data || []).map((product: ChemicalProduct) => ({
+        const productsWithStats: ChemicalProductWithStats[] = data.map((product: ChemicalProduct) => ({
           ...product,
           is_low_stock:
             product.current_inventory !== null &&
@@ -237,36 +244,39 @@ export function useChemicals(): UseChemicalsReturn {
   const getProduct = useCallback(
     async (id: string): Promise<ChemicalProductWithStats | null> => {
       try {
-         
-        const { data: product, error: productError } = await supabase.from("chemical_products")
-          .select("*")
-          .eq("id", id)
-          .single() as { data: ChemicalProduct | null; error: { message: string } | null };
-
-        if (productError) {
-          console.error("Error fetching product:", productError);
-          return null;
-        }
+        const product = await directSelectRow<ChemicalProduct>(
+          "chemical_products",
+          "id",
+          id,
+          "*",
+          "useChemicals.getProduct",
+        );
 
         if (!product) return null;
 
-        // Get application count and last application
-         
-        const { data: appData } = await supabase.from("chemical_applications")
-          .select("id, application_date")
-          .eq("product_id", id)
-          .order("application_date", { ascending: false })
-          .limit(1);
-
-         
-        const { count } = await supabase.from("chemical_applications")
-          .select("*", { count: "exact", head: true })
-          .eq("product_id", id);
+        // Get application count and last application via direct REST.
+        const [appData, count] = await Promise.all([
+          directSelectList<{ id: string; application_date: string }>(
+            "chemical_applications",
+            {
+              columns: "id, application_date",
+              filters: [`product_id=eq.${encodeURIComponent(id)}`],
+              orderBy: [{ column: "application_date", ascending: false }],
+              limit: 1,
+              label: "useChemicals.getProduct.lastApp",
+            },
+          ),
+          directSelectCount(
+            "chemical_applications",
+            [`product_id=eq.${encodeURIComponent(id)}`],
+            "useChemicals.getProduct.appCount",
+          ),
+        ]);
 
         return {
           ...product,
-          total_applications: count || 0,
-          last_application_date: appData?.[0]?.application_date || null,
+          total_applications: count,
+          last_application_date: appData[0]?.application_date,
           is_low_stock:
             product.current_inventory !== null &&
             product.reorder_threshold !== null &&
@@ -289,16 +299,11 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-         
-        const { data: newProduct, error: createError } = await supabase.from("chemical_products")
-          .insert(data)
-          .select()
-          .single();
-
-        if (createError) {
-          throw new Error(createError.message);
-        }
-
+        const newProduct = await directInsertRow<ChemicalProduct>(
+          "chemical_products",
+          data as unknown as Record<string, unknown>,
+          "useChemicals.createProduct",
+        );
         return newProduct;
       } catch (err) {
         console.error("Error creating product:", err);
@@ -308,7 +313,7 @@ export function useChemicals(): UseChemicalsReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -320,16 +325,13 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-         
-        const { data: updatedProduct, error: updateError } = await supabase.from("chemical_products")
-          .update(data)
-          .eq("id", id)
-          .select()
-          .single();
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        const updatedProduct = await directPatchRowReturning<ChemicalProduct>(
+          "chemical_products",
+          "id",
+          id,
+          data as unknown as Record<string, unknown>,
+          "useChemicals.updateProduct",
+        );
 
         // Update local state
         setProducts((prev) =>
@@ -345,7 +347,7 @@ export function useChemicals(): UseChemicalsReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -358,16 +360,14 @@ export function useChemicals(): UseChemicalsReturn {
       operation: "add" | "subtract" | "set"
     ): Promise<boolean> => {
       try {
-        // Get current inventory
-         
-        const { data: product, error: fetchError } = await supabase.from("chemical_products")
-          .select("current_inventory")
-          .eq("id", id)
-          .single();
-
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
+        // Get current inventory via direct REST.
+        const product = await directSelectRow<{ current_inventory: number | null }>(
+          "chemical_products",
+          "id",
+          id,
+          "current_inventory",
+          "useChemicals.updateInventory.fetch",
+        );
 
         let newInventory: number;
         const currentInventory = product?.current_inventory ?? 0;
@@ -384,14 +384,13 @@ export function useChemicals(): UseChemicalsReturn {
             break;
         }
 
-         
-        const { error: updateError } = await supabase.from("chemical_products")
-          .update({ current_inventory: newInventory })
-          .eq("id", id);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
+        await directPatchRow(
+          "chemical_products",
+          "id",
+          id,
+          { current_inventory: newInventory },
+          "useChemicals.updateInventory.patch",
+        );
 
         // Update local state
         setProducts((prev) =>
@@ -426,37 +425,25 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-         
-        let query = supabase.from("chemical_applications")
-          .select(
-            `
-            *,
-            product:chemical_products!product_id(*)
-          `
-          );
+        const restFilters: string[] = [];
+        if (filters?.productId) restFilters.push(`product_id=eq.${encodeURIComponent(filters.productId)}`);
+        if (filters?.startDate) restFilters.push(`application_date=gte.${filters.startDate}`);
+        if (filters?.endDate) restFilters.push(`application_date=lte.${filters.endDate}`);
 
-        if (filters?.productId) {
-          query = query.eq("product_id", filters.productId);
-        }
-        if (filters?.startDate) {
-          query = query.gte("application_date", filters.startDate);
-        }
-        if (filters?.endDate) {
-          query = query.lte("application_date", filters.endDate);
-        }
-
-        query = query.order("application_date", { ascending: false });
-        query = query.limit(100); // Limit applications list
-
-        const { data, error: fetchError } = await query;
-
-        if (fetchError) {
-          throw new Error(fetchError.message);
-        }
+        const data = await directSelectList<ChemicalApplication & { product: ChemicalProduct }>(
+          "chemical_applications",
+          {
+            columns: "*, product:chemical_products!product_id(*)",
+            filters: restFilters,
+            orderBy: [{ column: "application_date", ascending: false }],
+            limit: 100,
+            label: "useChemicals.fetchApplications",
+          },
+        );
 
         // Type the data properly
-        const typedApplications: ChemicalApplicationWithProduct[] = (data || []).map(
-          (app: ChemicalApplication & { product: ChemicalProduct }) => ({
+        const typedApplications: ChemicalApplicationWithProduct[] = data.map(
+          (app) => ({
             ...app,
             product: app.product,
           })
@@ -470,7 +457,7 @@ export function useChemicals(): UseChemicalsReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -479,29 +466,22 @@ export function useChemicals(): UseChemicalsReturn {
   const getApplication = useCallback(
     async (id: string): Promise<ChemicalApplicationWithProduct | null> => {
       try {
-         
-        const { data, error: fetchError } = await supabase.from("chemical_applications")
-          .select(
-            `
-            *,
-            product:chemical_products!product_id(*)
-          `
-          )
-          .eq("id", id)
-          .single();
-
-        if (fetchError) {
-          console.error("Error fetching application:", fetchError);
-          return null;
-        }
-
-        return data as unknown as ChemicalApplicationWithProduct;
+        const rows = await directSelectList<ChemicalApplicationWithProduct>(
+          "chemical_applications",
+          {
+            columns: "*, product:chemical_products!product_id(*)",
+            filters: [`id=eq.${encodeURIComponent(id)}`],
+            limit: 1,
+            label: "useChemicals.getApplication",
+          },
+        );
+        return rows[0] ?? null;
       } catch (err) {
         console.error("Error fetching application:", err);
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -514,14 +494,16 @@ export function useChemicals(): UseChemicalsReturn {
       setError(null);
 
       try {
-        // Get product info for REI calculation
-         
-        const { data: product, error: productError } = await supabase.from("chemical_products")
-          .select("rei_hours, current_inventory")
-          .eq("id", data.product_id)
-          .single();
+        // Get product info for REI calculation via direct REST.
+        const product = await directSelectRow<{ rei_hours: number | null; current_inventory: number | null }>(
+          "chemical_products",
+          "id",
+          data.product_id,
+          "rei_hours, current_inventory",
+          "useChemicals.createApplication.product",
+        );
 
-        if (productError) {
+        if (!product) {
           throw new Error("Product not found");
         }
 
@@ -540,31 +522,25 @@ export function useChemicals(): UseChemicalsReturn {
           rei_expires_at = applicationDateTime.toISOString();
         }
 
-        // Get current user ID
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-        if (!user) {
+        if (!userId) {
           throw new Error("User not authenticated");
         }
 
         // Create the application record
         const applicationData = {
           ...data,
-          applied_by: user.id,
+          applied_by: userId,
           rei_expires_at,
         };
 
-         
-        const { data: newApplication, error: createError } = await supabase.from("chemical_applications")
-          .insert(applicationData)
-          .select()
-          .single();
-
-        if (createError) {
-          throw new Error(createError.message);
-        }
+        const newApplication = await directInsertRow<ChemicalApplication>(
+          "chemical_applications",
+          applicationData as unknown as Record<string, unknown>,
+          "useChemicals.createApplication",
+        );
 
         // Auto-deduct inventory if amount used is specified
         if (data.total_amount_used && data.total_amount_used > 0) {
@@ -580,7 +556,7 @@ export function useChemicals(): UseChemicalsReturn {
         setLoading(false);
       }
     },
-    [supabase, updateInventory]
+    [updateInventory]
   );
 
   /**
@@ -589,25 +565,23 @@ export function useChemicals(): UseChemicalsReturn {
   const getProductApplicationHistory = useCallback(
     async (productId: string, limit: number = 20): Promise<ChemicalApplicationWithProduct[]> => {
       try {
-         
-        const { data, error: fetchError } = await supabase.from("chemical_applications")
-          .select("*")
-          .eq("product_id", productId)
-          .order("application_date", { ascending: false })
-          .limit(limit);
-
-        if (fetchError) {
-          console.error("Error fetching application history:", fetchError);
-          return [];
-        }
-
-        return data || [];
+        const data = await directSelectList<ChemicalApplicationWithProduct>(
+          "chemical_applications",
+          {
+            columns: "*",
+            filters: [`product_id=eq.${encodeURIComponent(productId)}`],
+            orderBy: [{ column: "application_date", ascending: false }],
+            limit,
+            label: "useChemicals.getProductApplicationHistory",
+          },
+        );
+        return data;
       } catch (err) {
         console.error("Error fetching application history:", err);
         return [];
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -622,17 +596,13 @@ export function useChemicals(): UseChemicalsReturn {
     };
 
     try {
-       
-      const { data, error: fetchError } = await supabase.from("chemical_products")
-        .select("*")
-        .eq("is_active", true);
+      const data = await directSelectList<ChemicalProduct>("chemical_products", {
+        columns: "*",
+        filters: [`is_active=eq.true`],
+        label: "useChemicals.fetchInventoryStats",
+      });
 
-      if (fetchError) {
-        console.error("Error fetching inventory stats:", fetchError);
-        return defaultStats;
-      }
-
-      if (!data || data.length === 0) {
+      if (data.length === 0) {
         return defaultStats;
       }
 
@@ -644,7 +614,7 @@ export function useChemicals(): UseChemicalsReturn {
         { count: number; value: number }
       >();
 
-      (data as ChemicalProduct[]).forEach((product: ChemicalProduct) => {
+      data.forEach((product: ChemicalProduct) => {
         // Check low stock
         if (
           product.current_inventory !== null &&
@@ -688,7 +658,7 @@ export function useChemicals(): UseChemicalsReturn {
       console.error("Error fetching inventory stats:", err);
       return defaultStats;
     }
-  }, [supabase]);
+  }, []);
 
   /**
    * Get products with low stock
@@ -697,18 +667,14 @@ export function useChemicals(): UseChemicalsReturn {
     ChemicalProductWithStats[]
   > => {
     try {
-       
-      const { data, error: fetchError } = await supabase.from("chemical_products")
-        .select("*")
-        .eq("is_active", true);
-
-      if (fetchError) {
-        console.error("Error fetching low stock products:", fetchError);
-        return [];
-      }
+      const data = await directSelectList<ChemicalProduct>("chemical_products", {
+        columns: "*",
+        filters: [`is_active=eq.true`],
+        label: "useChemicals.getLowStockProducts",
+      });
 
       // Filter to low stock only
-      return ((data || []) as ChemicalProduct[])
+      return data
         .filter(
           (product: ChemicalProduct) =>
             product.current_inventory !== null &&
@@ -723,7 +689,7 @@ export function useChemicals(): UseChemicalsReturn {
       console.error("Error fetching low stock products:", err);
       return [];
     }
-  }, [supabase]);
+  }, []);
 
   /**
    * Get currently active REI (Restricted Entry Interval) zones
@@ -731,28 +697,6 @@ export function useChemicals(): UseChemicalsReturn {
   const getActiveREIs = useCallback(async (): Promise<ActiveREI[]> => {
     try {
       const now = new Date().toISOString();
-
-       
-      const { data, error: fetchError } = await supabase.from("chemical_applications")
-        .select(
-          `
-          id,
-          rei_expires_at,
-          zone_ids,
-          product:chemical_products!product_id(product_name)
-        `
-        )
-        .gt("rei_expires_at", now)
-        .order("rei_expires_at", { ascending: true });
-
-      if (fetchError) {
-        console.error("Error fetching active REIs:", fetchError);
-        return [];
-      }
-
-      if (!data || data.length === 0) {
-        return [];
-      }
 
       // Type for the application data from query
       interface REIApplicationData {
@@ -762,25 +706,41 @@ export function useChemicals(): UseChemicalsReturn {
         product: { product_name: string } | null;
       }
 
-      const typedData = data as REIApplicationData[];
+      const typedData = await directSelectList<REIApplicationData>(
+        "chemical_applications",
+        {
+          columns: "id, rei_expires_at, zone_ids, product:chemical_products!product_id(product_name)",
+          filters: [`rei_expires_at=gt.${encodeURIComponent(now)}`],
+          orderBy: [{ column: "rei_expires_at", ascending: true }],
+          label: "useChemicals.getActiveREIs",
+        },
+      );
+
+      if (typedData.length === 0) {
+        return [];
+      }
 
       // Get zone names for the applications
-      const allZoneIds = [...new Set(typedData.flatMap((app: REIApplicationData) => app.zone_ids || []))];
+      const allZoneIds = [...new Set(typedData.flatMap((app) => app.zone_ids || []))];
 
       let zoneNames: Record<string, string> = {};
       if (allZoneIds.length > 0) {
-         
-        const { data: zones } = await supabase.from("course_zones")
-          .select("id, name")
-          .in("id", allZoneIds);
+        const zones = await directSelectList<{ id: string; name: string }>(
+          "course_zones",
+          {
+            columns: "id, name",
+            filters: [`id=in.(${allZoneIds.map(encodeURIComponent).join(",")})`],
+            label: "useChemicals.getActiveREIs.zones",
+          },
+        );
 
-        zoneNames = (zones || []).reduce(
-          (acc: Record<string, string>, zone: { id: string; name: string }) => ({ ...acc, [zone.id]: zone.name }),
+        zoneNames = zones.reduce(
+          (acc, zone) => ({ ...acc, [zone.id]: zone.name }),
           {} as Record<string, string>
         );
       }
 
-      return typedData.map((app: REIApplicationData) => {
+      return typedData.map((app) => {
         const expiresAt = new Date(app.rei_expires_at as string);
         const hoursRemaining = Math.max(
           0,
@@ -801,7 +761,7 @@ export function useChemicals(): UseChemicalsReturn {
       console.error("Error fetching active REIs:", err);
       return [];
     }
-  }, [supabase]);
+  }, []);
 
   return {
     products,

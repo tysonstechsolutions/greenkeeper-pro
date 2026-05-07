@@ -5,7 +5,6 @@ import {
   Plus,
   Camera,
   Map,
-  Wrench,
   FileText,
   Archive,
   Scan,
@@ -43,7 +42,9 @@ export const QUICK_ACTION_CATALOGUE: QuickActionDef[] = [
   { id: "new-task", href: "/tasks/new", label: "New Task", icon: Plus, color: "from-blue-500 to-blue-600" },
   { id: "take-photo", href: "/photos", label: "Take Photo", icon: Camera, color: "from-emerald-500 to-emerald-600" },
   { id: "course-map", href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-teal-600" },
-  { id: "equipment", href: "/equipment", label: "Equipment", icon: Wrench, color: "from-orange-500 to-orange-600" },
+  // Single "Assets" entry — operational data (formerly /equipment) is
+  // shown inline on /assets/view, so we no longer need a separate
+  // Equipment quick action.
   { id: "reports", href: "/reports", label: "Reports", icon: FileText, color: "from-[#1B4332] to-[#2D6A4F]" },
   { id: "assets", href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-amber-700" },
   { id: "scan-asset", href: "/assets/scan", label: "Scan Asset", icon: Scan, color: "from-cyan-500 to-cyan-600" },

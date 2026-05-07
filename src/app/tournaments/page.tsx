@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { directSelectList, directInsertRow } from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -139,51 +139,64 @@ export default function TournamentsPage() {
   const [formNotes, setFormNotes] = useState("");
 
   const fetchTournaments = useCallback(async () => {
-    const supabase = createClient();
+    try {
+      // Direct REST avoids the supabase-js auth-wrapper wedge that has
+      // stuck other pages on "Loading…" after navigation.
+      const tourns = await directSelectList<Record<string, unknown>>(
+        "tournaments",
+        {
+          columns: "*",
+          orderBy: [{ column: "event_date", ascending: true }],
+          label: "tournaments.fetchList",
+        },
+      );
 
-    // Fetch tournaments
-    const { data: tourns } = await supabase
-      .from("tournaments")
-      .select("*")
-      .order("event_date", { ascending: true });
-
-    if (!tourns) {
-      setTournaments([]);
-      setLoading(false);
-      return;
-    }
-
-    // Fetch checklist counts per tournament
-    const tournIds = tourns.map((t: { id: string }) => t.id);
-    const checklistCounts: Record<string, { total: number; completed: number }> = {};
-
-    if (tournIds.length > 0) {
-      const { data: items } = await supabase
-        .from("tournament_checklist_items")
-        .select("tournament_id, status")
-        .in("tournament_id", tournIds);
-
-      if (items) {
-        for (const item of items) {
-          const tid = item.tournament_id as string;
-          if (!checklistCounts[tid]) checklistCounts[tid] = { total: 0, completed: 0 };
-          checklistCounts[tid].total++;
-          if (item.status === "completed") checklistCounts[tid].completed++;
-        }
+      if (tourns.length === 0) {
+        setTournaments([]);
+        setLoading(false);
+        return;
       }
+
+      // Per-tournament checklist counts. PostgREST `in.(...)` accepts
+      // a comma-separated id list — encode each id so any commas inside
+      // would be safe (uuid case never has them, but defensive).
+      const tournIds = tourns.map((t) => t.id as string);
+      const checklistCounts: Record<
+        string,
+        { total: number; completed: number }
+      > = {};
+      const items = await directSelectList<{
+        tournament_id: string;
+        status: string;
+      }>("tournament_checklist_items", {
+        columns: "tournament_id, status",
+        filters: [
+          `tournament_id=in.(${tournIds.map(encodeURIComponent).join(",")})`,
+        ],
+        label: "tournaments.fetchChecklists",
+      });
+      for (const item of items) {
+        const tid = item.tournament_id;
+        if (!checklistCounts[tid]) checklistCounts[tid] = { total: 0, completed: 0 };
+        checklistCounts[tid].total++;
+        if (item.status === "completed") checklistCounts[tid].completed++;
+      }
+
+      const mapped: Tournament[] = tourns.map((t) => ({
+        ...t,
+        checklist_total: checklistCounts[t.id as string]?.total ?? 0,
+        checklist_completed: checklistCounts[t.id as string]?.completed ?? 0,
+      })) as Tournament[];
+
+      setTournaments(mapped);
+    } catch (err) {
+      console.error("[tournaments] fetch failed:", err);
+      setTournaments([]);
+    } finally {
+      setLoading(false);
     }
-
-    const mapped: Tournament[] = tourns.map((t: Record<string, unknown>) => ({
-      ...t,
-      checklist_total: checklistCounts[t.id as string]?.total ?? 0,
-      checklist_completed: checklistCounts[t.id as string]?.completed ?? 0,
-    })) as Tournament[];
-
-    setTournaments(mapped);
-    setLoading(false);
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchTournaments(); }, [fetchTournaments]);
 
   const resetForm = () => {
@@ -204,7 +217,6 @@ export default function TournamentsPage() {
   const handleCreate = async () => {
     if (!formName.trim() || !formDate) return;
     setSaving(true);
-    const supabase = createClient();
 
     const payload: Record<string, unknown> = {
       name: formName.trim(),
@@ -223,11 +235,16 @@ export default function TournamentsPage() {
     if (formContactEmail.trim()) payload.contact_email = formContactEmail.trim();
     if (formNotes.trim()) payload.notes = formNotes.trim();
 
-    await supabase.from("tournaments").insert(payload);
-    resetForm();
-    setShowForm(false);
-    setSaving(false);
-    fetchTournaments();
+    try {
+      await directInsertRow("tournaments", payload, "tournaments.insert");
+      resetForm();
+      setShowForm(false);
+      fetchTournaments();
+    } catch (err) {
+      console.error("[tournaments] insert failed:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Filtered lists ──

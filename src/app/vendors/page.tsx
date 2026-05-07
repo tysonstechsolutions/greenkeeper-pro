@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Phone,
   Plus,
@@ -31,6 +31,11 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directPatchRow,
+  directInsertRow,
+} from "@/lib/supabase/rest";
 import { callApi } from "@/lib/api/client";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { parseAppDate } from "@/lib/utils/date-format";
@@ -168,6 +173,37 @@ export default function VendorsPage() {
   const [extractInfo, setExtractInfo] = useState<string | null>(null);
   const [extractWarnings, setExtractWarnings] = useState<string[]>([]);
 
+  // Ref to the inline Add/Edit form. Used to scroll the form into view
+  // when the user taps "Edit" on a vendor card — without this, the form
+  // pops open at the top of the page while the user is scrolled down
+  // looking at the card and it looks like the button did nothing.
+  const formRef = useRef<HTMLDivElement | null>(null);
+  // Set to a vendor id whenever we want the form to scroll into view on
+  // the next render. Cleared after the scroll fires so back-to-back
+  // edits keep working.
+  const [scrollToFormForId, setScrollToFormForId] = useState<string | null>(null);
+
+  // After startEdit / handleAdd toggles showForm, the form mounts and we
+  // scroll it into view. We do this in an effect (not directly in the
+  // handler) because the form Card is conditionally rendered — the ref
+  // isn't attached until React commits the showForm=true render.
+  useEffect(() => {
+    if (!scrollToFormForId) return;
+    if (!showForm) return;
+    const el = formRef.current;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Move focus into the first input so keyboard users (and the
+      // mobile soft keyboard) get a useful next step. Looked up by id
+      // since we know the form's first field renders with id="v-name".
+      const nameInput = document.getElementById("v-name") as HTMLInputElement | null;
+      // Defer focus a tick so the smooth scroll has time to start —
+      // focusing too early on iOS Safari yanks the page back.
+      setTimeout(() => nameInput?.focus({ preventScroll: true }), 250);
+    }
+    setScrollToFormForId(null);
+  }, [scrollToFormForId, showForm]);
+
   // Form state
   const initialForm = {
     name: "",
@@ -187,16 +223,20 @@ export default function VendorsPage() {
   const [form, setForm] = useState(initialForm);
 
   const fetchVendors = useCallback(async () => {
-    const supabase = createClient();
-    const { data, error: fetchErr } = await supabase
-      .from("vendors")
-      .select("*")
-      .order("name");
-    if (fetchErr) {
-      setError(fetchErr.message);
+    // Direct REST avoids the supabase.from() wedge that has stuck other
+    // pages on "Loading..." after navigation.
+    try {
+      const data = await directSelectList<Vendor>("vendors", {
+        columns: "*",
+        orderBy: [{ column: "name", ascending: true }],
+        label: "vendors.fetchList",
+      });
+      setVendors(data);
+    } catch (fetchErr) {
+      setError(fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
+    } finally {
+      setLoading(false);
     }
-    if (data) setVendors(data as Vendor[]);
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -223,6 +263,11 @@ export default function VendorsPage() {
       gsa_naf_other_no: v.gsa_naf_other_no || "",
     });
     setShowForm(true);
+    // Tell the post-render effect to scroll the form into view. Without
+    // this the form opens far above the user's scroll position when
+    // they edit a vendor low in the list — looks like the button did
+    // nothing.
+    setScrollToFormForId(v.id);
   }
 
   function resetForm() {
@@ -236,7 +281,6 @@ export default function VendorsPage() {
     if (!form.name.trim() || !user) return;
     setSaving(true);
     setError(null);
-    const supabase = createClient();
     const payload = {
       name: form.name.trim(),
       company: form.company.trim() || null,
@@ -252,18 +296,32 @@ export default function VendorsPage() {
       sap_vendor_no: form.sap_vendor_no.trim() || null,
       gsa_naf_other_no: form.gsa_naf_other_no.trim() || null,
     };
-    const { error: saveErr } = editingId
-      ? await supabase.from("vendors").update(payload).eq("id", editingId)
-      : await supabase
-          .from("vendors")
-          .insert({ ...payload, created_by: user.id });
-    setSaving(false);
-    if (saveErr) {
-      setError(saveErr.message);
-      return;
+    // Direct REST so the save can't wedge on a stalled supabase-js
+    // auth wrapper. Both branches throw on error and bubble up to the
+    // catch block below; resetForm + refetch only run on success.
+    try {
+      if (editingId) {
+        await directPatchRow(
+          "vendors",
+          "id",
+          editingId,
+          payload,
+          "vendors.update",
+        );
+      } else {
+        await directInsertRow(
+          "vendors",
+          { ...payload, created_by: user.id },
+          "vendors.insert",
+        );
+      }
+      resetForm();
+      fetchVendors();
+    } catch (saveErr) {
+      setError(saveErr instanceof Error ? saveErr.message : String(saveErr));
+    } finally {
+      setSaving(false);
     }
-    resetForm();
-    fetchVendors();
   }
 
   async function handle889Upload(vendorId: string, file: File) {
@@ -563,7 +621,7 @@ export default function VendorsPage() {
 
       {/* ── Inline Add / Edit Form ── */}
       {showForm && (
-        <Card className="mb-4 mt-3">
+        <Card ref={formRef} className="mb-4 mt-3 scroll-mt-4">
           <CardContent className="pt-4">
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>

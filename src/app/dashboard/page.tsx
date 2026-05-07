@@ -1419,12 +1419,12 @@ function LeadershipDashboardView() {
                   <Wrench className="w-5 h-5 text-amber-600" />
                 </div>
                 <h2 className="font-semibold text-sm">
-                  Equipment Alerts (
+                  Asset Alerts (
                   {briefingData.equipment.needsService.length})
                 </h2>
               </div>
               <Link
-                href="/equipment"
+                href="/assets"
                 className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
               >
                 View all
@@ -2337,10 +2337,10 @@ function GMDashboardView() {
                   View Staff
                 </Button>
               </Link>
-              <Link href="/equipment">
+              <Link href="/assets">
                 <Button variant="outline" className="w-full justify-start gap-2 h-10">
                   <Wrench className="w-4 h-4" />
-                  View Equipment
+                  View Assets
                 </Button>
               </Link>
               <Link href="/reports/monthly-board" className="col-span-2">

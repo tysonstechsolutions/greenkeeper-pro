@@ -47,6 +47,7 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCachedUserId } from "@/lib/supabase/rest";
 import { useCourse } from "@/lib/hooks/useCourse";
 
 // Types
@@ -218,10 +219,8 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        // Get current user for read status
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let query = (supabase as any)
@@ -275,11 +274,11 @@ export function useKnowledge() {
 
         // Get read status for current user
         let readArticleIds: Set<string> = new Set();
-        if (user) {
+        if (userId) {
           const { data: readLog } = await supabase
             .from("knowledge_read_log")
             .select("article_id")
-            .eq("user_id", user.id) as { data: { article_id: string }[] | null };
+            .eq("user_id", userId) as { data: { article_id: string }[] | null };
 
           if (readLog) {
             readArticleIds = new Set(readLog.map((r) => r.article_id));
@@ -314,9 +313,8 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
         const { data, error: fetchError } = await supabase
           .from("knowledge_articles")
@@ -335,12 +333,12 @@ export function useKnowledge() {
 
         // Check if user has read this article
         let isRead = false;
-        if (user) {
+        if (userId) {
           const { data: readLog } = await supabase
             .from("knowledge_read_log")
             .select("read_at")
             .eq("article_id", id)
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .single() as { data: { read_at: string } | null };
 
           isRead = !!readLog;
@@ -390,11 +388,10 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-        if (!user) throw new Error("Not authenticated");
+        if (!userId) throw new Error("Not authenticated");
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: article, error: createError } = await (supabase as any)
@@ -402,7 +399,7 @@ export function useKnowledge() {
           .insert({
             ...data,
             course_id: activeCourse.id,
-            created_by: user.id,
+            created_by: userId,
             version: 1,
             tags: data.tags || [],
             linked_template_ids: data.linked_template_ids || [],
@@ -436,11 +433,10 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-        if (!user) throw new Error("Not authenticated");
+        if (!userId) throw new Error("Not authenticated");
 
         // Get current version
         const { data: current } = await supabase
@@ -455,7 +451,7 @@ export function useKnowledge() {
           .update({
             ...data,
             version: (current?.version || 1) + 1,
-            updated_by: user.id,
+            updated_by: userId,
             updated_at: new Date().toISOString(),
           })
           .eq("id", id)
@@ -516,11 +512,10 @@ export function useKnowledge() {
   const markAsRead = useCallback(
     async (articleId: string): Promise<boolean> => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
-        if (!user) return false;
+        if (!userId) return false;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: upsertError } = await (supabase as any)
@@ -528,7 +523,7 @@ export function useKnowledge() {
           .upsert(
             {
               article_id: articleId,
-              user_id: user.id,
+              user_id: userId,
               read_at: new Date().toISOString(),
             },
             { onConflict: "article_id,user_id" }
@@ -561,11 +556,10 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const cachedId = getCachedUserId();
 
-        const targetUserId = userId || user?.id;
+        const targetUserId = userId || cachedId;
         if (!targetUserId) return [];
 
         // Get all read article IDs for the user
@@ -655,9 +649,8 @@ export function useKnowledge() {
       setError(null);
 
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const userId = getCachedUserId();
 
         // Search in title and content
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -677,11 +670,11 @@ export function useKnowledge() {
 
         // Get read status
         let readArticleIds: Set<string> = new Set();
-        if (user) {
+        if (userId) {
           const { data: readLog } = await supabase
             .from("knowledge_read_log")
             .select("article_id")
-            .eq("user_id", user.id) as { data: { article_id: string }[] | null };
+            .eq("user_id", userId) as { data: { article_id: string }[] | null };
 
           if (readLog) {
             readArticleIds = new Set(readLog.map((r) => r.article_id));
@@ -742,10 +735,9 @@ export function useKnowledge() {
   const fetchOnboardingArticles = useCallback(
     async (userId?: string): Promise<{ articles: ArticleWithAuthor[]; readCount: number }> => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const targetUserId = userId || user?.id;
+        // Cached user-id read avoids the supabase.auth.getUser() wedge.
+        const cachedId = getCachedUserId();
+        const targetUserId = userId || cachedId;
 
         // Get articles tagged with "onboarding"
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

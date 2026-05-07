@@ -7,7 +7,6 @@ import {
   ClipboardList,
   Calendar,
   MessageSquare,
-  Wrench,
   Camera,
   Map,
   Settings,
@@ -61,7 +60,11 @@ const leadershipPinned: SidebarItem[] = [
 ];
 
 const leadershipApps: SidebarItem[] = [
-  { href: "/equipment", label: "Equipment", icon: Wrench },
+  // Assets is the unified entry point — operational data (photos, parts,
+  // service, inspections) is shown inline on /assets/view alongside the
+  // FY26 inventory tracking. The standalone "Equipment" item was removed
+  // when the two views were merged.
+  { href: "/assets", label: "Assets", icon: Archive },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
@@ -74,7 +77,6 @@ const leadershipApps: SidebarItem[] = [
   { href: "/purchase-requests", label: "Purchase Requests", icon: FileText },
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-  { href: "/assets", label: "FY26 Assets", icon: Archive },
   { href: "/vendors", label: "Vendors", icon: Phone },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
@@ -87,7 +89,7 @@ const foremanPinned: SidebarItem[] = [
 ];
 
 const foremanApps: SidebarItem[] = [
-  { href: "/equipment", label: "Equipment", icon: Wrench },
+  { href: "/assets", label: "Assets", icon: Archive },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
@@ -110,7 +112,7 @@ const mechanicPinned: SidebarItem[] = [
 ];
 
 const mechanicApps: SidebarItem[] = [
-  { href: "/equipment", label: "Equipment", icon: Wrench },
+  { href: "/assets", label: "Assets", icon: Archive },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/course-map", label: "Course Map", icon: Map },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },

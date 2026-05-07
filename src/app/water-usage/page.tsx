@@ -26,7 +26,12 @@ import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard } from "@/components/auth/role-guard";
-import { createClient } from "@/lib/supabase/client";
+import {
+  directSelectList,
+  directInsertRow,
+  directPatchRow,
+  directDeleteRow,
+} from "@/lib/supabase/rest";
 import type { WaterMeterReading, WaterUsageTarget, WaterSource } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 
@@ -72,7 +77,6 @@ export default function WaterUsagePage() {
 }
 
 function WaterUsageContent() {
-  const supabase = createClient();
   const { user, profile } = useAuth();
 
   const [readings, setReadings] = useState<WaterMeterReading[]>([]);
@@ -89,22 +93,34 @@ function WaterUsageContent() {
 
   // ── Data fetching ──
   const fetchReadings = useCallback(async () => {
-    const { data } = await supabase
-      .from("water_meter_readings")
-      .select("*")
-      .order("reading_date", { ascending: false })
-      .limit(100);
-    if (data) setReadings(data as WaterMeterReading[]);
-  }, [supabase]);
+    // Direct REST avoids the supabase.from() wedge that has stuck other
+    // pages on "Loading..." after navigation.
+    try {
+      const data = await directSelectList<WaterMeterReading>("water_meter_readings", {
+        columns: "*",
+        orderBy: [{ column: "reading_date", ascending: false }],
+        limit: 100,
+        label: "water-usage.fetchReadings",
+      });
+      setReadings(data);
+    } catch (err) {
+      console.error("[water-usage] fetchReadings failed:", err);
+    }
+  }, []);
 
   const fetchTargets = useCallback(async () => {
-    const { data } = await supabase
-      .from("water_usage_targets")
-      .select("*")
-      .eq("year", currentYear)
-      .order("month", { ascending: true });
-    if (data) setTargets(data as WaterUsageTarget[]);
-  }, [supabase, currentYear]);
+    try {
+      const data = await directSelectList<WaterUsageTarget>("water_usage_targets", {
+        columns: "*",
+        filters: [`year=eq.${currentYear}`],
+        orderBy: [{ column: "month", ascending: true }],
+        label: "water-usage.fetchTargets",
+      });
+      setTargets(data);
+    } catch (err) {
+      console.error("[water-usage] fetchTargets failed:", err);
+    }
+  }, [currentYear]);
 
   useEffect(() => {
     Promise.all([fetchReadings(), fetchTargets()]).finally(() =>
@@ -177,8 +193,17 @@ function WaterUsageContent() {
 
   // ── Delete reading ──
   const handleDeleteReading = async (id: string) => {
-    await supabase.from("water_meter_readings").delete().eq("id", id);
-    setReadings((prev) => prev.filter((r) => r.id !== id));
+    try {
+      await directDeleteRow(
+        "water_meter_readings",
+        "id",
+        id,
+        "water-usage.deleteReading",
+      );
+      setReadings((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      console.error("[water-usage] deleteReading failed:", err);
+    }
   };
 
   // ── Inline target edit ──
@@ -189,10 +214,17 @@ function WaterUsageContent() {
 
     const existing = targets.find((t) => t.id === targetId);
     if (existing) {
-      await supabase
-        .from("water_usage_targets")
-        .update({ target_gallons: val, updated_at: new Date().toISOString() })
-        .eq("id", targetId);
+      try {
+        await directPatchRow(
+          "water_usage_targets",
+          "id",
+          targetId,
+          { target_gallons: val, updated_at: new Date().toISOString() },
+          "water-usage.inlineTargetEdit",
+        );
+      } catch (err) {
+        console.error("[water-usage] inlineTargetEdit failed:", err);
+      }
     }
     setEditingTarget(null);
     setEditingValue("");
@@ -215,20 +247,31 @@ function WaterUsageContent() {
       const existing = targets.find(
         (t) => t.year === currentYear && t.month === m
       );
-      if (existing) {
-        await supabase
-          .from("water_usage_targets")
-          .update({
-            target_gallons: monthTarget,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
-      } else {
-        await supabase.from("water_usage_targets").insert({
-          year: currentYear,
-          month: m,
-          target_gallons: monthTarget,
-        });
+      try {
+        if (existing) {
+          await directPatchRow(
+            "water_usage_targets",
+            "id",
+            existing.id,
+            {
+              target_gallons: monthTarget,
+              updated_at: new Date().toISOString(),
+            },
+            "water-usage.updateTarget",
+          );
+        } else {
+          await directInsertRow(
+            "water_usage_targets",
+            {
+              year: currentYear,
+              month: m,
+              target_gallons: monthTarget,
+            },
+            "water-usage.insertTarget",
+          );
+        }
+      } catch (err) {
+        console.error(`[water-usage] target month ${m} save failed:`, err);
       }
     }
     setShowBudgetForm(false);
@@ -367,7 +410,6 @@ function WaterUsageContent() {
 
         {showAddForm && (
           <AddReadingForm
-            supabase={supabase}
             userId={user?.id || ""}
             readings={readings}
             onSaved={() => {
@@ -629,14 +671,15 @@ function StatCard({
 }
 
 // ── Add Reading Form ──
+// `supabase` prop removed — the form's submit now uses directInsertRow
+// (no `.from()` call), so the prop was dead. Keeping `userId`, `readings`
+// for the previous-reading lookup and the recorded_by column.
 function AddReadingForm({
-  supabase,
   userId,
   readings,
   onSaved,
   onCancel,
 }: {
-  supabase: ReturnType<typeof createClient>;
   userId: string;
   readings: WaterMeterReading[];
   onSaved: () => void;
@@ -668,21 +711,29 @@ function AddReadingForm({
     setSaving(true);
 
     const val = parseFloat(readingValue);
-    await supabase.from("water_meter_readings").insert({
-      meter_id: meterId,
-      reading_date: readingDate,
-      reading_value: val,
-      previous_reading: previousForMeter
-        ? previousForMeter.reading_value
-        : null,
-      usage_gallons: calcUsage,
-      source,
-      notes: notes || null,
-      recorded_by: userId,
-    });
-
-    setSaving(false);
-    onSaved();
+    try {
+      await directInsertRow(
+        "water_meter_readings",
+        {
+          meter_id: meterId,
+          reading_date: readingDate,
+          reading_value: val,
+          previous_reading: previousForMeter
+            ? previousForMeter.reading_value
+            : null,
+          usage_gallons: calcUsage,
+          source,
+          notes: notes || null,
+          recorded_by: userId,
+        },
+        "water-usage.insertReading",
+      );
+      onSaved();
+    } catch (err) {
+      console.error("[water-usage] insertReading failed:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
