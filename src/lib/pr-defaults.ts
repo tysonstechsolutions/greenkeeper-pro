@@ -37,8 +37,26 @@ export const PR_ACCOUNTING_DEFAULTS = {
   // VMGC's requesting facility never changes — bake it in so the user
   // doesn't have to retype it on every PR.
   requesting_facility_code: "8400",
-  // project_no, program — left blank for the user to fill per-PR.
+  // Every PR out of this app is for the golf program. Same rationale as
+  // the facility code — VMGC only runs golf, so this never varies.
+  program: "golf",
+  // project_no — left blank for the user to fill per-PR.
   // internal_order is auto-generated, see pr-internal-order.ts.
+} as const;
+
+/**
+ * Site-wide fallback for the Requestor block. Used as the last resort
+ * when:
+ *   - the saved PR row's `requestor_phone` is blank, AND
+ *   - the currently signed-in user's profile.phone is blank too.
+ *
+ * Lets old PRs print the right phone on download even if the user hasn't
+ * yet saved it to their profile. Also pre-fills the field on a new PR
+ * when no profile phone exists. The user can override per-PR by typing
+ * a different number into the form.
+ */
+export const PR_REQUESTOR_DEFAULTS = {
+  phone: "(847) 688-4593",
 } as const;
 
 /** Default request method. Overridable in the form. */

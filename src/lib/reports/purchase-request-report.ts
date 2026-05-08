@@ -30,7 +30,9 @@ import {
   type PDFForm,
 } from "pdf-lib";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
-import { PR_ACCOUNTING_DEFAULTS } from "@/lib/pr-defaults";
+import { PR_ACCOUNTING_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
+import { findVendorDefaults } from "@/lib/vendor-defaults";
+import { getCachedUserId, directSelectRow } from "@/lib/supabase/rest";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 
 const TEMPLATE_URL = "/templates/naf-pr-template.pdf";
@@ -202,14 +204,21 @@ export async function generatePurchaseRequestReport(
     setDropdown(form, "Currency", pr.currency, written);
 
     // ── Vendor 1 (uses unprefixed field names) ─────────────────────────
+    // Old PRs were saved when the vendor record itself was blank, so the
+    // denormalized vendor1_* fields on the PR are blank too. Look up
+    // VENDOR_DEFAULTS by the saved vendor name and use those as the
+    // fallback for any blank field — that way re-downloading an old PR
+    // prints the right POC / phone / email / address even though the
+    // database row hasn't been touched.
     step = "fill-vendor1";
+    const v1Defaults = findVendorDefaults(pr.vendor1_name || "");
     setText(form, "VENDOR.1", pr.vendor1_name || "", written);
-    setText(form, "ADDRESS", pr.vendor1_address || "", written);
-    setText(form, "LINE2", pr.vendor1_line2 || "", written);
-    setText(form, "CITY_ST_ZIP_CODE", pr.vendor1_city_state_zip || "", written);
-    setText(form, "POC1", pr.vendor1_poc || "", written);
-    setText(form, "EMAIL", pr.vendor1_email || "", written);
-    setText(form, "PHONE", pr.vendor1_phone || "", written);
+    setText(form, "ADDRESS", pr.vendor1_address || v1Defaults?.address || "", written);
+    setText(form, "LINE2", pr.vendor1_line2 || v1Defaults?.address_line2 || "", written);
+    setText(form, "CITY_ST_ZIP_CODE", pr.vendor1_city_state_zip || v1Defaults?.city_state_zip || "", written);
+    setText(form, "POC1", pr.vendor1_poc || v1Defaults?.poc || "", written);
+    setText(form, "EMAIL", pr.vendor1_email || v1Defaults?.email || "", written);
+    setText(form, "PHONE", pr.vendor1_phone || v1Defaults?.phone || "", written);
     setText(form, "SAP_VENDOR_No", pr.vendor1_sap_no || "", written);
     setText(form, "GSANAFOther_No", pr.vendor1_gsa_naf_no || "", written);
 
@@ -219,10 +228,50 @@ export async function generatePurchaseRequestReport(
     setText(form, "VENDOR.3", pr.vendor3_name || "", written);
 
     // ── Requestor ──────────────────────────────────────────────────────
+    // For older PRs that were saved before the auto-fill rule wired up,
+    // back-fill blank requestor name / email / phone from the *currently
+    // signed-in user's* profile. So when you re-download a PR you made
+    // last week, your phone shows even though the row still has it blank.
     step = "fill-requestor";
-    setText(form, "REQUESTOR_NAME", pr.requestor_name || "", written);
-    setText(form, "REQUESTOR_EMAIL", pr.requestor_email || "", written);
-    setText(form, "REQUESTOR_PHONE", pr.requestor_phone || "", written);
+    let fallbackName = "";
+    let fallbackEmail = "";
+    let fallbackPhone = "";
+    try {
+      const uid = getCachedUserId();
+      if (uid) {
+        const profile = await directSelectRow<{
+          full_name: string | null;
+          display_name: string | null;
+          email: string | null;
+          phone: string | null;
+        }>(
+          "profiles",
+          "id",
+          uid,
+          "full_name, display_name, email, phone",
+          "purchase-request-report.requestorFallback",
+        );
+        if (profile) {
+          fallbackName = profile.full_name || profile.display_name || "";
+          fallbackEmail = profile.email || "";
+          fallbackPhone = profile.phone || "";
+        }
+      }
+    } catch {
+      // Non-fatal — if profile lookup fails we just print whatever the PR
+      // row has (blank if blank). Same as before.
+    }
+    setText(form, "REQUESTOR_NAME", pr.requestor_name || fallbackName, written);
+    setText(form, "REQUESTOR_EMAIL", pr.requestor_email || fallbackEmail, written);
+    // Final fallback for phone is the site-wide default — guarantees the
+    // PR prints with a phone number even on rows saved before the
+    // auto-fill rule existed and on accounts that never set a profile phone.
+    setText(
+      form,
+      "REQUESTOR_PHONE",
+      pr.requestor_phone || fallbackPhone || PR_REQUESTOR_DEFAULTS.phone,
+      written,
+    );
 
     // ── Invoice address ────────────────────────────────────────────────
     step = "fill-invoice";
@@ -260,7 +309,9 @@ export async function generatePurchaseRequestReport(
       "";
     setText(form, "INTERNAL_ORDER", internalOrder, written);
     setText(form, "PROJECT_No", pr.project_no || "", written);
-    setText(form, "PROGRAM", pr.program || "", written);
+    // Same fallback pattern as facility code — old PRs that pre-date
+    // the "always golf" rule still print "golf" on download.
+    setText(form, "PROGRAM", pr.program || PR_ACCOUNTING_DEFAULTS.program, written);
 
     // ── Line items ─────────────────────────────────────────────────────
     step = "fill-items";
@@ -362,5 +413,17 @@ export function purchaseRequestFilename(pr: PurchaseRequest): string {
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 30);
-  return `PR-${d}-${vendor}.pdf`;
+  // Include a unique discriminator so two PRs to the same vendor on the
+  // same day don't collide on download (which used to silently overwrite
+  // each other in the user's Downloads folder). Prefer the human-readable
+  // PR sequence number (matches what shows in the form's Internal Order
+  // field); fall back to the first chunk of the row's UUID.
+  const seq = pr.pr_sequence_number;
+  const disc =
+    seq != null && seq !== 0
+      ? String(seq).padStart(4, "0")
+      : pr.id?.slice(0, 8) || "";
+  return disc
+    ? `PR-${d}-${disc}-${vendor}.pdf`
+    : `PR-${d}-${vendor}.pdf`;
 }

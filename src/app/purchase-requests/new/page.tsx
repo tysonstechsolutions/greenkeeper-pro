@@ -27,6 +27,7 @@ import {
   PR_ACCOUNTING_DEFAULTS,
   PR_REQUEST_VIA_DEFAULT,
   PR_DELIVERY_DAYS,
+  PR_REQUESTOR_DEFAULTS,
 } from "@/lib/pr-defaults";
 import {
   PR_SITES,
@@ -207,7 +208,10 @@ function NewPurchaseRequestPageInner() {
     editId ? "" : PR_ACCOUNTING_DEFAULTS.requesting_facility_code,
   );
   const [projectNo, setProjectNo] = useState("");
-  const [program, setProgram] = useState("");
+  // VMGC only runs golf — same auto-fill pattern as facility code.
+  const [program, setProgram] = useState(() =>
+    editId ? "" : PR_ACCOUNTING_DEFAULTS.program,
+  );
 
   // Line items
   const [items, setItems] = useState<PurchaseRequestItem[]>([emptyItem(1)]);
@@ -300,8 +304,10 @@ function NewPurchaseRequestPageInner() {
     if (!requestorEmail && profile.email) {
       setRequestorEmail(profile.email);
     }
-    if (!requestorPhone && profile.phone) {
-      setRequestorPhone(profile.phone);
+    if (!requestorPhone) {
+      // Profile phone wins; fall back to the site-wide default so a new
+      // PR is never blank in the phone slot.
+      setRequestorPhone(profile.phone || PR_REQUESTOR_DEFAULTS.phone);
     }
   }, [profile, editId, fromId, requestorName, requestorEmail, requestorPhone]);
 
@@ -411,9 +417,19 @@ function NewPurchaseRequestPageInner() {
       // Don't carry the source PR's uploaded quote file — the new request
       // will get its own.
       setExistingQuoteName(isClone ? null : row.quote_filename);
-      setRequestorName(row.requestor_name);
-      setRequestorEmail(row.requestor_email || "");
-      setRequestorPhone(row.requestor_phone || "");
+      // Backfill blanks from the current user's profile so old PRs that
+      // pre-date the auto-fill rule still show a sensible requestor block
+      // when re-downloaded after a save. The form lets the user override.
+      setRequestorName(
+        row.requestor_name ||
+          profile?.full_name ||
+          profile?.display_name ||
+          "",
+      );
+      setRequestorEmail(row.requestor_email || profile?.email || "");
+      setRequestorPhone(
+        row.requestor_phone || profile?.phone || PR_REQUESTOR_DEFAULTS.phone,
+      );
       setV1({
         name: row.vendor1_name || "",
         address: row.vendor1_address || "",
@@ -452,7 +468,9 @@ function NewPurchaseRequestPageInner() {
       );
       // internal_order is computed from pr_sequence_number; nothing to load.
       setProjectNo(row.project_no || "");
-      setProgram(row.program || "");
+      // Backfill blank program for older PRs that pre-date the
+      // "always golf" rule.
+      setProgram(row.program || PR_ACCOUNTING_DEFAULTS.program);
       setItems(row.items?.length ? row.items : [emptyItem(1)]);
       setIgeExcessPct(Number(row.ige_excess_pct) || 0);
       setJustification(row.justification || "");

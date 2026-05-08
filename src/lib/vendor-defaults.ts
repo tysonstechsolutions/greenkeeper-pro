@@ -27,6 +27,7 @@ export interface VendorDefaults {
 
 export const VENDOR_DEFAULTS: VendorDefaults[] = [
   {
+    // Russo Hardware Inc / DBA Russo Power Equipment
     matchName: ["russo"],
     poc: "Joseph Jones",
     phone: "(847) 678-9525",
@@ -36,6 +37,7 @@ export const VENDOR_DEFAULTS: VendorDefaults[] = [
     city_state_zip: "Schiller Park, IL 60176-1923",
   },
   {
+    // The Toro Company — Commercial Division (federal contracts)
     matchName: ["toro"],
     poc: "Brooke Carey, Federal Contracts Manager",
     phone: "(507) 649-2104",
@@ -45,7 +47,10 @@ export const VENDOR_DEFAULTS: VendorDefaults[] = [
     city_state_zip: "Bloomington, MN 55420-1196",
   },
   {
-    matchName: ["r&r", "r & r", "rr products"],
+    // R & R Products Inc — match patterns cover "R&R", "R & R",
+    // "RandR", "R and R", "RR Products", etc. The normalize step
+    // strips punctuation/whitespace before comparing.
+    matchName: ["rrproducts", "randr", "rrandr"],
     poc: "Sales",
     phone: "1-800-528-3446",
     email: "sales@rrproducts.com",
@@ -54,6 +59,7 @@ export const VENDOR_DEFAULTS: VendorDefaults[] = [
     city_state_zip: "Tucson, AZ 85714",
   },
   {
+    // Uline Inc — covers "Uline", "U-Line", "U Line", etc.
     matchName: ["uline"],
     poc: "Customer Service",
     phone: "1-800-295-5510",
@@ -62,16 +68,65 @@ export const VENDOR_DEFAULTS: VendorDefaults[] = [
     address_line2: null,
     city_state_zip: "Pleasant Prairie, WI 53158-3686",
   },
+  {
+    // Conserv FS / Clesen / Clesens — golf course chemical & turf supply.
+    // Alex Panzenhagen is the sales rep.
+    matchName: ["clesens", "clesen", "conserv"],
+    poc: "Alex Panzenhagen",
+    phone: "(847) 561-3139",
+    email: "apanzenhagen@clesens.com",
+    address: null,
+    address_line2: null,
+    city_state_zip: null,
+  },
+  {
+    // NAPA Auto Parts — Tim Becmer is the local rep; phone + inbox are
+    // the national customer-service fallbacks until a direct line is on
+    // file.
+    matchName: ["napa"],
+    poc: "Tim Becmer",
+    phone: "1-800-538-6272",
+    email: "customersupport@napaonline.com",
+    address: null,
+    address_line2: null,
+    city_state_zip: null,
+  },
+  {
+    // Burris Equipment / Alta Construction Equipment Illinois LLC — golf
+    // course turf equipment. Bryan Heinrichs (General Manager) is the
+    // signatory on the 889; he's also the point of contact at the
+    // Waukegan store. Email isn't published on Burris's site (Cloudflare
+    // mailto protection) — fill it in on the vendor card if you have a
+    // direct address.
+    matchName: ["burris", "alta construction"],
+    poc: "Bryan Heinrichs, General Manager",
+    phone: "(847) 336-1205",
+    email: null,
+    address: "2216 N. Greenbay Rd.",
+    address_line2: null,
+    city_state_zip: "Waukegan, IL 60087",
+  },
 ];
 
 /**
+ * Aggressive normalization for vendor-name matching: lowercase, then
+ * strip everything that isn't a letter or digit. This way "R & R", "R&R",
+ * "R and R", "RandR", and "R-And-R Products" all collapse to forms that
+ * a single matchName entry can target.
+ */
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
  * Look up the seed defaults for a given vendor name. Returns the first
- * match (matchName uses substring contains).
+ * match (matchName uses normalized substring contains).
  */
 export function findVendorDefaults(vendorName: string): VendorDefaults | null {
-  const normalized = vendorName.toLowerCase().replace(/\s+/g, " ").trim();
+  const normalized = normalizeForMatch(vendorName);
+  if (!normalized) return null;
   for (const def of VENDOR_DEFAULTS) {
-    if (def.matchName.some((m) => normalized.includes(m.toLowerCase()))) {
+    if (def.matchName.some((m) => normalized.includes(normalizeForMatch(m)))) {
       return def;
     }
   }

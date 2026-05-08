@@ -37,7 +37,7 @@ import {
   directInsertRow,
 } from "@/lib/supabase/rest";
 import { calc889ExpirationDate, format889Date } from "@/lib/section-889";
-import { computeVendorPatch } from "@/lib/vendor-defaults";
+import { computeVendorPatch, findVendorDefaults } from "@/lib/vendor-defaults";
 import { callApi } from "@/lib/api/client";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { Sparkles } from "lucide-react";
@@ -499,16 +499,25 @@ export default function VendorsPage() {
   // Never overwrites a value the user already filled in. Idempotent —
   // running it twice does nothing the second time.
   const [syncingDefaults, setSyncingDefaults] = useState(false);
+  const [syncReport, setSyncReport] = useState<string | null>(null);
   async function handleSyncVendorDefaults() {
     setSyncingDefaults(true);
+    setSyncReport(null);
     setError(null);
-    let touched = 0;
-    let skipped = 0;
+    const touched: string[] = [];
+    const alreadyFull: string[] = [];
+    const noDefaults: string[] = [];
     try {
       for (const v of vendors) {
         const patch = computeVendorPatch(v);
         if (!patch) {
-          skipped++;
+          // Either no matching entry in VENDOR_DEFAULTS, or every field
+          // it would patch is already filled.
+          if (findVendorDefaults(v.name)) {
+            alreadyFull.push(v.name);
+          } else {
+            noDefaults.push(v.name);
+          }
           continue;
         }
         await directPatchRow(
@@ -518,26 +527,35 @@ export default function VendorsPage() {
           patch as Record<string, unknown>,
           `vendors.syncDefaults.${v.id}`,
         );
-        touched++;
+        touched.push(v.name);
       }
       await fetchVendors();
-      if (touched === 0) {
-        setError(null);
-        // Surface a quick info banner via the existing error UI by reusing
-        // the slot — green-styled inline below the header would be nicer
-        // but this keeps the diff small. Treat as informational.
-        setError(
-          `All ${vendors.length} vendor records already had their default contact info filled — nothing to sync.`,
+
+      const lines: string[] = [];
+      if (touched.length > 0) {
+        lines.push(`Updated ${touched.length}: ${touched.join(", ")}`);
+      }
+      if (alreadyFull.length > 0) {
+        lines.push(
+          `${alreadyFull.length} already had complete info: ${alreadyFull.join(", ")}`,
         );
       }
+      if (noDefaults.length > 0) {
+        lines.push(
+          `${noDefaults.length} vendor${noDefaults.length === 1 ? "" : "s"} had no matching seed entry (skipped): ${noDefaults.join(", ")}`,
+        );
+      }
+      if (lines.length === 0) {
+        lines.push("No vendors loaded — nothing to sync.");
+      }
+      setSyncReport(lines.join(" · "));
     } catch (err) {
       setError(
-        `Sync stopped after updating ${touched} vendors. ${
+        `Sync stopped after updating ${touched.length} vendors. ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
     } finally {
-      void skipped;
       setSyncingDefaults(false);
     }
   }
@@ -610,6 +628,24 @@ export default function VendorsPage() {
           <p className="text-sm text-red-700 dark:text-red-400 break-words">
             {error}
           </p>
+        </div>
+      )}
+
+      {syncReport && (
+        <div className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3 flex items-start gap-2">
+          <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-emerald-800 dark:text-emerald-300 break-words">
+              {syncReport}
+            </p>
+            <button
+              type="button"
+              onClick={() => setSyncReport(null)}
+              className="text-[11px] text-muted-foreground hover:text-foreground mt-1"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 

@@ -308,8 +308,30 @@ export function BoardBacklog({
 
       {/* List — grouped by category, alphabetical within each group so
           related work clusters together (mow-greens beside mow-fairways
-          beside mow-tees, etc.). */}
-      <div className="flex-1 overflow-y-auto px-2 py-2 flex flex-col gap-2">
+          beside mow-tees, etc.).
+
+          `overflow-y-scroll` (not `auto`) keeps the scrollbar visible
+          even when the list happens to fit, so the user always sees
+          there's a scrollable region. The `[&::-webkit-scrollbar*]`
+          arbitrary classes give the track a thin styled look on
+          Chrome/Edge/Safari; Firefox uses `scrollbar-thin` via
+          `scrollbar-color` since it ignores webkit pseudos. */}
+      <div
+        className={cn(
+          "flex-1 px-2 py-2 flex flex-col gap-2",
+          "overflow-y-scroll overscroll-contain",
+          // Reserve gutter so list width doesn't jump when filters change
+          "[scrollbar-gutter:stable]",
+          // Webkit (Chrome/Edge/Safari) — thin always-visible track
+          "[&::-webkit-scrollbar]:w-2",
+          "[&::-webkit-scrollbar-track]:bg-muted/30",
+          "[&::-webkit-scrollbar-thumb]:bg-border",
+          "[&::-webkit-scrollbar-thumb]:rounded-full",
+          "[&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/40",
+          // Firefox
+          "[scrollbar-width:thin]",
+        )}
+      >
         {filtered.length === 0 ? (
           <div className="text-center text-xs text-muted-foreground py-8 px-3">
             {templates.length === 0
