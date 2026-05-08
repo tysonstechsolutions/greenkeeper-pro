@@ -143,8 +143,18 @@ export async function generateEquipmentReport(
       .in("equipment_id", equipmentIds)
       .order("service_date", { ascending: false });
 
+    // Barcode lookup — barcodes live on fy26_assets.barcode_value, linked to
+    // equipment via fy26_assets.equipment_id. One equipment row could be
+    // linked from multiple assets (no unique constraint), so we keep the
+    // first non-null barcode we see per equipment_id.
+    const { data: fy26Assets } = await supabase.from("fy26_assets")
+      .select("equipment_id, barcode_value")
+      .in("equipment_id", equipmentIds)
+      .not("barcode_value", "is", null);
+
     const partsMap = new Map<string, any[]>();
     const serviceMap = new Map<string, any[]>();
+    const barcodeMap = new Map<string, string>();
     (allParts || []).forEach((p: any) => {
       if (!partsMap.has(p.equipment_id)) partsMap.set(p.equipment_id, []);
       partsMap.get(p.equipment_id)!.push(p);
@@ -152,6 +162,11 @@ export async function generateEquipmentReport(
     (allServiceRecords || []).forEach((r: any) => {
       if (!serviceMap.has(r.equipment_id)) serviceMap.set(r.equipment_id, []);
       serviceMap.get(r.equipment_id)!.push(r);
+    });
+    (fy26Assets || []).forEach((a: any) => {
+      if (a.equipment_id && a.barcode_value && !barcodeMap.has(a.equipment_id)) {
+        barcodeMap.set(a.equipment_id, String(a.barcode_value));
+      }
     });
 
     // ── FETCH PHOTOS (parallel) ──
@@ -266,6 +281,7 @@ export async function generateEquipmentReport(
         typeLabels[eq.equipment_type] || s(eq.equipment_type),
         [eq.make, eq.model].filter(Boolean).join(" ") || "—",
         s(eq.serial_number),
+        s(barcodeMap.get(eq.id)),
         conditionLabels[cond] || cond,
         statusLabels[eq.status] || s(eq.status),
         hasPartsNeeded ? `${neededParts.length || "Yes"}` : "—",
@@ -275,7 +291,7 @@ export async function generateEquipmentReport(
 
     autoTable(doc, {
       startY: y,
-      head: [["Name", "Type", "Make/Model", "Serial #", "Condition", "Status", "Parts?", "DRMO?"]],
+      head: [["Name", "Type", "Make/Model", "Serial #", "Barcode", "Condition", "Status", "Parts?", "DRMO?"]],
       body: rows,
       margin: { left: m + 3, right: m + 3 },
       styles: { fontSize: 7, cellPadding: 1.5 },
@@ -283,8 +299,9 @@ export async function generateEquipmentReport(
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
         0: { fontStyle: "bold", cellWidth: 45 },
-        6: { halign: "center" as const, cellWidth: 14 },
+        4: { cellWidth: 28 },
         7: { halign: "center" as const, cellWidth: 14 },
+        8: { halign: "center" as const, cellWidth: 14 },
       },
     });
 
@@ -376,6 +393,7 @@ export async function generateEquipmentReport(
       detailRow("Year:", s(eq.year));
       detailRow("Serial #:", s(eq.serial_number));
       detailRow("Asset Tag:", s(eq.asset_tag));
+      detailRow("Barcode:", s(barcodeMap.get(eq.id)));
       detailRow("Fuel Type:", fuelLabels[eq.fuel_type] || s(eq.fuel_type));
       detailRow("Hours:", eq.current_hours != null ? eq.current_hours + " hrs" : "—");
       detailRow("Location:", s(eq.location));

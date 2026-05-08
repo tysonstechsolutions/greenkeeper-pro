@@ -524,10 +524,11 @@ function PageContent() {
       </Card>
 
       {/* ═══ Operational Information (linked equipment) ═══
-          Shows the day-to-day operational data — photos the crew sees,
-          condition, parts ordered, service history, hours. When the asset
-          isn't linked to an equipment record yet, offer to scan/create one
-          so the user can start tracking that side of things from here. */}
+          Shows the day-to-day operational data — condition, parts ordered,
+          service history, hours. Photos live in the Condition Photos
+          section above (single source of truth). When the asset isn't
+          linked to an equipment record yet, offer to scan/create one so
+          the user can start tracking that side of things from here. */}
       <Card className="mb-4">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
@@ -573,45 +574,6 @@ function PageContent() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Operational photos gallery */}
-              {(linkedEquipment.photos && linkedEquipment.photos.length > 0) ||
-              linkedEquipment.photo_url ? (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                    Photos
-                  </p>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {(linkedEquipment.photos && linkedEquipment.photos.length > 0
-                      ? linkedEquipment.photos
-                      : [linkedEquipment.photo_url].filter((u): u is string => !!u)
-                    ).map((url, i) => (
-                      <div
-                        key={i}
-                        className="aspect-square rounded-lg overflow-hidden border border-border bg-muted"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt={`${linkedEquipment.name} photo ${i + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-3 border border-dashed border-border/60 rounded-lg">
-                  <Camera className="w-6 h-6 text-muted-foreground/40 mx-auto mb-1" />
-                  <p className="text-xs text-muted-foreground mb-2">No operational photos yet</p>
-                  <Link
-                    href={`/equipment/view?id=${asset.equipment_id}`}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    Add photos
-                  </Link>
-                </div>
-              )}
-
               {/* Status + condition badges */}
               <div className="flex flex-wrap gap-2">
                 <Badge
