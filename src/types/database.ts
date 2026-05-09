@@ -1205,6 +1205,10 @@ export interface HoleObservation {
   task_id: string | null; // linked task when created from observation
   resolved_at: string | null;
   resolved_by: string | null;
+  /** Photos taken after the fix to prove resolution (URLs). */
+  resolution_photos: string[];
+  /** Notes describing what was done to fix the issue. */
+  resolution_notes: string | null;
   /** Spanish translation of {@link HoleObservation.title} (optional). */
   title_es?: string | null;
   /** Spanish translation of {@link HoleObservation.description} (optional). */
@@ -1327,6 +1331,10 @@ export interface GreenObservation {
   task_id: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  /** Photos taken after the fix to prove resolution (URLs). */
+  resolution_photos: string[];
+  /** Notes describing what was done to fix the issue. */
+  resolution_notes: string | null;
   /** Spanish translation of {@link GreenObservation.title} (optional). */
   title_es?: string | null;
   /** Spanish translation of {@link GreenObservation.description} (optional). */

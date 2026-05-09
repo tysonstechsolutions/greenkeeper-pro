@@ -489,7 +489,10 @@ export default function SchedulePage() {
 
           {/* Desktop: full grid + templates sidebar. */}
           <div className="hidden lg:flex gap-4 items-start">
-            <aside className="w-[280px] shrink-0 sticky top-2 max-h-[calc(100vh-3rem)]">
+            {/* Definite `h-` (not `max-h-`) — max-height doesn't establish
+                a definite parent height for `h-full` to resolve against, so
+                the templates list inside loses its scrollbar. */}
+            <aside className="w-[280px] shrink-0 sticky top-2 h-[calc(100dvh-3rem)]">
               <BoardBacklog
                 templates={board.templates}
                 onTemplateDragStart={onTemplateDragStart}

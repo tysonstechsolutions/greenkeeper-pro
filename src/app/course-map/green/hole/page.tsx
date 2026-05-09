@@ -53,6 +53,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { DetailPageHeader } from "@/components/ui/back-button";
+import { ResolveIssueDialog } from "@/components/resolve-issue-dialog";
 import {
   useGreenObservations,
   greenIssueTypeLabels,
@@ -176,6 +177,9 @@ function PageContent() {
   // Create task dialog
   const [taskDialogObs, setTaskDialogObs] = useState<GreenObservation | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
+
+  // Resolve dialog (capture proof photos before closing the issue)
+  const [resolvingObs, setResolvingObs] = useState<GreenObservation | null>(null);
 
   // Filter
   const [statusFilter, setStatusFilter] = useState<string>("active");
@@ -436,17 +440,41 @@ function PageContent() {
   }, [user?.id, updateObservation]);
 
   // ── Update Observation Status ──
+  // For "resolved": open the proof-photo dialog instead of resolving directly.
+  // For other transitions: persist immediately.
   const handleStatusChange = useCallback(async (obs: GreenObservation, newStatus: GreenObservationStatus) => {
-    const updates: Partial<GreenObservation> = { status: newStatus };
     if (newStatus === "resolved") {
-      updates.resolved_at = new Date().toISOString();
-      updates.resolved_by = user?.id || null;
+      setResolvingObs(obs);
+      return;
     }
+    const updates: Partial<GreenObservation> = { status: newStatus };
     await updateObservation(obs.id, updates);
     if (selectedObs?.id === obs.id) {
       setSelectedObs({ ...obs, ...updates });
     }
-  }, [user?.id, updateObservation, selectedObs?.id]);
+  }, [updateObservation, selectedObs?.id]);
+
+  // ── Resolve with proof photos ──
+  const handleConfirmResolve = useCallback(async (photos: string[], notes: string) => {
+    if (!resolvingObs) return;
+    const updates: Partial<GreenObservation> = {
+      status: "resolved",
+      resolved_at: new Date().toISOString(),
+      resolved_by: user?.id || null,
+      resolution_photos: photos,
+      resolution_notes: notes || null,
+    };
+    const result = await updateObservation(resolvingObs.id, updates);
+    if (result) {
+      if (selectedObs?.id === resolvingObs.id) {
+        setSelectedObs({ ...resolvingObs, ...updates });
+      }
+      setResolvingObs(null);
+      setFeedbackMsg({ type: "success", text: "Issue resolved — proof photos saved to history." });
+    } else {
+      throw new Error("Failed to resolve");
+    }
+  }, [resolvingObs, user?.id, updateObservation, selectedObs?.id]);
 
   // ── Reset form when sheet closes ──
   const handleFormSheetClose = useCallback((open: boolean) => {
@@ -1050,6 +1078,32 @@ function PageContent() {
                   </div>
                 ) : null}
 
+                {/* Resolution proof — shown once the issue is resolved */}
+                {selectedObs.status === "resolved" && (selectedObs.resolution_photos?.length || selectedObs.resolution_notes) && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-3">
+                    <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Resolution Proof
+                    </p>
+                    {selectedObs.resolution_photos && selectedObs.resolution_photos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {selectedObs.resolution_photos.map((url) => (
+                          <img
+                            key={url}
+                            src={url}
+                            alt="Resolution proof"
+                            className="aspect-square w-full rounded-lg object-cover border border-emerald-200"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {selectedObs.resolution_notes && (
+                      <p className="text-sm text-emerald-900 whitespace-pre-line">{selectedObs.resolution_notes}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* AI Treatment Plan */}
                 {selectedObs.diagnosis_result && (
                   <TreatmentPlanView data={selectedObs.diagnosis_result} />
@@ -1438,6 +1492,18 @@ function PageContent() {
           handlePhotoCaptured(file);
         }}
         onClose={() => setShowInlineCamera(false)}
+      />
+
+      {/* Resolve dialog — captures proof photos and notes before closing the issue */}
+      <ResolveIssueDialog
+        open={!!resolvingObs}
+        title={resolvingObs ? `Resolve Green ${resolvingObs.hole_number} Issue` : ""}
+        issueTitle={resolvingObs?.title ?? ""}
+        uploadPhoto={uploadPhoto}
+        onResolve={async ({ photos, notes }) => {
+          await handleConfirmResolve(photos, notes);
+        }}
+        onCancel={() => setResolvingObs(null)}
       />
     </div>
   );

@@ -181,7 +181,7 @@ export function useGreenObservations() {
   );
 
   const updateObservation = useCallback(
-    async (id: string, updates: Partial<Pick<GreenObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by">>) => {
+    async (id: string, updates: Partial<Pick<GreenObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by" | "resolution_photos" | "resolution_notes">>) => {
       try {
         await directPatchRowReturning<GreenObservation>(
           "green_observations",

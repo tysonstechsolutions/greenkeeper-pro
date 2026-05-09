@@ -12,6 +12,8 @@ import {
   Flag,
   Circle,
   Download,
+  ClipboardList,
+  History,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ import {
 } from "@/lib/hooks/useGreenObservations";
 import type { TaskPriority } from "@/types/database";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
+import { downloadActionPlanReport } from "@/lib/reports/action-plan-report";
 
 // ── Hole image placeholder component ──
 function HoleImage({
@@ -112,6 +115,8 @@ export default function CourseMapPage() {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [generatingActionPlan, setGeneratingActionPlan] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const stats = activeTab === "holes" ? holeStats : greenStats;
   const loading = activeTab === "holes" ? holeLoading : greenLoading;
@@ -212,8 +217,8 @@ export default function CourseMapPage() {
 
   return (
     <div className="p-4 md:p-6 pb-24 overflow-x-hidden">
-      {/* Header — title stacks above the Download button on mobile so
-          "Course Map" never wraps awkwardly next to a full-width button. */}
+      {/* Header — title stacks above the action buttons on mobile so
+          "Course Map" never wraps awkwardly next to full-width buttons. */}
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-[#1B4332] flex items-center justify-center shrink-0">
@@ -228,27 +233,75 @@ export default function CourseMapPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={generatingReport}
-          onClick={async () => {
-            setGeneratingReport(true);
-            try {
-              const type = activeTab === "holes" ? "hole" : "green";
-              await downloadObservationReport({ type });
-            } catch (err) {
-              console.error("Report generation failed:", err);
-            } finally {
-              setGeneratingReport(false);
-            }
-          }}
-          className="gap-2 self-start md:self-auto shrink-0"
-        >
-          <Download className="w-4 h-4" />
-          {generatingReport ? "Generating..." : "Download Report"}
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start md:self-auto shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={generatingReport || generatingActionPlan}
+            onClick={async () => {
+              setReportError(null);
+              setGeneratingReport(true);
+              try {
+                const type = activeTab === "holes" ? "hole" : "green";
+                await downloadObservationReport({ type });
+              } catch (err) {
+                console.error("Report generation failed:", err);
+                setReportError("Failed to generate report. Please try again.");
+              } finally {
+                setGeneratingReport(false);
+              }
+            }}
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            {generatingReport ? "Generating..." : "Download Report"}
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={generatingReport || generatingActionPlan}
+            onClick={async () => {
+              setReportError(null);
+              setGeneratingActionPlan(true);
+              try {
+                await downloadActionPlanReport();
+              } catch (err) {
+                console.error("Action plan generation failed:", err);
+                setReportError(
+                  "Failed to generate the action plan. Please try again.",
+                );
+              } finally {
+                setGeneratingActionPlan(false);
+              }
+            }}
+            className="gap-2 bg-[#B68D40] hover:bg-[#9C7634] text-white"
+            title="Step-by-step no-chemical fix procedures for every open issue"
+          >
+            <ClipboardList className="w-4 h-4" />
+            {generatingActionPlan ? "Building Plan..." : "Action Plan"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/course-map/resolution-history")}
+            className="gap-2"
+          >
+            <History className="w-4 h-4" />
+            History
+          </Button>
+        </div>
       </div>
+
+      {reportError && (
+        <div className="mb-4 px-3 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {reportError}
+          <button className="ml-auto" onClick={() => setReportError(null)}>
+            <span className="sr-only">Dismiss</span>
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Tab Switcher */}
       <div className="flex gap-1 p-1 bg-muted rounded-lg mb-6">

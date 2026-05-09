@@ -185,7 +185,7 @@ export function useHoleObservations() {
   );
 
   const updateObservation = useCallback(
-    async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by" | "pin_x" | "pin_y">>) => {
+    async (id: string, updates: Partial<Pick<HoleObservation, "title" | "issue_type" | "status" | "priority" | "description" | "fix_instructions" | "photo_url" | "task_id" | "resolved_at" | "resolved_by" | "pin_x" | "pin_y" | "resolution_photos" | "resolution_notes">>) => {
       try {
         await directPatchRowReturning<HoleObservation>(
           "hole_observations",
