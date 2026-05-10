@@ -14,9 +14,19 @@ import {
   Download,
   ClipboardList,
   History,
+  ChevronDown,
+  Languages,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -256,30 +266,66 @@ export default function CourseMapPage() {
             <Download className="w-4 h-4" />
             {generatingReport ? "Generating..." : "Download Report"}
           </Button>
-          <Button
-            variant="default"
-            size="sm"
-            disabled={generatingReport || generatingActionPlan}
-            onClick={async () => {
-              setReportError(null);
-              setGeneratingActionPlan(true);
-              try {
-                await downloadActionPlanReport();
-              } catch (err) {
-                console.error("Action plan generation failed:", err);
-                setReportError(
-                  "Failed to generate the action plan. Please try again.",
-                );
-              } finally {
-                setGeneratingActionPlan(false);
-              }
-            }}
-            className="gap-2 bg-[#B68D40] hover:bg-[#9C7634] text-white"
-            title="Step-by-step no-chemical fix procedures for every open issue"
-          >
-            <ClipboardList className="w-4 h-4" />
-            {generatingActionPlan ? "Building Plan..." : "Action Plan"}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="default"
+                size="sm"
+                disabled={generatingReport || generatingActionPlan}
+                className="gap-2 bg-[#B68D40] hover:bg-[#9C7634] text-white"
+                title="Step-by-step fix procedures for every open issue — choose language"
+              >
+                <ClipboardList className="w-4 h-4" />
+                {generatingActionPlan ? "Building Plan..." : "Action Plan"}
+                <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="flex items-center gap-1.5">
+                <Languages className="w-3.5 h-3.5" />
+                Choose language
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={async () => {
+                  setReportError(null);
+                  setGeneratingActionPlan(true);
+                  try {
+                    await downloadActionPlanReport({ locale: "en" });
+                  } catch (err) {
+                    console.error("Action plan (en) failed:", err);
+                    setReportError(
+                      "Failed to generate the action plan. Please try again.",
+                    );
+                  } finally {
+                    setGeneratingActionPlan(false);
+                  }
+                }}
+              >
+                <span className="mr-2">🇺🇸</span>
+                English
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={async () => {
+                  setReportError(null);
+                  setGeneratingActionPlan(true);
+                  try {
+                    await downloadActionPlanReport({ locale: "es" });
+                  } catch (err) {
+                    console.error("Action plan (es) failed:", err);
+                    setReportError(
+                      "Failed to generate the action plan. Please try again.",
+                    );
+                  } finally {
+                    setGeneratingActionPlan(false);
+                  }
+                }}
+              >
+                <span className="mr-2">🇲🇽</span>
+                Español (para la cuadrilla)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"

@@ -42,6 +42,8 @@ const priorityColors: Record<string, [number, number, number]> = {
   low: [107, 114, 128],
 };
 
+const RUNNING_HDR_H = 13; // mm — brand stripe on every non-cover page
+
 interface ResolvedItem {
   surface: "Hole" | "Green";
   id: string;
@@ -269,54 +271,112 @@ export async function generateResolutionHistoryReport(
     const contentWidth = pageWidth - margin * 2;
     let y = margin;
 
+    const renderRunningHdr = () => {
+      const pg = (doc as any).internal.getCurrentPageInfo().pageNumber;
+      if (pg <= 1) return;
+      doc.setFillColor(...BRAND_DARK);
+      doc.rect(0, 0, pageWidth, RUNNING_HDR_H - 0.8, "F");
+      doc.setFillColor(...BRAND_GOLD);
+      doc.rect(0, RUNNING_HDR_H - 0.8, pageWidth, 0.8, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(255, 255, 255);
+      doc.text("VMGC  ·  GreenKeeper Pro", margin, RUNNING_HDR_H - 4.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...BRAND_GOLD);
+      doc.text("Resolution History — Proof-of-Work Report", pageWidth / 2, RUNNING_HDR_H - 4.5, { align: "center" });
+    };
     const addPage = () => {
       doc.addPage();
-      y = margin;
+      renderRunningHdr();
+      y = RUNNING_HDR_H + 5;
     };
 
     const checkPageSpace = (needed: number) => {
       if (y + needed > pageHeight - 18) addPage();
     };
 
-    // ── HEADER ──
+    // ── COVER HEADER ──
     step = "pdf-header";
+    const COVER_HDR_H = 60;
     doc.setFillColor(...BRAND_DARK);
-    doc.rect(0, 0, pageWidth, 36, "F");
+    doc.rect(0, 0, pageWidth, COVER_HDR_H, "F");
+    // Emerald left accent bar
+    doc.setFillColor(...EMERALD_600);
+    doc.rect(0, 0, 3.5, COVER_HDR_H, "F");
+    // Gold bottom stripe
     doc.setFillColor(...BRAND_GOLD);
-    doc.rect(0, 36, pageWidth, 1.5, "F");
+    doc.rect(0, COVER_HDR_H, pageWidth, 1.5, "F");
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(255, 255, 255);
-    doc.text("Resolution History", margin, 16);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...BRAND_GOLD);
-    doc.text("Proof-of-Work Report — Before / After Photos", margin, 23);
-
-    doc.setFontSize(9);
-    doc.setTextColor(255, 255, 255);
     const dateStr = new Date().toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
       day: "numeric",
     });
-    doc.text(dateStr, pageWidth - margin, 16, { align: "right" });
+
+    // Org identifier + date
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...BRAND_GOLD);
+    doc.text("VMGC  ·  GreenKeeper Pro", margin + 5, 9);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(190, 200, 210);
+    doc.text(dateStr, pageWidth - margin, 9, { align: "right" });
+
+    // Thin rule
+    doc.setDrawColor(...BRAND_GOLD);
+    doc.setLineWidth(0.25);
+    doc.line(margin + 5, 12, pageWidth - margin, 12);
+    doc.setLineWidth(0.2);
+
+    // Main title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(27);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Resolution History", margin + 5, 29);
+
+    // Subtitle
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...BRAND_GOLD);
+    doc.text("Proof-of-Work Report — Before / After Photo Documentation", margin + 5, 37);
+
+    // Prepared by (right side)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(170, 185, 200);
+    doc.text("PREPARED BY", pageWidth - margin, 20, { align: "right" });
     if (profile?.full_name) {
-      doc.text(`Prepared by: ${profile.full_name}`, pageWidth - margin, 23, {
-        align: "right",
-      });
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text(profile.full_name, pageWidth - margin, 27, { align: "right" });
     }
+    if (profile?.role) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...BRAND_GOLD);
+      doc.text(profile.role, pageWidth - margin, 34, { align: "right" });
+    }
+
+    // Issue count
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
     doc.text(
-      `${filteredItems.length} resolved issue${filteredItems.length === 1 ? "" : "s"}`,
-      pageWidth - margin,
-      30,
-      { align: "right" },
+      `${filteredItems.length} resolved issue${filteredItems.length === 1 ? "" : "s"} documented`,
+      margin + 5, 48,
     );
 
-    y = 44;
+    // Confidential notice
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(6.5);
+    doc.setTextColor(110, 125, 140);
+    doc.text("Confidential — For Internal Course Operations & Management Review Only", margin + 5, 56);
+
+    y = COVER_HDR_H + 9;
 
     // ── Filter / scope summary ──
     step = "pdf-scope";
@@ -426,15 +486,16 @@ export async function generateResolutionHistoryReport(
 
       autoTable(doc, {
         startY: y,
-        margin: { left: margin, right: margin },
+        margin: { left: margin, right: margin, top: RUNNING_HDR_H + 4 },
         head: [["#", "Resolved", "Where", "Issue", "Photos", "By"]],
         body: idxBody,
-        styles: { fontSize: 8, cellPadding: 1.6 },
+        styles: { fontSize: 8, cellPadding: 2 },
         headStyles: {
           fillColor: BRAND_DARK,
           textColor: [255, 255, 255],
           fontSize: 8,
           fontStyle: "bold",
+          minCellHeight: 8,
         },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
@@ -444,6 +505,7 @@ export async function generateResolutionHistoryReport(
           4: { cellWidth: 16, halign: "center" },
           5: { cellWidth: 30 },
         },
+        didDrawPage: () => { renderRunningHdr(); },
       });
       y = (doc as any).lastAutoTable.finalY + 6;
     }
@@ -473,21 +535,25 @@ export async function generateResolutionHistoryReport(
       if (i > 0) addPage();
       else if (y > pageHeight - 90) addPage();
 
-      // Header ribbon
+      // Header ribbon — priority-colored with emerald left accent
       const pColor = priorityColors[item.priority] || GRAY_600;
       doc.setFillColor(...pColor);
-      doc.rect(margin, y, contentWidth, 10, "F");
+      doc.rect(margin, y, contentWidth, 14, "F");
+      doc.setFillColor(...EMERALD_600);
+      doc.rect(margin, y, 3.5, 14, "F");
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
+      doc.setFontSize(8);
       doc.setTextColor(255, 255, 255);
-      const headerLeft = `#${i + 1}  ${item.surface} ${item.hole_number}`;
-      const headerRight = `RESOLVED  ${new Date(item.resolved_at).toLocaleDateString()}`;
-      doc.text(headerLeft, margin + 3, y + 6.8);
-      doc.text(headerRight, pageWidth - margin - 3, y + 6.8, {
-        align: "right",
-      });
-      y += 14;
+      doc.text(`#${i + 1}`, margin + 7, y + 5.5);
+      doc.setFontSize(13);
+      doc.text(`${item.surface} ${item.hole_number}`, margin + 7, y + 11.5);
+      doc.setFontSize(8.5);
+      doc.text(
+        `RESOLVED  ·  ${new Date(item.resolved_at).toLocaleDateString()}`,
+        pageWidth - margin - 3, y + 8.5, { align: "right" },
+      );
+      y += 18;
 
       // Title + issue label
       doc.setFont("helvetica", "bold");
@@ -674,28 +740,28 @@ export async function generateResolutionHistoryReport(
       }
     }
 
-    // ── FOOTER ──
+    // ── FOOTER (all pages) ──
     step = "pdf-footer";
     const totalPages = doc.getNumberOfPages();
+    const footerGenerated = `Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     for (let p = 1; p <= totalPages; p++) {
       doc.setPage(p);
-      doc.setFontSize(8);
+      // Rule above footer
+      doc.setDrawColor(...GRAY_400);
+      doc.setLineWidth(0.3);
+      doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+      doc.setLineWidth(0.2);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
       doc.setTextColor(...GRAY_400);
+      doc.text("VMGC GreenKeeper Pro", margin, pageHeight - 7);
       doc.text(
-        `VMGC GreenKeeper Pro — Resolution History | Generated ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString(
-          [],
-          { hour: "2-digit", minute: "2-digit" },
-        )}`,
+        `Resolution History  —  ${footerGenerated}`,
         pageWidth / 2,
-        pageHeight - 8,
+        pageHeight - 7,
         { align: "center" },
       );
-      doc.text(
-        `Page ${p} of ${totalPages}`,
-        pageWidth - margin,
-        pageHeight - 8,
-        { align: "right" },
-      );
+      doc.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
     }
 
     step = "pdf-output";

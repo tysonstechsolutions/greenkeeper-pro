@@ -64,6 +64,8 @@ const BRAND_GOLD: [number, number, number] = [182, 141, 64];
 const GRAY_600: [number, number, number] = [75, 85, 99];
 const GRAY_400: [number, number, number] = [156, 163, 175];
 
+const RUNNING_HDR_H = 13; // mm — brand stripe on every non-cover page
+
 const priorityColors: Record<string, [number, number, number]> = {
   critical: [220, 38, 38],
   high: [234, 88, 12],
@@ -162,9 +164,29 @@ export async function generateObservationReport(
     const contentWidth = pageWidth - margin * 2;
     let y = margin;
 
+    const surfaceLabelForHdr = type === "green" ? "Green" : "Fairway";
+    const reportTitle = holeNumber
+      ? `${surfaceLabelForHdr} Report — Hole ${holeNumber}`
+      : `All ${surfaceLabelForHdr}s — Observation Report`;
+    const renderRunningHdr = () => {
+      const pg = (doc as any).internal.getCurrentPageInfo().pageNumber;
+      if (pg <= 1) return;
+      doc.setFillColor(...BRAND_DARK);
+      doc.rect(0, 0, pageWidth, RUNNING_HDR_H - 0.8, "F");
+      doc.setFillColor(...BRAND_GOLD);
+      doc.rect(0, RUNNING_HDR_H - 0.8, pageWidth, 0.8, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(255, 255, 255);
+      doc.text("VMGC  ·  GreenKeeper Pro", margin, RUNNING_HDR_H - 4.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...BRAND_GOLD);
+      doc.text(reportTitle, pageWidth / 2, RUNNING_HDR_H - 4.5, { align: "center" });
+    };
     const addPage = () => {
       doc.addPage();
-      y = margin;
+      renderRunningHdr();
+      y = RUNNING_HDR_H + 5;
     };
 
     const checkPageSpace = (needed: number) => {
@@ -181,42 +203,90 @@ export async function generateObservationReport(
       return truncated + "…";
     };
 
-    // ── HEADER ──
+    // ── COVER HEADER ──
     step = "pdf-header";
-    doc.setFillColor(...BRAND_DARK);
-    doc.rect(0, 0, pageWidth, 32, "F");
-    doc.setFillColor(...BRAND_GOLD);
-    doc.rect(0, 32, pageWidth, 1.5, "F");
-
+    const COVER_HDR_H = 58;
     const surfaceLabel = type === "green" ? "Green" : "Fairway";
     const titleText = holeNumber
       ? `Hole ${holeNumber} ${surfaceLabel} Report`
-      : `All ${surfaceLabel}s Observation Report`;
+      : `All ${surfaceLabel}s — Observation Report`;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(255, 255, 255);
-    doc.text(titleText, margin, 15);
+    doc.setFillColor(...BRAND_DARK);
+    doc.rect(0, 0, pageWidth, COVER_HDR_H, "F");
+    // Gold left accent bar
+    doc.setFillColor(...BRAND_GOLD);
+    doc.rect(0, 0, 3.5, COVER_HDR_H, "F");
+    // Gold bottom stripe
+    doc.setFillColor(...BRAND_GOLD);
+    doc.rect(0, COVER_HDR_H, pageWidth, 1.5, "F");
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...BRAND_GOLD);
-    doc.text("Observation & Treatment Report", margin, 22);
-
-    doc.setFontSize(9);
-    doc.setTextColor(255, 255, 255);
     const dateStr = new Date().toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
       day: "numeric",
     });
-    doc.text(dateStr, pageWidth - margin, 15, { align: "right" });
+
+    // Org identifier + date
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(...BRAND_GOLD);
+    doc.text("VMGC  ·  GreenKeeper Pro", margin + 5, 9);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(190, 200, 210);
+    doc.text(dateStr, pageWidth - margin, 9, { align: "right" });
+
+    // Thin rule
+    doc.setDrawColor(...BRAND_GOLD);
+    doc.setLineWidth(0.25);
+    doc.line(margin + 5, 12, pageWidth - margin, 12);
+    doc.setLineWidth(0.2);
+
+    // Main title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(255, 255, 255);
+    doc.text(titleText, margin + 5, 28);
+
+    // Subtitle
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...BRAND_GOLD);
+    doc.text("Observation & Treatment Report", margin + 5, 36);
+
+    // Prepared by (right side)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(170, 185, 200);
+    doc.text("PREPARED BY", pageWidth - margin, 20, { align: "right" });
     if (profile?.full_name) {
-      doc.text(`Prepared by: ${profile.full_name}`, pageWidth - margin, 22, { align: "right" });
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text(profile.full_name, pageWidth - margin, 27, { align: "right" });
+    }
+    if (profile?.role) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...BRAND_GOLD);
+      doc.text(profile.role, pageWidth - margin, 34, { align: "right" });
     }
 
-    y = 40;
+    // Observation count + confidential notice
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(
+      `${(observations || []).length} observation${(observations || []).length === 1 ? "" : "s"} on record`,
+      margin + 5, 47,
+    );
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(6.5);
+    doc.setTextColor(110, 125, 140);
+    doc.text("Confidential — For Internal Course Operations Use Only", margin + 5, 55);
+
+    y = COVER_HDR_H + 9;
 
     // ── SUMMARY BOX ──
     step = "pdf-summary";
@@ -274,36 +344,32 @@ export async function generateObservationReport(
 
       const pColor = priorityColors[observation.priority] || GRAY_600;
       doc.setFillColor(...pColor);
-      doc.rect(margin, y, contentWidth, 8, "F");
+      doc.rect(margin, y, contentWidth, 12, "F");
+      // Gold left accent bar
+      doc.setFillColor(...BRAND_GOLD);
+      doc.rect(margin, y, 3.5, 12, "F");
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
+      doc.setFontSize(7.5);
       doc.setTextColor(255, 255, 255);
+      doc.text(`#${i + 1}`, margin + 7, y + 4.5);
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      const statusText = `${observation.priority.toUpperCase()} | ${statusLabels[observation.status] || observation.status}`;
-      const statusWidth = doc.getTextWidth(statusText) + 8;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
+      doc.setFontSize(9.5);
       const holePrefix = holeNumber == null && observation.hole_number
         ? `H${observation.hole_number}  `
         : "";
-      const titlePrefix = `#${i + 1}  ${holePrefix}`;
-      const maxTitleWidth = contentWidth - statusWidth - 8;
-      const truncatedTitle = truncateText(
-        observation.title,
-        maxTitleWidth - doc.getTextWidth(titlePrefix),
-        10,
-      );
-      doc.text(`${titlePrefix}${truncatedTitle}`, margin + 3, y + 5.5);
+      const titlePrefix = `${holePrefix}`;
+      const statusText = `${observation.priority.toUpperCase()}  ·  ${statusLabels[observation.status] || observation.status}`;
+      const statusWidth = doc.getTextWidth(statusText) + 8;
+      const maxTitleWidth = contentWidth - statusWidth - 20;
+      const truncatedTitle = truncateText(observation.title, maxTitleWidth - doc.getTextWidth(titlePrefix), 9.5);
+      doc.text(`${titlePrefix}${truncatedTitle}`, margin + 7, y + 10);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.text(statusText, pageWidth - margin - 3, y + 5.5, { align: "right" });
+      doc.text(statusText, pageWidth - margin - 3, y + 7.5, { align: "right" });
 
-      y += 10;
+      y += 15;
 
       doc.setFontSize(8);
       doc.setTextColor(...GRAY_600);
@@ -568,19 +634,20 @@ export async function generateObservationReport(
 
     step = "pdf-footer";
     const totalPages = doc.getNumberOfPages();
+    const footerGenerated = `Generated ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     for (let p = 1; p <= totalPages; p++) {
       doc.setPage(p);
-      doc.setFontSize(8);
+      // Rule above footer
+      doc.setDrawColor(...GRAY_400);
+      doc.setLineWidth(0.3);
+      doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+      doc.setLineWidth(0.2);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
       doc.setTextColor(...GRAY_400);
-      doc.text(
-        `VMGC GreenKeeper Pro | Generated ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-        pageWidth / 2,
-        pageHeight - 8,
-        { align: "center" },
-      );
-      doc.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 8, {
-        align: "right",
-      });
+      doc.text("VMGC GreenKeeper Pro", margin, pageHeight - 7);
+      doc.text(footerGenerated, pageWidth / 2, pageHeight - 7, { align: "center" });
+      doc.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
     }
 
     step = "pdf-output";
