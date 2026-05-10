@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/layout";
 import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync-indicator";
@@ -8,14 +8,16 @@ import { AuthGate } from "@/components/auth/auth-gate";
 import { CapacitorInit } from "@/components/capacitor-init";
 import { SupabaseRecovery } from "@/components/supabase-recovery";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -75,7 +77,7 @@ export default function RootLayout({
       </head>
       <body
         suppressHydrationWarning
-        className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
+        className={`${outfit.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
         style={{
           /*
             Top padding defends against Android edge-to-edge mode (API 35+)

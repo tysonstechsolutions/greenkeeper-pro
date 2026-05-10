@@ -14,7 +14,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase/client";
-import { directSelectList, getCachedUserId } from "@/lib/supabase/rest";
+import { getCachedUserId } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 import {
   holeFixProcedures,
@@ -37,11 +37,9 @@ import {
   getMossAutoDescription,
   type ReportLocale,
 } from "./action-plan-i18n";
-import { matchTools, type ToolMatch } from "./tool-inventory";
 import { issueTypeLabels } from "@/lib/hole-constants";
 import { greenIssueTypeLabels } from "@/lib/green-constants";
 import type {
-  Equipment,
   HoleIssueType,
   GreenIssueType,
   HoleObservation,
@@ -176,26 +174,7 @@ export async function generateActionPlanReport(
       .order("hole_number", { ascending: true });
     if (greenErr) throw new ActionPlanReportError(step, greenErr.message);
 
-    // Equipment / asset list — used to annotate the Tools & Materials section
-    // with availability ("in repair", "needs replacement", "NOT IN INVENTORY",
-    // etc.). Retired equipment is excluded by default — the user only cares
-    // about the active fleet.
-    step = "fetch-equipment";
-    let equipment: Equipment[] = [];
-    try {
-      equipment = await directSelectList<Equipment>("equipment", {
-        columns:
-          "id, name, equipment_type, status, condition_status, make, model, asset_tag",
-        filters: ["status=neq.retired"],
-        orderBy: [{ column: "name", ascending: true }],
-        label: "action-plan-report.fetchEquipment",
-      });
-    } catch (eqErr) {
-      // If the equipment fetch fails, continue without inventory annotation
-      // — better to ship the report than to block on a side feature.
-      console.warn("Action plan: equipment fetch failed, tool annotations will be skipped:", eqErr);
-      equipment = [];
-    }
+
 
     step = "build-action-items";
     const items: ActionItem[] = [];
@@ -334,16 +313,6 @@ export async function generateActionPlanReport(
 
     const checkPageSpace = (needed: number) => {
       if (y + needed > pageHeight - 20) addPage();
-    };
-
-    const drawSectionDivider = () => {
-      checkPageSpace(8);
-      y += 2;
-      doc.setDrawColor(...GRAY_400);
-      doc.setLineDashPattern([1.2, 1.2], 0);
-      doc.line(margin + 4, y, pageWidth - margin - 4, y);
-      doc.setLineDashPattern([], 0);
-      y += 6;
     };
 
     // ── COVER HEADER ──
@@ -508,168 +477,6 @@ export async function generateActionPlanReport(
     });
     y += 28;
 
-    // ── EQUIPMENT INVENTORY SUMMARY (across every action item) ──
-    // Roll up every Tools & Materials line that's flagged so the
-    // superintendent can see the full equipment story up front instead of
-    // hunting through each item.
-    step = "pdf-inventory-summary";
-    type FlaggedTool = ReturnType<typeof matchTools>[number];
-    const flaggedAll: { tool: FlaggedTool; itemContext: string }[] = [];
-    for (const it of items) {
-      const tm = matchTools(it.procedure.tools_needed, equipment, locale);
-      for (const t of tm) {
-        if (t.isProblem) {
-          flaggedAll.push({
-            tool: t,
-            itemContext: `${getSurfaceLabel(it.surface, locale)} ${it.hole_number} — ${it.title}`,
-          });
-        }
-      }
-    }
-    // De-dup by displayText so the same missing tool doesn't list 18x
-    const seenDisplay = new Set<string>();
-    const uniqueFlagged: { tool: FlaggedTool; uses: number; firstContext: string }[] = [];
-    for (const f of flaggedAll) {
-      const key = f.tool.displayText;
-      const existing = uniqueFlagged.find((u) => u.tool.displayText === key);
-      if (existing) {
-        existing.uses += 1;
-      } else {
-        seenDisplay.add(key);
-        uniqueFlagged.push({
-          tool: f.tool,
-          uses: 1,
-          firstContext: f.itemContext,
-        });
-      }
-    }
-    // Sort by severity: missing > out > issue, then by use count desc
-    const severityRank: Record<string, number> = { missing: 0, out: 1, issue: 2, ok: 3 };
-    uniqueFlagged.sort((a, b) => {
-      const r = severityRank[a.tool.status] - severityRank[b.tool.status];
-      if (r !== 0) return r;
-      return b.uses - a.uses;
-    });
-
-    if (uniqueFlagged.length > 0) {
-      checkPageSpace(20);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...BRAND_DARK);
-      doc.text(L.inventoryHeading, margin, y);
-      y += 4;
-
-      const invBody = uniqueFlagged.map((u) => {
-        const statusTag =
-          u.tool.status === "missing"
-            ? L.notInInventory
-            : u.tool.status === "out"
-              ? L.needsReplacement
-              : L.repairOrService;
-        return [
-          statusTag,
-          u.tool.displayText.replace(/ — .*$/, "").replace(/ \(.*\)$/, ""),
-          u.tool.displayText.includes(" — ")
-            ? u.tool.displayText.split(" — ")[1]
-            : u.tool.displayText.includes(" (")
-              ? u.tool.displayText.match(/\(([^)]+)\)/)?.[1] ?? ""
-              : "",
-          u.uses.toString(),
-        ];
-      });
-
-      autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin, top: RUNNING_HDR_H + 4 },
-        head: [[L.invSeverity, L.invTool, L.invDetail, L.invUsedBy]],
-        body: invBody,
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: {
-          fillColor: [180, 83, 9],
-          textColor: [255, 255, 255],
-          fontSize: 8,
-          fontStyle: "bold",
-          minCellHeight: 8,
-        },
-        alternateRowStyles: { fillColor: [255, 251, 235] },
-        columnStyles: {
-          0: { cellWidth: 32, fontStyle: "bold" },
-          3: { cellWidth: 16, halign: "center" },
-        },
-        didDrawPage: () => { renderRunningHdr(); },
-        didParseCell: (data) => {
-          if (data.section === "body" && data.column.index === 0) {
-            const txt = String(data.cell.raw ?? "");
-            if (txt === L.notInInventory) {
-              data.cell.styles.textColor = [220, 38, 38];
-            } else if (txt === L.needsReplacement) {
-              data.cell.styles.textColor = [234, 88, 12];
-            } else {
-              data.cell.styles.textColor = [180, 83, 9];
-            }
-          }
-        },
-      });
-      y = (doc as any).lastAutoTable.finalY + 2;
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(7);
-      doc.setTextColor(...GRAY_400);
-      doc.text(L.inventoryUsedByNote, margin, y + 3);
-      y += 8;
-    } else if (equipment.length > 0) {
-      // Inventory was checked successfully and nothing is flagged — let the
-      // user know with a brief positive note.
-      checkPageSpace(10);
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(8.5);
-      doc.setTextColor(5, 150, 105); // emerald-600
-      doc.text(L.inventoryAllOk(equipment.length), margin, y);
-      y += 8;
-    }
-
-    // ── TABLE OF CONTENTS (compact) ──
-    step = "pdf-toc";
-    if (items.length > 0) {
-      checkPageSpace(20);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(...BRAND_DARK);
-      doc.text(L.indexHeading, margin, y);
-      y += 4;
-
-      const tocBody = items.map((it, i) => [
-        `${i + 1}.`,
-        `${getSurfaceLabel(it.surface, locale)} ${it.hole_number}`,
-        it.title,
-        getPriorityLabel(it.priority, locale),
-        it.origin === "auto" ? L.sourceAuto : L.sourceLogged,
-      ]);
-
-      autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin, top: RUNNING_HDR_H + 4 },
-        head: [[L.idxNum, L.idxWhere, L.idxIssue, L.idxPriority, L.idxSource]],
-        body: tocBody,
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: {
-          fillColor: BRAND_DARK,
-          textColor: [255, 255, 255],
-          fontSize: 8,
-          fontStyle: "bold",
-          minCellHeight: 8,
-        },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        columnStyles: {
-          0: { cellWidth: 10 },
-          1: { cellWidth: 28, fontStyle: "bold" },
-          3: { cellWidth: 22 },
-          4: { cellWidth: 22 },
-        },
-        didDrawPage: () => { renderRunningHdr(); },
-      });
-      y = (doc as any).lastAutoTable.finalY + 6;
-    }
-
     // Initialise the running-header section label before the items loop.
     if (items.length > 0) {
       currentSection = items[0].surface === "Hole"
@@ -677,18 +484,14 @@ export async function generateActionPlanReport(
         : (locale === "es" ? "SECCIÓN II — GREENS" : "SECTION II — PUTTING SURFACES");
     }
 
-    // ── DETAIL: ONE ENTRY PER ACTION ITEM ──
+    // ── DETAIL: ONE ISSUE PER PAGE ──
     step = "pdf-items";
     if (items.length === 0) {
-      checkPageSpace(20);
+      addPage(currentSection);
       doc.setFont("helvetica", "italic");
       doc.setFontSize(11);
       doc.setTextColor(...GRAY_400);
-      doc.text(
-        L.noOpenIssues,
-        margin,
-        y + 10,
-      );
+      doc.text(L.noOpenIssues, margin, y + 10);
     }
 
     for (let i = 0; i < items.length; i++) {
@@ -704,29 +507,28 @@ export async function generateActionPlanReport(
               (item.surface === "Hole" ? issueTypeLabels : greenIssueTypeLabels) as Record<string, string>
             )[item.issue_type] || item.issue_type;
 
-      // Section labels for running header.
       const holeSectionLabel = locale === "es" ? "SECCIÓN I — CANCHAS Y ROUGH" : "SECTION I — FAIRWAYS & ROUGH";
       const greenSectionLabel = locale === "es" ? "SECCIÓN II — GREENS" : "SECTION II — PUTTING SURFACES";
       const prevSurface = i > 0 ? items[i - 1].surface : null;
       const isFirstGreen = item.surface === "Green" && prevSurface === "Hole";
 
       if (isFirstGreen) {
-        // Section break: draw a "Putting Surfaces" header panel, then the item follows on the same page.
+        // Section break panel on its own page
         addPage(greenSectionLabel);
         doc.setFillColor(...BRAND_GREEN);
-        doc.rect(margin, y, contentWidth, 20, "F");
+        doc.rect(margin, y, contentWidth, 22, "F");
         doc.setFillColor(...BRAND_GOLD);
-        doc.rect(margin, y, 3.5, 20, "F");
+        doc.rect(margin, y, 3.5, 22, "F");
         doc.setFont("helvetica", "bold");
         doc.setFontSize(15);
         doc.setTextColor(255, 255, 255);
-        doc.text(locale === "es" ? "SECCIÓN II" : "SECTION II", margin + 8, y + 11);
+        doc.text(locale === "es" ? "SECCIÓN II" : "SECTION II", margin + 8, y + 12);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9.5);
         doc.setTextColor(...BRAND_GOLD);
         doc.text(
           locale === "es" ? "Superficies de Putting — Greens" : "Putting Surfaces — Greens",
-          margin + 8, y + 17.5,
+          margin + 8, y + 19,
         );
         const greenCount = items.filter((it) => it.surface === "Green").length;
         doc.setFont("helvetica", "bold");
@@ -734,177 +536,133 @@ export async function generateActionPlanReport(
         doc.setTextColor(255, 255, 255);
         doc.text(
           locale === "es" ? `${greenCount} elementos` : `${greenCount} items`,
-          pageWidth - margin, y + 12, { align: "right" },
+          pageWidth - margin, y + 13, { align: "right" },
         );
-        y += 26;
-        // New page for the item itself so it isn't squeezed below the section panel.
+        // Item starts on its own fresh page
         addPage(greenSectionLabel);
-      } else if (i > 0) {
+      } else {
+        // Every item — including the first — gets its own page
         addPage(item.surface === "Hole" ? holeSectionLabel : greenSectionLabel);
-      } else if (y > pageHeight - 80) {
-        addPage(holeSectionLabel);
       }
 
-      // Header ribbon — priority-colored with gold left accent bar
+      // ── HEADER RIBBON ──
       const pColor = priorityColors[item.priority] || GRAY_600;
       doc.setFillColor(...pColor);
-      doc.rect(margin, y, contentWidth, 14, "F");
+      doc.rect(margin, y, contentWidth, 12, "F");
       doc.setFillColor(...BRAND_GOLD);
-      doc.rect(margin, y, 3.5, 14, "F");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-      doc.text(`#${i + 1}`, margin + 7, y + 5.5);
-      doc.setFontSize(13);
-      doc.text(`${getSurfaceLabel(item.surface, locale)} ${item.hole_number}`, margin + 7, y + 11.5);
-      const headerRight = `${getPriorityLabel(item.priority, locale).toUpperCase()}  ·  ${getStatusLabel(item.status, locale).toUpperCase()}`;
-      doc.setFontSize(8.5);
-      doc.text(headerRight, pageWidth - margin - 3, y + 8.5, { align: "right" });
-      y += 18;
-
-      // Title
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.setTextColor(...BRAND_DARK);
-      doc.text(item.title, margin, y);
-      y += 5;
-
-      // Issue type + origin
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(...GRAY_600);
-      const subline = `${issueLabel}${
-        item.origin === "auto" ? L.autoIncluded : ""
-      }`;
-      doc.text(subline, margin, y);
-      y += 5;
-
-      // Photo + description (if present)
-      if (photo) {
-        try {
-          const imgWidth = 60;
-          const imgHeight = 45;
-          const imgFormat = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
-          doc.addImage(photo, imgFormat, margin, y, imgWidth, imgHeight);
-
-          if (item.description) {
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(8);
-            doc.setTextColor(...GRAY_600);
-            const textX = margin + imgWidth + 5;
-            const textWidth = contentWidth - imgWidth - 5;
-            const descLines = doc.splitTextToSize(
-              item.description,
-              textWidth,
-            );
-            doc.text(descLines.slice(0, 10), textX, y + 4);
-          }
-          y += imgHeight + 4;
-        } catch {
-          y += 2;
-        }
-      } else if (item.description) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(...GRAY_600);
-        const lines = doc.splitTextToSize(item.description, contentWidth);
-        doc.text(lines.slice(0, 5), margin, y);
-        y += Math.min(lines.length, 5) * 4 + 2;
-      }
-
-      drawSectionDivider();
-
-      // Procedure title
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...BRAND_DARK);
-      doc.text(L.procedureHeading(proc.title), margin, y);
-      y += 5;
-
-      // Best window / crew / duration as a 3-column meta strip
-      checkPageSpace(16);
-      doc.setFillColor(247, 250, 252);
-      doc.setDrawColor(229, 231, 235);
-      doc.roundedRect(margin, y, contentWidth, 12, 2, 2, "FD");
+      doc.rect(margin, y, 3.5, 12, "F");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
-      doc.setTextColor(...BRAND_GREEN);
-      doc.text(L.bestWindow, margin + 3, y + 4);
-      doc.text(L.crew, margin + contentWidth / 3 + 3, y + 4);
-      doc.text(L.duration, margin + (2 * contentWidth) / 3 + 3, y + 4);
+      doc.setTextColor(255, 255, 255);
+      doc.text(`#${i + 1}`, margin + 7, y + 4.5);
+      doc.setFontSize(12);
+      doc.text(`${getSurfaceLabel(item.surface, locale)} ${item.hole_number}`, margin + 7, y + 10);
+      doc.setFontSize(8);
+      doc.text(
+        `${getPriorityLabel(item.priority, locale).toUpperCase()}  ·  ${getStatusLabel(item.status, locale).toUpperCase()}`,
+        pageWidth - margin - 3, y + 7, { align: "right" },
+      );
+      y += 15;
 
+      // ── PHOTO (right) + TITLE / DESCRIPTION (left) ──
+      const photoW = 55;
+      const photoH = 42;
+      const hasPhoto = !!photo;
+      const textW = hasPhoto ? contentWidth - photoW - 5 : contentWidth;
+
+      // Title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(...BRAND_DARK);
+      const titleLines = doc.splitTextToSize(item.title, textW);
+      doc.text(titleLines.slice(0, 2), margin, y + 4);
+      let textY = y + 4 + titleLines.slice(0, 2).length * 5;
+
+      // Issue type tag
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(...GRAY_600);
-      const winLines = doc.splitTextToSize(
-        proc.best_window,
-        contentWidth / 3 - 6,
-      );
-      doc.text(winLines.slice(0, 2), margin + 3, y + 8);
-      doc.text(proc.crew, margin + contentWidth / 3 + 3, y + 8);
-      doc.text(
-        proc.duration,
-        margin + (2 * contentWidth) / 3 + 3,
-        y + 8,
-      );
+      const subline = `${issueLabel}${item.origin === "auto" ? L.autoIncluded : ""}`;
+      doc.text(subline, margin, textY + 2);
+      textY += 7;
 
-      y += 16;
+      // Description (up to 4 lines beside the photo)
+      if (item.description) {
+        const descLines = doc.splitTextToSize(item.description, textW);
+        doc.text(descLines.slice(0, 4), margin, textY);
+        textY += descLines.slice(0, 4).length * 3.4 + 2;
+      }
 
-      // Tools — annotated against the live equipment inventory.
-      // Basic hand tools / materials pass through unchanged. Powered
-      // equipment is matched to the asset list and tagged with status.
-      checkPageSpace(15);
-      const toolMatches: ToolMatch[] = matchTools(
-        proc.tools_needed,
-        equipment,
-        locale,
-      );
-      const problemCount = toolMatches.filter((t) => t.isProblem).length;
+      // Photo on the right
+      if (hasPhoto) {
+        try {
+          const imgFormat = photo!.startsWith("data:image/png") ? "PNG" : "JPEG";
+          doc.addImage(photo!, imgFormat, margin + contentWidth - photoW, y, photoW, photoH);
+        } catch { /* skip broken images */ }
+      }
 
+      y = Math.max(textY, hasPhoto ? y + photoH : y) + 4;
+
+      // ── THIN RULE SEPARATOR ──
+      doc.setDrawColor(...GRAY_400);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([1.5, 1.5], 0);
+      doc.line(margin, y, pageWidth - margin, y);
+      doc.setLineDashPattern([], 0);
+      y += 5;
+
+      // ── META STRIP (Best Window · Crew · Duration) ──
+      doc.setFillColor(247, 250, 252);
+      doc.setDrawColor(229, 231, 235);
+      doc.roundedRect(margin, y, contentWidth, 11, 2, 2, "FD");
+
+      const col3 = contentWidth / 3;
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...BRAND_DARK);
-      const toolHeading =
-        problemCount > 0
-          ? L.toolsNeedAttention(problemCount)
-          : L.toolsAndMaterials;
-      doc.text(toolHeading, margin, y);
-      y += 4;
-      doc.setFontSize(8);
-      toolMatches.forEach((t) => {
-        checkPageSpace(5);
-        // Color-code by status:
-        //   ok      → gray (default)
-        //   issue   → orange (in repair / needs service / condition: needs repair)
-        //   out     → red-orange (out of service / retired)
-        //   missing → red (not in inventory)
-        if (t.status === "missing") {
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(220, 38, 38); // red-600
-        } else if (t.status === "out") {
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(234, 88, 12); // orange-600
-        } else if (t.status === "issue") {
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(180, 83, 9); // amber-700
-        } else {
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(...GRAY_600);
-        }
-        const lines = doc.splitTextToSize(`• ${t.displayText}`, contentWidth - 4);
-        doc.text(lines, margin + 2, y);
-        y += lines.length * 3.4;
-      });
-      // Reset color after the loop so subsequent text isn't tinted.
+      doc.setFontSize(6.5);
+      doc.setTextColor(...BRAND_GREEN);
+      doc.text(L.bestWindow, margin + 3, y + 3.5);
+      doc.text(L.crew, margin + col3 + 3, y + 3.5);
+      doc.text(L.duration, margin + col3 * 2 + 3, y + 3.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
       doc.setTextColor(...GRAY_600);
-      y += 2;
+      const bwLines = doc.splitTextToSize(proc.best_window, col3 - 6);
+      doc.text(bwLines.slice(0, 1), margin + 3, y + 8);
+      doc.text(proc.crew, margin + col3 + 3, y + 8);
+      doc.text(proc.duration, margin + col3 * 2 + 3, y + 8);
+      y += 14;
 
-      // Steps — the heart of the report
-      checkPageSpace(15);
+      // ── TOOLS & MATERIALS ──
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
+      doc.setTextColor(...BRAND_DARK);
+      doc.text(L.toolsAndMaterials, margin, y);
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GRAY_600);
+
+      // Two-column tool list
+      const toolList = proc.tools_needed;
+      const halfLen = Math.ceil(toolList.length / 2);
+      const colToolW = (contentWidth - 8) / 2;
+      let col1Y = y;
+      let col2Y = y;
+      toolList.forEach((tool, ti) => {
+        const colX = ti < halfLen ? margin + 2 : margin + 2 + colToolW + 4;
+        const currentColY = ti < halfLen ? col1Y : col2Y;
+        const lines = doc.splitTextToSize(`• ${tool}`, colToolW - 2);
+        doc.text(lines, colX, currentColY);
+        if (ti < halfLen) col1Y += lines.length * 3.3;
+        else col2Y += lines.length * 3.3;
+      });
+      y = Math.max(col1Y, col2Y) + 3;
+
+      // ── STEP-BY-STEP ──
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
       doc.setTextColor(...BRAND_DARK);
       doc.text(L.stepByStep, margin, y);
       y += 4;
@@ -919,170 +677,23 @@ export async function generateActionPlanReport(
         margin: { left: margin, right: margin, top: RUNNING_HDR_H + 4 },
         head: [[L.stepNum, L.stepAction, L.stepDetail]],
         body: stepsBody,
-        styles: { fontSize: 8, cellPadding: 2.5, valign: "top" },
+        styles: { fontSize: 7.5, cellPadding: 2, valign: "top" },
         headStyles: {
           fillColor: BRAND_GREEN,
           textColor: [255, 255, 255],
-          fontSize: 8,
+          fontSize: 7.5,
           fontStyle: "bold",
-          minCellHeight: 9,
+          minCellHeight: 8,
         },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         columnStyles: {
           0: { cellWidth: 8, halign: "center", fontStyle: "bold" },
-          1: { cellWidth: 76, fontStyle: "bold" },
-          2: { cellWidth: contentWidth - 84, textColor: GRAY_600 },
+          1: { cellWidth: 72, fontStyle: "bold" },
+          2: { cellWidth: contentWidth - 80, textColor: GRAY_600 },
         },
         didDrawPage: () => { renderRunningHdr(); },
       });
       y = (doc as any).lastAutoTable.finalY + 4;
-
-      // Chemical Applications — only when the procedure has any.
-      // GRUB DAMAGE intentionally omits this section per superintendent direction.
-      if (proc.chemicals && proc.chemicals.length > 0) {
-        checkPageSpace(15);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.setTextColor(180, 83, 9);
-        doc.text(L.chemicalApplications, margin, y);
-        y += 4;
-
-        const chemRows: string[][] = [];
-        for (const c of proc.chemicals) {
-          const examples = c.product_examples.join("; ");
-          const rei =
-            c.rei_hours == null
-              ? L.chemREINone
-              : `${c.rei_hours} ${L.chemREIShort}`;
-          chemRows.push([
-            c.product_type,
-            examples,
-            c.rate,
-            c.method,
-            c.timing,
-            rei,
-          ]);
-        }
-
-        autoTable(doc, {
-          startY: y,
-          margin: { left: margin, right: margin, top: RUNNING_HDR_H + 4 },
-          head: [
-            [
-              L.chemProductType,
-              L.chemExamples,
-              L.chemRate,
-              L.chemMethod,
-              L.chemTiming,
-              L.chemREI,
-            ],
-          ],
-          body: chemRows,
-          styles: { fontSize: 7.5, cellPadding: 2, valign: "top" },
-          headStyles: {
-            fillColor: [180, 83, 9],
-            textColor: [255, 255, 255],
-            fontSize: 7.5,
-            fontStyle: "bold",
-            minCellHeight: 8,
-          },
-          alternateRowStyles: { fillColor: [255, 251, 235] },
-          columnStyles: {
-            0: { cellWidth: 28, fontStyle: "bold" },
-            1: { cellWidth: 40 },
-            2: { cellWidth: 28 },
-            3: { cellWidth: 28 },
-            4: { cellWidth: contentWidth - 28 - 40 - 28 - 28 - 14 },
-            5: { cellWidth: 14, halign: "center" },
-          },
-          didDrawPage: () => { renderRunningHdr(); },
-        });
-        y = (doc as any).lastAutoTable.finalY + 3;
-
-        // Per-chemical precautions list (collapsed, 1 line per precaution)
-        for (const c of proc.chemicals) {
-          if (!c.precautions || c.precautions.length === 0) continue;
-          checkPageSpace(10);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(7.5);
-          doc.setTextColor(180, 83, 9);
-          doc.text(L.precautionsFor(c.product_type), margin + 2, y);
-          y += 3.5;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(7.5);
-          doc.setTextColor(...GRAY_600);
-          for (const p of c.precautions) {
-            checkPageSpace(4);
-            const lines = doc.splitTextToSize(`• ${p}`, contentWidth - 6);
-            doc.text(lines, margin + 4, y);
-            y += lines.length * 3.2;
-          }
-          y += 1;
-        }
-        y += 2;
-      }
-
-      // Follow-up
-      if (proc.follow_up.length > 0) {
-        checkPageSpace(15);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(9);
-        doc.setTextColor(...BRAND_DARK);
-        doc.text(L.followUp, margin, y);
-        y += 4;
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(...GRAY_600);
-        proc.follow_up.forEach((f) => {
-          checkPageSpace(5);
-          const lines = doc.splitTextToSize(`• ${f}`, contentWidth - 4);
-          doc.text(lines, margin + 2, y);
-          y += lines.length * 3.4;
-        });
-        y += 2;
-      }
-
-      // Monitor
-      if (proc.monitor) {
-        checkPageSpace(15);
-        doc.setFillColor(255, 251, 235);
-        doc.setDrawColor(254, 215, 170);
-        const monLines = doc.splitTextToSize(proc.monitor, contentWidth - 8);
-        const boxHeight = 8 + monLines.length * 3.4 + 2;
-        doc.roundedRect(margin, y, contentWidth, boxHeight, 2, 2, "FD");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.setTextColor(180, 83, 9);
-        doc.text(L.monitorBoxHeading, margin + 3, y + 5);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(...GRAY_600);
-        doc.text(monLines, margin + 3, y + 9);
-        y += boxHeight + 4;
-      }
-
-      // Resolution proof reminder (every entry — this is what the user asked for)
-      // The body text wraps so it fits across the box width. We size the box
-      // to fit the wrapped text dynamically — Spanish text often wraps to 2
-      // lines where English fits in 1.
-      const docFixWrapped = doc.splitTextToSize(
-        L.documentTheFixBody,
-        contentWidth - 6,
-      );
-      const docFixBoxHeight = 6 + docFixWrapped.length * 3.4 + 2;
-      checkPageSpace(docFixBoxHeight + 4);
-      doc.setFillColor(236, 253, 245);
-      doc.setDrawColor(167, 243, 208);
-      doc.roundedRect(margin, y, contentWidth, docFixBoxHeight, 2, 2, "FD");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(6, 95, 70);
-      doc.text(L.documentTheFix, margin + 3, y + 4.5);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(...GRAY_600);
-      doc.text(docFixWrapped, margin + 3, y + 8);
-      y += docFixBoxHeight + 4;
     }
 
     // ── FOOTER (all pages) ──

@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Delete, Loader2, KeyRound } from "lucide-react";
+import { Delete, Loader2, Leaf, CheckCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { persistSessionDirect } from "@/lib/supabase/persist-session";
 
@@ -92,24 +92,9 @@ function PinLoginInner() {
       }
 
       if (data.session) {
-        // Write the session to localStorage in the exact shape supabase-js
-        // expects, then skip `setSession` entirely. Previous attempts
-        // called supabase.auth.setSession which consistently hung on
-        // first login — internally it fires onAuthStateChange listeners
-        // that acquire navigator.locks and kick off realtime reconnects,
-        // and any one of those can stall for minutes. The user's symptom
-        // was "Verifying… forever, close + reopen fixes it" because the
-        // tokens WERE in storage (step 1 of setSession, synchronous),
-        // the blocking was in steps 2 and 3. Writing directly skips
-        // those entirely. On the destination page, AuthProvider's
-        // getSession() reads from storage and the user is logged in
-        // immediately.
         try {
           persistSessionDirect(data.session);
         } catch (err) {
-          // If the direct write somehow fails (quota? JSON too big?),
-          // fall back to setSession so at least something attempts to
-          // authenticate. Don't await — we still want to proceed.
           console.error("[pin-login] persistSessionDirect failed:", err);
           supabase.auth
             .setSession({
@@ -124,10 +109,6 @@ function PinLoginInner() {
 
       setUserName(data.user?.name || "User");
 
-      // Hard navigation so AuthProvider reinitializes from localStorage on
-      // the destination page. Shorter delay now (250ms) since we're not
-      // waiting on any async auth work — just giving the "Welcome, Name"
-      // UI a moment to render.
       setTimeout(() => {
         const destination = returnTo || data.redirectPath || "/dashboard";
         window.location.href = destination.startsWith("/")
@@ -144,128 +125,194 @@ function PinLoginInner() {
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
-      <div className="w-full max-w-sm">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-3">
-            <KeyRound className="w-7 h-7 text-primary-foreground" />
-          </div>
-          <h1 className="text-xl font-bold text-foreground">VMGC Greenkeeper</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Enter your PIN to sign in
-          </p>
+    <div
+      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-4 py-12"
+      style={{
+        background:
+          "linear-gradient(160deg, #1B4332 0%, #14352A 55%, #0D2018 100%)",
+      }}
+    >
+      {/* Subtle grid texture */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+
+      {/* Soft glow behind the card */}
+      <div
+        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse, rgba(182,141,64,0.08) 0%, transparent 70%)",
+        }}
+      />
+
+      {/* Brand mark */}
+      <div className="relative z-10 text-center mb-8">
+        <div
+          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 shadow-lg shadow-black/30"
+          style={{
+            background: "linear-gradient(135deg, #B68D40 0%, #D4A853 100%)",
+          }}
+        >
+          <Leaf className="w-8 h-8 text-[#1B4332]" strokeWidth={2.5} />
         </div>
-
-        {/* PIN Display */}
-        <div className="bg-card rounded-xl border border-border shadow-lg p-6 mb-4">
-          {/* Success State */}
-          {userName && !error ? (
-            <div className="text-center py-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-                <svg
-                  className="w-8 h-8 text-green-600 dark:text-green-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <p className="text-lg font-semibold text-foreground">
-                Welcome, {userName}!
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">Loading your dashboard...</p>
-            </div>
-          ) : (
-            <>
-              {/* PIN Dots */}
-              <div className="flex justify-center gap-3 mb-6">
-                {Array.from({ length: maxDigits }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
-                      i < pin.length
-                        ? "bg-primary border-primary scale-110"
-                        : "border-muted-foreground/30"
-                    }`}
-                  />
-                ))}
-              </div>
-
-              {/* Error Message */}
-              {error && (
-                <div className="text-center mb-4">
-                  <p className="text-sm text-destructive font-medium">{error}</p>
-                </div>
-              )}
-
-              {/* Number Pad */}
-              <div className="grid grid-cols-3 gap-3">
-                {digits.map((digit) => (
-                  <button
-                    key={digit}
-                    onClick={() => handleDigit(digit)}
-                    disabled={loading}
-                    className="h-16 rounded-xl bg-muted/50 hover:bg-muted active:bg-muted/80 text-2xl font-semibold text-foreground transition-all duration-100 active:scale-95 disabled:opacity-50"
-                  >
-                    {digit}
-                  </button>
-                ))}
-
-                {/* Bottom row: Clear, 0, Delete */}
-                <button
-                  onClick={handleClear}
-                  disabled={loading}
-                  className="h-16 rounded-xl bg-muted/30 hover:bg-muted/50 text-sm font-medium text-muted-foreground transition-all duration-100 active:scale-95 disabled:opacity-50"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={() => handleDigit("0")}
-                  disabled={loading}
-                  className="h-16 rounded-xl bg-muted/50 hover:bg-muted active:bg-muted/80 text-2xl font-semibold text-foreground transition-all duration-100 active:scale-95 disabled:opacity-50"
-                >
-                  0
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={loading}
-                  className="h-16 rounded-xl bg-muted/30 hover:bg-muted/50 flex items-center justify-center text-muted-foreground transition-all duration-100 active:scale-95 disabled:opacity-50"
-                >
-                  <Delete className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                onClick={handleSubmit}
-                disabled={loading || pin.length < 4}
-                className="w-full mt-4 h-14 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-lg transition-all duration-100 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-4">
-          Veterans Memorial Golf Course
+        <h1 className="text-2xl font-bold text-white tracking-tight">VMGC</h1>
+        <p
+          className="text-xs font-semibold mt-1 tracking-[0.18em] uppercase"
+          style={{ color: "rgba(182,141,64,0.85)" }}
+        >
+          GreenKeeper Pro
         </p>
       </div>
+
+      {/* PIN card */}
+      <div
+        className="relative z-10 w-full max-w-[340px] rounded-2xl p-6 shadow-2xl shadow-black/40"
+        style={{
+          background: "rgba(255,255,255,0.97)",
+          border: "1px solid rgba(255,255,255,0.15)",
+        }}
+      >
+        {userName && !error ? (
+          /* Success state */
+          <div className="text-center py-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
+              style={{ background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)" }}
+            >
+              <CheckCircle className="w-8 h-8 text-white" />
+            </div>
+            <p className="text-lg font-bold text-gray-900">Welcome, {userName}!</p>
+            <p className="text-sm text-gray-500 mt-1">Loading your dashboard…</p>
+          </div>
+        ) : (
+          <>
+            {/* Label */}
+            <p className="text-center text-sm font-semibold text-gray-500 mb-5 tracking-wide uppercase text-xs">
+              Enter your PIN
+            </p>
+
+            {/* PIN dots */}
+            <div className="flex justify-center gap-3 mb-5">
+              {Array.from({ length: maxDigits }).map((_, i) => (
+                <div
+                  key={i}
+                  className="w-3.5 h-3.5 rounded-full transition-all duration-150"
+                  style={{
+                    background:
+                      i < pin.length
+                        ? "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)"
+                        : "transparent",
+                    border:
+                      i < pin.length
+                        ? "2px solid #1B4332"
+                        : "2px solid rgba(0,0,0,0.18)",
+                    transform: i < pin.length ? "scale(1.15)" : "scale(1)",
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-center">
+                <p className="text-sm text-red-600 font-medium">{error}</p>
+              </div>
+            )}
+
+            {/* Number pad */}
+            <div className="grid grid-cols-3 gap-2.5">
+              {digits.map((digit) => (
+                <button
+                  key={digit}
+                  onClick={() => handleDigit(digit)}
+                  disabled={loading}
+                  className="h-14 rounded-xl text-2xl font-semibold text-gray-800 transition-all duration-100 active:scale-95 disabled:opacity-40"
+                  style={{ background: "rgba(0,0,0,0.04)" }}
+                  onMouseEnter={(e) =>
+                    ((e.currentTarget as HTMLButtonElement).style.background =
+                      "rgba(0,0,0,0.07)")
+                  }
+                  onMouseLeave={(e) =>
+                    ((e.currentTarget as HTMLButtonElement).style.background =
+                      "rgba(0,0,0,0.04)")
+                  }
+                >
+                  {digit}
+                </button>
+              ))}
+
+              {/* Bottom row: Clear | 0 | Delete */}
+              <button
+                onClick={handleClear}
+                disabled={loading}
+                className="h-14 rounded-xl text-xs font-semibold text-gray-400 tracking-wider uppercase transition-all duration-100 active:scale-95 disabled:opacity-40"
+                style={{ background: "rgba(0,0,0,0.02)" }}
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => handleDigit("0")}
+                disabled={loading}
+                className="h-14 rounded-xl text-2xl font-semibold text-gray-800 transition-all duration-100 active:scale-95 disabled:opacity-40"
+                style={{ background: "rgba(0,0,0,0.04)" }}
+                onMouseEnter={(e) =>
+                  ((e.currentTarget as HTMLButtonElement).style.background =
+                    "rgba(0,0,0,0.07)")
+                }
+                onMouseLeave={(e) =>
+                  ((e.currentTarget as HTMLButtonElement).style.background =
+                    "rgba(0,0,0,0.04)")
+                }
+              >
+                0
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className="h-14 rounded-xl flex items-center justify-center transition-all duration-100 active:scale-95 disabled:opacity-40 text-gray-400"
+                style={{ background: "rgba(0,0,0,0.02)" }}
+              >
+                <Delete className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sign in button */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading || pin.length < 4}
+              className="w-full mt-4 h-13 rounded-xl font-bold text-base transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-white"
+              style={{
+                height: "52px",
+                background:
+                  pin.length >= 4 && !loading
+                    ? "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)"
+                    : "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)",
+              }}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Verifying…
+                </>
+              ) : (
+                "Sign In"
+              )}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <p className="relative z-10 text-center text-xs mt-8 tracking-wide"
+        style={{ color: "rgba(255,255,255,0.3)" }}
+      >
+        Veterans Memorial Golf Course
+      </p>
     </div>
   );
 }
@@ -274,8 +321,13 @@ export default function PinLoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{
+            background: "linear-gradient(160deg, #1B4332 0%, #0D2018 100%)",
+          }}
+        >
+          <Loader2 className="w-6 h-6 animate-spin text-white/40" />
         </div>
       }
     >

@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-outfit);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -164,17 +164,17 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
     /* Prevent pull-to-refresh browser behavior on mobile */
     overscroll-behavior-y: contain;
     /* Slightly larger base font for readability (accessibility) */
     font-size: 16px;
     line-height: 1.6;
-  }
-  html {
-    @apply font-sans;
+    /* Ensure subpixel rendering is crisp */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  html {
     /* Smoother scrolling on iOS */
     -webkit-overflow-scrolling: touch;
     /* Prevent any horizontal overflow on mobile */
@@ -192,6 +192,26 @@
     input, select, textarea {
       font-size: inherit;
     }
+  }
+
+  /* ── Typography hierarchy ── */
+  h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+  }
+  h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
   }
 
   /* ── Accessibility: Older / Low-Vision Users ── */
@@ -418,6 +438,44 @@
   background: oklch(0.32 0.06 160 / 0.35);
 }
 
+/* Standard page content container — use on every page root div */
+.gk-page {
+  padding: 1rem;
+  padding-bottom: 6rem;
+  max-width: 72rem;
+}
+
+@media (min-width: 768px) {
+  .gk-page {
+    padding: 1.5rem;
+    padding-bottom: 2rem;
+  }
+}
+
+/* Section label — small caps above a group of cards */
+.gk-section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  opacity: 0.8;
+}
+
+/* Thin separator line between major page sections */
+.gk-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  opacity: 0.5;
+  margin: 0.25rem 0;
+}
+
+/* Priority stripe — left-border accent on list cards */
+.gk-priority-critical { border-left: 3px solid oklch(0.5 0.2 25); }
+.gk-priority-high     { border-left: 3px solid oklch(0.65 0.17 40); }
+.gk-priority-normal   { border-left: 3px solid oklch(0.55 0.12 155); }
+.gk-priority-low      { border-left: 3px solid oklch(0.75 0.04 155); }
+
 /* Badge glow for important items */
 .gk-badge-glow {
   box-shadow: 0 0 8px oklch(0.65 0.12 75 / 0.4);
@@ -578,6 +636,21 @@ textarea:focus {
   main {
     scroll-padding-bottom: 200px;
   }
+}
+
+/* Main content area scrollbar — thin and brand-tinted */
+main::-webkit-scrollbar {
+  width: 5px;
+}
+main::-webkit-scrollbar-track {
+  background: transparent;
+}
+main::-webkit-scrollbar-thumb {
+  background: oklch(0.32 0.06 160 / 0.15);
+  border-radius: 3px;
+}
+main::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.32 0.06 160 / 0.3);
 }
 
 /* Reduce motion for users who prefer it */
