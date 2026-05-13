@@ -60,28 +60,26 @@ export async function generateSowContent(
       : "";
   const itemsBlock = buildItemsBlock(ctx.items);
 
-  const prompt = `You are a professional Navy FRSC contracting specialist writing a Statement of Work.
+  const prompt = `You are a Navy FRSC contracting specialist writing a Statement of Work.
 
-Generate professional government contracting language. Be SPECIFIC: when line items are provided, reference the actual quantities, part numbers, and items in the contractor duties — do not write generic boilerplate when you have concrete details available.
-
-The contractor may be from ANY trade — irrigation, paving, roofing, landscaping, tree care, electrical, plumbing, HVAC, painting, fencing, masonry, equipment service, pest control, signage, etc. INFER the trade strictly from the line items and work description below, then tailor every section to that trade. Do not default to irrigation or any single trade unless the line items clearly indicate it.
+Infer the trade STRICTLY from the line items and work description (irrigation, paving, roofing, electrical, HVAC, tree care, painting, fencing, masonry, equipment service, etc.). Do not default to any single trade. When line items list quantities or part numbers, reference them by name in the relevant duty items — no generic boilerplate when concrete details are available.
 
 ACTIVITY: ${ctx.activityName}
 REQUESTED BY: ${ctx.from}
 WORK DESCRIPTION: ${ctx.workDescription}
-PERIOD OF PERFORMANCE: ${ctx.startDate} through ${ctx.endDate}
+PERIOD: ${ctx.startDate} through ${ctx.endDate}
 REQUISITION TYPE: ${ctx.requisitionType}${vendorBlock}${contactBlock}${justificationBlock}${totalBlock}${itemsBlock}
 
-Provide three sections formatted EXACTLY as shown. Write full sentences and complete paragraphs — do not truncate or use ellipses. Each section must stand on its own and be ready to print on a government form:
+Output three sections, formatted EXACTLY as shown, with complete sentences (no ellipses or truncation):
 
 EXPECTATION:
-[Write 8-14 numbered items listing specific contractor duties as complete, self-contained sentences. Use formal government contracting language. Cover: mobilization/site preparation, specific work tasks referencing the actual quote items and quantities, safety/compliance with OSHA and Navy regulations, cleanup/disposal of debris and packaging, documentation/reporting requirements, and coordination with the COR (Contracting Officer Representative). When part numbers and quantities are provided, name them explicitly in the relevant duty items.]
+[8-14 numbered items listing specific contractor duties as full sentences in formal government contracting language. Cover mobilization/site prep, specific work tasks (cite quote items and quantities), OSHA/Navy safety compliance, cleanup and disposal of debris and packaging, documentation/reporting, and coordination with the COR.]
 
 DESCRIPTION_OF_GOODS:
-[Write 3-5 professional sentences describing the goods/services being procured. Reference specific quantities, part numbers, and the vendor name when provided. Tie the procurement back to the operational justification if one was given.]
+[3-5 sentences describing what is being procured. Reference specific quantities, part numbers, and the vendor when given; tie back to the justification if provided.]
 
 CERTIFICATIONS:
-[Write 2-3 sentences listing minimum contractor certifications, licenses, insurance, and special skills required for this type of work. Be specific to the trade implied by the line items.]`;
+[2-3 sentences listing the minimum certifications, licenses, insurance, and skills required for the trade implied by the line items.]`;
 
   const reply = await callApi<{ reply?: string; error?: string }>("ai-assistant", {
     method: "POST",

@@ -21,7 +21,12 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TOKENS = 2048;
 const TIMEOUT_MS = 45_000;
 const MAX_TOOL_ROUNDS = 5;
-const MAX_MESSAGE_LENGTH = 2000;
+// 2000 was a guard for chat-style messages. Structured-generation callers
+// (e.g. the SOW writer in src/lib/reports/sow-content.ts) build a full
+// prompt with vendor info, line items, and section instructions and can
+// legitimately need 3-6 KB. Anthropic's per-message ceiling is far higher
+// than this; we just want to block accidental megabyte-pastes.
+const MAX_MESSAGE_LENGTH = 12000;
 
 // ── Tool definitions for Claude ─────────────────────────────────────────────
 
