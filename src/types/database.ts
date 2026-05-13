@@ -1628,6 +1628,7 @@ export interface PurchaseRequest {
   attached_other: string | null;
   attached_section_889: boolean;
   attached_sow: boolean;
+  sow_storage_path: string | null;
 
   status: "draft" | "submitted" | "received";
 

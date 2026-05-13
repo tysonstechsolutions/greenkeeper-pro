@@ -17,6 +17,8 @@ import {
   Camera,
   Sparkles,
   Eye,
+  X,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -46,9 +48,13 @@ import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistory";
 import { History as HistoryIcon } from "lucide-react";
+import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
+import { generateSowContent } from "@/lib/reports/sow-content";
+import { roleLabels } from "@/lib/hooks/useProfiles";
 import type {
   PurchaseRequest,
   PurchaseRequestItem,
+  UserRole,
   VendorWith889,
 } from "@/types/database";
 
@@ -126,6 +132,320 @@ function formatMoney(n: number): string {
   });
 }
 
+// ── SOW constants (same as /sow page) ────────────────────────────────────────
+
+const COURSE_NAME = "Veterans Memorial Golf Course";
+const BUILDING = "Golf Course Maintenance Facility, BLDG 8400";
+const FACILITY_ADDRESS = "2821 Great Lakes Dr, Great Lakes, IL 60088";
+const REQUISITION_TYPES = [
+  "New Procurement", "Re-order", "Renewal",
+  "Non-Personal Services Contract", "Other",
+];
+
+interface SowQuickForm {
+  workDescription: string;
+  requisitionType: string;
+  projectedStartDate: string;
+  desiredCompletionDate: string;
+}
+
+/** Modal shown when the SOW checkbox is checked on the new PR form. */
+function SowAttachModal({
+  items,
+  profile,
+  onComplete,
+  onSkip,
+  onCancel,
+}: {
+  items: PurchaseRequestItem[];
+  profile: { full_name?: string | null; role?: string; phone?: string | null; email?: string | null } | null;
+  onComplete: (blob: Blob) => void;
+  onSkip: () => void;
+  onCancel: () => void;
+}) {
+  const [mode, setMode] = useState<"fill" | "attach">("fill");
+  const roleLabel = profile?.role ? (roleLabels[profile.role as UserRole] ?? "") : "";
+  const fromName = [profile?.full_name, roleLabel, COURSE_NAME].filter(Boolean).join(", ");
+  const autoDescription = items.map((it) => it.description).filter(Boolean).join("; ");
+
+  const [form, setForm] = useState<SowQuickForm>({
+    workDescription: autoDescription,
+    requisitionType: "",
+    projectedStartDate: "",
+    desiredCompletionDate: "",
+  });
+  const [generating, setGenerating] = useState(false);
+  const [sowError, setSowError] = useState<string | null>(null);
+
+  const canGenerate =
+    form.workDescription.trim() &&
+    form.requisitionType &&
+    form.projectedStartDate &&
+    form.desiredCompletionDate;
+
+  async function handleFillOut() {
+    setGenerating(true);
+    setSowError(null);
+    try {
+      const { expectation, goods, certifications } = await generateSowContent(
+        form.workDescription, COURSE_NAME, fromName,
+        form.projectedStartDate, form.desiredCompletionDate, form.requisitionType,
+      );
+      const sowData: SowFormData = {
+        date: new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+        from: fromName,
+        activityName: COURSE_NAME,
+        requisitionType: form.requisitionType,
+        requisitionReason: "New Requirement",
+        hasReferences: false,
+        referencesText: "",
+        projectedStartDate: form.projectedStartDate,
+        desiredCompletionDate: form.desiredCompletionDate,
+        facilityHours: "Monday–Saturday: 0700–2000\nSunday: Closed",
+        appointmentTime: "",
+        servicesInterrupted: false,
+        patronsInDanger: false,
+        personnelCertifications: certifications,
+        specificPersonnelRequired: false,
+        personnelCount: "",
+        lodgingRequired: false,
+        individualLodging: false,
+        groupLodging: false,
+        vehicleStorage: false,
+        equipmentStorage: false,
+        baseAccess: false,
+        escort: true,
+        expectationText: expectation,
+        weatherInterrupt: false,
+        rescheduleIfWeather: false,
+        rescheduleDate: "",
+        baseEntryAmendments: false,
+        buildingNameNumber: BUILDING,
+        roomNumber: "",
+        accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall contact ${PR_DELIVERY_DEFAULTS.poc} or the Course Superintendent for escort to the work area. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
+        descriptionOfGoods: goods,
+        requestorName: profile?.full_name ?? "",
+        requestorTitle: roleLabel,
+        directPhone: profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone,
+        cellPhone: "",
+        email: profile?.email ?? "",
+        supervisorName: PR_DELIVERY_DEFAULTS.poc,
+        supervisorPhone: PR_DELIVERY_DEFAULTS.phone,
+      };
+      const { blob } = generateSowReport(sowData);
+      onComplete(blob);
+    } catch (err) {
+      setSowError(err instanceof Error ? err.message : "Failed to generate SOW. Try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  const inputCls = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40";
+  const labelCls = "block text-xs font-medium text-muted-foreground mb-1";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative w-full sm:max-w-lg bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-background border-b border-border px-4 py-3 flex items-center justify-between rounded-t-2xl">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-[#1B4332]" />
+            <span className="font-semibold text-sm">Statement of Work</span>
+          </div>
+          <button type="button" onClick={onCancel} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            How would you like to include the SOW in the download bundle?
+          </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("fill")}
+              className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
+                mode === "fill"
+                  ? "border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332] dark:text-green-400"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 inline mr-1.5" />
+              Fill Out with AI
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("attach")}
+              className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
+                mode === "attach"
+                  ? "border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332] dark:text-green-400"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Plus className="w-3.5 h-3.5 inline mr-1.5" />
+              Attach Completed PDF
+            </button>
+          </div>
+
+          {mode === "fill" && (
+            <>
+              <div>
+                <label className={labelCls}>
+                  What work needs to be done? <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={form.workDescription}
+                  onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
+                  rows={4}
+                  placeholder="e.g. Remove and replace irrigation heads on holes 1-9..."
+                  className={`${inputCls} resize-none`}
+                />
+                {autoDescription && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pre-filled from your line items — edit as needed.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className={labelCls}>
+                  Requisition Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.requisitionType}
+                  onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">Select type…</option>
+                  {REQUISITION_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Projected Start <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={form.projectedStartDate}
+                    onChange={(e) => setForm({ ...form, projectedStartDate: e.target.value })}
+                    min={todayLocal()}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Desired Completion <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={form.desiredCompletionDate}
+                    onChange={(e) => setForm({ ...form, desiredCompletionDate: e.target.value })}
+                    min={form.projectedStartDate || todayLocal()}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">Auto-filled from your profile & PR defaults:</p>
+                <p>Requestor: {profile?.full_name || "—"} · {roleLabel}</p>
+                <p>Supervisor: {PR_DELIVERY_DEFAULTS.poc}</p>
+                <p>Location: {BUILDING}</p>
+              </div>
+
+              {sowError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-400">{sowError}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {mode === "attach" && (
+            <div className="border-2 border-dashed border-border rounded-xl p-6 text-center">
+              <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+              <p className="text-sm font-medium mb-1">Upload your completed SOW PDF</p>
+              <p className="text-xs text-muted-foreground mb-3">The file will be included in the download bundle.</p>
+              <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium cursor-pointer hover:bg-primary/90 transition-colors">
+                <Plus className="w-4 h-4" />
+                Choose PDF
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onComplete(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-background border-t border-border px-4 py-3 flex gap-3">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
+          >
+            Skip for Now
+          </button>
+          {mode === "fill" && (
+            <button
+              type="button"
+              onClick={handleFillOut}
+              disabled={!canGenerate || generating}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
+            >
+              {generating ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
+              ) : (
+                <><Sparkles className="w-4 h-4" />Generate SOW</>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Merge multiple image files into a single-page-per-image PDF so the quote
+ * bundle always has exactly one file regardless of how many photos were taken.
+ * Falls back to the raw file when only one is provided.
+ */
+async function stitchImagesToQuotePdf(files: File[]): Promise<File> {
+  if (files.length === 1) return files[0];
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
+  let first = true;
+  for (const f of files) {
+    if (!first) doc.addPage();
+    first = false;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(f);
+    });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const props = doc.getImageProperties(dataUrl);
+    const ratio = Math.min(pageW / props.width, pageH / props.height);
+    const w = props.width * ratio;
+    const h = props.height * ratio;
+    doc.addImage(dataUrl, f.type.includes("png") ? "PNG" : "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h);
+  }
+  return new File([doc.output("blob")], "quote.pdf", { type: "application/pdf" });
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 
 function NewPurchaseRequestPageInner() {
@@ -177,9 +497,13 @@ function NewPurchaseRequestPageInner() {
   const [vendors, setVendors] = useState<VendorWith889[]>([]);
   const [vendorsLoading, setVendorsLoading] = useState(true);
 
-  // Uploaded quote file (kept locally; uploaded to storage on save)
-  const [quoteFile, setQuoteFile] = useState<File | null>(null);
+  // Uploaded quote pages (kept locally; stitched + uploaded to storage on save)
+  const [quoteFiles, setQuoteFiles] = useState<File[]>([]);
   const [existingQuoteName, setExistingQuoteName] = useState<string | null>(null);
+
+  // SOW: blob generated/attached in the modal, uploaded on save
+  const [sowBlob, setSowBlob] = useState<Blob | null>(null);
+  const [showSowModal, setShowSowModal] = useState(false);
 
   // Invoice — pre-filled with facility defaults on new PRs.
   // (Edit mode replaces these from the loaded row a few effects below.)
@@ -648,8 +972,8 @@ function NewPurchaseRequestPageInner() {
           image_base64: resized.base64,
           media_type: resized.mediaType,
         };
-        // Track the resized File for storage upload later.
-        setQuoteFile(resized.file);
+        // Reset to a single-page quote (replaces any prior selection).
+        setQuoteFiles([resized.file]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(`Couldn't read image: ${msg}`);
@@ -764,14 +1088,28 @@ function NewPurchaseRequestPageInner() {
     }
   }
 
+  /** Add a subsequent quote page without re-running AI extraction. */
+  async function handleAddQuotePage(rawFile: File) {
+    setError(null);
+    try {
+      const resized = await resizeImageFile(rawFile, { maxDim: 1600, quality: 0.82 });
+      setQuoteFiles((prev) => {
+        recordBreadcrumb("click", `[quote-add-page] page ${prev.length + 1}: ${resized.file.name} ${resized.size}B`);
+        return [...prev, resized.file];
+      });
+      setExtractInfo("Added another page — all pages will be merged into the bundle.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Couldn't add page: ${msg}`);
+    }
+  }
+
   /**
    * Native camera path — uses @capacitor/camera so we don't trip the
    * file-input + WebView OOM crash on high-resolution Android photos.
+   * First shot triggers AI extraction; subsequent shots just append a page.
    */
   async function handleNativeTakePhoto() {
-    setExtracting(true);
-    setExtractWarnings([]);
-    setExtractInfo(null);
     setError(null);
     try {
       recordBreadcrumb("click", "[quote-upload] opening native camera");
@@ -780,11 +1118,15 @@ function NewPurchaseRequestPageInner() {
         "click",
         `[quote-upload] photo captured ${photo.file.size}B`,
       );
-      // Reuse the same upload pipeline so the resize + JSON-POST path still runs.
-      await handleQuoteUpload(photo.file);
+      if (quoteFiles.length === 0) {
+        // First photo — run the full extraction pipeline.
+        await handleQuoteUpload(photo.file);
+      } else {
+        // Additional page — just append, no re-extraction.
+        await handleAddQuotePage(photo.file);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Cancellation is the most common "error" — silently ignore.
       if (
         /cancel/i.test(msg) ||
         /denied/i.test(msg) ||
@@ -881,6 +1223,7 @@ function NewPurchaseRequestPageInner() {
         attached_other: attachedOther.trim() || null,
         attached_section_889: attached.section_889,
         attached_sow: attached.sow,
+        sow_storage_path: null,
         status: "draft",
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
@@ -1061,19 +1404,47 @@ function NewPurchaseRequestPageInner() {
     let quoteFilenameSaved: string | null = existingQuoteName;
     let quoteUploadedAt: string | null = null;
 
+    // Upload SOW PDF if one was generated/attached during form fill (edit only;
+    // new PRs defer until after insert so we have an id to namespace the path).
+    let sowStoragePath: string | null = null;
+    if (sowBlob && editId) {
+      try {
+        const sowPath = `quotes/${editId}/sow-${Date.now()}.pdf`;
+        const sowUp = supabase.storage
+          .from("vendor-files")
+          .upload(sowPath, sowBlob, { upsert: true, contentType: "application/pdf" });
+        const sowResult = (await Promise.race([
+          sowUp,
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ error: { message: "SOW upload timed out after 30s" } }), 30_000),
+          ),
+        ])) as { error: { message: string } | null };
+        if (sowResult.error) throw sowResult.error;
+        sowStoragePath = sowPath;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(`SOW upload failed: ${msg}`);
+        finishSave();
+        return;
+      }
+    }
+
     // We'll know the id only after insert (for new) OR we already have it (for edit).
     // For new PRs, defer the upload until after insert and do a follow-up update.
-    if (quoteFile && editId) {
+    if (quoteFiles.length > 0 && editId) {
       try {
-        const ext = quoteFile.name.split(".").pop() || "bin";
+        const fileToUpload = quoteFiles.length > 1
+          ? await stitchImagesToQuotePdf(quoteFiles)
+          : quoteFiles[0];
+        const ext = fileToUpload.name.split(".").pop() || "bin";
         quoteStoragePath = `quotes/${editId}/quote-${Date.now()}.${ext}`;
         // Race the upload against a 30s timeout so a stuck connection
         // doesn't lock the form forever.
         const upPromise = supabase.storage
           .from("vendor-files")
-          .upload(quoteStoragePath, quoteFile, {
+          .upload(quoteStoragePath, fileToUpload, {
             upsert: true,
-            contentType: quoteFile.type || "application/octet-stream",
+            contentType: fileToUpload.type || "application/octet-stream",
           });
         const result = (await Promise.race([
           upPromise,
@@ -1088,7 +1459,7 @@ function NewPurchaseRequestPageInner() {
           ),
         ])) as { error: { message: string } | null };
         if (result.error) throw result.error;
-        quoteFilenameSaved = quoteFile.name;
+        quoteFilenameSaved = fileToUpload.name;
         quoteUploadedAt = new Date().toISOString();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1163,6 +1534,8 @@ function NewPurchaseRequestPageInner() {
       attached_itpr: attached.itpr,
       attached_other: attachedOther.trim() || null,
       attached_section_889: attached.section_889,
+      attached_sow: attached.sow,
+      ...(sowStoragePath ? { sow_storage_path: sowStoragePath } : {}),
       status: asDraft ? "draft" : "submitted",
     };
 
@@ -1207,21 +1580,24 @@ function NewPurchaseRequestPageInner() {
         recordBreadcrumb("click", `[pr-save] inserted id=${newId.slice(-8)}`);
 
         // Now that we have an id, upload the quote (if any) and link it.
-        if (quoteFile) {
+        if (quoteFiles.length > 0) {
           try {
-            const ext = quoteFile.name.split(".").pop() || "bin";
+            const fileToUpload = quoteFiles.length > 1
+              ? await stitchImagesToQuotePdf(quoteFiles)
+              : quoteFiles[0];
+            const ext = fileToUpload.name.split(".").pop() || "bin";
             const path = `quotes/${newId}/quote-${Date.now()}.${ext}`;
             // 30s timeout — large quote PDFs on slow networks otherwise
             // freeze the navigation to the view page.
             const upPromise = supabase.storage
               .from("vendor-files")
-              .upload(path, quoteFile, {
+              .upload(path, fileToUpload, {
                 upsert: true,
-                contentType: quoteFile.type || "application/octet-stream",
+                contentType: fileToUpload.type || "application/octet-stream",
               });
             recordBreadcrumb(
               "click",
-              `[pr-save] quote upload start (${quoteFile.size}B)`,
+              `[pr-save] quote upload start (${fileToUpload.size}B, ${quoteFiles.length} page(s))`,
             );
             const result = (await Promise.race([
               upPromise,
@@ -1246,7 +1622,7 @@ function NewPurchaseRequestPageInner() {
                 `purchase_requests?id=eq.${encodeURIComponent(newId)}`,
                 {
                   quote_storage_path: path,
-                  quote_filename: quoteFile.name,
+                  quote_filename: fileToUpload.name,
                   quote_uploaded_at: new Date().toISOString(),
                 },
                 false,
@@ -1259,6 +1635,40 @@ function NewPurchaseRequestPageInner() {
             recordBreadcrumb(
               "warn",
               `[pr-save] quote upload non-fatal failure: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        // Upload the SOW PDF if one was generated/attached (non-fatal).
+        if (sowBlob) {
+          try {
+            const sowPath = `quotes/${newId}/sow-${Date.now()}.pdf`;
+            const sowUp = supabase.storage
+              .from("vendor-files")
+              .upload(sowPath, sowBlob, { upsert: true, contentType: "application/pdf" });
+            const sowResult = (await Promise.race([
+              sowUp,
+              new Promise((resolve) =>
+                setTimeout(() => resolve({ error: { message: "SOW upload timed out after 30s" } }), 30_000),
+              ),
+            ])) as { error: { message: string } | null };
+            if (cancel.cancelled) return;
+            if (sowResult.error) throw sowResult.error;
+            await timedStep(
+              "link SOW to PR",
+              restFetch(
+                "PATCH",
+                `purchase_requests?id=eq.${encodeURIComponent(newId)}`,
+                { sow_storage_path: sowPath },
+                false,
+              ),
+            );
+            if (cancel.cancelled) return;
+          } catch (err) {
+            console.warn("[PR] SOW upload failed:", err);
+            recordBreadcrumb(
+              "warn",
+              `[pr-save] SOW upload non-fatal failure: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
         }
@@ -1306,6 +1716,23 @@ function NewPurchaseRequestPageInner() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
+    <>
+    {showSowModal && (
+      <SowAttachModal
+        items={items}
+        profile={profile}
+        onComplete={(blob) => {
+          setSowBlob(blob);
+          setShowSowModal(false);
+        }}
+        onSkip={() => setShowSowModal(false)}
+        onCancel={() => {
+          setShowSowModal(false);
+          setAttached((prev) => ({ ...prev, sow: false }));
+          setSowBlob(null);
+        }}
+      />
+    )}
     <div className="p-3 pb-40 max-w-2xl mx-auto overflow-x-hidden">
       <div className="flex items-center gap-2 mb-1">
         <Link
@@ -1472,12 +1899,30 @@ function NewPurchaseRequestPageInner() {
             </p>
           </div>
         </div>
-        {(quoteFile || existingQuoteName) && (
-          <div className="mb-2 px-2 py-1.5 rounded bg-background border border-border text-xs">
-            <span className="text-muted-foreground">Attached:</span>{" "}
-            <span className="font-medium break-all">
-              {quoteFile?.name || existingQuoteName}
-            </span>
+        {/* Existing quote from DB (edit mode, no new files staged yet) */}
+        {existingQuoteName && quoteFiles.length === 0 && (
+          <div className="mb-2 px-2 py-1.5 rounded bg-background border border-border text-xs flex items-center gap-1.5">
+            <span className="text-muted-foreground shrink-0">Attached:</span>
+            <span className="font-medium break-all flex-1 min-w-0 truncate">{existingQuoteName}</span>
+          </div>
+        )}
+        {/* Newly staged quote pages */}
+        {quoteFiles.length > 0 && (
+          <div className="mb-2 space-y-1">
+            {quoteFiles.map((f, i) => (
+              <div key={i} className="px-2 py-1.5 rounded bg-background border border-border text-xs flex items-center gap-1.5">
+                <span className="text-muted-foreground shrink-0 font-medium">p{i + 1}</span>
+                <span className="font-medium flex-1 min-w-0 truncate">{f.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuoteFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-red-600 transition-colors"
+                  aria-label={`Remove page ${i + 1}`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <div className="grid grid-cols-2 gap-2">
@@ -1493,7 +1938,7 @@ function NewPurchaseRequestPageInner() {
               }`}
             >
               <Camera className="w-4 h-4" />
-              Take Photo
+              {quoteFiles.length === 0 ? "Take Photo" : "Add Page"}
             </button>
           ) : (
             <label
@@ -1504,7 +1949,7 @@ function NewPurchaseRequestPageInner() {
               }`}
             >
               <Camera className="w-4 h-4" />
-              Take Photo
+              {quoteFiles.length === 0 ? "Take Photo" : "Add Page"}
               <input
                 type="file"
                 accept="image/*"
@@ -1512,7 +1957,10 @@ function NewPurchaseRequestPageInner() {
                 className="absolute inset-0 opacity-0 cursor-pointer"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) handleQuoteUpload(f);
+                  if (f) {
+                    if (quoteFiles.length === 0) handleQuoteUpload(f);
+                    else handleAddQuotePage(f);
+                  }
                   e.target.value = "";
                 }}
                 disabled={extracting}
@@ -1527,14 +1975,17 @@ function NewPurchaseRequestPageInner() {
             }`}
           >
             <Plus className="w-4 h-4" />
-            Upload File
+            {quoteFiles.length === 0 ? "Upload File" : "Add File"}
             <input
               type="file"
               accept="image/*,application/pdf"
               className="absolute inset-0 opacity-0 cursor-pointer"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) handleQuoteUpload(f);
+                if (f) {
+                  if (quoteFiles.length === 0) handleQuoteUpload(f);
+                  else handleAddQuotePage(f);
+                }
                 e.target.value = "";
               }}
               disabled={extracting}
@@ -2288,8 +2739,41 @@ function NewPurchaseRequestPageInner() {
           <Checkbox
             label="SOW"
             checked={attached.sow}
-            onChange={(v) => setAttached({ ...attached, sow: v })}
+            onChange={(v) => {
+              setAttached({ ...attached, sow: v });
+              if (v) {
+                setShowSowModal(true);
+              } else {
+                setSowBlob(null);
+              }
+            }}
           />
+          {attached.sow && sowBlob && (
+            <div className="col-span-full flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 mt-1">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>SOW ready — will be included in the bundle</span>
+              <button
+                type="button"
+                onClick={() => setShowSowModal(true)}
+                className="ml-auto text-muted-foreground underline hover:text-foreground"
+              >
+                Replace
+              </button>
+            </div>
+          )}
+          {attached.sow && !sowBlob && (
+            <div className="col-span-full flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 mt-1">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>SOW not yet filled — you&apos;ll be prompted when downloading.</span>
+              <button
+                type="button"
+                onClick={() => setShowSowModal(true)}
+                className="ml-auto text-muted-foreground underline hover:text-foreground"
+              >
+                Fill Now
+              </button>
+            </div>
+          )}
         </div>
         <div className="mt-2">
           <Field label="Other (specify)">
@@ -2368,6 +2852,7 @@ function NewPurchaseRequestPageInner() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
