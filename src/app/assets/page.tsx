@@ -14,6 +14,7 @@ import {
   ScanLine,
   Trash2,
   Camera,
+  FileDown,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFy26Assets, type Fy26AssetFilters } from "@/lib/hooks/useFy26Assets";
+import { downloadAssetInventoryReport } from "@/lib/reports/asset-inventory-report";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
+import { useAuth } from "@/lib/hooks/useAuth";
 import {
   fy26AssetStatusLabels,
   fy26AssetStatusColors,
@@ -72,7 +75,23 @@ function StatCard({
 function AssetsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { loading: authLoading } = useAuth();
   const { assets, loading, error, fetchAssets, stats } = useFy26Assets();
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleExportPDF = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadAssetInventoryReport();
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Failed to generate PDF");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Initialize filter state from URL params so back-navigation restores them
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
@@ -97,8 +116,11 @@ function AssetsPageContent() {
     router.replace(qs ? `/assets?${qs}` : "/assets", { scroll: false });
   }, [search, siteFilter, statusFilter, manufacturerFilter, router]);
 
-  // Debounced fetch on filter change (manufacturer is filtered client-side)
+  // Debounced fetch on filter change (manufacturer is filtered client-side).
+  // Gated on authLoading so the first fetch never fires with an expired JWT —
+  // the token refresh completes before this effect runs for the first time.
   useEffect(() => {
+    if (authLoading) return;
     const timeout = setTimeout(() => {
       const filters: Fy26AssetFilters = {};
       if (siteFilter !== "all") filters.site = siteFilter;
@@ -107,7 +129,7 @@ function AssetsPageContent() {
       fetchAssets(filters);
     }, 300);
     return () => clearTimeout(timeout);
-  }, [search, siteFilter, statusFilter, fetchAssets]);
+  }, [search, siteFilter, statusFilter, fetchAssets, authLoading]);
 
   // Re-fetch on tab focus / visibility (re-applies current filters).
   const refreshAssets = useCallback(() => {
@@ -151,13 +173,25 @@ function AssetsPageContent() {
 
   return (
     <div className="p-4 md:p-6 pb-24">
-      <div className="flex items-center justify-between mb-6 gap-2">
-        <PageHeader
-          title="Assets"
-          description={`Annual Inventory \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
-          icon={Archive}
-        />
-        <div className="flex items-center gap-2 shrink-0">
+      <PageHeader
+        title="Assets"
+        description={`Annual Inventory \u2014 SITE 7009 & 7010 \u2022 Total value ${totalValueFormatted}`}
+        icon={Archive}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            onClick={handleExportPDF}
+            size="sm"
+            variant="outline"
+            disabled={exporting}
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+            ) : (
+              <FileDown className="w-4 h-4 mr-1.5" />
+            )}
+            {exporting ? "Building…" : "Print Report"}
+          </Button>
           <Button
             onClick={() => router.push("/assets/untracked")}
             size="sm"
@@ -173,11 +207,23 @@ function AssetsPageContent() {
             Scan
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {error && (
         <div className="mb-4 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
           {error}
+        </div>
+      )}
+
+      {exportError && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg flex items-start justify-between gap-3">
+          <p className="text-sm text-red-700 dark:text-red-400 flex-1">{exportError}</p>
+          <button
+            onClick={() => setExportError(null)}
+            className="text-red-500 hover:text-red-700 text-xs font-medium shrink-0"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

@@ -27,6 +27,8 @@ import {
   Mic,
   Bell,
   Flag,
+  ClipboardSignature,
+  Scale,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -78,6 +80,8 @@ const leadershipApps: SidebarItem[] = [
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
   { href: "/vendors", label: "Vendors", icon: Phone },
+  { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
+  { href: "/sole-source", label: "Sole Source", icon: Scale },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
 

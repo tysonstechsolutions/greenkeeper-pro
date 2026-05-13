@@ -1627,8 +1627,9 @@ export interface PurchaseRequest {
   attached_itpr: boolean;
   attached_other: string | null;
   attached_section_889: boolean;
+  attached_sow: boolean;
 
-  status: "draft" | "submitted";
+  status: "draft" | "submitted" | "received";
 
   created_by: string | null;
   created_at: string;

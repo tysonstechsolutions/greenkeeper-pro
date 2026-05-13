@@ -233,6 +233,7 @@ function NewPurchaseRequestPageInner() {
     pws: false,
     itpr: false,
     section_889: false,
+    sow: false,
   });
   const [attachedOther, setAttachedOther] = useState("");
 
@@ -488,6 +489,7 @@ function NewPurchaseRequestPageInner() {
         pws: row.attached_pws,
         itpr: row.attached_itpr,
         section_889: row.attached_section_889,
+        sow: row.attached_sow ?? false,
       });
       setAttachedOther(row.attached_other || "");
       setLoadingExisting(false);
@@ -878,6 +880,7 @@ function NewPurchaseRequestPageInner() {
         attached_itpr: attached.itpr,
         attached_other: attachedOther.trim() || null,
         attached_section_889: attached.section_889,
+        attached_sow: attached.sow,
         status: "draft",
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
@@ -2281,6 +2284,11 @@ function NewPurchaseRequestPageInner() {
             label="Section 889"
             checked={attached.section_889}
             onChange={(v) => setAttached({ ...attached, section_889: v })}
+          />
+          <Checkbox
+            label="SOW"
+            checked={attached.sow}
+            onChange={(v) => setAttached({ ...attached, sow: v })}
           />
         </div>
         <div className="mt-2">

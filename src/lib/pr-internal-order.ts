@@ -1,13 +1,12 @@
 /**
- * Internal Order ID format: `FY{YY}-FM-{NNNN}`.
+ * Internal Order ID format: `FY{YY}-GC-{NNNN}`.
  *
- * Examples: `FY26-FM-0001`, `FY26-FM-0030`, `FY27-FM-0007`.
+ * Examples: `FY26-GC-0001`, `FY26-GC-0030`, `FY27-GC-0007`.
  *
  * • FY{YY} — federal fiscal year (Oct 1 – Sep 30). Tied to the PR's
  *   `date_prepared`, NOT the time the user opens the form, so editing an
  *   old PR doesn't accidentally re-stamp it with the wrong fiscal year.
- * • FM — static, stands for Facility Maintenance / Fleet Management.
- *   Locked because procurement expects this exact code on submissions.
+ * • GC — Golf Course.
  * • NNNN — zero-padded 4-digit sequence, monotonically increasing across
  *   the lifetime of the table. The DB sequence (see migration
  *   20260504_pr_sequence_number.sql) hands these out on insert; we never
@@ -15,7 +14,7 @@
  *   by raw sequence, not by FY-prefixed slot.
  */
 
-const FACILITY_CODE = "FM";
+const FACILITY_CODE = "GC";
 
 /** Compute fiscal year from a date. Oct/Nov/Dec roll into the next FY. */
 export function fiscalYearTwoDigit(d: Date): string {

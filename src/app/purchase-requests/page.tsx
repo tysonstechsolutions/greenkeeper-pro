@@ -12,11 +12,14 @@ import {
   ShieldAlert,
   Copy,
   Trash2,
+  PackageCheck,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import {
   directDeleteRow,
+  directPatchRow,
   directSelectList,
 } from "@/lib/supabase/rest";
 import type { PurchaseRequest } from "@/types/database";
@@ -80,6 +83,39 @@ export default function PurchaseRequestsListPage() {
   // Re-fetch on tab focus / visibility change so navigating back from /new
   // or /view shows fresh data without a manual reload.
   useRefreshOnFocus(fetchRequests, isAllowed);
+
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+  const handleMarkReceived = useCallback(
+    async (id: string, label: string) => {
+      if (
+        !confirm(
+          `Mark "${label}" as purchased and received?\n\nThis updates its status but keeps the record — you can still view and re-download the bundle.`,
+        )
+      ) {
+        return;
+      }
+      setReceivingId(id);
+      try {
+        await directPatchRow(
+          "purchase_requests",
+          "id",
+          id,
+          { status: "received" },
+          "purchase-requests.markReceived",
+        );
+        setRequests((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status: "received" } : r)),
+        );
+      } catch (err) {
+        alert(
+          `Couldn't update status: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        setReceivingId(null);
+      }
+    },
+    [],
+  );
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const handleDelete = useCallback(
@@ -189,6 +225,8 @@ export default function PurchaseRequestsListPage() {
           <ul className="space-y-2">
             {requests.map((pr) => {
               const isDraft = pr.status === "draft";
+              const isReceived = pr.status === "received";
+              const label = `${pr.vendor1_name || "this PR"} (${formatDate(pr.date_prepared)})`;
               return (
                 <li
                   key={pr.id}
@@ -202,10 +240,16 @@ export default function PurchaseRequestsListPage() {
                       className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                         isDraft
                           ? "bg-muted text-muted-foreground"
-                          : "bg-primary/10 text-primary"
+                          : isReceived
+                            ? "bg-green-500/10 text-green-600"
+                            : "bg-primary/10 text-primary"
                       }`}
                     >
-                      <FileText className="w-5 h-5" />
+                      {isReceived ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : (
+                        <FileText className="w-5 h-5" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -215,6 +259,11 @@ export default function PurchaseRequestsListPage() {
                         {isDraft && (
                           <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                             Draft
+                          </span>
+                        )}
+                        {isReceived && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-green-500/10 text-green-700 dark:text-green-400">
+                            Received
                           </span>
                         )}
                       </div>
@@ -228,7 +277,7 @@ export default function PurchaseRequestsListPage() {
                         </p>
                       )}
                     </div>
-                    {!isDraft && (
+                    {!isDraft && !isReceived && (
                       <Download className="w-4 h-4 text-muted-foreground shrink-0" />
                     )}
                     <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -241,17 +290,24 @@ export default function PurchaseRequestsListPage() {
                   >
                     <Copy className="w-4 h-4" />
                   </Link>
+                  {pr.status === "submitted" && (
+                    <button
+                      type="button"
+                      aria-label="Mark purchased and received"
+                      title="Mark purchased and received"
+                      disabled={receivingId === pr.id}
+                      onClick={() => handleMarkReceived(pr.id, label)}
+                      className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-green-500/10 hover:text-green-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                    >
+                      <PackageCheck className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label="Delete"
                     title="Delete"
                     disabled={deletingId === pr.id}
-                    onClick={() =>
-                      handleDelete(
-                        pr.id,
-                        `${pr.vendor1_name || "this PR"} (${formatDate(pr.date_prepared)})`,
-                      )
-                    }
+                    onClick={() => handleDelete(pr.id, label)}
                     className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4" />

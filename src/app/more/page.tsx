@@ -21,6 +21,8 @@ import {
   Archive,
   Mic,
   Phone,
+  ClipboardSignature,
+  Scale,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
@@ -66,6 +68,8 @@ const leadershipApps: AppItem[] = [
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-green-600 to-emerald-700" },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
   { href: "/vendors", label: "Vendors", icon: Phone, color: "from-purple-500 to-fuchsia-700" },
+  { href: "/sow", label: "Statement of Work", icon: ClipboardSignature, color: "from-cyan-600 to-teal-700" },
+  { href: "/sole-source", label: "Sole Source", icon: Scale, color: "from-indigo-500 to-violet-600" },
   { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
 ];
 

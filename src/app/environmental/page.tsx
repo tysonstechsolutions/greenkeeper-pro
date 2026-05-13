@@ -710,13 +710,15 @@ function SummaryTab() {
   return (
     <div className="space-y-4">
       {/* Date Range */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-border bg-card text-sm" />
-        <span className="text-sm text-muted-foreground">to</span>
-        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 rounded-xl border border-border bg-card text-sm" />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <div className="flex items-center gap-2">
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-border bg-card text-sm flex-1 sm:flex-none" />
+          <span className="text-sm text-muted-foreground">to</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 rounded-xl border border-border bg-card text-sm flex-1 sm:flex-none" />
+        </div>
         <button
           onClick={() => setShowPrint(true)}
-          className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
+          className="sm:ml-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
         >
           <FileText className="w-4 h-4" /> Export Report
         </button>

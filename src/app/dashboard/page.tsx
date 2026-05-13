@@ -197,7 +197,7 @@ function DashboardQuickActions() {
           Customize
         </button>
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {actions.map((action) => (
           <Link
             key={action.id}
@@ -498,7 +498,7 @@ function ProDashboardView() {
               <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 bg-muted/50 rounded-lg">
               <p className="text-xs text-muted-foreground">Green Speed</p>
               <p className="text-lg font-semibold">10.5</p>
@@ -528,7 +528,7 @@ function ProDashboardView() {
             </Link>
           </div>
           {loading ? (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
@@ -542,7 +542,7 @@ function ProDashboardView() {
               <p className="text-sm">No recent photos</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {recentPhotosData.slice(0, 6).map((photo) => (
                 <Link
                   key={photo.id}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { Fy26Asset, Fy26AssetStatus, AssetDamageRecord, ConditionPhotoAngle, ConditionPhotos } from "@/types/fy26-assets";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import {
@@ -367,11 +367,6 @@ export function useFy26Assets(): UseFy26AssetsReturn {
 
   const refetch = useCallback(async () => {
     await fetchAssets();
-  }, [fetchAssets]);
-
-  // Initial load
-  useEffect(() => {
-    fetchAssets();
   }, [fetchAssets]);
 
   // Stats derived from the STATUS-AGNOSTIC cache so each chip shows the

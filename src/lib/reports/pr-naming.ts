@@ -109,6 +109,18 @@ export function section889Filename(
   return `889-${name} - ${expires}.${originalExt}`;
 }
 
+/**
+ * SOW filename included in the PR bundle.
+ * Example: "SOW-Ace Hardware - Golf Course - May 2026.pdf"
+ */
+export function sowFilename(
+  pr: PurchaseRequest,
+  now: Date = new Date(),
+): string {
+  const vendor = sanitize(pr.vendor1_name || "Vendor");
+  return `SOW-${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.pdf`;
+}
+
 /** ZIP filename for the whole PR bundle. */
 export function prBundleZipFilename(
   pr: PurchaseRequest,
