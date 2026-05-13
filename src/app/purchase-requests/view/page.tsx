@@ -51,6 +51,14 @@ const COURSE_NAME = "Veterans Memorial Golf Course";
 const BUILDING = "Golf Course Maintenance Facility, BLDG 8400";
 const FACILITY_ADDRESS = "2821 Great Lakes Dr, Great Lakes, IL 60088";
 
+const REQUISITION_REASONS = [
+  "New Requirement",
+  "Replacement",
+  "Additional Quantity",
+  "Enhancement/Upgrade",
+  "Other",
+];
+
 const REQUISITION_TYPES = [
   "New Procurement",
   "Re-order",
@@ -64,6 +72,7 @@ const REQUISITION_TYPES = [
 interface SowQuickForm {
   workDescription: string;
   requisitionType: string;
+  requisitionReason: string;
   projectedStartDate: string;
   desiredCompletionDate: string;
 }
@@ -115,6 +124,7 @@ function SowWizardModal({
   const [form, setForm] = useState<SowQuickForm>({
     workDescription: autoDescription,
     requisitionType: "",
+    requisitionReason: "New Requirement",
     projectedStartDate: "",
     desiredCompletionDate: "",
   });
@@ -163,7 +173,7 @@ function SowWizardModal({
         from: fromName,
         activityName: COURSE_NAME,
         requisitionType: form.requisitionType,
-        requisitionReason: "New Requirement",
+        requisitionReason: form.requisitionReason,
         hasReferences: false,
         referencesText: "",
         projectedStartDate: form.projectedStartDate,
@@ -283,21 +293,37 @@ function SowWizardModal({
               </p>
             </div>
 
-            {/* Requisition type */}
-            <div>
-              <label className={labelCls}>
-                Requisition Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.requisitionType}
-                onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
-                className={inputCls}
-              >
-                <option value="">Select type…</option>
-                {REQUISITION_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+            {/* Requisition type + reason */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>
+                  Requisition Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.requisitionType}
+                  onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">Select type…</option>
+                  {REQUISITION_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>
+                  Reason for Requisition
+                </label>
+                <select
+                  value={form.requisitionReason}
+                  onChange={(e) => setForm({ ...form, requisitionReason: e.target.value })}
+                  className={inputCls}
+                >
+                  {REQUISITION_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Dates */}
@@ -348,6 +374,33 @@ function SowWizardModal({
             <p className="text-sm text-muted-foreground">
               Review the AI-generated SOW content below. Edit any section before downloading.
             </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>4.1 Requisition Type</label>
+                <select
+                  value={draft.requisitionType}
+                  onChange={(e) => setDraft({ ...draft, requisitionType: e.target.value })}
+                  className={inputCls}
+                >
+                  {REQUISITION_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>4.2 Reason for Requisition</label>
+                <select
+                  value={draft.requisitionReason}
+                  onChange={(e) => setDraft({ ...draft, requisitionReason: e.target.value })}
+                  className={inputCls}
+                >
+                  {REQUISITION_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <div>
               <label className={labelCls}>4.6 Expectation (contractor duties)</label>

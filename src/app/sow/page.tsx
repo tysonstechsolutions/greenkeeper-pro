@@ -67,7 +67,7 @@ function emptyForm(): SowForm {
     referencesText: "",
     projectedStartDate: "",
     desiredCompletionDate: "",
-    facilityHours: "Monday–Saturday: 0700–2000\nSunday: Closed",
+    facilityHours: "Open daily, including Sundays and holidays: 0700–2000",
     appointmentTime: "",
     servicesInterrupted: false,
     patronsInDanger: false,

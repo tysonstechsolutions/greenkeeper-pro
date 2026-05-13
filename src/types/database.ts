@@ -1629,6 +1629,8 @@ export interface PurchaseRequest {
   attached_section_889: boolean;
   attached_sow: boolean;
   sow_storage_path: string | null;
+  // Parallel lifecycle for the Statement of Work. Null when no SOW.
+  sow_status: "draft" | "submitted" | "sent" | "approved" | "received" | null;
 
   status: "draft" | "submitted" | "sent" | "approved" | "received";
 

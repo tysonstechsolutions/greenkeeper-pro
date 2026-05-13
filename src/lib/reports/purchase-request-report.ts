@@ -346,6 +346,18 @@ export async function generatePurchaseRequestReport(
       else pg2Total += ext;
     });
 
+    // ── Blank out the Price/Extended cells for every unused row ───────
+    // The template has Acrobat JS that pre-formats those cells as "$0.00".
+    // If we don't touch them, that cached appearance shows on the printed
+    // PDF and the spec sheet looks like every row has a $0.00 line item.
+    // Explicitly clearing them (and marking them written) forces a fresh
+    // empty appearance.
+    for (let row = items.length + 1; row <= MAX_LINE_ITEMS; row++) {
+      const { noDot } = rowSuffixes(row);
+      setText(form, `Price${noDot}`, "", written);
+      setText(form, `Extended${noDot}`, "", written);
+    }
+
     // ── IGE / approvals / justification ────────────────────────────────
     step = "fill-footer";
     // The form's "subTotal" is the page-1 IGE amount; we use the user's

@@ -159,6 +159,59 @@ function drawBox(
 }
 
 /**
+ * Render mixed-weight inline text (regular + bold segments) with automatic
+ * word-wrap. The original FRSC form has a few paragraphs where specific
+ * phrases are bolded inline — the only way to match that exactly in
+ * jsPDF (which doesn't support styled runs natively) is to lay out word
+ * by word, swapping the font in between.
+ */
+function drawRichText(
+  doc: jsPDF,
+  segments: Array<{ text: string; bold?: boolean }>,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+): number {
+  type Word = { text: string; bold: boolean; isSpace: boolean };
+  const words: Word[] = [];
+  for (const seg of segments) {
+    const parts = seg.text.split(/(\s+)/);
+    for (const p of parts) {
+      if (p.length === 0) continue;
+      words.push({
+        text: p,
+        bold: !!seg.bold,
+        isSpace: /^\s+$/.test(p),
+      });
+    }
+  }
+
+  let curX = x;
+  let curY = y;
+
+  for (const word of words) {
+    doc.setFont("courier", word.bold ? "bold" : "normal");
+    const w = doc.getTextWidth(word.text);
+
+    // Don't start a new line with a space.
+    if (word.isSpace && curX === x) continue;
+
+    // Wrap when a non-space word would overflow the right margin.
+    if (!word.isSpace && curX > x && curX + w > x + maxWidth) {
+      curX = x;
+      curY += lineHeight;
+    }
+
+    doc.text(word.text, curX, curY);
+    curX += w;
+  }
+
+  doc.setFont("courier", "normal");
+  return curY;
+}
+
+/**
  * Same as drawBox, but returns the text that didn't fit (or null if it
  * all fit). Used for the AI-generated long-text sections so we can spill
  * the remainder onto a continuation page instead of silently dropping it.
@@ -327,7 +380,9 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 1. BACKGROUND
+  body(doc, true);
   doc.text("1.  BACKGROUND", ML, y);
+  body(doc);
   y += LH * 1.5;
 
   const bgText =
@@ -381,30 +436,62 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   body(doc);
   y += LH * 1.5;
 
-  // 4.1 REQUISITION TYPE
+  // 4.1 REQUISITION TYPE — matches the FRSC blank form layout. The original
+  // has an invisible dropdown widget between the heading and the "if other"
+  // instruction; when filled, the selected value appears there. The "if
+  // other" box at the bottom is for the Other override.
   body(doc, true);
   doc.text("4.1  REQUISITION TYPE", ML, y);
   body(doc);
+  y += LH * 1.5;
+
+  const REQ_TYPE_STANDARD = [
+    "New Procurement",
+    "Re-order",
+    "Renewal",
+    "Non-Personal Services Contract",
+  ];
+  const typeIsOther = !!data.requisitionType && !REQ_TYPE_STANDARD.includes(data.requisitionType);
+  const typeDisplay = typeIsOther ? "Other" : data.requisitionType;
+  if (typeDisplay) {
+    doc.text(typeDisplay, ML, y);
+  }
+  // Reserve vertical space whether or not the field is filled so the layout
+  // matches the blank original.
   y += LH * 1.5;
 
   doc.text("If other is chosen, list type below:", ML, y);
   y += LH;
 
   const typeBoxH = 12;
-  drawBox(doc, ML, y, cw, typeBoxH, data.requisitionType);
+  drawBox(doc, ML, y, cw, typeBoxH, typeIsOther ? data.requisitionType : "");
   y += typeBoxH + LH;
 
-  // 4.2 REASON FOR REQUISITION
+  // 4.2 REASON FOR REQUISITION — same pattern as 4.1.
   body(doc, true);
   doc.text("4.2  REASON FOR REQUISITION", ML, y);
   body(doc);
+  y += LH * 1.5;
+
+  const REQ_REASON_STANDARD = [
+    "New Requirement",
+    "Replacement",
+    "Additional Quantity",
+    "Enhancement/Upgrade",
+  ];
+  const reasonIsOther =
+    !!data.requisitionReason && !REQ_REASON_STANDARD.includes(data.requisitionReason);
+  const reasonDisplay = reasonIsOther ? "Other" : data.requisitionReason;
+  if (reasonDisplay) {
+    doc.text(reasonDisplay, ML, y);
+  }
   y += LH * 1.5;
 
   doc.text(" If other is chosen, list the reason below:", ML, y);
   y += LH;
 
   const reasonBoxH = 12;
-  drawBox(doc, ML, y, cw, reasonBoxH, data.requisitionReason);
+  drawBox(doc, ML, y, cw, reasonBoxH, reasonIsOther ? data.requisitionReason : "");
 
   addFooter(doc, 1);
 
@@ -448,13 +535,31 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += hoursBoxH + LH;
 
   doc.text("Requested Appointment and Suggested Time of Service or Delivery:", ML, y);
-  y += LH * 2;
+  y += LH * 1.5;
+
+  // The original has an invisible dropdown widget here for predefined
+  // service-time options (Standard hours / Before opening / After closing /
+  // etc). We don't know the exact option set, so show the user's value
+  // here as plain text when present — matches the filled-form look.
+  const apptStandard = [
+    "Standard hours",
+    "Before opening",
+    "After closing",
+    "Weekdays only",
+    "Weekends only",
+  ];
+  const apptIsOther = !!data.appointmentTime && !apptStandard.includes(data.appointmentTime);
+  const apptDisplay = apptIsOther ? "Other" : data.appointmentTime;
+  if (apptDisplay) {
+    doc.text(apptDisplay, ML, y);
+  }
+  y += LH * 1.5;
 
   doc.text("If other is chosen, list suggested time of service or delivery below:", ML, y);
   y += LH;
 
   const apptBoxH = 12;
-  drawBox(doc, ML, y, cw, apptBoxH, data.appointmentTime);
+  drawBox(doc, ML, y, cw, apptBoxH, apptIsOther ? data.appointmentTime : "");
   y += apptBoxH + LH * 1.5;
 
   // Services interrupted
@@ -564,16 +669,27 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   body(doc);
   y += LH * 1.5;
 
-  const expIntroText =
-    "In the area provided, please list a complete list of specific duties the contractor\n" +
-    "will be required to perform. i.e. perform lifeguard services, remove old self-service\n" +
-    "pumps, install two self-service pump stations at specific locations and dispose of old\n" +
-    "materials and equipment, order and install sails and jibs for the Sailing Center,\n" +
-    "located at... If additional space is required please attach separate documentation with\n" +
-    "outlined duties. Be detailed and specific.";
-  const expIntroLines = doc.splitTextToSize(expIntroText, cw);
-  doc.text(expIntroLines, ML, y);
-  y += expIntroLines.length * LH + LH;
+  // 4.6 intro paragraph with the same inline bold runs as the FRSC form:
+  // "specific duties", "i.e.", and "Be detailed and specific." are bold.
+  const expIntroEndY = drawRichText(
+    doc,
+    [
+      { text: "In the area provided, please list a complete list of " },
+      { text: "specific duties", bold: true },
+      { text: " the contractor will be required to perform. " },
+      { text: "i.e.", bold: true },
+      {
+        text:
+          " perform lifeguard services, remove old self-service pumps, install two self-service pump stations at specific locations and dispose of old materials and equipment, order and install sails and jibs for the Sailing Center, located at... If additional space is required please attach separate documentation with outlined duties. ",
+      },
+      { text: "Be detailed and specific.", bold: true },
+    ],
+    ML,
+    y,
+    cw,
+    LH,
+  );
+  y = expIntroEndY + LH * 2;
 
   const expectBoxH = 52;
   {
@@ -668,7 +784,8 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
 
   body(doc, true);
   doc.text("Description of Goods Requested (Ref 4.1):", ML, y);
-  body(doc);
+  // Italic helper line, matching the original form.
+  doc.setFont("courier", "italic");
   doc.setFontSize(8);
   doc.text("(attach additional pages if needed)", ML, y + LH);
   body(doc);

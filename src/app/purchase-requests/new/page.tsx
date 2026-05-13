@@ -142,10 +142,15 @@ const REQUISITION_TYPES = [
   "New Procurement", "Re-order", "Renewal",
   "Non-Personal Services Contract", "Other",
 ];
+const REQUISITION_REASONS = [
+  "New Requirement", "Replacement", "Additional Quantity",
+  "Enhancement/Upgrade", "Other",
+];
 
 interface SowQuickForm {
   workDescription: string;
   requisitionType: string;
+  requisitionReason: string;
   projectedStartDate: string;
   desiredCompletionDate: string;
 }
@@ -182,6 +187,7 @@ function SowAttachModal({
   const [form, setForm] = useState<SowQuickForm>({
     workDescription: autoDescription,
     requisitionType: "",
+    requisitionReason: "New Requirement",
     projectedStartDate: "",
     desiredCompletionDate: "",
   });
@@ -226,7 +232,7 @@ function SowAttachModal({
         from: fromName,
         activityName: COURSE_NAME,
         requisitionType: form.requisitionType,
-        requisitionReason: "New Requirement",
+        requisitionReason: form.requisitionReason,
         hasReferences: false,
         referencesText: "",
         projectedStartDate: form.projectedStartDate,
@@ -369,20 +375,36 @@ function SowAttachModal({
                   )}
                 </div>
 
-                <div>
-                  <label className={labelCls}>
-                    Requisition Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={form.requisitionType}
-                    onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
-                    className={inputCls}
-                  >
-                    <option value="">Select type…</option>
-                    {REQUISITION_TYPES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>
+                      Requisition Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={form.requisitionType}
+                      onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">Select type…</option>
+                      {REQUISITION_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>
+                      Reason for Requisition
+                    </label>
+                    <select
+                      value={form.requisitionReason}
+                      onChange={(e) => setForm({ ...form, requisitionReason: e.target.value })}
+                      className={inputCls}
+                    >
+                      {REQUISITION_REASONS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -452,6 +474,33 @@ function SowAttachModal({
             <p className="text-sm text-muted-foreground">
               Review the AI-generated SOW content. Edit any section before saving with the PR.
             </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>4.1 Requisition Type</label>
+                <select
+                  value={draft.requisitionType}
+                  onChange={(e) => setDraft({ ...draft, requisitionType: e.target.value })}
+                  className={inputCls}
+                >
+                  {REQUISITION_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>4.2 Reason for Requisition</label>
+                <select
+                  value={draft.requisitionReason}
+                  onChange={(e) => setDraft({ ...draft, requisitionReason: e.target.value })}
+                  className={inputCls}
+                >
+                  {REQUISITION_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <div>
               <label className={labelCls}>4.6 Expectation (contractor duties)</label>
@@ -594,7 +643,9 @@ function SowAttachModal({
  */
 async function stitchImagesToQuotePdf(files: File[]): Promise<File> {
   if (files.length === 1) return files[0];
-  const { jsPDF } = await import("jspdf");
+  // jspdf v4 only exposes the constructor as the default export; the
+  // named-export destructure that worked in v3 is no longer typed.
+  const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
   let first = true;
   for (const f of files) {
@@ -1395,6 +1446,7 @@ function NewPurchaseRequestPageInner() {
         attached_section_889: attached.section_889,
         attached_sow: attached.sow,
         sow_storage_path: null,
+        sow_status: null,
         status: "draft",
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
@@ -1707,6 +1759,14 @@ function NewPurchaseRequestPageInner() {
       attached_section_889: attached.section_889,
       attached_sow: attached.sow,
       ...(sowStoragePath ? { sow_storage_path: sowStoragePath } : {}),
+      // SOW lifecycle: initialize on first save (no editId) or when the
+      // user just turned attached_sow off. On edit, leave sow_status alone
+      // so manual advances via the history page are preserved.
+      ...(!editId
+        ? { sow_status: attached.sow ? "submitted" : null }
+        : !attached.sow
+          ? { sow_status: null }
+          : {}),
       status: asDraft ? "draft" : "submitted",
     };
 

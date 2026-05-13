@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Send,
   ShieldCheck,
+  FileSignature,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
@@ -156,26 +157,39 @@ export default function PurchaseRequestsListPage() {
   useRefreshOnFocus(fetchRequests, isAllowed);
 
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  /**
+   * Advance either the PR's main `status` column or its parallel
+   * `sow_status` column. The lifecycle values are identical so the same
+   * handler covers both — `column` selects which DB field to patch and
+   * `kind` is just for the confirm-prompt wording.
+   */
   const handleAdvanceStatus = useCallback(
-    async (id: string, label: string, next: PrStatus, nextLabel: string) => {
+    async (
+      id: string,
+      label: string,
+      next: PrStatus,
+      nextLabel: string,
+      column: "status" | "sow_status",
+      kind: "PR" | "SOW",
+    ) => {
       if (
         !confirm(
-          `Mark "${label}" as "${nextLabel}"?\n\nYou can still view and re-download the bundle afterward.`,
+          `Mark the ${kind} for "${label}" as "${nextLabel}"?\n\nYou can still view and re-download the bundle afterward.`,
         )
       ) {
         return;
       }
-      setAdvancingId(id);
+      setAdvancingId(`${id}:${column}`);
       try {
         await directPatchRow(
           "purchase_requests",
           "id",
           id,
-          { status: next },
-          "purchase-requests.advanceStatus",
+          { [column]: next },
+          `purchase-requests.advance.${column}`,
         );
         setRequests((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: next } : r)),
+          prev.map((r) => (r.id === id ? { ...r, [column]: next } : r)),
         );
       } catch (err) {
         alert(
@@ -301,6 +315,13 @@ export default function PurchaseRequestsListPage() {
               const showDownloadHint =
                 pr.status !== "draft" && pr.status !== "received";
               const label = `${pr.vendor1_name || "this PR"} (${formatDate(pr.date_prepared)})`;
+              // SOW has its own parallel lifecycle. Only show it when the
+              // PR has an attached SOW AND we have a status to display.
+              const sowMeta =
+                pr.attached_sow && pr.sow_status
+                  ? STATUS_FLOW[pr.sow_status] ?? STATUS_FLOW.submitted
+                  : null;
+              const SowNextIcon = sowMeta?.nextIcon ?? null;
               return (
                 <li
                   key={pr.id}
@@ -325,10 +346,21 @@ export default function PurchaseRequestsListPage() {
                         >
                           {meta.label}
                         </span>
+                        {sowMeta && (
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${sowMeta.badge}`}
+                            title={`SOW: ${sowMeta.label}`}
+                          >
+                            <FileSignature className="w-2.5 h-2.5" />
+                            SOW · {sowMeta.label}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {pr.vendor1_name || "Vendor TBD"} &middot;{" "}
-                        {formatMoney(Number(pr.ige_amount) || 0)}
+                        {pr.vendor1_name || "Vendor TBD"}
+                        {Number(pr.ige_amount) > 0 && (
+                          <> &middot; {formatMoney(Number(pr.ige_amount))}</>
+                        )}
                       </p>
                       {pr.justification && (
                         <p className="text-[11px] text-muted-foreground truncate mt-0.5">
@@ -352,15 +384,46 @@ export default function PurchaseRequestsListPage() {
                   {meta.next && NextIcon && meta.nextLabel && (
                     <button
                       type="button"
-                      aria-label={`Mark as ${meta.nextLabel}`}
-                      title={`Mark as ${meta.nextLabel}`}
-                      disabled={advancingId === pr.id}
+                      aria-label={`Advance PR — Mark as ${meta.nextLabel}`}
+                      title={`Advance PR — Mark as ${meta.nextLabel}`}
+                      disabled={advancingId === `${pr.id}:status`}
                       onClick={() =>
-                        handleAdvanceStatus(pr.id, label, meta.next!, meta.nextLabel!)
+                        handleAdvanceStatus(
+                          pr.id,
+                          label,
+                          meta.next!,
+                          meta.nextLabel!,
+                          "status",
+                          "PR",
+                        )
                       }
                       className={`flex items-center justify-center px-3 border-l border-border text-muted-foreground active:scale-[0.97] transition-all disabled:opacity-50 ${meta.nextHover}`}
                     >
                       <NextIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                  {sowMeta?.next && SowNextIcon && sowMeta.nextLabel && (
+                    <button
+                      type="button"
+                      aria-label={`Advance SOW — Mark as ${sowMeta.nextLabel}`}
+                      title={`Advance SOW — Mark as ${sowMeta.nextLabel}`}
+                      disabled={advancingId === `${pr.id}:sow_status`}
+                      onClick={() =>
+                        handleAdvanceStatus(
+                          pr.id,
+                          label,
+                          sowMeta.next!,
+                          sowMeta.nextLabel!,
+                          "sow_status",
+                          "SOW",
+                        )
+                      }
+                      className={`relative flex items-center justify-center px-3 border-l border-border text-muted-foreground active:scale-[0.97] transition-all disabled:opacity-50 ${sowMeta.nextHover}`}
+                    >
+                      <SowNextIcon className="w-4 h-4" />
+                      <span className="absolute -top-0.5 -right-0.5 text-[7px] font-bold tracking-tight px-1 leading-3 rounded bg-violet-500 text-white">
+                        SOW
+                      </span>
                     </button>
                   )}
                   <button
