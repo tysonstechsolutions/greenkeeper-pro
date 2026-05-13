@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
   Plus,
@@ -14,6 +15,8 @@ import {
   Trash2,
   PackageCheck,
   CheckCircle2,
+  Send,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
@@ -45,6 +48,74 @@ function formatMoney(n: number): string {
     minimumFractionDigits: 2,
   });
 }
+
+// ── PR lifecycle ─────────────────────────────────────────────────────────────
+
+type PrStatus = PurchaseRequest["status"];
+
+interface StatusMeta {
+  label: string;
+  iconBg: string;     // bg + text classes for the row's left icon tile
+  badge: string;      // bg + text classes for the inline badge
+  icon: LucideIcon;   // icon shown on the row
+  next: PrStatus | null;       // null = terminal state
+  nextLabel: string | null;    // verb shown in the confirm prompt
+  nextIcon: LucideIcon | null; // icon for the advance button
+  nextHover: string | null;    // hover color for the advance button
+}
+
+const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
+  draft: {
+    label: "Draft",
+    iconBg: "bg-muted text-muted-foreground",
+    badge: "bg-muted text-muted-foreground",
+    icon: FileText,
+    next: null,
+    nextLabel: null,
+    nextIcon: null,
+    nextHover: null,
+  },
+  submitted: {
+    label: "Not Sent",
+    iconBg: "bg-amber-500/10 text-amber-600",
+    badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    icon: FileText,
+    next: "sent",
+    nextLabel: "Sent for Approval",
+    nextIcon: Send,
+    nextHover: "hover:bg-blue-500/10 hover:text-blue-600",
+  },
+  sent: {
+    label: "Sent for Approval",
+    iconBg: "bg-blue-500/10 text-blue-600",
+    badge: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    icon: Send,
+    next: "approved",
+    nextLabel: "Approved",
+    nextIcon: ShieldCheck,
+    nextHover: "hover:bg-emerald-500/10 hover:text-emerald-600",
+  },
+  approved: {
+    label: "Approved",
+    iconBg: "bg-emerald-500/10 text-emerald-600",
+    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    icon: ShieldCheck,
+    next: "received",
+    nextLabel: "Received & Signed",
+    nextIcon: PackageCheck,
+    nextHover: "hover:bg-green-500/10 hover:text-green-600",
+  },
+  received: {
+    label: "Received & Signed",
+    iconBg: "bg-green-600/10 text-green-700 dark:text-green-400",
+    badge: "bg-green-600/10 text-green-700 dark:text-green-400",
+    icon: CheckCircle2,
+    next: null,
+    nextLabel: null,
+    nextIcon: null,
+    nextHover: null,
+  },
+};
 
 export default function PurchaseRequestsListPage() {
   const { profile, loading: authLoading } = useAuth();
@@ -84,34 +155,34 @@ export default function PurchaseRequestsListPage() {
   // or /view shows fresh data without a manual reload.
   useRefreshOnFocus(fetchRequests, isAllowed);
 
-  const [receivingId, setReceivingId] = useState<string | null>(null);
-  const handleMarkReceived = useCallback(
-    async (id: string, label: string) => {
+  const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const handleAdvanceStatus = useCallback(
+    async (id: string, label: string, next: PrStatus, nextLabel: string) => {
       if (
         !confirm(
-          `Mark "${label}" as purchased and received?\n\nThis updates its status but keeps the record — you can still view and re-download the bundle.`,
+          `Mark "${label}" as "${nextLabel}"?\n\nYou can still view and re-download the bundle afterward.`,
         )
       ) {
         return;
       }
-      setReceivingId(id);
+      setAdvancingId(id);
       try {
         await directPatchRow(
           "purchase_requests",
           "id",
           id,
-          { status: "received" },
-          "purchase-requests.markReceived",
+          { status: next },
+          "purchase-requests.advanceStatus",
         );
         setRequests((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: "received" } : r)),
+          prev.map((r) => (r.id === id ? { ...r, status: next } : r)),
         );
       } catch (err) {
         alert(
           `Couldn't update status: ${err instanceof Error ? err.message : String(err)}`,
         );
       } finally {
-        setReceivingId(null);
+        setAdvancingId(null);
       }
     },
     [],
@@ -224,8 +295,11 @@ export default function PurchaseRequestsListPage() {
         ) : (
           <ul className="space-y-2">
             {requests.map((pr) => {
-              const isDraft = pr.status === "draft";
-              const isReceived = pr.status === "received";
+              const meta = STATUS_FLOW[pr.status] ?? STATUS_FLOW.submitted;
+              const StatusIcon = meta.icon;
+              const NextIcon = meta.nextIcon;
+              const showDownloadHint =
+                pr.status !== "draft" && pr.status !== "received";
               const label = `${pr.vendor1_name || "this PR"} (${formatDate(pr.date_prepared)})`;
               return (
                 <li
@@ -237,35 +311,20 @@ export default function PurchaseRequestsListPage() {
                     className="flex items-center gap-3 p-3 flex-1 min-w-0 active:scale-[0.99]"
                   >
                     <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        isDraft
-                          ? "bg-muted text-muted-foreground"
-                          : isReceived
-                            ? "bg-green-500/10 text-green-600"
-                            : "bg-primary/10 text-primary"
-                      }`}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.iconBg}`}
                     >
-                      {isReceived ? (
-                        <CheckCircle2 className="w-5 h-5" />
-                      ) : (
-                        <FileText className="w-5 h-5" />
-                      )}
+                      <StatusIcon className="w-5 h-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-sm">
                           {formatDate(pr.date_prepared)}
                         </p>
-                        {isDraft && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                            Draft
-                          </span>
-                        )}
-                        {isReceived && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-green-500/10 text-green-700 dark:text-green-400">
-                            Received
-                          </span>
-                        )}
+                        <span
+                          className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${meta.badge}`}
+                        >
+                          {meta.label}
+                        </span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {pr.vendor1_name || "Vendor TBD"} &middot;{" "}
@@ -277,7 +336,7 @@ export default function PurchaseRequestsListPage() {
                         </p>
                       )}
                     </div>
-                    {!isDraft && !isReceived && (
+                    {showDownloadHint && (
                       <Download className="w-4 h-4 text-muted-foreground shrink-0" />
                     )}
                     <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -290,16 +349,18 @@ export default function PurchaseRequestsListPage() {
                   >
                     <Copy className="w-4 h-4" />
                   </Link>
-                  {pr.status === "submitted" && (
+                  {meta.next && NextIcon && meta.nextLabel && (
                     <button
                       type="button"
-                      aria-label="Mark purchased and received"
-                      title="Mark purchased and received"
-                      disabled={receivingId === pr.id}
-                      onClick={() => handleMarkReceived(pr.id, label)}
-                      className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-green-500/10 hover:text-green-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                      aria-label={`Mark as ${meta.nextLabel}`}
+                      title={`Mark as ${meta.nextLabel}`}
+                      disabled={advancingId === pr.id}
+                      onClick={() =>
+                        handleAdvanceStatus(pr.id, label, meta.next!, meta.nextLabel!)
+                      }
+                      className={`flex items-center justify-center px-3 border-l border-border text-muted-foreground active:scale-[0.97] transition-all disabled:opacity-50 ${meta.nextHover}`}
                     >
-                      <PackageCheck className="w-4 h-4" />
+                      <NextIcon className="w-4 h-4" />
                     </button>
                   )}
                   <button

@@ -1630,7 +1630,7 @@ export interface PurchaseRequest {
   attached_sow: boolean;
   sow_storage_path: string | null;
 
-  status: "draft" | "submitted" | "received";
+  status: "draft" | "submitted" | "sent" | "approved" | "received";
 
   created_by: string | null;
   created_at: string;
