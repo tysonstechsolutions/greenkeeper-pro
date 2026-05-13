@@ -65,3 +65,21 @@ export function formatLocalDateTime(d: Date): string {
 export function daysAgoLocal(days: number): string {
   return addDaysLocal(todayLocal(), -days);
 }
+
+/**
+ * Today's date in `MM/DD/YYYY`, locked to Central Time (America/Chicago).
+ *
+ * Used by government forms (SOW, NAVCOMPT) that must reflect the date as
+ * of the requesting office's local time, not the user's browser timezone.
+ * VMGC sits in Central Time, so anything stamped on its paperwork should
+ * follow CT regardless of where the superintendent is when they hit
+ * "generate" (laptop on a trip, etc.).
+ */
+export function todayCentralMmDdYyyy(): string {
+  return new Date().toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    timeZone: "America/Chicago",
+  });
+}

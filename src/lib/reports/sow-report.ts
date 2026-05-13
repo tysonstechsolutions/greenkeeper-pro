@@ -7,6 +7,32 @@
  */
 import { jsPDF } from "jspdf";
 import { formatLocalDate } from "@/lib/utils/date";
+import { findSignatureUrl } from "@/lib/staff-signatures";
+
+// Cache fetched signature images so re-renders / multiple SOWs in one
+// session don't keep re-fetching the same PNG.
+const imageCache = new Map<string, string>();
+
+async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const cached = imageCache.get(url);
+  if (cached) return cached;
+  try {
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    imageCache.set(url, dataUrl);
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
@@ -132,6 +158,101 @@ function drawBox(
   }
 }
 
+/**
+ * Same as drawBox, but returns the text that didn't fit (or null if it
+ * all fit). Used for the AI-generated long-text sections so we can spill
+ * the remainder onto a continuation page instead of silently dropping it.
+ */
+function drawBoxOverflow(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  text: string,
+  fontSize = 8,
+): string | null {
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.3);
+  doc.rect(x, y, w, h, "FD");
+
+  if (!text.trim()) return null;
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(fontSize);
+  doc.setTextColor(0, 0, 0);
+
+  const lines = doc.splitTextToSize(text, w - 4) as string[];
+  const lineStep = fontSize * 0.35 + 1.5;
+  let ty = y + lineStep;
+  let drawn = 0;
+  for (const line of lines) {
+    if (ty + lineStep > y + h - 1) break;
+    doc.text(line, x + 2, ty);
+    ty += lineStep;
+    drawn++;
+  }
+  if (drawn >= lines.length) return null;
+
+  // Mark the box visibly so the reader knows there's more on a continuation page.
+  doc.setFont("courier", "italic");
+  doc.setFontSize(Math.max(7, fontSize - 1));
+  doc.text("(continued on next page)", x + w - 2, y + h - 1.5, { align: "right" });
+  doc.setFont("courier", "normal");
+  doc.setFontSize(fontSize);
+
+  return lines.slice(drawn).join("\n");
+}
+
+/**
+ * Append a continuation page (or pages) at the end of the doc for a section
+ * whose box ran out of room. Returns the page number for the LAST page it
+ * emitted, so the caller can keep sequencing footers correctly.
+ */
+function addContinuationPage(
+  doc: jsPDF,
+  startPageNum: number,
+  sectionTitle: string,
+  text: string,
+): number {
+  const cw = contentWidth(doc);
+  const ph = doc.internal.pageSize.getHeight();
+  const pw = doc.internal.pageSize.getWidth();
+  const fontSize = 9;
+  const lineStep = fontSize * 0.35 + 1.5;
+  const bottomLimit = ph - 18;
+
+  let pageNum = startPageNum;
+  const newPage = () => {
+    doc.addPage();
+    let y = MT;
+    doc.setFont("times", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`${sectionTitle} (continued)`, pw / 2, y + 4, { align: "center" });
+    y += 12;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(fontSize);
+    return y;
+  };
+
+  let y = newPage();
+  const allLines = doc.splitTextToSize(text, cw) as string[];
+
+  for (const line of allLines) {
+    if (y + lineStep > bottomLimit) {
+      addFooter(doc, pageNum);
+      pageNum++;
+      y = newPage();
+    }
+    doc.text(line, ML, y);
+    y += lineStep;
+  }
+  addFooter(doc, pageNum);
+  return pageNum;
+}
+
 /** Add page number and revision footer. */
 function addFooter(doc: jsPDF, pageNum: number): void {
   const pw = doc.internal.pageSize.getWidth();
@@ -152,10 +273,15 @@ function body(doc: jsPDF, bold = false): void {
 
 // ── Main generator ────────────────────────────────────────────────────────────
 
-export function generateSowReport(data: SowFormData): { blob: Blob; filename: string } {
+export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const pw = doc.internal.pageSize.getWidth();
   const cw = contentWidth(doc);
+
+  // Long-text sections that may not fit their fixed boxes. We collect any
+  // overflow here and append a "(continued)" page per section at the end
+  // so AI-generated paragraphs are never silently truncated.
+  const overflows: Array<{ section: string; text: string }> = [];
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PAGE 1
@@ -301,7 +427,11 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
   y += LH;
 
   const refBoxH = 18;
-  drawBox(doc, ML, y, cw, refBoxH, data.hasReferences ? data.referencesText : "");
+  {
+    const refText = data.hasReferences ? data.referencesText : "";
+    const refOver = drawBoxOverflow(doc, ML, y, cw, refBoxH, refText);
+    if (refOver) overflows.push({ section: "References / Instructions", text: refOver });
+  }
   y += refBoxH + LH;
 
   doc.text(`Projected Start Date:  ${data.projectedStartDate}`, ML, y);
@@ -361,7 +491,10 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
   y += mpLines.length * LH + LH;
 
   const personnelBoxH = 22;
-  drawBox(doc, ML, y, cw, personnelBoxH, data.personnelCertifications);
+  {
+    const certOver = drawBoxOverflow(doc, ML, y, cw, personnelBoxH, data.personnelCertifications);
+    if (certOver) overflows.push({ section: "4.4 Minimum Personnel Requirements", text: certOver });
+  }
   y += personnelBoxH + LH * 1.5;
 
   const spLabelW = 118;
@@ -443,7 +576,10 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
   y += expIntroLines.length * LH + LH;
 
   const expectBoxH = 52;
-  drawBox(doc, ML, y, cw, expectBoxH, data.expectationText, 8);
+  {
+    const expOver = drawBoxOverflow(doc, ML, y, cw, expectBoxH, data.expectationText, 8);
+    if (expOver) overflows.push({ section: "4.6 Expectation", text: expOver });
+  }
   y += expectBoxH + LH;
 
   // 5. CONTINGENCY PLAN
@@ -524,7 +660,10 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
   y += accessLines.length * LH + LH;
 
   const accessBoxH = 25;
-  drawBox(doc, ML, y, cw, accessBoxH, data.accessDirections);
+  {
+    const accessOver = drawBoxOverflow(doc, ML, y, cw, accessBoxH, data.accessDirections);
+    if (accessOver) overflows.push({ section: "Section 6 Access Directions", text: accessOver });
+  }
   y += accessBoxH + LH * 2;
 
   body(doc, true);
@@ -537,7 +676,10 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
 
   const ph = doc.internal.pageSize.getHeight();
   const goodsBoxH = ph - y - 20;
-  drawBox(doc, ML, y, cw, goodsBoxH, data.descriptionOfGoods, 8);
+  {
+    const goodsOver = drawBoxOverflow(doc, ML, y, cw, goodsBoxH, data.descriptionOfGoods, 8);
+    if (goodsOver) overflows.push({ section: "Description of Goods Requested", text: goodsOver });
+  }
 
   addFooter(doc, 4);
 
@@ -586,6 +728,35 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
   // Signature
   doc.text("Signature of Requestor:", ML, y);
   drawBox(doc, ML + 62, y - 4, cw - 62, 7, "", 9);
+
+  // Overlay the requestor's signature image (if mapped in staff-signatures.ts)
+  const sigUrl = findSignatureUrl(data.requestorName);
+  if (sigUrl) {
+    try {
+      const dataUrl = await loadImageAsDataUrl(sigUrl);
+      if (dataUrl) {
+        // ~55mm wide, ~12mm tall; bottom-aligned to the signature line so it
+        // looks like the requestor signed on top of the printed box.
+        const sigW = 55;
+        const sigH = 12;
+        doc.addImage(
+          dataUrl,
+          "PNG",
+          ML + 64,
+          y + 3 - sigH,
+          sigW,
+          sigH,
+          undefined,
+          "FAST",
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[sow-report] signature image failed to load:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
   y += LH * 2.5;
 
   // Date Signed
@@ -593,8 +764,16 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.3);
   doc.line(ML + 32, y, ML + 95, y);
+  // Stamp today's date next to the line so the form is fully complete.
+  doc.text(data.date, ML + 34, y - 1);
 
   addFooter(doc, 5);
+
+  // ── Continuation pages for sections whose AI/user content didn't fit ────────
+  let pageNum = 6;
+  for (const over of overflows) {
+    pageNum = addContinuationPage(doc, pageNum, over.section, over.text) + 1;
+  }
 
   // ── Output ──────────────────────────────────────────────────────────────────
   const blob = doc.output("blob") as Blob;
@@ -611,7 +790,7 @@ export function generateSowReport(data: SowFormData): { blob: Blob; filename: st
 }
 
 export async function downloadSowReport(data: SowFormData): Promise<void> {
-  const { blob, filename } = generateSowReport(data);
+  const { blob, filename } = await generateSowReport(data);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

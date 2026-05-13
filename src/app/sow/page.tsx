@@ -33,7 +33,7 @@ import { roleLabels } from "@/lib/hooks/useProfiles";
 import { callApi } from "@/lib/api/client";
 import { downloadSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { PR_DELIVERY_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
-import { todayLocal } from "@/lib/utils/date";
+import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ type SowForm = Omit<SowFormData, "expectationText" | "descriptionOfGoods"> & {
 
 function emptyForm(): SowForm {
   return {
-    date: new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+    date: todayCentralMmDdYyyy(),
     from: "",
     activityName: COURSE_NAME,
     requisitionType: "",
@@ -351,7 +351,7 @@ export default function SowPage() {
                 </Label>
                 <Textarea
                   id="workDescription"
-                  placeholder="e.g. Remove and replace irrigation heads on holes 1-9, repair broken cart path sections near hole 4, reseed tee boxes on 12 and 15..."
+                  placeholder="Describe what the contractor will do. The AI tailors every section to the trade — paving, roofing, HVAC, electrical, tree care, irrigation, painting, fencing, pest control, etc. Be specific about quantities, locations, and materials."
                   value={form.workDescription}
                   onChange={(e) => set("workDescription", e.target.value)}
                   rows={5}

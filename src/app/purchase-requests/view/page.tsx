@@ -42,7 +42,7 @@ import {
   PR_DELIVERY_DEFAULTS,
   PR_REQUESTOR_DEFAULTS,
 } from "@/lib/pr-defaults";
-import { todayLocal } from "@/lib/utils/date";
+import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 
 // ── Constants (mirrors /sow page) ─────────────────────────────────────────────
@@ -103,6 +103,7 @@ function SowWizardModal({
 }) {
   const roleLabel = profile?.role ? (roleLabels[profile.role as UserRole] ?? "") : "";
   const fromName = [profile?.full_name, roleLabel, COURSE_NAME].filter(Boolean).join(", ");
+  const userPhone = profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone;
 
   // Pre-fill work description from PR line item descriptions
   const autoDescription = (pr.items || [])
@@ -110,14 +111,17 @@ function SowWizardModal({
     .filter(Boolean)
     .join("; ");
 
+  const [step, setStep] = useState<"form" | "review">("form");
   const [form, setForm] = useState<SowQuickForm>({
     workDescription: autoDescription,
     requisitionType: "",
     projectedStartDate: "",
     desiredCompletionDate: "",
   });
+  const [draft, setDraft] = useState<SowFormData | null>(null);
 
   const [generating, setGenerating] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canGenerate =
@@ -130,17 +134,32 @@ function SowWizardModal({
     setGenerating(true);
     setError(null);
     try {
-      const { expectation, goods, certifications } = await generateSowContent(
-        form.workDescription,
-        COURSE_NAME,
-        fromName,
-        form.projectedStartDate,
-        form.desiredCompletionDate,
-        form.requisitionType,
-      );
+      const { expectation, goods, certifications } = await generateSowContent({
+        workDescription: form.workDescription,
+        activityName: COURSE_NAME,
+        from: fromName,
+        startDate: form.projectedStartDate,
+        endDate: form.desiredCompletionDate,
+        requisitionType: form.requisitionType,
+        // Hand the AI everything we know from the PR/quote so it can write
+        // specific contracting language instead of generic boilerplate.
+        vendorName: pr.vendor1_name,
+        vendorContact: [pr.vendor1_poc, pr.vendor1_phone, pr.vendor1_email]
+          .filter(Boolean)
+          .join(" · ") || null,
+        items: (pr.items || []).map((it: PurchaseRequestItem) => ({
+          description: it.description || "",
+          part_number: it.part_number,
+          qty: Number(it.qty) || 0,
+          unit: it.unit,
+          unit_price: Number(it.unit_price) || 0,
+        })),
+        totalAmount: Number(pr.ige_amount) || 0,
+        justification: pr.justification,
+      });
 
       const sowData: SowFormData = {
-        date: new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+        date: todayCentralMmDdYyyy(),
         from: fromName,
         activityName: COURSE_NAME,
         requisitionType: form.requisitionType,
@@ -149,7 +168,7 @@ function SowWizardModal({
         referencesText: "",
         projectedStartDate: form.projectedStartDate,
         desiredCompletionDate: form.desiredCompletionDate,
-        facilityHours: "Monday–Saturday: 0700–2000\nSunday: Closed",
+        facilityHours: "Open daily, including Sundays and holidays: 0700–2000",
         appointmentTime: "",
         servicesInterrupted: false,
         patronsInDanger: false,
@@ -170,23 +189,39 @@ function SowWizardModal({
         baseEntryAmendments: false,
         buildingNameNumber: BUILDING,
         roomNumber: "",
-        accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall contact ${PR_DELIVERY_DEFAULTS.poc} or the Course Superintendent for escort to the work area. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
+        accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall report to ${profile?.full_name ?? "the Course Superintendent"} (Course Superintendent) at ${userPhone} for escort to the work area. The contractor reports directly to the Course Superintendent for the duration of the contract. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
         descriptionOfGoods: goods,
         requestorName: profile?.full_name ?? "",
         requestorTitle: roleLabel,
-        directPhone: profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone,
+        directPhone: userPhone,
         cellPhone: "",
         email: profile?.email ?? "",
-        supervisorName: PR_DELIVERY_DEFAULTS.poc,
-        supervisorPhone: PR_DELIVERY_DEFAULTS.phone,
+        // The contractor reports to the superintendent (the current user),
+        // not to the user's own boss. Joseph Caprez is still the delivery
+        // POC on the PR itself; for the SOW he doesn't supervise the work.
+        supervisorName: profile?.full_name ?? "",
+        supervisorPhone: userPhone,
       };
-
-      const { blob } = generateSowReport(sowData);
-      onComplete(blob);
+      setDraft(sowData);
+      setStep("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate SOW. Please try again.");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleBuildPdf() {
+    if (!draft) return;
+    setBuilding(true);
+    setError(null);
+    try {
+      const { blob } = await generateSowReport(draft);
+      onComplete(blob);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to build SOW PDF. Please try again.");
+    } finally {
+      setBuilding(false);
     }
   }
 
@@ -203,8 +238,19 @@ function SowWizardModal({
         {/* Header */}
         <div className="sticky top-0 bg-background border-b border-border px-4 py-3 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-2">
+            {step === "review" && (
+              <button
+                onClick={() => setStep("form")}
+                className="p-1 -ml-1 rounded hover:bg-muted transition-colors"
+                aria-label="Back"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
             <FileText className="w-4 h-4 text-[#1B4332]" />
-            <span className="font-semibold text-sm">Statement of Work</span>
+            <span className="font-semibold text-sm">
+              {step === "form" ? "Statement of Work" : "Review SOW Before Download"}
+            </span>
           </div>
           <button
             onClick={onCancel}
@@ -214,114 +260,208 @@ function SowWizardModal({
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            This PR is marked as requiring a Statement of Work. Fill in the details below — Claude AI will expand your description into formal contracting language and include the SOW PDF in the download bundle.
-          </p>
-
-          {/* Work description */}
-          <div>
-            <label className={labelCls}>
-              What work needs to be done? <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={form.workDescription}
-              onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
-              rows={4}
-              placeholder="e.g. Remove and replace irrigation heads on holes 1-9, repair broken cart path sections near hole 4..."
-              className={`${inputCls} resize-none`}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Pre-filled from your PR line items. Edit as needed — the AI will expand this into formal contract language.
+        {step === "form" && (
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This PR is marked as requiring a Statement of Work. Fill in the details below — Claude AI will expand your description into formal contracting language. You&apos;ll get to review and edit before downloading.
             </p>
-          </div>
 
-          {/* Requisition type */}
-          <div>
-            <label className={labelCls}>
-              Requisition Type <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={form.requisitionType}
-              onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
-              className={inputCls}
-            >
-              <option value="">Select type…</option>
-              {REQUISITION_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-3">
+            {/* Work description */}
             <div>
               <label className={labelCls}>
-                Projected Start <span className="text-red-500">*</span>
+                What work needs to be done? <span className="text-red-500">*</span>
               </label>
+              <textarea
+                value={form.workDescription}
+                onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
+                rows={4}
+                placeholder="e.g. Asphalt patch & seal cart paths from tee 3 to 5; OR install new pump-house electrical panel; OR fence repair on perimeter — any trade works"
+                className={`${inputCls} resize-none`}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Pre-filled from your PR line items. Edit as needed.
+              </p>
+            </div>
+
+            {/* Requisition type */}
+            <div>
+              <label className={labelCls}>
+                Requisition Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={form.requisitionType}
+                onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">Select type…</option>
+                {REQUISITION_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>
+                  Projected Start <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={form.projectedStartDate}
+                  onChange={(e) => setForm({ ...form, projectedStartDate: e.target.value })}
+                  min={todayLocal()}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>
+                  Desired Completion <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={form.desiredCompletionDate}
+                  onChange={(e) => setForm({ ...form, desiredCompletionDate: e.target.value })}
+                  min={form.projectedStartDate || todayLocal()}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Auto-filled from your profile & PR defaults:</p>
+              <p>Requestor & on-site supervisor: {profile?.full_name || "—"} · {roleLabel}</p>
+              <p>Location: {BUILDING}</p>
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === "review" && draft && (
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Review the AI-generated SOW content below. Edit any section before downloading.
+            </p>
+
+            <div>
+              <label className={labelCls}>4.6 Expectation (contractor duties)</label>
+              <textarea
+                value={draft.expectationText}
+                onChange={(e) => setDraft({ ...draft, expectationText: e.target.value })}
+                rows={10}
+                className={`${inputCls} resize-y font-mono text-xs leading-relaxed`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Description of Goods Requested</label>
+              <textarea
+                value={draft.descriptionOfGoods}
+                onChange={(e) => setDraft({ ...draft, descriptionOfGoods: e.target.value })}
+                rows={4}
+                className={`${inputCls} resize-y`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Minimum Personnel Certifications</label>
+              <textarea
+                value={draft.personnelCertifications}
+                onChange={(e) => setDraft({ ...draft, personnelCertifications: e.target.value })}
+                rows={3}
+                className={`${inputCls} resize-y`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Facility / Program Hours</label>
               <input
-                type="date"
-                value={form.projectedStartDate}
-                onChange={(e) => setForm({ ...form, projectedStartDate: e.target.value })}
-                min={todayLocal()}
+                type="text"
+                value={draft.facilityHours}
+                onChange={(e) => setDraft({ ...draft, facilityHours: e.target.value })}
                 className={inputCls}
               />
             </div>
+
             <div>
-              <label className={labelCls}>
-                Desired Completion <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={form.desiredCompletionDate}
-                onChange={(e) => setForm({ ...form, desiredCompletionDate: e.target.value })}
-                min={form.projectedStartDate || todayLocal()}
-                className={inputCls}
+              <label className={labelCls}>Access Directions / Reporting Structure</label>
+              <textarea
+                value={draft.accessDirections}
+                onChange={(e) => setDraft({ ...draft, accessDirections: e.target.value })}
+                rows={4}
+                className={`${inputCls} resize-y`}
               />
             </div>
-          </div>
 
-          {/* Note about auto-filled fields */}
-          <div className="rounded-lg bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Auto-filled from your profile & PR defaults:</p>
-            <p>Requestor: {profile?.full_name || "—"} · {roleLabel}</p>
-            <p>Supervisor: {PR_DELIVERY_DEFAULTS.poc}</p>
-            <p>Location: {BUILDING}</p>
-          </div>
-
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Projected Start</label>
+                <input
+                  type="date"
+                  value={draft.projectedStartDate}
+                  onChange={(e) => setDraft({ ...draft, projectedStartDate: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Desired Completion</label>
+                <input
+                  type="date"
+                  value={draft.desiredCompletionDate}
+                  onChange={(e) => setDraft({ ...draft, desiredCompletionDate: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
             </div>
-          )}
-        </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-background border-t border-border px-4 py-3 flex gap-3">
           <button
-            onClick={onCancel}
+            onClick={step === "review" ? () => setStep("form") : onCancel}
             className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
           >
-            Cancel
+            {step === "review" ? "Back" : "Cancel"}
           </button>
-          <button
-            onClick={handleGenerate}
-            disabled={!canGenerate || generating}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating SOW…
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Generate &amp; Bundle
-              </>
-            )}
-          </button>
+          {step === "form" ? (
+            <button
+              onClick={handleGenerate}
+              disabled={!canGenerate || generating}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
+            >
+              {generating ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
+              ) : (
+                <><Sparkles className="w-4 h-4" />Generate SOW</>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={handleBuildPdf}
+              disabled={building}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
+            >
+              {building ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Building PDF…</>
+              ) : (
+                <><CheckCircle className="w-4 h-4" />Use This SOW</>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

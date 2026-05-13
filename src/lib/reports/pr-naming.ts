@@ -7,13 +7,16 @@
  *   • QUOTE-FY25-MS-001-HomeDepot-Marina-May2025
  *   • 889-HOME DEPOT – EXPIRES 01 JAN 2026
  *
- * For VMGC the program is always "Golf Course". The month/year reflect
- * the actual current month at download time, not the date the PR was
- * created — that matches the "May 2025" example which lines up with
- * the email's send date.
+ * All filenames now embed the Internal Order ID (e.g. FY26-GC-0001) so
+ * the saved files match the number printed on the PR form and the
+ * procurement office can cross-reference them without ambiguity.
+ *
+ * When the sequence number hasn't been assigned yet (draft preview), the
+ * IO slot falls back to the date string "YYYYMMDD".
  */
 
 import type { PurchaseRequest, VendorWith889 } from "@/types/database";
+import { formatInternalOrder } from "@/lib/pr-internal-order";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -57,20 +60,31 @@ export function currentMonthYearCompact(now: Date = new Date()): string {
 }
 
 /**
- * PR filename: "PR-{Vendor} - Golf Course - {Month} {Year}.pdf"
- * Example: "PR-Ace Hardware - Golf Course - May 2026.pdf"
+ * Internal order tag for filenames: "FY26-GC-0001".
+ * Falls back to "YYYYMMDD" when the sequence hasn't been assigned (drafts).
+ */
+function ioTag(pr: PurchaseRequest): string {
+  const io = formatInternalOrder(pr.pr_sequence_number, pr.date_prepared);
+  if (io) return io;
+  // Draft fallback — use the prepared date so the name is still unique.
+  return pr.date_prepared.replace(/-/g, "");
+}
+
+/**
+ * PR PDF filename: "PR-{IO} - {Vendor} - Golf Course - {Month} {Year}.pdf"
+ * Example: "PR-FY26-GC-0001 - Ace Hardware - Golf Course - May 2026.pdf"
  */
 export function purchaseRequestPdfFilename(
   pr: PurchaseRequest,
   now: Date = new Date(),
 ): string {
   const vendor = sanitize(pr.vendor1_name || "Vendor");
-  return `PR-${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.pdf`;
+  return `PR-${ioTag(pr)} - ${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.pdf`;
 }
 
 /**
- * Quote filename: "QUOTE-FY{YY}-{Vendor}-Golf Course-{Month}{Year}.{ext}"
- * Example: "QUOTE-FY26-AceHardware-Golf Course-May2026.pdf"
+ * Quote filename: "QUOTE-{IO}-{Vendor}-Golf Course-{Month}{Year}.{ext}"
+ * Example: "QUOTE-FY26-GC-0001-AceHardware-Golf Course-May2026.pdf"
  *
  * `originalExt` is what the source quote file used (pdf/jpg/png/etc).
  */
@@ -79,12 +93,8 @@ export function quoteFilename(
   originalExt: string,
   now: Date = new Date(),
 ): string {
-  // Fiscal year — Navy NAF runs Oct–Sep. October-onwards is next fiscal year.
-  const yy = (now.getMonth() >= 9 ? now.getFullYear() + 1 : now.getFullYear())
-    .toString()
-    .slice(-2);
   const vendor = compactVendor(pr.vendor1_name || "Vendor");
-  return `QUOTE-FY${yy}-${vendor}-${PROGRAM}-${currentMonthYearCompact(now)}.${originalExt}`;
+  return `QUOTE-${ioTag(pr)}-${vendor}-${PROGRAM}-${currentMonthYearCompact(now)}.${originalExt}`;
 }
 
 /**
@@ -110,24 +120,27 @@ export function section889Filename(
 }
 
 /**
- * SOW filename included in the PR bundle.
- * Example: "SOW-Ace Hardware - Golf Course - May 2026.pdf"
+ * SOW filename: "SOW-{IO} - {Vendor} - Golf Course - {Month} {Year}.pdf"
+ * Example: "SOW-FY26-GC-0001 - Ace Hardware - Golf Course - May 2026.pdf"
  */
 export function sowFilename(
   pr: PurchaseRequest,
   now: Date = new Date(),
 ): string {
   const vendor = sanitize(pr.vendor1_name || "Vendor");
-  return `SOW-${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.pdf`;
+  return `SOW-${ioTag(pr)} - ${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.pdf`;
 }
 
-/** ZIP filename for the whole PR bundle. */
+/**
+ * ZIP bundle filename: "PR Bundle - {IO} - {Vendor} - Golf Course - {Month} {Year}.zip"
+ * Example: "PR Bundle - FY26-GC-0001 - Ace Hardware - Golf Course - May 2026.zip"
+ */
 export function prBundleZipFilename(
   pr: PurchaseRequest,
   now: Date = new Date(),
 ): string {
   const vendor = sanitize(pr.vendor1_name || "Vendor");
-  return `PR Bundle - ${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.zip`;
+  return `PR Bundle - ${ioTag(pr)} - ${vendor} - ${PROGRAM} - ${currentMonthYear(now)}.zip`;
 }
 
 /** Email subject suggested for sending the bundle. */
@@ -136,5 +149,5 @@ export function prEmailSubject(
   now: Date = new Date(),
 ): string {
   const vendor = sanitize(pr.vendor1_name || "Vendor").toUpperCase();
-  return `PR – ${vendor} – GOLF – ${currentMonthYear(now)}`;
+  return `PR – ${ioTag(pr)} – ${vendor} – GOLF – ${currentMonthYear(now)}`;
 }

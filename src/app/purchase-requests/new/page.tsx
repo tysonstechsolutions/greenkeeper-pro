@@ -19,6 +19,7 @@ import {
   Eye,
   X,
   FileText,
+  ChevronLeft,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -45,7 +46,7 @@ import {
   PurchaseRequestReportError,
 } from "@/lib/reports/purchase-request-report";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
-import { formatLocalDate, todayLocal } from "@/lib/utils/date";
+import { formatLocalDate, todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistory";
 import { History as HistoryIcon } from "lucide-react";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
@@ -152,20 +153,30 @@ interface SowQuickForm {
 /** Modal shown when the SOW checkbox is checked on the new PR form. */
 function SowAttachModal({
   items,
+  vendorName,
+  vendorContact,
+  justification,
+  totalAmount,
   profile,
   onComplete,
   onSkip,
   onCancel,
 }: {
   items: PurchaseRequestItem[];
+  vendorName?: string | null;
+  vendorContact?: string | null;
+  justification?: string | null;
+  totalAmount?: number | null;
   profile: { full_name?: string | null; role?: string; phone?: string | null; email?: string | null } | null;
   onComplete: (blob: Blob) => void;
   onSkip: () => void;
   onCancel: () => void;
 }) {
   const [mode, setMode] = useState<"fill" | "attach">("fill");
+  const [step, setStep] = useState<"form" | "review">("form");
   const roleLabel = profile?.role ? (roleLabels[profile.role as UserRole] ?? "") : "";
   const fromName = [profile?.full_name, roleLabel, COURSE_NAME].filter(Boolean).join(", ");
+  const userPhone = profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone;
   const autoDescription = items.map((it) => it.description).filter(Boolean).join("; ");
 
   const [form, setForm] = useState<SowQuickForm>({
@@ -174,7 +185,9 @@ function SowAttachModal({
     projectedStartDate: "",
     desiredCompletionDate: "",
   });
+  const [draft, setDraft] = useState<SowFormData | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [sowError, setSowError] = useState<string | null>(null);
 
   const canGenerate =
@@ -187,12 +200,29 @@ function SowAttachModal({
     setGenerating(true);
     setSowError(null);
     try {
-      const { expectation, goods, certifications } = await generateSowContent(
-        form.workDescription, COURSE_NAME, fromName,
-        form.projectedStartDate, form.desiredCompletionDate, form.requisitionType,
-      );
+      const { expectation, goods, certifications } = await generateSowContent({
+        workDescription: form.workDescription,
+        activityName: COURSE_NAME,
+        from: fromName,
+        startDate: form.projectedStartDate,
+        endDate: form.desiredCompletionDate,
+        requisitionType: form.requisitionType,
+        // Pass in everything we know about the quote/PR so the AI can
+        // reference actual line items, part numbers, qty, and pricing.
+        vendorName,
+        vendorContact,
+        items: items.map((it) => ({
+          description: it.description || "",
+          part_number: it.part_number,
+          qty: Number(it.qty) || 0,
+          unit: it.unit,
+          unit_price: Number(it.unit_price) || 0,
+        })),
+        totalAmount: totalAmount ?? 0,
+        justification,
+      });
       const sowData: SowFormData = {
-        date: new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+        date: todayCentralMmDdYyyy(),
         from: fromName,
         activityName: COURSE_NAME,
         requisitionType: form.requisitionType,
@@ -201,7 +231,7 @@ function SowAttachModal({
         referencesText: "",
         projectedStartDate: form.projectedStartDate,
         desiredCompletionDate: form.desiredCompletionDate,
-        facilityHours: "Monday–Saturday: 0700–2000\nSunday: Closed",
+        facilityHours: "Open daily, including Sundays and holidays: 0700–2000",
         appointmentTime: "",
         servicesInterrupted: false,
         patronsInDanger: false,
@@ -222,22 +252,38 @@ function SowAttachModal({
         baseEntryAmendments: false,
         buildingNameNumber: BUILDING,
         roomNumber: "",
-        accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall contact ${PR_DELIVERY_DEFAULTS.poc} or the Course Superintendent for escort to the work area. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
+        accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall report to ${profile?.full_name ?? "the Course Superintendent"} (Course Superintendent) at ${userPhone} for escort to the work area. The contractor reports directly to the Course Superintendent for the duration of the contract. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
         descriptionOfGoods: goods,
         requestorName: profile?.full_name ?? "",
         requestorTitle: roleLabel,
-        directPhone: profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone,
+        directPhone: userPhone,
         cellPhone: "",
         email: profile?.email ?? "",
-        supervisorName: PR_DELIVERY_DEFAULTS.poc,
-        supervisorPhone: PR_DELIVERY_DEFAULTS.phone,
+        // Contractor reports to the superintendent (current user), not the
+        // user's own boss. Joseph Caprez stays on the PR as delivery POC.
+        supervisorName: profile?.full_name ?? "",
+        supervisorPhone: userPhone,
       };
-      const { blob } = generateSowReport(sowData);
-      onComplete(blob);
+      setDraft(sowData);
+      setStep("review");
     } catch (err) {
       setSowError(err instanceof Error ? err.message : "Failed to generate SOW. Try again.");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleBuildPdf() {
+    if (!draft) return;
+    setBuilding(true);
+    setSowError(null);
+    try {
+      const { blob } = await generateSowReport(draft);
+      onComplete(blob);
+    } catch (err) {
+      setSowError(err instanceof Error ? err.message : "Failed to build SOW PDF. Try again.");
+    } finally {
+      setBuilding(false);
     }
   }
 
@@ -250,165 +296,290 @@ function SowAttachModal({
       <div className="relative w-full sm:max-w-lg bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-background border-b border-border px-4 py-3 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-2">
+            {step === "review" && (
+              <button
+                type="button"
+                onClick={() => setStep("form")}
+                className="p-1 -ml-1 rounded hover:bg-muted transition-colors"
+                aria-label="Back"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
             <FileText className="w-4 h-4 text-[#1B4332]" />
-            <span className="font-semibold text-sm">Statement of Work</span>
+            <span className="font-semibold text-sm">
+              {step === "form" ? "Statement of Work" : "Review SOW Before Download"}
+            </span>
           </div>
           <button type="button" onClick={onCancel} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            How would you like to include the SOW in the download bundle?
-          </p>
+        {step === "form" && (
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              How would you like to include the SOW in the download bundle?
+            </p>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setMode("fill")}
-              className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
-                mode === "fill"
-                  ? "border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332] dark:text-green-400"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 inline mr-1.5" />
-              Fill Out with AI
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("attach")}
-              className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
-                mode === "attach"
-                  ? "border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332] dark:text-green-400"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Plus className="w-3.5 h-3.5 inline mr-1.5" />
-              Attach Completed PDF
-            </button>
-          </div>
-
-          {mode === "fill" && (
-            <>
-              <div>
-                <label className={labelCls}>
-                  What work needs to be done? <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={form.workDescription}
-                  onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
-                  rows={4}
-                  placeholder="e.g. Remove and replace irrigation heads on holes 1-9..."
-                  className={`${inputCls} resize-none`}
-                />
-                {autoDescription && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Pre-filled from your line items — edit as needed.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className={labelCls}>
-                  Requisition Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={form.requisitionType}
-                  onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
-                  className={inputCls}
-                >
-                  <option value="">Select type…</option>
-                  {REQUISITION_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Projected Start <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
-                    value={form.projectedStartDate}
-                    onChange={(e) => setForm({ ...form, projectedStartDate: e.target.value })}
-                    min={todayLocal()}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>Desired Completion <span className="text-red-500">*</span></label>
-                  <input
-                    type="date"
-                    value={form.desiredCompletionDate}
-                    onChange={(e) => setForm({ ...form, desiredCompletionDate: e.target.value })}
-                    min={form.projectedStartDate || todayLocal()}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">Auto-filled from your profile & PR defaults:</p>
-                <p>Requestor: {profile?.full_name || "—"} · {roleLabel}</p>
-                <p>Supervisor: {PR_DELIVERY_DEFAULTS.poc}</p>
-                <p>Location: {BUILDING}</p>
-              </div>
-
-              {sowError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-400">{sowError}</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {mode === "attach" && (
-            <div className="border-2 border-dashed border-border rounded-xl p-6 text-center">
-              <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
-              <p className="text-sm font-medium mb-1">Upload your completed SOW PDF</p>
-              <p className="text-xs text-muted-foreground mb-3">The file will be included in the download bundle.</p>
-              <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium cursor-pointer hover:bg-primary/90 transition-colors">
-                <Plus className="w-4 h-4" />
-                Choose PDF
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onComplete(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMode("fill")}
+                className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
+                  mode === "fill"
+                    ? "border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332] dark:text-green-400"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 inline mr-1.5" />
+                Fill Out with AI
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("attach")}
+                className={`py-2.5 px-3 rounded-xl border text-sm font-medium transition-all ${
+                  mode === "attach"
+                    ? "border-[#1B4332] bg-[#1B4332]/10 text-[#1B4332] dark:text-green-400"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5 inline mr-1.5" />
+                Attach Completed PDF
+              </button>
             </div>
-          )}
-        </div>
+
+            {mode === "fill" && (
+              <>
+                <div>
+                  <label className={labelCls}>
+                    What work needs to be done? <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={form.workDescription}
+                    onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
+                    rows={4}
+                    placeholder="e.g. Replace 4 rooftop HVAC units on the pro shop; OR re-roof maintenance shed; OR tree removal & stump grinding near hole 12 — any trade works"
+                    className={`${inputCls} resize-none`}
+                  />
+                  {autoDescription && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Pre-filled from your line items — edit as needed.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className={labelCls}>
+                    Requisition Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={form.requisitionType}
+                    onChange={(e) => setForm({ ...form, requisitionType: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="">Select type…</option>
+                    {REQUISITION_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Projected Start <span className="text-red-500">*</span></label>
+                    <input
+                      type="date"
+                      value={form.projectedStartDate}
+                      onChange={(e) => setForm({ ...form, projectedStartDate: e.target.value })}
+                      min={todayLocal()}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Desired Completion <span className="text-red-500">*</span></label>
+                    <input
+                      type="date"
+                      value={form.desiredCompletionDate}
+                      onChange={(e) => setForm({ ...form, desiredCompletionDate: e.target.value })}
+                      min={form.projectedStartDate || todayLocal()}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-muted/40 border border-border p-3 text-xs text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">Auto-filled from your profile & PR defaults:</p>
+                  <p>Requestor & on-site supervisor: {profile?.full_name || "—"} · {roleLabel}</p>
+                  <p>Location: {BUILDING}</p>
+                </div>
+
+                {sowError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700 dark:text-red-400">{sowError}</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {mode === "attach" && (
+              <div className="border-2 border-dashed border-border rounded-xl p-6 text-center">
+                <FileText className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                <p className="text-sm font-medium mb-1">Upload your completed SOW PDF</p>
+                <p className="text-xs text-muted-foreground mb-3">The file will be included in the download bundle.</p>
+                <label className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium cursor-pointer hover:bg-primary/90 transition-colors">
+                  <Plus className="w-4 h-4" />
+                  Choose PDF
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onComplete(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === "review" && draft && (
+          <div className="p-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Review the AI-generated SOW content. Edit any section before saving with the PR.
+            </p>
+
+            <div>
+              <label className={labelCls}>4.6 Expectation (contractor duties)</label>
+              <textarea
+                value={draft.expectationText}
+                onChange={(e) => setDraft({ ...draft, expectationText: e.target.value })}
+                rows={10}
+                className={`${inputCls} resize-y font-mono text-xs leading-relaxed`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Description of Goods Requested</label>
+              <textarea
+                value={draft.descriptionOfGoods}
+                onChange={(e) => setDraft({ ...draft, descriptionOfGoods: e.target.value })}
+                rows={4}
+                className={`${inputCls} resize-y`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Minimum Personnel Certifications</label>
+              <textarea
+                value={draft.personnelCertifications}
+                onChange={(e) => setDraft({ ...draft, personnelCertifications: e.target.value })}
+                rows={3}
+                className={`${inputCls} resize-y`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Facility / Program Hours</label>
+              <input
+                type="text"
+                value={draft.facilityHours}
+                onChange={(e) => setDraft({ ...draft, facilityHours: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Access Directions / Reporting Structure</label>
+              <textarea
+                value={draft.accessDirections}
+                onChange={(e) => setDraft({ ...draft, accessDirections: e.target.value })}
+                rows={4}
+                className={`${inputCls} resize-y`}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Projected Start</label>
+                <input
+                  type="date"
+                  value={draft.projectedStartDate}
+                  onChange={(e) => setDraft({ ...draft, projectedStartDate: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Desired Completion</label>
+                <input
+                  type="date"
+                  value={draft.desiredCompletionDate}
+                  onChange={(e) => setDraft({ ...draft, desiredCompletionDate: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            {sowError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-400">{sowError}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="sticky bottom-0 bg-background border-t border-border px-4 py-3 flex gap-3">
-          <button
-            type="button"
-            onClick={onSkip}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
-          >
-            Skip for Now
-          </button>
-          {mode === "fill" && (
-            <button
-              type="button"
-              onClick={handleFillOut}
-              disabled={!canGenerate || generating}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
-            >
-              {generating ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
-              ) : (
-                <><Sparkles className="w-4 h-4" />Generate SOW</>
+          {step === "form" ? (
+            <>
+              <button
+                type="button"
+                onClick={onSkip}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
+              >
+                Skip for Now
+              </button>
+              {mode === "fill" && (
+                <button
+                  type="button"
+                  onClick={handleFillOut}
+                  disabled={!canGenerate || generating}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
+                >
+                  {generating ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4" />Generate SOW</>
+                  )}
+                </button>
               )}
-            </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setStep("form")}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-all"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleBuildPdf}
+                disabled={building}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#1B4332] text-white text-sm font-semibold hover:bg-[#2D6A4F] disabled:opacity-50 transition-all"
+              >
+                {building ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />Building PDF…</>
+                ) : (
+                  <><CheckCircle2 className="w-4 h-4" />Use This SOW</>
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1720,6 +1891,12 @@ function NewPurchaseRequestPageInner() {
     {showSowModal && (
       <SowAttachModal
         items={items}
+        vendorName={v1.name || null}
+        vendorContact={
+          [v1.poc, v1.phone, v1.email].filter(Boolean).join(" · ") || null
+        }
+        justification={justification || null}
+        totalAmount={igeAmount}
         profile={profile}
         onComplete={(blob) => {
           setSowBlob(blob);
