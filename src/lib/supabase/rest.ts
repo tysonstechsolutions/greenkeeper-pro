@@ -131,6 +131,96 @@ export function hasValidCachedSession(): boolean {
   return true;
 }
 
+/**
+ * Call the Supabase auth refresh endpoint directly (no supabase-js, no
+ * navigator.locks). On success, overwrites the localStorage session so all
+ * subsequent reads pick up the new token. Returns the new access token, or
+ * null if the refresh failed (expired refresh token, network error, etc.).
+ */
+async function refreshTokenDirect(): Promise<string | null> {
+  const session = readCachedSession();
+  const refreshToken = session?.refresh_token;
+  if (!refreshToken) return null;
+
+  const url = buildUrl("auth/v1/token?grant_type=refresh_token");
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_at?: number;
+      expires_in?: number;
+      token_type?: string;
+      user?: unknown;
+    };
+    if (!data.access_token) return null;
+
+    // Persist the new tokens so subsequent localStorage reads are fresh.
+    const match = SUPABASE_URL.match(/https?:\/\/([^./]+)\.supabase\./);
+    if (match && typeof window !== "undefined") {
+      const key = `sb-${match[1]}-auth-token`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...(session ?? {}),
+          access_token: data.access_token,
+          refresh_token: data.refresh_token ?? refreshToken,
+          expires_at: data.expires_at,
+          expires_in: data.expires_in,
+          token_type: data.token_type ?? "bearer",
+        }),
+      );
+    }
+    return data.access_token;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return a valid access token for direct REST calls.
+ *
+ * Reads from localStorage first (instant, no locks). If the stored token
+ * is expired or within 30 s of expiry, calls the Supabase auth refresh
+ * endpoint directly and returns the new token. Falls back to the stale
+ * token if the refresh fails so the caller still gets a meaningful server
+ * error rather than a local exception.
+ *
+ * Never calls supabase.auth.getSession() — that goes through navigator.locks
+ * and has been the source of silent hangs in this codebase.
+ */
+async function resolveDirectAccessToken(): Promise<string | null> {
+  const token = getAccessTokenSync();
+  if (!token) return null;
+
+  // If the cached session is still valid (not within 30 s of expiry),
+  // use it directly.
+  if (hasValidCachedSession()) return token;
+
+  // Token is expired or near-expiry — refresh proactively.
+  recordBreadcrumb("info", "access token expired or near-expiry, refreshing");
+  const refreshed = await refreshTokenDirect();
+  if (refreshed) {
+    recordBreadcrumb("info", "token refreshed successfully");
+    return refreshed;
+  }
+
+  // Refresh failed (bad refresh token, offline, etc.). Return the stale
+  // token so the caller gets a real 401 from the server rather than a
+  // local error — the server error is more descriptive.
+  recordBreadcrumb("warn", "token refresh failed, proceeding with stale token");
+  return token;
+}
+
 function buildHeaders(
   accessToken: string,
   extra?: Record<string, string>,
@@ -161,7 +251,7 @@ async function directFetch(
 
   recordBreadcrumb("fetch", `direct ${method} ${path} (${opts.label})`);
 
-  const accessToken = getAccessTokenSync();
+  const accessToken = await resolveDirectAccessToken();
   if (!accessToken) {
     recordBreadcrumb("error", `${opts.label}: no access token in localStorage`);
     throw new Error(
@@ -513,7 +603,7 @@ export async function directStorageUpload(
     `direct POST storage/${bucket}/${path} (${Math.round(file.size / 1024)}KB, ${label})`,
   );
 
-  const accessToken = getAccessTokenSync();
+  const accessToken = await resolveDirectAccessToken();
   if (!accessToken) {
     recordBreadcrumb("error", `${label}: no access token for storage upload`);
     throw new Error(
@@ -604,7 +694,7 @@ export async function directStorageDelete(
     `direct DELETE storage/${bucket} [${paths.length} path(s)] (${label})`,
   );
 
-  const accessToken = getAccessTokenSync();
+  const accessToken = await resolveDirectAccessToken();
   if (!accessToken) {
     recordBreadcrumb("error", `${label}: no access token for storage delete`);
     throw new Error(

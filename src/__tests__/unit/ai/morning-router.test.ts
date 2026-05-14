@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateMorningRoute, type GenerateMorningRouteInput, type MorningRoute } from "@/lib/ai/morning-router";
+import { generateMorningRoute, type GenerateMorningRouteInput } from "@/lib/ai/morning-router";
 
 // ─── Test fixtures ───────────────────────────────────────────────────────────
 

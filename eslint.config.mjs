@@ -32,6 +32,8 @@ const eslintConfig = defineConfig([
     "android/app/build/**",
     "android/app/src/main/assets/public/**",
     "android/build/**",
+    // Standalone Node.js utility scripts (CommonJS, not part of the app).
+    "scripts/**",
   ]),
 ]);
 

@@ -5,18 +5,14 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Search,
-  Filter,
   Download,
   Check,
   X,
-  ChevronDown,
   Receipt,
   Calendar,
-  DollarSign,
   Building2,
   AlertCircle,
   Loader2,
-  Eye,
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,12 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,

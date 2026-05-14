@@ -31,7 +31,6 @@ import {
   useBudget,
   budgetCategoryLabels,
   budgetCategoryColors,
-  type BudgetItemWithSpent,
 } from "@/lib/hooks/useBudget";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -492,6 +491,7 @@ export default function NewExpensePage() {
           <CardContent>
             {receiptPreview ? (
               <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={receiptPreview}
                   alt="Receipt preview"

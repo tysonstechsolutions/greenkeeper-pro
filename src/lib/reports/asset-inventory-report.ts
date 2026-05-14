@@ -492,7 +492,7 @@ export async function generateAssetInventoryReport(): Promise<{ blob: Blob; file
         doc.text(assetMeta, M + 3, subY + 2.8);
 
         // Photo grid
-        let photoTop = subY + 6;
+        const photoTop = subY + 6;
         const availableAngles = ANGLES.filter(a => photosByAngle[a]);
 
         availableAngles.forEach((angle, idx) => {
