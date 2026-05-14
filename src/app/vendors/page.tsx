@@ -326,7 +326,7 @@ export default function VendorsPage() {
           upsert: true,
           contentType: file.type || "application/pdf",
         });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(upErr.message);
 
       // 889s expire on Oct 1 of the federal fiscal year they were signed
       // in. The "signed date" defaults to today (the upload time) — we
@@ -401,7 +401,7 @@ export default function VendorsPage() {
       // (FY = Oct 1 → Sept 30). If the form has a sign date, use it;
       // otherwise default to today (when the file was uploaded). The
       // user can adjust the date input on the card afterward.
-      const signedSource = extracted.date_signed || new Date().toISOString();
+      const signedSource: Date | string = extracted.date_signed ?? new Date();
       let expirationDate: string | null = null;
       try {
         expirationDate = calc889ExpirationDate(signedSource);
@@ -430,7 +430,7 @@ export default function VendorsPage() {
         .select("id")
         .single();
       if (insertErr || !newVendor) {
-        throw insertErr || new Error("Insert returned no row");
+        throw new Error(insertErr?.message || "Insert returned no row");
       }
       const vendorId = (newVendor as { id: string }).id;
 
@@ -443,7 +443,7 @@ export default function VendorsPage() {
           upsert: true,
           contentType: file.type || "application/pdf",
         });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(upErr.message);
 
       // 5. Link the file + expiration to the vendor row.
       const { error: linkErr } = await supabase
@@ -455,7 +455,7 @@ export default function VendorsPage() {
           section_889_uploaded_at: new Date().toISOString(),
         })
         .eq("id", vendorId);
-      if (linkErr) throw linkErr;
+      if (linkErr) throw new Error(linkErr.message);
 
       const formNote =
         extracted.form_type === "paper_merchant"
