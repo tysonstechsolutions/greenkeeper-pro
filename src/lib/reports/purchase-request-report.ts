@@ -346,13 +346,41 @@ export async function generatePurchaseRequestReport(
       else pg2Total += ext;
     });
 
-    // ── Blank out the Price/Extended cells for every unused row ───────
+    // ── Cost-center / G/L subtotals ───────────────────────────────────
+    // Group line items by "COST_CTR/GL_ACCT" and write one description-only
+    // row per group below the last real item. This mirrors the yellow-
+    // highlighted summary rows the finance office requires.
+    step = "fill-subtotals";
+    const ccGlMap = new Map<string, number>();
+    for (const it of items) {
+      const key = `${it.cost_ctr || ""}/${it.gl_acct || ""}`;
+      const ext = (Number(it.qty) || 0) * (Number(it.unit_price) || 0);
+      ccGlMap.set(key, (ccGlMap.get(key) ?? 0) + ext);
+    }
+    // Only emit totals when there is cost-center info and at least one group
+    // has a non-zero extended amount (avoids phantom rows on blank PRs).
+    const ccGlEntries = [...ccGlMap.entries()].filter(
+      ([key, total]) => key !== "/" && total > 0,
+    );
+    let nextRow = items.length + 1;
+    for (const [key, total] of ccGlEntries) {
+      if (nextRow > MAX_LINE_ITEMS) break;
+      const { noDot } = rowSuffixes(nextRow);
+      setText(form, `Description${noDot}`, `${key} total — ${fmtMoney(total)}`, written);
+      // Explicitly clear Price / Extended so the template's cached "$0.00"
+      // appearance doesn't render for these summary rows.
+      setText(form, `Price${noDot}`, "", written);
+      setText(form, `Extended${noDot}`, "", written);
+      nextRow++;
+    }
+
+    // ── Blank out the Price/Extended cells for every remaining unused row ─
     // The template has Acrobat JS that pre-formats those cells as "$0.00".
     // If we don't touch them, that cached appearance shows on the printed
     // PDF and the spec sheet looks like every row has a $0.00 line item.
     // Explicitly clearing them (and marking them written) forces a fresh
     // empty appearance.
-    for (let row = items.length + 1; row <= MAX_LINE_ITEMS; row++) {
+    for (let row = nextRow; row <= MAX_LINE_ITEMS; row++) {
       const { noDot } = rowSuffixes(row);
       setText(form, `Price${noDot}`, "", written);
       setText(form, `Extended${noDot}`, "", written);

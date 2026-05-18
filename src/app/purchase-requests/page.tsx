@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -18,6 +18,13 @@ import {
   Send,
   ShieldCheck,
   FileSignature,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
+  Clock,
+  TrendingUp,
+  Building2,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
@@ -29,11 +36,6 @@ import {
 import type { PurchaseRequest } from "@/types/database";
 
 function formatDate(iso: string): string {
-  // The DB column is a DATE (yyyy-mm-dd). new Date("2026-05-04") parses
-  // as 2026-05-04T00:00:00Z (UTC midnight); in any negative-UTC zone
-  // (Central, Pacific, etc.) toLocaleDateString then shows the day BEFORE.
-  // Anchoring at noon local keeps the calendar day correct everywhere
-  // in the US.
   const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
   return new Date(anchored).toLocaleDateString("en-US", {
     year: "numeric",
@@ -50,19 +52,36 @@ function formatMoney(n: number): string {
   });
 }
 
+function getMonthKey(iso: string): string {
+  // Returns "YYYY-MM" from a date string
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  const d = new Date(anchored);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function formatMonthLabel(key: string): string {
+  const [y, m] = key.split("-");
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+  });
+}
+
 // ── PR lifecycle ─────────────────────────────────────────────────────────────
 
 type PrStatus = PurchaseRequest["status"];
 
 interface StatusMeta {
   label: string;
-  iconBg: string;     // bg + text classes for the row's left icon tile
-  badge: string;      // bg + text classes for the inline badge
-  icon: LucideIcon;   // icon shown on the row
-  next: PrStatus | null;       // null = terminal state
-  nextLabel: string | null;    // verb shown in the confirm prompt
-  nextIcon: LucideIcon | null; // icon for the advance button
-  nextHover: string | null;    // hover color for the advance button
+  iconBg: string;
+  badge: string;
+  icon: LucideIcon;
+  next: PrStatus | null;
+  nextLabel: string | null;
+  nextIcon: LucideIcon | null;
+  nextHover: string | null;
 }
 
 const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
@@ -118,10 +137,188 @@ const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
   },
 };
 
+// ── Money summary helpers ─────────────────────────────────────────────────────
+
+function sumAmount(prs: PurchaseRequest[]): number {
+  return prs.reduce((acc, pr) => acc + (Number(pr.ige_amount) || 0), 0);
+}
+
+// ── Money Stats Card ──────────────────────────────────────────────────────────
+
+interface StatCardProps {
+  label: string;
+  amount: number;
+  count: number;
+  icon: LucideIcon;
+  colorClass: string; // text + border accent color
+  bgClass: string;
+}
+
+function StatCard({ label, amount, count, icon: Icon, colorClass, bgClass }: StatCardProps) {
+  return (
+    <div className={`rounded-xl border border-border bg-card p-3 flex flex-col gap-1 ${bgClass}`}>
+      <div className="flex items-center gap-1.5">
+        <Icon className={`w-3.5 h-3.5 ${colorClass}`} />
+        <span className={`text-[10px] font-semibold uppercase tracking-wide ${colorClass}`}>
+          {label}
+        </span>
+      </div>
+      <p className="text-lg font-bold leading-tight">{formatMoney(amount)}</p>
+      <p className="text-[11px] text-muted-foreground">{count} request{count !== 1 ? "s" : ""}</p>
+    </div>
+  );
+}
+
+// ── Monthly Spending Section ──────────────────────────────────────────────────
+
+interface MonthGroup {
+  key: string;       // "YYYY-MM"
+  label: string;     // "May 2026"
+  total: number;
+  prs: PurchaseRequest[];
+  byVendor: Record<string, { total: number; prs: PurchaseRequest[] }>;
+}
+
+function buildMonthGroups(
+  prs: PurchaseRequest[],
+  vendorFilter: string | null,
+): MonthGroup[] {
+  const filtered = vendorFilter
+    ? prs.filter((pr) => (pr.vendor1_name || "Unknown") === vendorFilter)
+    : prs;
+
+  const map: Record<string, MonthGroup> = {};
+  for (const pr of filtered) {
+    const key = getMonthKey(pr.date_prepared);
+    if (!map[key]) {
+      map[key] = { key, label: formatMonthLabel(key), total: 0, prs: [], byVendor: {} };
+    }
+    const amt = Number(pr.ige_amount) || 0;
+    map[key].total += amt;
+    map[key].prs.push(pr);
+
+    const vendor = pr.vendor1_name || "Unknown Vendor";
+    if (!map[key].byVendor[vendor]) {
+      map[key].byVendor[vendor] = { total: 0, prs: [] };
+    }
+    map[key].byVendor[vendor].total += amt;
+    map[key].byVendor[vendor].prs.push(pr);
+  }
+
+  return Object.values(map).sort((a, b) => b.key.localeCompare(a.key));
+}
+
+function MonthRow({
+  group,
+  isCurrentMonth,
+  showVendors,
+}: {
+  group: MonthGroup;
+  isCurrentMonth: boolean;
+  showVendors: boolean;
+}) {
+  const [expanded, setExpanded] = useState(isCurrentMonth);
+  const vendors = Object.entries(group.byVendor).sort((a, b) => b[1].total - a[1].total);
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 p-3 hover:bg-muted/40 transition-colors text-left"
+      >
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isCurrentMonth ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+          <Calendar className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-sm">{group.label}</span>
+            {isCurrentMonth && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                Current
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {group.prs.length} request{group.prs.length !== 1 ? "s" : ""}
+            {!showVendors && vendors.length > 1 && ` · ${vendors.length} vendors`}
+          </p>
+        </div>
+        <span className="font-bold text-sm shrink-0">{formatMoney(group.total)}</span>
+        {expanded ? (
+          <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border">
+          {showVendors ? (
+            // Per-vendor breakdown
+            <div className="divide-y divide-border">
+              {vendors.map(([vendor, data]) => (
+                <div key={vendor} className="px-3 py-2.5">
+                  <div className="flex items-start gap-2">
+                    <Building2 className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium truncate">{vendor}</span>
+                        <span className="text-sm font-semibold shrink-0">{formatMoney(data.total)}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {data.prs.length} request{data.prs.length !== 1 ? "s" : ""}
+                        {data.prs.map((pr) => (
+                          <span key={pr.id}>
+                            {" "}· {formatDate(pr.date_prepared)} ({STATUS_FLOW[pr.status]?.label ?? pr.status})
+                          </span>
+                        ))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            // PR list
+            <div className="divide-y divide-border">
+              {group.prs
+                .slice()
+                .sort((a, b) => b.date_prepared.localeCompare(a.date_prepared))
+                .map((pr) => {
+                  const meta = STATUS_FLOW[pr.status] ?? STATUS_FLOW.submitted;
+                  return (
+                    <Link
+                      key={pr.id}
+                      href={`/purchase-requests/view?id=${pr.id}`}
+                      className="flex items-center gap-2 px-3 py-2.5 hover:bg-muted/30 transition-colors"
+                    >
+                      <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${meta.badge}`}>
+                        {meta.label}
+                      </span>
+                      <span className="text-sm text-muted-foreground truncate flex-1">
+                        {pr.vendor1_name || "Vendor TBD"} · {formatDate(pr.date_prepared)}
+                      </span>
+                      <span className="text-sm font-medium shrink-0">{formatMoney(Number(pr.ige_amount) || 0)}</span>
+                    </Link>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function PurchaseRequestsListPage() {
   const { profile, loading: authLoading } = useAuth();
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vendorFilter, setVendorFilter] = useState<string | null>(null);
+  const [showVendors, setShowVendors] = useState(false);
 
   const isAllowed =
     profile?.role === "super" ||
@@ -149,20 +346,52 @@ export default function PurchaseRequestsListPage() {
 
   useEffect(() => {
     if (!isAllowed) return;
-    fetchRequests(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
+    fetchRequests();
   }, [isAllowed, fetchRequests]);
 
-  // Re-fetch on tab focus / visibility change so navigating back from /new
-  // or /view shows fresh data without a manual reload.
   useRefreshOnFocus(fetchRequests, isAllowed);
 
+  // ── Money stats ─────────────────────────────────────────────────────────────
+
+  const activePrs = useMemo(
+    () => requests.filter((r) => r.status !== "draft"),
+    [requests],
+  );
+
+  const pendingPrs = useMemo(
+    () => activePrs.filter((r) => r.status === "submitted" || r.status === "sent"),
+    [activePrs],
+  );
+  const approvedPrs = useMemo(
+    () => activePrs.filter((r) => r.status === "approved" || r.status === "received"),
+    [activePrs],
+  );
+  const receivedPrs = useMemo(
+    () => activePrs.filter((r) => r.status === "received"),
+    [activePrs],
+  );
+
+  // ── Vendor list for filter ──────────────────────────────────────────────────
+
+  const vendors = useMemo(() => {
+    const names = new Set<string>();
+    for (const pr of requests) {
+      if (pr.vendor1_name) names.add(pr.vendor1_name);
+    }
+    return Array.from(names).sort();
+  }, [requests]);
+
+  // ── Monthly groups ──────────────────────────────────────────────────────────
+
+  const currentMonthKey = getMonthKey(new Date().toISOString().slice(0, 10));
+  const monthGroups = useMemo(
+    () => buildMonthGroups(activePrs, vendorFilter),
+    [activePrs, vendorFilter],
+  );
+
+  // ── PR list actions ─────────────────────────────────────────────────────────
+
   const [advancingId, setAdvancingId] = useState<string | null>(null);
-  /**
-   * Advance either the PR's main `status` column or its parallel
-   * `sow_status` column. The lifecycle values are identical so the same
-   * handler covers both — `column` selects which DB field to patch and
-   * `kind` is just for the confirm-prompt wording.
-   */
   const handleAdvanceStatus = useCallback(
     async (
       id: string,
@@ -222,11 +451,12 @@ export default function PurchaseRequestsListPage() {
         return;
       }
       setDeletingId(null);
-      // Optimistic prune so the row vanishes without a round-trip.
       setRequests((prev) => prev.filter((r) => r.id !== id));
     },
     [],
   );
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (authLoading) {
     return (
@@ -262,6 +492,7 @@ export default function PurchaseRequestsListPage() {
 
   return (
     <div className="p-3 pb-32 max-w-2xl mx-auto overflow-x-hidden">
+      {/* Header */}
       <div className="flex items-center gap-2 mb-1">
         <Link
           href="/more"
@@ -284,6 +515,112 @@ export default function PurchaseRequestsListPage() {
         <Plus className="w-5 h-5" /> New Purchase Request
       </Link>
 
+      {/* ── Money Summary ─────────────────────────────────────────────────── */}
+      {!loading && activePrs.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
+            Money Tracker
+          </h2>
+          <div className="grid grid-cols-3 gap-2">
+            <StatCard
+              label="Pending"
+              amount={sumAmount(pendingPrs)}
+              count={pendingPrs.length}
+              icon={Clock}
+              colorClass="text-amber-600"
+              bgClass=""
+            />
+            <StatCard
+              label="Approved"
+              amount={sumAmount(approvedPrs)}
+              count={approvedPrs.length}
+              icon={ShieldCheck}
+              colorClass="text-emerald-600"
+              bgClass=""
+            />
+            <StatCard
+              label="Received"
+              amount={sumAmount(receivedPrs)}
+              count={receivedPrs.length}
+              icon={PackageCheck}
+              colorClass="text-green-700 dark:text-green-400"
+              bgClass=""
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Monthly Spending ──────────────────────────────────────────────── */}
+      {!loading && activePrs.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Spending by Month
+            </h2>
+            <div className="flex items-center gap-2">
+              {/* Vendor filter */}
+              {vendors.length > 0 && (
+                <div className="relative">
+                  {vendorFilter ? (
+                    <button
+                      type="button"
+                      onClick={() => setVendorFilter(null)}
+                      className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20"
+                    >
+                      <Building2 className="w-3 h-3" />
+                      <span className="max-w-[100px] truncate">{vendorFilter}</span>
+                      <X className="w-3 h-3" />
+                    </button>
+                  ) : (
+                    <select
+                      value=""
+                      onChange={(e) => setVendorFilter(e.target.value || null)}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-muted text-muted-foreground border border-border appearance-none cursor-pointer pr-5"
+                    >
+                      <option value="">All Vendors</option>
+                      {vendors.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+              {/* Per-vendor toggle */}
+              <button
+                type="button"
+                onClick={() => setShowVendors((v) => !v)}
+                className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg border transition-colors ${
+                  showVendors
+                    ? "bg-primary/10 text-primary border-primary/20"
+                    : "bg-muted text-muted-foreground border-border"
+                }`}
+              >
+                <Building2 className="w-3 h-3" />
+                By Vendor
+              </button>
+            </div>
+          </div>
+
+          {monthGroups.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">
+              No data for selected filter.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {monthGroups.map((group) => (
+                <MonthRow
+                  key={group.key}
+                  group={group}
+                  isCurrentMonth={group.key === currentMonthKey}
+                  showVendors={showVendors}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── History List ─────────────────────────────────────────────────── */}
       <div className="mt-6">
         <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
           History
@@ -315,8 +652,6 @@ export default function PurchaseRequestsListPage() {
               const showDownloadHint =
                 pr.status !== "draft" && pr.status !== "received";
               const label = `${pr.vendor1_name || "this PR"} (${formatDate(pr.date_prepared)})`;
-              // SOW has its own parallel lifecycle. Only show it when the
-              // PR has an attached SOW AND we have a status to display.
               const sowMeta =
                 pr.attached_sow && pr.sow_status
                   ? STATUS_FLOW[pr.sow_status] ?? STATUS_FLOW.submitted
