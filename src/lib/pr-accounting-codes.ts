@@ -33,6 +33,7 @@ export const PR_COST_CENTERS: AccountingCode[] = [
 export const PR_GL_ACCOUNTS: AccountingCode[] = [
   { value: "641000", label: "641000 — UTILITIES" },
   { value: "681000", label: "681000 — REPAIRS & MAINT VEHICLES" },
+  { value: "683000", label: "683000 — FURNITURE, FIXTURES & EQUIPMENT" },
   { value: "684000", label: "684000 — REPAIRS & MAINT GROUNDS" },
   { value: "685000", label: "685000 — REPAIRS & MAINT BLDG & FAC" },
   { value: "701000", label: "701000 — SUPPLIES" },
