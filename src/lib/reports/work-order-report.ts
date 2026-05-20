@@ -124,30 +124,96 @@ const S3_LC4 = CW - S3_LC1 - S3_LC2 - S3_LC3; // 47 DATE COMPLETED
 // ── Colors ────────────────────────────────────────────────────────────────────
 
 const GRAY_BG: [number, number, number] = [70, 70, 70];
+/** Light blue tint on every fillable value cell — matches the original form. */
+const BLUE_TINT: [number, number, number] = [198, 217, 241];
 
 // ── Dropdown options (interactive AcroForm ComboBox fields) ──────────────────
 
-const NATURE_OPTIONS = ["", "Routine", "Urgent", "Emergent"];
-
-const WORK_TYPE_OPTIONS = [
-  "",
-  "General Maintenance",
-  "Electrical",
-  "Plumbing",
-  "HVAC/Mechanical",
-  "Carpentry/Structural",
-  "Painting/Finishes",
-  "Grounds/Landscaping",
-  "Vehicle/Equipment",
-  "Pest Control",
-  "Special Event Support",
+/** NATURE OF REQUEST — exact options from the original form (Dropdown35). */
+const NATURE_OPTIONS = [
+  "(select one)",
+  "Alarm Panel",
+  "Custodial Support",
+  "Equipment Disposal",
+  "Equipment Repair",
+  "Event Support",
+  "Facility Emergency",
+  "Facility Repair",
+  "HVAC",
+  "Key and Lock",
+  "Landscaping Support",
+  "Marketing/Sponsorship Support",
   "Other",
+  "Patch/Paint",
+  "Pest Control",
+  "Project Support",
+  "Transport Materials",
+  "Vehicle Emergency",
+  "Vehicle Repair",
+  "Snow Removal",
+];
+
+/** FACILITY/BLDG # — exact options from the original form (Dropdown2). */
+const FACILITY_OPTIONS = [
+  "(select one)",
+  "Beach",
+  "Beach House @ 10",
+  "Bldg 1",
+  "Brew Club @ 140",
+  "CDC 2700",
+  "CDC 3110",
+  "Central Warehouse",
+  "Comm Rec @ 13",
+  "Constitution Field",
+  "Courts Plus @ 4",
+  "Epicenter @ 525",
+  "Fieldhouse @ 440",
+  "Fitness Center @ 2A",
+  "Library @ 617",
+  "Library/Resource Center @ ship 17",
+  "Loft @ 2A",
+  "Maintenance @ 154",
+  "Marina @ 13",
+  "Other",
+  "Park and Picnic",
+  "Pool @ 440",
+  "Port O Call @ 140",
+  "Retail @ 1326",
+  "RV Park",
+  "Seabee Park",
+  "Storage Lot @ Great Lakes Drive",
+  "Storage Lot @ Ray Street",
+  "VMGC @ 3311",
+  "VMGC @ 3313",
+  "VMGC @ 3314",
+  "VMGC @ 8400",
+  "YFA @ 8190",
+  "Zappers @ 1326",
+  "Zappers @ 236",
+  "Zappers @ 2A",
+  "Zappers @ 616",
+  "Zappers @ 621",
+];
+
+/** WORK TYPE — exact options from the original form (Dropdown32). */
+const WORK_TYPE_OPTIONS = [
+  "(select one)",
+  "Emergency (Life/Safety)",
+  "Fire Deficiency",
+  "IH Deficiency",
+  "NAVOSH Deficiency",
+  "Revenue Impact",
+  "Routine",
+  "Safety",
+  "Urgent (Impact to Mission)",
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface WorkOrderData {
   date: string;
+  /** Maps to the NATURE OF REQUEST dropdown in Section 1. */
+  natureOfRequest: string;
   facilityBldg: string;
   programAreaRoom: string;
   costCenter: string;
@@ -180,6 +246,12 @@ function vLine(doc: jsPDF, x: number, y1: number, y2: number, lw = 0.3) {
 function sectionFill(doc: jsPDF, y: number, h: number) {
   doc.setFillColor(...GRAY_BG);
   doc.rect(FX, y, SLW, h, "F");
+}
+
+/** Fill a value cell with the light-blue tint that marks fillable areas. */
+function blueFill(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  doc.setFillColor(...BLUE_TINT);
+  doc.rect(x, y, w, h, "F");
 }
 
 /** Rotated white section label centered in the gray column. */
@@ -317,6 +389,42 @@ export async function downloadWorkOrderReport(
   sectionLabel(doc, "SECTION 2", S2Y, S2H);
   sectionLabel(doc, "SECTION 3", S3Y, S3H);
 
+  // ── Blue tint fills on ALL value cells (painted BEFORE lines / text) ──
+  // These must be rendered first so grid lines draw cleanly on top.
+
+  // S1 value row (3 cells)
+  blueFill(doc, CX, S1Y, CW, S1_VAL_H);
+
+  // S2 Row 1 value strip (4 cells)
+  blueFill(doc, CX, S2R1_VAL_Y, CW, VAL_H);
+
+  // S2 Description area
+  blueFill(doc, CX, S2D_AREA_Y, CW, S2D_AREA_H);
+
+  // S2 Work-Type value strip (3 cells)
+  blueFill(doc, CX, S2W_VAL_Y, CW, VAL_H);
+
+  // S2 Enclosures value strip (3 cells)
+  blueFill(doc, CX, S2E_VAL_Y, CW, VAL_H);
+
+  // S2 blank rows at bottom
+  blueFill(doc, CX, S2E_BOT, CW, S2_BLK_H * 2);
+
+  // S3 Maximo value boxes (4 cells — 2 per row)
+  const _mx2 = CX + S3M_L1;
+  const _mx3 = _mx2 + S3M_V1;
+  const _mx4 = _mx3 + S3M_L2;
+  blueFill(doc, _mx2, S3M_Y, S3M_V1, S3M_ROW_H);
+  blueFill(doc, _mx4, S3M_Y, CW - S3M_L1 - S3M_V1 - S3M_L2, S3M_ROW_H);
+  blueFill(doc, _mx2, S3M_Y + S3M_ROW_H, S3M_V1, S3M_ROW_H);
+  blueFill(doc, _mx4, S3M_Y + S3M_ROW_H, CW - S3M_L1 - S3M_V1 - S3M_L2, S3M_ROW_H);
+
+  // S3 Description of Work Provided area
+  blueFill(doc, CX, S3D_AREA_Y, CW, S3D_AREA_H);
+
+  // S3 Labor table data rows (6 rows × full width)
+  blueFill(doc, CX, S3L_DATA_Y, CW, S3L_ROWS * S3L_ROW_H);
+
   // ════════════════════════════════════════════════════════════════════════
   //  SECTION 1  —  Admin fills (left blank)
   // ════════════════════════════════════════════════════════════════════════
@@ -346,8 +454,8 @@ export async function downloadWorkOrderReport(
     align: "center",
   });
 
-  // Interactive dropdown for NATURE OF REQUEST
-  addComboBox(doc, "natureOfRequest", s1x2, S1Y, S1_C2, S1_VAL_H, NATURE_OPTIONS, "");
+  // Interactive dropdown for NATURE OF REQUEST — pre-filled from the user's priority selection
+  addComboBox(doc, "natureOfRequest", s1x2, S1Y, S1_C2, S1_VAL_H, NATURE_OPTIONS, data.natureOfRequest);
 
   // ════════════════════════════════════════════════════════════════════════
   //  SECTION 2  —  Requestor fills
@@ -378,10 +486,9 @@ export async function downloadWorkOrderReport(
 
   // Row 1 values
   value(doc, data.date, r1x1, S2R1_VAL_Y + 3.5, S2_C1, S2R1_Y + ROW_H);
-  // FACILITY/BLDG # — interactive dropdown (editable so user can type custom values)
+  // FACILITY/BLDG # — interactive dropdown (exact options from original form)
   addComboBox(doc, "facilityBldg", r1x2, S2R1_VAL_Y, S2_C2, VAL_H,
-    ["", data.facilityBldg].filter((v, i, a) => a.indexOf(v) === i),
-    data.facilityBldg, true);
+    FACILITY_OPTIONS, data.facilityBldg);
   value(doc, data.programAreaRoom, r1x3, S2R1_VAL_Y + 3.5, S2_C3, S2R1_Y + ROW_H);
   value(doc, data.costCenter, r1x4, S2R1_VAL_Y + 3.5, S2_C4, S2R1_Y + ROW_H);
 

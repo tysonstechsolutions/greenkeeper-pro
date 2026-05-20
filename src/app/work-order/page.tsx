@@ -44,18 +44,80 @@ const STEPS = [
 
 // ── Work type options ─────────────────────────────────────────────────────────
 
+// Exact WORK TYPE options from the original MWR form (Dropdown32)
 const WORK_TYPES = [
-  "General Maintenance",
-  "Electrical",
-  "Plumbing",
-  "HVAC/Mechanical",
-  "Carpentry/Structural",
-  "Painting/Finishes",
-  "Grounds/Landscaping",
-  "Vehicle/Equipment",
-  "Pest Control",
-  "Special Event Support",
+  "Emergency (Life/Safety)",
+  "Fire Deficiency",
+  "IH Deficiency",
+  "NAVOSH Deficiency",
+  "Revenue Impact",
+  "Routine",
+  "Safety",
+  "Urgent (Impact to Mission)",
+];
+
+// Exact NATURE OF REQUEST options from the original MWR form (Dropdown35)
+const NATURE_OF_REQUEST = [
+  "Alarm Panel",
+  "Custodial Support",
+  "Equipment Disposal",
+  "Equipment Repair",
+  "Event Support",
+  "Facility Emergency",
+  "Facility Repair",
+  "HVAC",
+  "Key and Lock",
+  "Landscaping Support",
+  "Marketing/Sponsorship Support",
   "Other",
+  "Patch/Paint",
+  "Pest Control",
+  "Project Support",
+  "Transport Materials",
+  "Vehicle Emergency",
+  "Vehicle Repair",
+  "Snow Removal",
+];
+
+// Exact FACILITY/BLDG # options from the original MWR form (Dropdown2)
+const FACILITY_BUILDINGS = [
+  "Beach",
+  "Beach House @ 10",
+  "Bldg 1",
+  "Brew Club @ 140",
+  "CDC 2700",
+  "CDC 3110",
+  "Central Warehouse",
+  "Comm Rec @ 13",
+  "Constitution Field",
+  "Courts Plus @ 4",
+  "Epicenter @ 525",
+  "Fieldhouse @ 440",
+  "Fitness Center @ 2A",
+  "Library @ 617",
+  "Library/Resource Center @ ship 17",
+  "Loft @ 2A",
+  "Maintenance @ 154",
+  "Marina @ 13",
+  "Other",
+  "Park and Picnic",
+  "Pool @ 440",
+  "Port O Call @ 140",
+  "Retail @ 1326",
+  "RV Park",
+  "Seabee Park",
+  "Storage Lot @ Great Lakes Drive",
+  "Storage Lot @ Ray Street",
+  "VMGC @ 3311",
+  "VMGC @ 3313",
+  "VMGC @ 3314",
+  "VMGC @ 8400",
+  "YFA @ 8190",
+  "Zappers @ 1326",
+  "Zappers @ 236",
+  "Zappers @ 2A",
+  "Zappers @ 616",
+  "Zappers @ 621",
 ];
 
 // ── Form state ────────────────────────────────────────────────────────────────
@@ -76,7 +138,7 @@ interface WoForm {
 function emptyForm(): WoForm {
   return {
     workDescription: "",
-    priority: "Routine",
+    priority: "",
     facilityBldg: "",
     programAreaRoom: "",
     costCenter: "",
@@ -100,12 +162,14 @@ async function generateWorkOrderContent(
 
 Based on the request below, produce two outputs:
 
-1. A professional, clear description of the work needed (100–180 words). Use factual maintenance language. Include the specific facility and area when relevant. If the priority is Urgent or Emergent, begin with "URGENT:" or "EMERGENT:" respectively. Do not editorialize — just describe the work clearly.
+1. A professional, clear description of the work needed (100–180 words). Use factual maintenance language. Include the specific facility and area when relevant. If the nature of the request involves an emergency or urgent matter, begin with "URGENT:" or "EMERGENCY:" respectively. Do not editorialize — just describe the work clearly.
 
-2. The single most appropriate work type from this exact list:
-General Maintenance | Electrical | Plumbing | HVAC/Mechanical | Carpentry/Structural | Painting/Finishes | Grounds/Landscaping | Vehicle/Equipment | Pest Control | Special Event Support | Other
+2. The single most appropriate WORK TYPE from this exact list (pick one):
+Emergency (Life/Safety) | Fire Deficiency | IH Deficiency | NAVOSH Deficiency | Revenue Impact | Routine | Safety | Urgent (Impact to Mission)
 
-PRIORITY: ${priority}
+Choose "Routine" unless the description clearly indicates life/safety, fire, health, safety, revenue impact, or mission-critical urgency.
+
+NATURE OF REQUEST: ${priority || "Not specified"}
 FACILITY/LOCATION: ${facility || "Golf Course Maintenance Facility"}
 PROGRAM AREA/ROOM: ${programArea || "See description"}
 REQUEST: ${description}
@@ -115,7 +179,7 @@ DESCRIPTION:
 [your description here]
 
 WORK_TYPE:
-[single work type from the list]`;
+[single work type from the list above]`;
 
   const reply = await callApi<{ reply?: string; error?: string }>("ai-assistant", {
     method: "POST",
@@ -128,7 +192,7 @@ WORK_TYPE:
 
   return {
     formattedDescription: descMatch?.[1]?.trim() ?? description,
-    workType: typeMatch?.[1]?.trim() ?? "General Maintenance",
+    workType: typeMatch?.[1]?.trim() ?? "Routine",
   };
 }
 
@@ -237,6 +301,7 @@ export default function WorkOrderPage() {
 
       const data: WorkOrderData = {
         date: todayCentralMmDdYyyy(),
+        natureOfRequest: form.priority,
         facilityBldg: form.facilityBldg,
         programAreaRoom: form.programAreaRoom,
         costCenter: form.costCenter,
@@ -393,26 +458,22 @@ export default function WorkOrderPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="priority">Priority / Nature of Request</Label>
+              <Label htmlFor="priority">Nature of Request</Label>
               <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
                 <SelectTrigger id="priority">
-                  <SelectValue />
+                  <SelectValue placeholder="Select nature of request…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Routine">
-                    Routine — standard scheduling, no immediate urgency
-                  </SelectItem>
-                  <SelectItem value="Urgent">
-                    Urgent — impacts customer service, revenue, or operations
-                  </SelectItem>
-                  <SelectItem value="Emergent">
-                    Emergent — life/safety, security, or prevents damage to MWR assets
-                  </SelectItem>
+                  {NATURE_OF_REQUEST.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Urgent/Emergent requests can be called in first — but the work order must still be
-                submitted no later than COB the following business day.
+                Select the category that best matches your request. This populates the
+                &quot;Nature of Request&quot; field on the official form.
               </p>
             </div>
 
@@ -503,12 +564,18 @@ export default function WorkOrderPage() {
                 <Label htmlFor="facility">
                   Facility / Building # <span className="text-red-500">*</span>
                 </Label>
-                <Input
-                  id="facility"
-                  placeholder="e.g. Golf Course Maintenance, Bldg 8400"
-                  value={form.facilityBldg}
-                  onChange={(e) => set("facilityBldg", e.target.value)}
-                />
+                <Select value={form.facilityBldg} onValueChange={(v) => set("facilityBldg", v)}>
+                  <SelectTrigger id="facility">
+                    <SelectValue placeholder="Select facility…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FACILITY_BUILDINGS.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="programArea">
