@@ -794,6 +794,8 @@ function NewPurchaseRequestPageInner() {
   const [loadingExisting, setLoadingExisting] = useState(!!editId || !!fromId);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  /** Object URL for the in-app PDF preview overlay. */
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Tick-counter so the spinner can show seconds elapsed during save —
   // gives the user feedback when the supabase-js auth lock or the
@@ -1455,22 +1457,12 @@ function NewPurchaseRequestPageInner() {
 
       const blob = await generatePurchaseRequestReport(previewPr);
 
-      // Filename: PREVIEW prefix + date + sanitized vendor name. No
-      // sequence number here, so it can't be confused with a real PR PDF
-      // generated from the view page.
-      const dateStr = datePrepared.replace(/-/g, "");
-      const vendorSlug = (v1.name.trim() || "vendor")
-        .replace(/[^a-z0-9]+/gi, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 30);
-      const filename = `PR-PREVIEW-${dateStr}-${vendorSlug}.pdf`;
+      // Revoke any previous preview URL to avoid memory leaks.
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
 
-      await saveBlobToDevice({
-        blob,
-        filename,
-        shareTitle: "PR preview",
-      });
-      recordBreadcrumb("click", `[pr-preview] saved ${filename} (${blob.size}B)`);
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+      recordBreadcrumb("click", `[pr-preview] opened in-app preview (${blob.size}B)`);
     } catch (err) {
       const msg =
         err instanceof PurchaseRequestReportError
@@ -3089,6 +3081,53 @@ function NewPurchaseRequestPageInner() {
         </div>
       </div>
     </div>
+
+    {/* ── In-app PDF preview overlay ── */}
+    {previewUrl && (
+      <div className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-background border-b">
+          <span className="text-sm font-medium">PR Preview</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                const resp = await fetch(previewUrl);
+                const blob = await resp.blob();
+                const dateStr = datePrepared.replace(/-/g, "");
+                const vendorSlug = (v1.name.trim() || "vendor")
+                  .replace(/[^a-z0-9]+/gi, "-")
+                  .replace(/^-+|-+$/g, "")
+                  .slice(0, 30);
+                const filename = `PR-PREVIEW-${dateStr}-${vendorSlug}.pdf`;
+                await saveBlobToDevice({ blob, filename, shareTitle: "PR preview" });
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border hover:bg-muted transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Download
+            </button>
+            <button
+              onClick={() => {
+                URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+              }}
+              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-muted transition-colors"
+              aria-label="Close preview"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        {/* PDF embed */}
+        <div className="flex-1 min-h-0">
+          <iframe
+            src={previewUrl}
+            className="w-full h-full border-0"
+            title="PR PDF Preview"
+          />
+        </div>
+      </div>
+    )}
     </>
   );
 }
