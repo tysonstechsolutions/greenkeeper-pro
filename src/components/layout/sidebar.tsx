@@ -84,6 +84,7 @@ const leadershipApps: SidebarItem[] = [
   { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
   { href: "/sole-source", label: "Sole Source", icon: Scale },
   { href: "/work-order", label: "Work Order", icon: Wrench },
+  { href: "/work-orders", label: "Work Orders", icon: Wrench },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
 
@@ -108,6 +109,7 @@ const foremanApps: SidebarItem[] = [
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
   { href: "/work-order", label: "Work Order", icon: Wrench },
+  { href: "/work-orders", label: "Work Orders", icon: Wrench },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
 

@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Building2,
   X,
+  Undo2,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
@@ -82,6 +83,9 @@ interface StatusMeta {
   nextLabel: string | null;
   nextIcon: LucideIcon | null;
   nextHover: string | null;
+  /** Previous status — allows reverting if a PR was rejected or marked too early. */
+  prev: PrStatus | null;
+  prevLabel: string | null;
 }
 
 const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
@@ -94,6 +98,8 @@ const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
     nextLabel: null,
     nextIcon: null,
     nextHover: null,
+    prev: null,
+    prevLabel: null,
   },
   submitted: {
     label: "Not Sent",
@@ -104,6 +110,8 @@ const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
     nextLabel: "Sent for Approval",
     nextIcon: Send,
     nextHover: "hover:bg-blue-500/10 hover:text-blue-600",
+    prev: null,
+    prevLabel: null,
   },
   sent: {
     label: "Sent for Approval",
@@ -114,6 +122,8 @@ const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
     nextLabel: "Approved",
     nextIcon: ShieldCheck,
     nextHover: "hover:bg-emerald-500/10 hover:text-emerald-600",
+    prev: "submitted",
+    prevLabel: "Not Sent",
   },
   approved: {
     label: "Approved",
@@ -124,6 +134,8 @@ const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
     nextLabel: "Received & Signed",
     nextIcon: PackageCheck,
     nextHover: "hover:bg-green-500/10 hover:text-green-600",
+    prev: "sent",
+    prevLabel: "Sent for Approval",
   },
   received: {
     label: "Received & Signed",
@@ -134,6 +146,8 @@ const STATUS_FLOW: Record<PrStatus, StatusMeta> = {
     nextLabel: null,
     nextIcon: null,
     nextHover: null,
+    prev: "approved",
+    prevLabel: "Approved",
   },
 };
 
@@ -716,6 +730,27 @@ export default function PurchaseRequestsListPage() {
                   >
                     <Copy className="w-4 h-4" />
                   </Link>
+                  {meta.prev && meta.prevLabel && (
+                    <button
+                      type="button"
+                      aria-label={`Revert PR — Back to ${meta.prevLabel}`}
+                      title={`Revert PR — Back to ${meta.prevLabel}`}
+                      disabled={advancingId === `${pr.id}:status`}
+                      onClick={() =>
+                        handleAdvanceStatus(
+                          pr.id,
+                          label,
+                          meta.prev!,
+                          meta.prevLabel!,
+                          "status",
+                          "PR",
+                        )
+                      }
+                      className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                    >
+                      <Undo2 className="w-4 h-4" />
+                    </button>
+                  )}
                   {meta.next && NextIcon && meta.nextLabel && (
                     <button
                       type="button"

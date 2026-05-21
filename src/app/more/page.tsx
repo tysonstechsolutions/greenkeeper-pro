@@ -22,6 +22,7 @@ import {
   Mic,
   Phone,
   ClipboardSignature,
+  ClipboardList,
   Scale,
   Wrench,
 } from "lucide-react";
@@ -72,6 +73,7 @@ const leadershipApps: AppItem[] = [
   { href: "/sow", label: "Statement of Work", icon: ClipboardSignature, color: "from-cyan-600 to-teal-700" },
   { href: "/sole-source", label: "Sole Source", icon: Scale, color: "from-indigo-500 to-violet-600" },
   { href: "/work-order", label: "Work Order", icon: Wrench, color: "from-orange-500 to-amber-600" },
+  { href: "/work-orders", label: "Work Orders", icon: ClipboardList, color: "from-orange-600 to-amber-700" },
   { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
 ];
 
@@ -90,6 +92,7 @@ const foremanApps: AppItem[] = [
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-green-600 to-emerald-700" },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
   { href: "/work-order", label: "Work Order", icon: Wrench, color: "from-orange-500 to-amber-600" },
+  { href: "/work-orders", label: "Work Orders", icon: ClipboardList, color: "from-orange-600 to-amber-700" },
   { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
 ];
 

@@ -21,19 +21,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// Native <select> used instead of Radix Select — Radix portals block
+// mouse-wheel scroll on the page when multiple Selects are present.
 import { useAuth } from "@/lib/hooks/useAuth";
 import { callApi } from "@/lib/api/client";
-import { downloadWorkOrderReport, type WorkOrderData } from "@/lib/reports/work-order-report";
+import { generateWorkOrderBlob, type WorkOrderData } from "@/lib/reports/work-order-report";
+import { workOrderPdfFilename } from "@/lib/reports/wo-naming";
+import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayCentralMmDdYyyy } from "@/lib/utils/date";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
+import { directInsertRow } from "@/lib/supabase/rest";
+import { PR_COST_CENTERS } from "@/lib/pr-accounting-codes";
+import { PR_DELIVERY_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 
@@ -143,8 +143,8 @@ function emptyForm(): WoForm {
     programAreaRoom: "",
     costCenter: "",
     numberOfEnclosures: "0",
-    secondaryPocName: "",
-    secondaryPocPhone: "",
+    secondaryPocName: PR_DELIVERY_DEFAULTS.poc,
+    secondaryPocPhone: PR_DELIVERY_DEFAULTS.phone,
     primaryPocEmail: "",
     primaryPocPhone: "",
   };
@@ -256,13 +256,14 @@ export default function WorkOrderPage() {
   const removePhoto = (idx: number) =>
     setPhotos((prev) => prev.filter((_, i) => i !== idx));
 
-  // Auto-fill primary POC from profile
+  // Auto-fill primary POC from profile (same source as PRs)
   useEffect(() => {
     if (!profile) return;
     setForm((prev) => ({
       ...prev,
       primaryPocEmail: profile.email ?? prev.primaryPocEmail,
-      primaryPocPhone: profile.phone ?? prev.primaryPocPhone,
+      primaryPocPhone:
+        profile.phone || PR_REQUESTOR_DEFAULTS.phone || prev.primaryPocPhone,
     }));
   }, [profile]);
 
@@ -316,7 +317,40 @@ export default function WorkOrderPage() {
       };
 
       setLastData(data);
-      await downloadWorkOrderReport(data);
+
+      // Save to database — the BEFORE INSERT trigger assigns wo_sequence_number
+      const row = await directInsertRow<{
+        id: string;
+        wo_sequence_number: number;
+      }>("work_orders", {
+        date_submitted: new Date().toISOString().slice(0, 10),
+        nature_of_request: form.priority || null,
+        facility_bldg: form.facilityBldg || null,
+        program_area_room: form.programAreaRoom || null,
+        cost_center: form.costCenter || null,
+        description_of_work: formattedDescription,
+        work_type: workType || null,
+        primary_poc_email: form.primaryPocEmail || null,
+        primary_poc_phone: form.primaryPocPhone || null,
+        secondary_poc_name: form.secondaryPocName || null,
+        secondary_poc_phone: form.secondaryPocPhone || null,
+        number_of_enclosures: enclosureCount,
+        status: "submitted",
+        created_by: profile?.id ?? null,
+      }, "work-orders.create");
+
+      // Build the filename from the sequence number
+      const filename = workOrderPdfFilename(row.wo_sequence_number);
+      setLastFilename(filename);
+
+      // Generate PDF and download with "Save As" dialog
+      const blob = await generateWorkOrderBlob(data);
+      await saveBlobToDevice({
+        blob,
+        filename,
+        shareTitle: "MWR Facilities Maintenance Work Order",
+      });
+
       setDone(true);
     } catch (err) {
       setError(
@@ -327,11 +361,19 @@ export default function WorkOrderPage() {
     }
   };
 
+  // Track the last-generated filename so "Download Again" uses the same name
+  const [lastFilename, setLastFilename] = useState<string | null>(null);
+
   const handleDownloadAgain = async () => {
     if (!lastData) return;
     setGenerating(true);
     try {
-      await downloadWorkOrderReport(lastData);
+      const blob = await generateWorkOrderBlob(lastData);
+      await saveBlobToDevice({
+        blob,
+        filename: lastFilename ?? "Work-Order.pdf",
+        shareTitle: "MWR Facilities Maintenance Work Order",
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Download failed.");
     } finally {
@@ -346,6 +388,7 @@ export default function WorkOrderPage() {
     setDone(false);
     setError(null);
     setLastData(null);
+    setLastFilename(null);
   };
 
   return (
@@ -459,18 +502,19 @@ export default function WorkOrderPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="priority">Nature of Request</Label>
-              <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
-                <SelectTrigger id="priority">
-                  <SelectValue placeholder="Select nature of request…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {NATURE_OF_REQUEST.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                id="priority"
+                value={form.priority}
+                onChange={(e) => set("priority", e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
+              >
+                <option value="">Select nature of request…</option>
+                {NATURE_OF_REQUEST.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
               <p className="text-xs text-muted-foreground">
                 Select the category that best matches your request. This populates the
                 &quot;Nature of Request&quot; field on the official form.
@@ -564,18 +608,19 @@ export default function WorkOrderPage() {
                 <Label htmlFor="facility">
                   Facility / Building # <span className="text-red-500">*</span>
                 </Label>
-                <Select value={form.facilityBldg} onValueChange={(v) => set("facilityBldg", v)}>
-                  <SelectTrigger id="facility">
-                    <SelectValue placeholder="Select facility…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FACILITY_BUILDINGS.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  id="facility"
+                  value={form.facilityBldg}
+                  onChange={(e) => set("facilityBldg", e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
+                >
+                  <option value="">Select facility…</option>
+                  {FACILITY_BUILDINGS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="programArea">
@@ -593,12 +638,19 @@ export default function WorkOrderPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="costCenter">Cost Center</Label>
-                <Input
+                <select
                   id="costCenter"
-                  placeholder="e.g. 1353-8400"
                   value={form.costCenter}
                   onChange={(e) => set("costCenter", e.target.value)}
-                />
+                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
+                >
+                  <option value="">Select cost center…</option>
+                  {PR_COST_CENTERS.map((cc) => (
+                    <option key={cc.value} value={cc.value}>
+                      {cc.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="enclosures">Number of Enclosures</Label>

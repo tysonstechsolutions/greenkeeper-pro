@@ -772,13 +772,16 @@ function NewPurchaseRequestPageInner() {
   const [secondApproval, setSecondApproval] = useState("");
   const [secondDate, setSecondDate] = useState("");
 
-  // Attached items
+  // Quote source — drives IGE Based On and the "Other" attachment label
+  const [quoteSource, setQuoteSource] = useState<"vendor_quote" | "online_pricing" | "">("");
+
+  // Attached items — Section 889 checked by default per procurement rules
   const [attached, setAttached] = useState({
     ssj: false,
     bnj: false,
     pws: false,
     itpr: false,
-    section_889: false,
+    section_889: true,
     sow: false,
   });
   const [attachedOther, setAttachedOther] = useState("");
@@ -792,6 +795,8 @@ function NewPurchaseRequestPageInner() {
   const [historyQuery, setHistoryQuery] = useState("");
 
   const [loadingExisting, setLoadingExisting] = useState(!!editId || !!fromId);
+  /** True once the user manually types in the justification box — stops auto-fill from overwriting. */
+  const justificationTouched = useRef(false);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   /** Object URL for the in-app PDF preview overlay. */
@@ -1023,7 +1028,17 @@ function NewPurchaseRequestPageInner() {
       setItems(row.items?.length ? row.items : [emptyItem(1)]);
       setIgeExcessPct(Number(row.ige_excess_pct) || 0);
       setJustification(row.justification || "");
+      // Preserve saved justification — mark touched so auto-fill doesn't
+      // overwrite it when loadingExisting flips to false.
+      if (row.justification) justificationTouched.current = true;
       setIgeBasedOn(row.ige_based_on || "");
+      // Infer quote source from saved IGE Based On text
+      const savedIge = (row.ige_based_on || "").toLowerCase();
+      if (savedIge.includes("vendor quote")) {
+        setQuoteSource("vendor_quote");
+      } else if (savedIge.includes("online pricing")) {
+        setQuoteSource("online_pricing");
+      }
       // Clone: drop signatures and approver names so the new draft starts
       // unsigned. Edit: keep what was there.
       setFinancialAnalyst(isClone ? "" : row.financial_analyst || "");
@@ -1057,6 +1072,65 @@ function NewPurchaseRequestPageInner() {
       ),
     [items],
   );
+
+  // Auto-fill IGE Based On + attached "Other" when quote source or total changes
+  useEffect(() => {
+    if (!quoteSource) return;
+    const label = quoteSource === "vendor_quote" ? "Vendor Quote" : "Online Pricing";
+    const amt = igeAmount.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+    });
+    setIgeBasedOn(`${label} - ${amt}`);
+    setAttachedOther(label);
+  }, [quoteSource, igeAmount]);
+
+  // Auto-fill "Justification for Purchase" from item descriptions, vendor &
+  // total.  Skipped when editing/cloning (saved value wins) or after the user
+  // manually types in the field (justificationTouched ref).
+  useEffect(() => {
+    if (loadingExisting) return;            // still hydrating edit/clone
+    if (justificationTouched.current) return; // user typed their own text
+
+    const descriptions = items
+      .map((it) => it.description.trim())
+      .filter(Boolean);
+
+    if (descriptions.length === 0 && !v1.name.trim()) {
+      // Nothing meaningful yet — leave field empty rather than writing a
+      // useless sentence.
+      setJustification("");
+      return;
+    }
+
+    const itemList = descriptions.length
+      ? descriptions.join(", ")
+      : "requested items";
+
+    const vendor = v1.name.trim();
+    const sourceLabel =
+      quoteSource === "vendor_quote"
+        ? "vendor quote"
+        : quoteSource === "online_pricing"
+          ? "online pricing"
+          : "";
+
+    const amt = igeAmount
+      ? ` Total: ${igeAmount.toLocaleString("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+        })}.`
+      : "";
+
+    let text = `Purchase of ${itemList} required for golf course maintenance operations.`;
+    if (vendor) text += ` Source: ${vendor}.`;
+    if (sourceLabel) text += ` Pricing based on ${sourceLabel}.`;
+    if (amt) text += amt;
+
+    setJustification(text);
+  }, [items, v1.name, quoteSource, igeAmount, loadingExisting]);
 
   // ── Item helpers ─────────────────────────────────────────────────────────
   function updateItem(idx: number, patch: Partial<PurchaseRequestItem>) {
@@ -2888,22 +2962,44 @@ function NewPurchaseRequestPageInner() {
             className={inputCls}
           />
         </Field>
+        <Field label="Quote Source">
+          <select
+            value={quoteSource}
+            onChange={(e) =>
+              setQuoteSource(
+                e.target.value as "vendor_quote" | "online_pricing" | "",
+              )
+            }
+            className={inputCls}
+          >
+            <option value="">Select quote source…</option>
+            <option value="vendor_quote">Vendor Quote</option>
+            <option value="online_pricing">Online Pricing</option>
+          </select>
+        </Field>
         <Field label="IGE Based On">
           <textarea
             value={igeBasedOn}
             onChange={(e) => setIgeBasedOn(e.target.value)}
             rows={2}
             className={`${inputCls} resize-none`}
-            placeholder="Quote, prior invoice, market research..."
+            placeholder={
+              quoteSource
+                ? "Auto-filled from quote source + total"
+                : "Select a quote source above, or type manually"
+            }
           />
         </Field>
         <Field label="Justification for Purchase">
           <textarea
             value={justification}
-            onChange={(e) => setJustification(e.target.value)}
+            onChange={(e) => {
+              justificationTouched.current = true;
+              setJustification(e.target.value);
+            }}
             rows={4}
             className={`${inputCls} resize-none`}
-            placeholder="Why this purchase is needed..."
+            placeholder="Auto-filled from items, vendor & total — or type manually"
           />
         </Field>
       </Section>

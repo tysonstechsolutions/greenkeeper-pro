@@ -352,9 +352,13 @@ function value(
 
 // ── Main generator ────────────────────────────────────────────────────────────
 
-export async function downloadWorkOrderReport(
+/**
+ * Generate the Work Order PDF blob without downloading it.
+ * This is the low-level function — callers handle download/naming.
+ */
+export async function generateWorkOrderBlob(
   data: WorkOrderData,
-): Promise<void> {
+): Promise<Blob> {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -729,11 +733,23 @@ export async function downloadWorkOrderReport(
   }
 
   // ── Output ─────────────────────────────────────────────────────────────
-  const blob = doc.output("blob");
-  const dateStr = data.date.replace(/\//g, "-");
+  return doc.output("blob");
+}
+
+/**
+ * Legacy convenience wrapper — generates the PDF and downloads it with the
+ * given filename. New code should call `generateWorkOrderBlob` + `saveBlobToDevice`
+ * directly for more control over naming.
+ */
+export async function downloadWorkOrderReport(
+  data: WorkOrderData,
+  filename?: string,
+): Promise<void> {
+  const blob = await generateWorkOrderBlob(data);
+  const fname = filename ?? `MWR-Work-Order-${data.date.replace(/\//g, "-")}.pdf`;
   await saveBlobToDevice({
     blob,
-    filename: `MWR-Work-Order-${dateStr}.pdf`,
+    filename: fname,
     shareTitle: "MWR Facilities Maintenance Work Order",
   });
 }
