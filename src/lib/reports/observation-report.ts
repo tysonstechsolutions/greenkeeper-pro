@@ -162,6 +162,10 @@ export async function generateObservationReport(
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 15;
     const contentWidth = pageWidth - margin * 2;
+    // Bottom limit for body content. Footer rule sits at pageHeight - 12; the
+    // generated/page-count text lives between that rule and the page bottom.
+    // Keep ≥3mm padding above the rule so body content never touches it.
+    const BOTTOM_LIMIT = pageHeight - 15;
     let y = margin;
 
     const surfaceLabelForHdr = type === "green" ? "Green" : "Fairway";
@@ -190,7 +194,7 @@ export async function generateObservationReport(
     };
 
     const checkPageSpace = (needed: number) => {
-      if (y + needed > pageHeight - 20) addPage();
+      if (y + needed > BOTTOM_LIMIT) addPage();
     };
 
     const truncateText = (text: string, maxWidth: number, fontSize: number) => {
@@ -243,11 +247,16 @@ export async function generateObservationReport(
     doc.line(margin + 5, 12, pageWidth - margin, 12);
     doc.setLineWidth(0.2);
 
-    // Main title
+    // Main title — clamp to the left column so the "PREPARED BY" block on
+    // the right always has clearance. jsPDF doesn't wrap automatically at a
+    // large font size, so we hand-wrap with splitTextToSize.
     doc.setFont("helvetica", "bold");
     doc.setFontSize(24);
     doc.setTextColor(255, 255, 255);
-    doc.text(titleText, margin + 5, 28);
+    const titleMaxWidth = pageWidth - (margin + 5) - 50; // leave ~50mm right gutter
+    const titleLines = doc.splitTextToSize(titleText, titleMaxWidth);
+    // Show at most 2 lines so it never collides with the subtitle row
+    doc.text((titleLines as string[]).slice(0, 2), margin + 5, 28);
 
     // Subtitle
     doc.setFont("helvetica", "normal");
@@ -339,8 +348,11 @@ export async function generateObservationReport(
       const photo = photos[i];
       const diag = observation.diagnosis_result;
 
-      const estimatedHeight = photo ? 100 : 50;
-      checkPageSpace(estimatedHeight);
+      // Minimum block height that should NOT be split awkwardly: the colored
+      // priority header (12mm) + the type/reporter row (~6mm) + a sliver of
+      // body (5mm) = 23mm. Below this threshold force a new page so we
+      // don't orphan just the header.
+      checkPageSpace(23);
 
       const pColor = priorityColors[observation.priority] || GRAY_600;
       doc.setFillColor(...pColor);
@@ -361,8 +373,14 @@ export async function generateObservationReport(
       const titlePrefix = `${holePrefix}`;
       const statusText = `${observation.priority.toUpperCase()}  ·  ${statusLabels[observation.status] || observation.status}`;
       const statusWidth = doc.getTextWidth(statusText) + 8;
-      const maxTitleWidth = contentWidth - statusWidth - 20;
-      const truncatedTitle = truncateText(observation.title, maxTitleWidth - doc.getTextWidth(titlePrefix), 9.5);
+      // Clamp to a sensible minimum so a long status string can't push the
+      // title width negative on narrow pages.
+      const maxTitleWidth = Math.max(40, contentWidth - statusWidth - 20);
+      const truncatedTitle = truncateText(
+        observation.title,
+        Math.max(20, maxTitleWidth - doc.getTextWidth(titlePrefix)),
+        9.5,
+      );
       doc.text(`${titlePrefix}${truncatedTitle}`, margin + 7, y + 10);
 
       doc.setFont("helvetica", "normal");
@@ -382,26 +400,46 @@ export async function generateObservationReport(
         minute: "2-digit",
       });
       const reporterName = observation.reporter?.full_name || "Unknown";
-      doc.text(
-        `Type: ${issueLabel}  |  Reported: ${reportDate}  |  By: ${reporterName}`,
-        margin + 2,
-        y + 3,
-      );
-      y += 6;
+      const metaText = `Type: ${issueLabel}  |  Reported: ${reportDate}  |  By: ${reporterName}`;
+      // Wrap if the meta string is too wide (long reporter names + long
+      // issue labels) so it can't run off the right edge.
+      const metaLines = doc.splitTextToSize(metaText, contentWidth - 4) as string[];
+      doc.text(metaLines, margin + 2, y + 3);
+      y += metaLines.length * 3.5 + 2.5;
 
       if (photo) {
-        checkPageSpace(65);
+        // Measure first so we can decide whether to start a new page rather
+        // than orphan the priority header at the bottom edge.
+        const imgWidth = 60;
+        const imgHeight = 45;
+        const textX = margin + imgWidth + 6;
+        const textWidth = contentWidth - imgWidth - 8;
+        const LINE_H = 3.5;
+
+        doc.setFontSize(8);
+        const descLinesAll = observation.description
+          ? (doc.splitTextToSize(observation.description, textWidth) as string[])
+          : [];
+        const fixLinesAll = observation.fix_instructions
+          ? (doc.splitTextToSize(observation.fix_instructions, textWidth) as string[])
+          : [];
+
+        // Right-column text height: label(4) + N lines + (label+gap if both)
+        let textHeight = 0;
+        if (descLinesAll.length) textHeight += 4 + descLinesAll.length * LINE_H;
+        if (fixLinesAll.length) {
+          textHeight += (descLinesAll.length ? 2 : 0) + 4 + fixLinesAll.length * LINE_H;
+        }
+        const blockHeight = Math.max(imgHeight, textHeight) + 3;
+        checkPageSpace(blockHeight);
+
         try {
-          const imgWidth = 60;
-          const imgHeight = 45;
           const imgFormat = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
           doc.addImage(photo, imgFormat, margin + 2, y, imgWidth, imgHeight);
 
-          const textX = margin + imgWidth + 6;
-          const textWidth = contentWidth - imgWidth - 8;
           let textY = y + 2;
 
-          if (observation.description) {
+          if (descLinesAll.length) {
             doc.setFont("helvetica", "bold");
             doc.setFontSize(8);
             doc.setTextColor(...BRAND_DARK);
@@ -410,13 +448,12 @@ export async function generateObservationReport(
             doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
             doc.setTextColor(...GRAY_600);
-            const descLines = doc.splitTextToSize(observation.description, textWidth);
-            doc.text(descLines.slice(0, 6), textX, textY);
-            textY += Math.min(descLines.length, 6) * 3.5;
+            doc.text(descLinesAll, textX, textY);
+            textY += descLinesAll.length * LINE_H;
           }
 
-          if (observation.fix_instructions) {
-            textY += 2;
+          if (fixLinesAll.length) {
+            textY += descLinesAll.length ? 2 : 0;
             doc.setFont("helvetica", "bold");
             doc.setFontSize(8);
             doc.setTextColor(180, 83, 9);
@@ -425,51 +462,66 @@ export async function generateObservationReport(
             doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
             doc.setTextColor(...GRAY_600);
-            const fixLines = doc.splitTextToSize(observation.fix_instructions, textWidth);
-            doc.text(fixLines.slice(0, 5), textX, textY);
-            textY += Math.min(fixLines.length, 5) * 3.5;
+            doc.text(fixLinesAll, textX, textY);
+            textY += fixLinesAll.length * LINE_H;
           }
 
-          const textHeight = textY - y;
-          y += Math.max(imgHeight, textHeight) + 3;
+          const actualTextHeight = textY - y;
+          y += Math.max(imgHeight, actualTextHeight) + 3;
         } catch {
           y += 2;
         }
       } else {
+        const LINE_H = 3.5;
         if (observation.description) {
-          checkPageSpace(15);
-          doc.setFont("helvetica", "normal");
           doc.setFontSize(8);
+          const descLines = doc.splitTextToSize(
+            observation.description,
+            contentWidth - 4,
+          ) as string[];
+          // Need space for: padding(3) + all lines + padding(3)
+          checkPageSpace(6 + descLines.length * LINE_H);
+          doc.setFont("helvetica", "normal");
           doc.setTextColor(...GRAY_600);
-          const descLines = doc.splitTextToSize(observation.description, contentWidth - 4);
-          doc.text(descLines.slice(0, 4), margin + 2, y + 3);
-          y += Math.min(descLines.length, 4) * 3.5 + 3;
+          doc.text(descLines, margin + 2, y + 3);
+          y += descLines.length * LINE_H + 3;
         }
 
         if (observation.fix_instructions) {
-          checkPageSpace(15);
-          doc.setFont("helvetica", "bold");
           doc.setFontSize(8);
+          const fixLines = doc.splitTextToSize(
+            observation.fix_instructions,
+            contentWidth - 4,
+          ) as string[];
+          // label header(5) + lines + padding(2)
+          checkPageSpace(7 + fixLines.length * LINE_H);
+          doc.setFont("helvetica", "bold");
           doc.setTextColor(180, 83, 9);
           doc.text("Fix Instructions:", margin + 2, y + 2);
           y += 5;
           doc.setFont("helvetica", "normal");
           doc.setTextColor(...GRAY_600);
-          const fixLines = doc.splitTextToSize(observation.fix_instructions, contentWidth - 4);
-          doc.text(fixLines.slice(0, 4), margin + 2, y);
-          y += Math.min(fixLines.length, 4) * 3.5 + 2;
+          doc.text(fixLines, margin + 2, y);
+          y += fixLines.length * LINE_H + 2;
         }
       }
 
       if (diag?.diagnosis) {
-        checkPageSpace(30);
         const conditionText = `${diag.diagnosis.condition || "Unknown Condition"}${
           diag.diagnosis.scientific_name ? ` (${diag.diagnosis.scientific_name})` : ""
         }`;
+        // The diagnosis box is drawn at margin+2 with width contentWidth-4
+        // and text starts at margin+5. So text usable width = (contentWidth-4) - 6 = contentWidth - 10.
         doc.setFontSize(8);
-        const conditionLines = doc.splitTextToSize(conditionText, contentWidth - 14);
+        const conditionLines = doc.splitTextToSize(
+          conditionText,
+          contentWidth - 10,
+        ) as string[];
         const conditionHeight = conditionLines.length * 3.5;
         const diagBoxHeight = Math.max(18, 8 + conditionHeight + 6);
+        // Reserve space for the whole box + trailing gap so the rounded
+        // rectangle never gets cut off by a mid-render page break.
+        checkPageSpace(diagBoxHeight + 3);
 
         doc.setFillColor(240, 253, 244);
         doc.setDrawColor(187, 247, 208);
@@ -518,10 +570,17 @@ export async function generateObservationReport(
 
           autoTable(doc, {
             startY: y,
-            margin: { left: margin + 2, right: margin + 2 },
+            // Side AND vertical margins so autoTable pagination keeps clear
+            // of the running header (RUNNING_HDR_H = 13) and footer rule.
+            margin: {
+              left: margin + 2,
+              right: margin + 2,
+              top: RUNNING_HDR_H + 5,
+              bottom: 15,
+            },
             head: [["Product", "Active Ingredient", "Rate", "Method", "Inventory", "Timing"]],
             body: tableData,
-            styles: { fontSize: 7, cellPadding: 1.5 },
+            styles: { fontSize: 7, cellPadding: 1.5, overflow: "linebreak" },
             headStyles: {
               fillColor: BRAND_DARK,
               textColor: [255, 255, 255],
@@ -533,13 +592,19 @@ export async function generateObservationReport(
               0: { fontStyle: "bold", cellWidth: 28 },
               4: { cellWidth: 18 },
             },
+            didDrawPage: () => {
+              // autoTable advances to a new page on its own — make sure our
+              // running header lands on every continuation page.
+              renderRunningHdr();
+            },
           });
 
           y = (doc as any).lastAutoTable.finalY + 3;
         }
 
         if (diag.treatment?.application_window) {
-          checkPageSpace(18);
+          // Box is 14mm + 3mm trailing gap = 17mm of vertical space.
+          checkPageSpace(17);
           const aw = diag.treatment.application_window;
           doc.setFillColor(239, 246, 255);
           doc.setDrawColor(191, 219, 254);
@@ -584,10 +649,15 @@ export async function generateObservationReport(
 
           autoTable(doc, {
             startY: y,
-            margin: { left: margin + 2, right: margin + 2 },
+            margin: {
+              left: margin + 2,
+              right: margin + 2,
+              top: RUNNING_HDR_H + 5,
+              bottom: 15,
+            },
             head: [["When", "Action", "Look For", "If No Improvement"]],
             body: followData,
-            styles: { fontSize: 7, cellPadding: 1.5 },
+            styles: { fontSize: 7, cellPadding: 1.5, overflow: "linebreak" },
             headStyles: {
               fillColor: BRAND_GREEN,
               textColor: [255, 255, 255],
@@ -595,13 +665,16 @@ export async function generateObservationReport(
               fontStyle: "bold",
             },
             alternateRowStyles: { fillColor: [245, 247, 250] },
+            didDrawPage: () => {
+              renderRunningHdr();
+            },
           });
 
           y = (doc as any).lastAutoTable.finalY + 3;
         }
 
         if (diag.prevention?.length > 0) {
-          checkPageSpace(15);
+          checkPageSpace(10);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(8);
           doc.setTextColor(...BRAND_DARK);
@@ -611,24 +684,38 @@ export async function generateObservationReport(
           doc.setFont("helvetica", "normal");
           doc.setFontSize(7);
           doc.setTextColor(...GRAY_600);
+          const BULLET_LH = 3.2;
           diag.prevention.forEach((tip: string) => {
-            checkPageSpace(5);
-            const lines = doc.splitTextToSize(`- ${tip}`, contentWidth - 6);
+            // Bullets are drawn at margin+4 so usable width = contentWidth - 8
+            const lines = doc.splitTextToSize(
+              `- ${tip}`,
+              contentWidth - 8,
+            ) as string[];
+            // Need full bullet height before drawing — otherwise the bottom
+            // lines spill over the page edge.
+            checkPageSpace(lines.length * BULLET_LH + 1);
             doc.text(lines, margin + 4, y + 2);
-            y += lines.length * 3 + 1;
+            y += lines.length * BULLET_LH + 1;
           });
           y += 2;
         }
       }
 
       if (i < obs.length - 1) {
-        y += 3;
-        checkPageSpace(5);
-        doc.setDrawColor(...GRAY_400);
-        doc.setLineDashPattern([1, 1], 0);
-        doc.line(margin + 10, y, pageWidth - margin - 10, y);
-        doc.setLineDashPattern([], 0);
-        y += 5;
+        // Skip separator entirely if we'd just be planting it at the page
+        // bottom right before a forced page break — looks orphaned.
+        if (y + 8 <= BOTTOM_LIMIT) {
+          y += 3;
+          doc.setDrawColor(...GRAY_400);
+          doc.setLineDashPattern([1, 1], 0);
+          doc.line(margin + 10, y, pageWidth - margin - 10, y);
+          doc.setLineDashPattern([], 0);
+          y += 5;
+        } else {
+          // Force a clean new page for the next observation; the running
+          // header will provide visual separation.
+          addPage();
+        }
       }
     }
 

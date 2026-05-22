@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   MapPin,
@@ -16,7 +16,17 @@ import {
   History,
   ChevronDown,
   Languages,
+  CheckCheck,
+  Loader2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,14 +129,29 @@ type TabType = "holes" | "greens";
 export default function CourseMapPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("holes");
-  const { observations: holeObs, loading: holeLoading, stats: holeStats, getOpenCountForHole } = useHoleObservations();
-  const { observations: greenObs, loading: greenLoading, stats: greenStats, getOpenCountForGreen } = useGreenObservations();
+  const {
+    observations: holeObs,
+    loading: holeLoading,
+    stats: holeStats,
+    getOpenCountForHole,
+    resolveAllOpen: resolveAllHoleOpen,
+  } = useHoleObservations();
+  const {
+    observations: greenObs,
+    loading: greenLoading,
+    stats: greenStats,
+    getOpenCountForGreen,
+    resolveAllOpen: resolveAllGreenOpen,
+  } = useGreenObservations();
   const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatingActionPlan, setGeneratingActionPlan] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [resolvingAll, setResolvingAll] = useState(false);
+  const [resolveBanner, setResolveBanner] = useState<string | null>(null);
 
   const stats = activeTab === "holes" ? holeStats : greenStats;
   const loading = activeTab === "holes" ? holeLoading : greenLoading;
@@ -200,6 +225,41 @@ export default function CourseMapPage() {
       return true;
     });
   }, [holeSummaries, search, filterPriority]);
+
+  // Auto-dismiss the resolve-all confirmation banner so it doesn't linger
+  useEffect(() => {
+    if (!resolveBanner) return;
+    const t = setTimeout(() => setResolveBanner(null), 5000);
+    return () => clearTimeout(t);
+  }, [resolveBanner]);
+
+  /**
+   * Bulk-resolve every open observation for whichever surface tab is
+   * currently active (holes OR greens). Always confirms first via the
+   * dialog state — never fires straight from the button.
+   */
+  const handleConfirmBulkResolve = async () => {
+    setResolvingAll(true);
+    try {
+      const count =
+        activeTab === "holes"
+          ? await resolveAllHoleOpen()
+          : await resolveAllGreenOpen();
+      setBulkConfirmOpen(false);
+      if (count > 0) {
+        setResolveBanner(
+          `${count} ${activeTab === "holes" ? "hole" : "green"} ${count === 1 ? "issue" : "issues"} marked fixed.`,
+        );
+      } else {
+        setReportError("No open issues to resolve.");
+      }
+    } catch (err) {
+      console.error("Bulk resolve failed:", err);
+      setReportError("Failed to mark issues as fixed. Please try again.");
+    } finally {
+      setResolvingAll(false);
+    }
+  };
 
   // Filter greens
   const filteredGreens = useMemo(() => {
@@ -335,6 +395,20 @@ export default function CourseMapPage() {
             <History className="w-4 h-4" />
             History
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={
+              resolvingAll ||
+              (activeTab === "holes" ? holeStats.open : greenStats.open) === 0
+            }
+            onClick={() => setBulkConfirmOpen(true)}
+            className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+            title="Mark every open observation on this tab as resolved"
+          >
+            <CheckCheck className="w-4 h-4" />
+            Mark All Fixed
+          </Button>
         </div>
       </div>
 
@@ -343,6 +417,17 @@ export default function CourseMapPage() {
           <AlertTriangle className="w-4 h-4 shrink-0" />
           {reportError}
           <button className="ml-auto" onClick={() => setReportError(null)}>
+            <span className="sr-only">Dismiss</span>
+            ×
+          </button>
+        </div>
+      )}
+
+      {resolveBanner && (
+        <div className="mb-4 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {resolveBanner}
+          <button className="ml-auto" onClick={() => setResolveBanner(null)}>
             <span className="sr-only">Dismiss</span>
             ×
           </button>
@@ -565,6 +650,54 @@ export default function CourseMapPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       )}
+
+      {/* Bulk Resolve Confirmation Dialog */}
+      <Dialog
+        open={bulkConfirmOpen}
+        onOpenChange={(open) => !resolvingAll && setBulkConfirmOpen(open)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCheck className="w-5 h-5 text-emerald-600" />
+              Mark all {activeTab === "holes" ? "hole" : "green"} issues as fixed?
+            </DialogTitle>
+            <DialogDescription>
+              This resolves every currently open observation on the{" "}
+              <strong>{activeTab === "holes" ? "Holes" : "Greens"}</strong> tab
+              ({activeTab === "holes" ? holeStats.open : greenStats.open}{" "}
+              {(activeTab === "holes" ? holeStats.open : greenStats.open) ===
+              1
+                ? "issue"
+                : "issues"}
+              ) so you have a clean slate to add new ones. Resolved items move
+              to History — you can still review them or unresolve individually
+              if needed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              disabled={resolvingAll}
+              onClick={() => setBulkConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              disabled={resolvingAll}
+              onClick={handleConfirmBulkResolve}
+            >
+              {resolvingAll ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCheck className="w-4 h-4" />
+              )}
+              {resolvingAll ? "Resolving..." : "Yes, Mark All Fixed"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

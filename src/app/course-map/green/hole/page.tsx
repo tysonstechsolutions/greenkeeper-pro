@@ -23,6 +23,8 @@ import {
   Edit3,
   Trash2,
   Ruler,
+  Locate,
+  Crosshair,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +56,13 @@ import {
 } from "@/components/ui/dialog";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { ResolveIssueDialog } from "@/components/resolve-issue-dialog";
+import { GpsCalibrationDialog } from "@/components/gps-calibration-dialog";
+import { useHoleGpsCalibration } from "@/lib/hooks/useHoleGpsCalibration";
+import {
+  gpsToImageCoords,
+  clampPixel,
+  buildCirclePolygon,
+} from "@/lib/utils/gps-to-pixel";
 import {
   useGreenObservations,
   greenIssueTypeLabels,
@@ -102,6 +111,16 @@ function PageContent() {
   // Drawing mode state
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnPath, setDrawnPath] = useState<AreaPoint[] | null>(null);
+
+  // GPS calibration + locate state
+  const {
+    calibration: gpsCalibration,
+    isCalibrated,
+    loading: calibrationLoading,
+  } = useHoleGpsCalibration(holeNumber, "green");
+  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const canCalibrate = isSuper || isForeman;
 
   // Multi-step form: photo → analyzing → review
   const [showForm, setShowForm] = useState(false);
@@ -255,6 +274,90 @@ function PageContent() {
       setGeneratingFix(false);
     }
   }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
+
+  /**
+   * Use the phone's GPS to drop a starting area at the user's current
+   * location on this green. Since the green observation model expects a
+   * drawn polygon (area_path) rather than a single pin, we synthesise a
+   * small ~2 m circular ring centred on the GPS reading. The user can
+   * then refine the polygon before submitting if they need more precision.
+   */
+  const handleUseMyLocation = useCallback(() => {
+    if (!isCalibrated || !gpsCalibration) {
+      if (canCalibrate) {
+        setShowCalibrationDialog(true);
+      } else {
+        setFeedbackMsg({
+          type: "error",
+          text: "This green isn't calibrated yet — ask a super or foreman to set it up.",
+        });
+      }
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setFeedbackMsg({
+        type: "error",
+        text: "GPS isn't available on this device.",
+      });
+      return;
+    }
+    setLocating(true);
+    setFeedbackMsg({ type: "loading", text: "Getting your GPS location…" });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const center = clampPixel(
+          gpsToImageCoords(gpsCalibration, {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          }),
+        );
+        // Build a ~2 m radius polygon as a starter area. If calibration's
+        // image-units-per-meter scale produces something larger than the
+        // image, the polygon vertices clamp to [0, 1] automatically.
+        const ring = buildCirclePolygon(gpsCalibration, center, 2, 12);
+        // Fallback if ring couldn't be built (degenerate scale) — drop a
+        // tiny pin-sized triangle so the submit path still works.
+        const path: AreaPoint[] =
+          ring.length >= 3
+            ? ring
+            : [
+                { x: center.x - 0.005, y: center.y - 0.005 },
+                { x: center.x + 0.005, y: center.y - 0.005 },
+                { x: center.x, y: center.y + 0.005 },
+              ];
+        setDrawnPath(path);
+        setIsDrawing(false);
+        // Open the issue form sheet so the user can pick issue type etc.
+        setFormStep("photo");
+        setShowForm(true);
+        setAnalyzeError(null);
+        setDiagnosisResult(null);
+        setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        const accuracy = Math.round(pos.coords.accuracy ?? 0);
+        setFeedbackMsg({
+          type: "success",
+          text: `Area centred at your location (±${accuracy}m). Tweak the shape before submitting if needed.`,
+        });
+        setLocating(false);
+      },
+      (err) => {
+        console.error("GPS error:", err);
+        setFeedbackMsg({
+          type: "error",
+          text:
+            err.code === err.PERMISSION_DENIED
+              ? "Location permission denied — enable GPS for this app in your phone settings."
+              : err.code === err.TIMEOUT
+                ? "GPS timed out. Try again with a clearer view of the sky."
+                : "Couldn't get your location. Make sure GPS is on and try again.",
+        });
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  }, [isCalibrated, gpsCalibration, canCalibrate]);
 
   // ── Submit Observation ──
   const handleSubmit = useCallback(async () => {
@@ -636,7 +739,7 @@ function PageContent() {
         </div>
 
         {/* Action buttons below image */}
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2 mt-3 flex-wrap">
           {isDrawing ? (
             <Button
               variant="outline"
@@ -647,12 +750,48 @@ function PageContent() {
               Cancel Drawing
             </Button>
           ) : (
+            <>
+              <Button
+                className="flex-1 bg-emerald-700 hover:bg-emerald-600"
+                onClick={() => setIsDrawing(true)}
+                disabled={locating}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Report Green Issue
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-[#B68D40] text-[#B68D40] hover:bg-[#B68D40]/10 hover:text-[#B68D40]"
+                onClick={handleUseMyLocation}
+                disabled={locating || calibrationLoading}
+                title={
+                  isCalibrated
+                    ? "Drop a starting area where I'm standing using GPS"
+                    : canCalibrate
+                      ? "Calibrate this green's GPS first"
+                      : "Green not GPS-calibrated yet — ask a super or foreman"
+                }
+              >
+                {locating ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Locate className="w-4 h-4 mr-2" />
+                )}
+                {isCalibrated ? "Use My Location" : canCalibrate ? "Calibrate GPS" : "GPS not set"}
+              </Button>
+            </>
+          )}
+          {canCalibrate && isCalibrated && !isDrawing && (
             <Button
-              className="flex-1 bg-emerald-700 hover:bg-emerald-600"
-              onClick={() => setIsDrawing(true)}
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => setShowCalibrationDialog(true)}
+              disabled={locating}
+              title="Recalibrate this green's GPS mapping"
             >
-              <Pencil className="w-4 h-4 mr-2" />
-              Report Green Issue
+              <Crosshair className="w-3.5 h-3.5 mr-1" />
+              Recalibrate
             </Button>
           )}
         </div>
@@ -697,66 +836,119 @@ function PageContent() {
         ) : (
           <div className="space-y-3">
             {filteredObs.map((obs) => (
-              <button
+              <div
                 key={obs.id}
-                onClick={() => { setSelectedObs(obs); setEditingObs(false); }}
-                className="w-full text-left bg-card rounded-xl border border-border p-3 hover:bg-muted/50 active:scale-[0.99] transition-all"
+                className="bg-card rounded-xl border border-border hover:border-primary/30 transition-all overflow-hidden"
               >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
-                    {greenIssueTypeIcons[obs.issue_type]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-sm truncate">{obs.title}</p>
-                      {obs.area_path && obs.area_path.length >= 3 && (
-                        <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-emerald-300 text-emerald-700 bg-emerald-50">
-                          <Pencil className="w-3 h-3 mr-0.5" />
-                          Zone
-                        </Badge>
-                      )}
-                      {obs.fix_instructions && (
-                        <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
-                          <Wrench className="w-3 h-3 mr-0.5" />
-                          Fix
-                        </Badge>
-                      )}
-                      {obs.task_id && (
-                        <Badge variant="outline" className="text-[10px] h-5 shrink-0">
-                          <ClipboardList className="w-3 h-3 mr-0.5" />
-                          Task
-                        </Badge>
-                      )}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedObs(obs); setEditingObs(false); }}
+                  className="w-full text-left p-3 hover:bg-muted/50 active:scale-[0.99] transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
+                      {greenIssueTypeIcons[obs.issue_type]}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {greenIssueTypeLabels[obs.issue_type]}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <Badge
-                        className={`text-[10px] ${greenPriorityColors[obs.priority].bg} ${greenPriorityColors[obs.priority].text} border-0`}
-                      >
-                        {greenPriorityLabels[obs.priority]}
-                      </Badge>
-                      <Badge
-                        className={`text-[10px] ${greenStatusColors[obs.status].bg} ${greenStatusColors[obs.status].text} border-0`}
-                      >
-                        {greenStatusLabels[obs.status]}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(obs.created_at).toLocaleDateString()}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm truncate">{obs.title}</p>
+                        {obs.area_path && obs.area_path.length >= 3 && (
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-emerald-300 text-emerald-700 bg-emerald-50">
+                            <Pencil className="w-3 h-3 mr-0.5" />
+                            Zone
+                          </Badge>
+                        )}
+                        {obs.fix_instructions && (
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
+                            <Wrench className="w-3 h-3 mr-0.5" />
+                            Fix
+                          </Badge>
+                        )}
+                        {obs.task_id && (
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                            <ClipboardList className="w-3 h-3 mr-0.5" />
+                            Task
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {greenIssueTypeLabels[obs.issue_type]}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <Badge
+                          className={`text-[10px] ${greenPriorityColors[obs.priority].bg} ${greenPriorityColors[obs.priority].text} border-0`}
+                        >
+                          {greenPriorityLabels[obs.priority]}
+                        </Badge>
+                        <Badge
+                          className={`text-[10px] ${greenStatusColors[obs.status].bg} ${greenStatusColors[obs.status].text} border-0`}
+                        >
+                          {greenStatusLabels[obs.status]}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(obs.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
+                    {obs.photo_url && (
+                      <img
+                        src={obs.photo_url}
+                        alt=""
+                        className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
                   </div>
-                  {obs.photo_url && (
-                    <img
-                      src={obs.photo_url}
-                      alt=""
-                      className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
+                </button>
+                {/* Quick actions row — fix/edit/delete without opening sheet */}
+                <div className="flex border-t border-border divide-x divide-border">
+                  {obs.status !== "resolved" && (
+                    <button
+                      type="button"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 active:scale-[0.97] transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(obs, "resolved");
+                      }}
+                      aria-label="Mark as fixed"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Mark Fixed
+                    </button>
                   )}
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-foreground hover:bg-muted/50 active:scale-[0.97] transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedObs(obs);
+                      handleStartEdit(obs);
+                    }}
+                    aria-label="Edit issue"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 active:scale-[0.97] transition-all"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`Delete "${obs.title}"? This cannot be undone.`)) return;
+                      const ok = await deleteObservation(obs.id);
+                      if (ok) {
+                        setFeedbackMsg({ type: "success", text: "Observation deleted." });
+                      } else {
+                        setFeedbackMsg({ type: "error", text: "Failed to delete observation." });
+                      }
+                    }}
+                    aria-label="Delete issue"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -1492,6 +1684,21 @@ function PageContent() {
           handlePhotoCaptured(file);
         }}
         onClose={() => setShowInlineCamera(false)}
+      />
+
+      {/* GPS Calibration dialog (admins only) */}
+      <GpsCalibrationDialog
+        open={showCalibrationDialog}
+        onOpenChange={setShowCalibrationDialog}
+        holeNumber={holeNumber}
+        surfaceType="green"
+        imageSrc={`/greens/green-${holeNumber}.svg`}
+        onSaved={() => {
+          setFeedbackMsg({
+            type: "success",
+            text: "GPS calibration saved — Use My Location is ready.",
+          });
+        }}
       />
 
       {/* Resolve dialog — captures proof photos and notes before closing the issue */}

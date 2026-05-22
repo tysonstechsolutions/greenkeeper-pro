@@ -8,6 +8,7 @@ import {
   directPatchRow,
   directPatchRowReturning,
   directDeleteRow,
+  directPatchByFilter,
 } from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
 import { translateSafe } from "@/lib/utils/translate";
@@ -275,6 +276,60 @@ export function useHoleObservations() {
     []
   );
 
+  /**
+   * Bulk-resolve every currently unresolved hole observation in a single
+   * REST call. Optionally scope by hole number. Returns the number of rows
+   * marked resolved (best-effort — counted from local cache).
+   */
+  const resolveAllOpen = useCallback(
+    async (opts?: { holeNumber?: number }): Promise<number> => {
+      if (!user) return 0;
+      const targets = observations.filter(
+        (o) =>
+          o.status !== "resolved" &&
+          (opts?.holeNumber == null || o.hole_number === opts.holeNumber),
+      );
+      if (targets.length === 0) return 0;
+
+      const filters = ["status=neq.resolved"];
+      if (opts?.holeNumber != null) {
+        filters.push(`hole_number=eq.${opts.holeNumber}`);
+      }
+      const nowIso = new Date().toISOString();
+      try {
+        await directPatchByFilter(
+          "hole_observations",
+          filters,
+          {
+            status: "resolved",
+            resolved_at: nowIso,
+            resolved_by: user.id,
+          },
+          "useHoleObservations.resolveAllOpen",
+        );
+        // Optimistic local update so the UI doesn't have to wait for a
+        // round-trip refetch.
+        setObservations((prev) =>
+          prev.map((o) =>
+            targets.some((t) => t.id === o.id)
+              ? {
+                  ...o,
+                  status: "resolved",
+                  resolved_at: nowIso,
+                  resolved_by: user.id,
+                }
+              : o,
+          ),
+        );
+        return targets.length;
+      } catch (err) {
+        console.error("Bulk resolve hole observations error:", err);
+        return 0;
+      }
+    },
+    [user, observations],
+  );
+
   // Summary stats
   const stats = {
     total: observations.length,
@@ -296,6 +351,7 @@ export function useHoleObservations() {
     createObservation,
     updateObservation,
     deleteObservation,
+    resolveAllOpen,
     uploadPhoto,
   };
 }

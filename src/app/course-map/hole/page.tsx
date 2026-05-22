@@ -26,6 +26,8 @@ import {
   Edit3,
   Move,
   Trash2,
+  Crosshair,
+  Locate,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +59,9 @@ import {
 } from "@/components/ui/dialog";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { ResolveIssueDialog } from "@/components/resolve-issue-dialog";
+import { GpsCalibrationDialog } from "@/components/gps-calibration-dialog";
+import { useHoleGpsCalibration } from "@/lib/hooks/useHoleGpsCalibration";
+import { gpsToImageCoords, clampPixel } from "@/lib/utils/gps-to-pixel";
 import {
   useHoleObservations,
   issueTypeLabels,
@@ -109,6 +114,16 @@ function PageContent() {
 
   // Pin move mode — tap new location to reposition an existing observation
   const [movingObsId, setMovingObsId] = useState<string | null>(null);
+
+  // GPS calibration + locate state
+  const {
+    calibration: gpsCalibration,
+    isCalibrated,
+    loading: calibrationLoading,
+  } = useHoleGpsCalibration(holeNumber, "hole");
+  const [showCalibrationDialog, setShowCalibrationDialog] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const canCalibrate = isSuper || isForeman;
 
   // Multi-step form: photo → analyzing → review
   const [showForm, setShowForm] = useState(false);
@@ -205,6 +220,124 @@ function PageContent() {
 
   const isInvalidHole =
     isNaN(holeNumber) || holeNumber < 1 || holeNumber > 18;
+
+  /**
+   * Use the phone's GPS to drop a pin at the user's current location.
+   *
+   * Requires a calibration row for this hole — if missing, we route the
+   * user to the calibration dialog first (admins only). Otherwise we
+   * request a high-accuracy reading from navigator.geolocation, map it
+   * through the calibration's similarity transform, and seed the same
+   * pendingPin state the manual tap-to-place flow uses.
+   */
+  const handleUseMyLocation = useCallback(() => {
+    if (!isCalibrated || !gpsCalibration) {
+      if (canCalibrate) {
+        setShowCalibrationDialog(true);
+      } else {
+        setFeedbackMsg({
+          type: "error",
+          text: "This hole isn't calibrated yet — ask a super or foreman to set it up.",
+        });
+      }
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setFeedbackMsg({
+        type: "error",
+        text: "GPS isn't available on this device.",
+      });
+      return;
+    }
+    if (movingObsId) {
+      // If we're in pin-move mode, use GPS to move the existing pin instead.
+      setLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const px = clampPixel(
+            gpsToImageCoords(gpsCalibration, {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            }),
+          );
+          updateObservation(movingObsId, { pin_x: px.x, pin_y: px.y }).then(
+            (result) => {
+              if (result) {
+                setFeedbackMsg({ type: "success", text: "Pin moved to your location." });
+              } else {
+                setFeedbackMsg({ type: "error", text: "Failed to move pin." });
+              }
+              setMovingObsId(null);
+              setLocating(false);
+            },
+          );
+        },
+        (err) => {
+          console.error("GPS error:", err);
+          setFeedbackMsg({
+            type: "error",
+            text:
+              err.code === err.PERMISSION_DENIED
+                ? "Location permission denied — enable GPS for this app in your phone settings."
+                : "Couldn't get your location. Make sure GPS is on and try again.",
+          });
+          setLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      );
+      return;
+    }
+    setLocating(true);
+    setFeedbackMsg({
+      type: "loading",
+      text: "Getting your GPS location…",
+    });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const px = clampPixel(
+          gpsToImageCoords(gpsCalibration, {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          }),
+        );
+        setPendingPin({ x: px.x, y: px.y });
+        setIsPlacingPin(false);
+        setFormStep("photo");
+        setShowForm(true);
+        setAnalyzeError(null);
+        setDiagnosisResult(null);
+        setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        const accuracy = Math.round(pos.coords.accuracy ?? 0);
+        setFeedbackMsg({
+          type: "success",
+          text: `Pin dropped at your location (±${accuracy}m).`,
+        });
+        setLocating(false);
+      },
+      (err) => {
+        console.error("GPS error:", err);
+        setFeedbackMsg({
+          type: "error",
+          text:
+            err.code === err.PERMISSION_DENIED
+              ? "Location permission denied — enable GPS for this app in your phone settings."
+              : err.code === err.TIMEOUT
+                ? "GPS timed out. Try again with a clearer view of the sky."
+                : "Couldn't get your location. Make sure GPS is on and try again.",
+        });
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  }, [
+    isCalibrated,
+    gpsCalibration,
+    canCalibrate,
+    movingObsId,
+    updateObservation,
+  ]);
 
   // ── Handle Image Tap (pin drop or pin move) ──
   const handleImageTap = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
@@ -763,16 +896,35 @@ function PageContent() {
         </div>
 
         {/* Action buttons below image */}
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2 mt-3 flex-wrap">
           {movingObsId ? (
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => setMovingObsId(null)}
-            >
-              <X className="w-4 h-4 mr-2" />
-              Cancel Move
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setMovingObsId(null)}
+                disabled={locating}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel Move
+              </Button>
+              {isCalibrated && (
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleUseMyLocation}
+                  disabled={locating}
+                  title="Use my GPS location to move this pin"
+                >
+                  {locating ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Locate className="w-4 h-4 mr-2" />
+                  )}
+                  Move to My Location
+                </Button>
+              )}
+            </>
           ) : isPlacingPin ? (
             <Button
               variant="outline"
@@ -786,12 +938,50 @@ function PageContent() {
               Cancel
             </Button>
           ) : (
+            <>
+              <Button
+                className="flex-1 bg-[#1B4332] hover:bg-[#2D6A4F]"
+                onClick={() => setIsPlacingPin(true)}
+                disabled={locating}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Report Issue
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-[#B68D40] text-[#B68D40] hover:bg-[#B68D40]/10 hover:text-[#B68D40]"
+                onClick={handleUseMyLocation}
+                disabled={locating || calibrationLoading}
+                title={
+                  isCalibrated
+                    ? "Drop a pin where I'm standing using GPS"
+                    : canCalibrate
+                      ? "Calibrate this hole's GPS first"
+                      : "Hole not GPS-calibrated yet — ask a super or foreman"
+                }
+              >
+                {locating ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Locate className="w-4 h-4 mr-2" />
+                )}
+                {isCalibrated ? "Use My Location" : canCalibrate ? "Calibrate GPS" : "GPS not set"}
+              </Button>
+            </>
+          )}
+          {/* Admin-only: recalibrate button shown alongside when already
+              calibrated, so they can fix bad calibrations easily. */}
+          {canCalibrate && isCalibrated && !movingObsId && !isPlacingPin && (
             <Button
-              className="flex-1 bg-[#1B4332] hover:bg-[#2D6A4F]"
-              onClick={() => setIsPlacingPin(true)}
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => setShowCalibrationDialog(true)}
+              disabled={locating}
+              title="Recalibrate this hole's GPS mapping"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              Report Issue
+              <Crosshair className="w-3.5 h-3.5 mr-1" />
+              Recalibrate
             </Button>
           )}
         </div>
@@ -836,60 +1026,114 @@ function PageContent() {
         ) : (
           <div className="space-y-3">
             {filteredObs.map((obs) => (
-              <button
+              <div
                 key={obs.id}
-                onClick={() => { setSelectedObs(obs); setEditingObs(false); }}
-                className="w-full text-left bg-card rounded-xl border border-border p-3 hover:bg-muted/50 active:scale-[0.99] transition-all"
+                className="bg-card rounded-xl border border-border hover:border-primary/30 transition-all overflow-hidden"
               >
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
-                    {issueTypeIcons[obs.issue_type]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-sm truncate">{obs.title}</p>
-                      {obs.fix_instructions && (
-                        <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
-                          <Wrench className="w-3 h-3 mr-0.5" />
-                          Fix
-                        </Badge>
-                      )}
-                      {obs.task_id && (
-                        <Badge variant="outline" className="text-[10px] h-5 shrink-0">
-                          <ClipboardList className="w-3 h-3 mr-0.5" />
-                          Task
-                        </Badge>
-                      )}
+                {/* Tap the body to open the full detail sheet */}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedObs(obs); setEditingObs(false); }}
+                  className="w-full text-left p-3 hover:bg-muted/50 active:scale-[0.99] transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg shrink-0">
+                      {issueTypeIcons[obs.issue_type]}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {issueTypeLabels[obs.issue_type]}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <Badge
-                        className={`text-[10px] ${priorityColors[obs.priority].bg} ${priorityColors[obs.priority].text} border-0`}
-                      >
-                        {priorityLabels[obs.priority]}
-                      </Badge>
-                      <Badge
-                        className={`text-[10px] ${statusColors[obs.status].bg} ${statusColors[obs.status].text} border-0`}
-                      >
-                        {statusLabels[obs.status]}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(obs.created_at).toLocaleDateString()}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm truncate">{obs.title}</p>
+                        {obs.fix_instructions && (
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0 border-amber-300 text-amber-700 bg-amber-50">
+                            <Wrench className="w-3 h-3 mr-0.5" />
+                            Fix
+                          </Badge>
+                        )}
+                        {obs.task_id && (
+                          <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+                            <ClipboardList className="w-3 h-3 mr-0.5" />
+                            Task
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {issueTypeLabels[obs.issue_type]}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <Badge
+                          className={`text-[10px] ${priorityColors[obs.priority].bg} ${priorityColors[obs.priority].text} border-0`}
+                        >
+                          {priorityLabels[obs.priority]}
+                        </Badge>
+                        <Badge
+                          className={`text-[10px] ${statusColors[obs.status].bg} ${statusColors[obs.status].text} border-0`}
+                        >
+                          {statusLabels[obs.status]}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(obs.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
+                    {obs.photo_url && (
+                      <img
+                        src={obs.photo_url}
+                        alt=""
+                        className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    )}
                   </div>
-                  {obs.photo_url && (
-                    <img
-                      src={obs.photo_url}
-                      alt=""
-                      className="w-14 h-14 rounded-lg object-cover shrink-0 border border-border"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
+                </button>
+                {/* Quick actions row — visible without opening the sheet */}
+                <div className="flex border-t border-border divide-x divide-border">
+                  {obs.status !== "resolved" && (
+                    <button
+                      type="button"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 active:scale-[0.97] transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(obs, "resolved");
+                      }}
+                      aria-label="Mark as fixed"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Mark Fixed
+                    </button>
                   )}
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-foreground hover:bg-muted/50 active:scale-[0.97] transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedObs(obs);
+                      handleStartEdit(obs);
+                    }}
+                    aria-label="Edit issue"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 active:scale-[0.97] transition-all"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm(`Delete "${obs.title}"? This cannot be undone.`)) return;
+                      const ok = await deleteObservation(obs.id);
+                      if (ok) {
+                        setFeedbackMsg({ type: "success", text: "Observation deleted." });
+                      } else {
+                        setFeedbackMsg({ type: "error", text: "Failed to delete observation." });
+                      }
+                    }}
+                    aria-label="Delete issue"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -1631,6 +1875,21 @@ function PageContent() {
           handlePhotoCaptured(file);
         }}
         onClose={() => setShowInlineCamera(false)}
+      />
+
+      {/* GPS Calibration dialog (admins only) */}
+      <GpsCalibrationDialog
+        open={showCalibrationDialog}
+        onOpenChange={setShowCalibrationDialog}
+        holeNumber={holeNumber}
+        surfaceType="hole"
+        imageSrc={`/holes/hole-${holeNumber}.png`}
+        onSaved={() => {
+          setFeedbackMsg({
+            type: "success",
+            text: "GPS calibration saved — Use My Location is ready.",
+          });
+        }}
       />
 
       {/* Resolve dialog — captures proof photos and notes before closing the issue */}

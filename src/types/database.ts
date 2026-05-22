@@ -1348,6 +1348,35 @@ export interface GreenObservation {
   task?: Pick<Task, "id" | "title" | "status"> | null;
 }
 
+/**
+ * Per-hole GPS calibration. Two reference points (lat/lng + image x/y) per
+ * (hole_number, surface_type) — enough to derive a similarity transform
+ * for mapping a phone's real-world GPS reading onto the 0-1 image
+ * coordinate system used by hole_observations / green_observations.
+ */
+export type HoleGpsSurfaceType = "hole" | "green";
+
+export interface HoleGpsCalibration {
+  id: string;
+  hole_number: number;
+  surface_type: HoleGpsSurfaceType;
+  /** Reference point 1 (typically the tee) — real-world coordinates. */
+  p1_lat: number;
+  p1_lng: number;
+  /** Reference point 1 image-relative coordinates (0..1). */
+  p1_x: number;
+  p1_y: number;
+  /** Reference point 2 (typically the green flag) — real-world coordinates. */
+  p2_lat: number;
+  p2_lng: number;
+  /** Reference point 2 image-relative coordinates (0..1). */
+  p2_x: number;
+  p2_y: number;
+  calibrated_by: string | null;
+  calibrated_at: string;
+  updated_at: string;
+}
+
 export interface ImprovementPlanItem {
   id: string;
   title: string;

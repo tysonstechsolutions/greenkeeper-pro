@@ -30,6 +30,8 @@ import {
   ClipboardSignature,
   Scale,
   Wrench,
+  ShieldCheck,
+  Flame,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -85,6 +87,8 @@ const leadershipApps: SidebarItem[] = [
   { href: "/sole-source", label: "Sole Source", icon: Scale },
   { href: "/work-order", label: "Work Order", icon: Wrench },
   { href: "/work-orders", label: "Work Orders", icon: Wrench },
+  { href: "/priority", label: "Priority Queue", icon: Flame },
+  { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
 
@@ -110,6 +114,8 @@ const foremanApps: SidebarItem[] = [
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
   { href: "/work-order", label: "Work Order", icon: Wrench },
   { href: "/work-orders", label: "Work Orders", icon: Wrench },
+  { href: "/priority", label: "Priority Queue", icon: Flame },
+  { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
 

@@ -9,6 +9,7 @@ import {
   directPatchRow,
   directPatchRowReturning,
   directDeleteRow,
+  directPatchByFilter,
 } from "@/lib/supabase/rest";
 import { translateSafe } from "@/lib/utils/translate";
 import type {
@@ -272,6 +273,58 @@ export function useGreenObservations() {
     []
   );
 
+  /**
+   * Bulk-resolve every currently unresolved green observation in a single
+   * REST call. Optionally scope by hole number. Returns the number of rows
+   * marked resolved (counted from local cache).
+   */
+  const resolveAllOpen = useCallback(
+    async (opts?: { holeNumber?: number }): Promise<number> => {
+      if (!user) return 0;
+      const targets = observations.filter(
+        (o) =>
+          o.status !== "resolved" &&
+          (opts?.holeNumber == null || o.hole_number === opts.holeNumber),
+      );
+      if (targets.length === 0) return 0;
+
+      const filters = ["status=neq.resolved"];
+      if (opts?.holeNumber != null) {
+        filters.push(`hole_number=eq.${opts.holeNumber}`);
+      }
+      const nowIso = new Date().toISOString();
+      try {
+        await directPatchByFilter(
+          "green_observations",
+          filters,
+          {
+            status: "resolved",
+            resolved_at: nowIso,
+            resolved_by: user.id,
+          },
+          "useGreenObservations.resolveAllOpen",
+        );
+        setObservations((prev) =>
+          prev.map((o) =>
+            targets.some((t) => t.id === o.id)
+              ? {
+                  ...o,
+                  status: "resolved",
+                  resolved_at: nowIso,
+                  resolved_by: user.id,
+                }
+              : o,
+          ),
+        );
+        return targets.length;
+      } catch (err) {
+        console.error("Bulk resolve green observations error:", err);
+        return 0;
+      }
+    },
+    [user, observations],
+  );
+
   // Summary stats
   const stats = {
     total: observations.length,
@@ -293,6 +346,7 @@ export function useGreenObservations() {
     createObservation,
     updateObservation,
     deleteObservation,
+    resolveAllOpen,
     uploadPhoto,
   };
 }
