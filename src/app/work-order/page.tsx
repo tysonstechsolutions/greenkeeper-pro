@@ -495,7 +495,7 @@ export default function WorkOrderPage() {
                 className="resize-none"
               />
               <p className="text-xs text-muted-foreground">
-                Be specific — include location, what's broken, and what you need done. The AI will
+                Be specific — include location, what&apos;s broken, and what you need done. The AI will
                 expand this into formal work order language.
               </p>
             </div>
@@ -530,7 +530,7 @@ export default function WorkOrderPage() {
                     <span className="text-xs font-normal text-muted-foreground">(optional)</span>
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Attach up to {MAX_PHOTOS} photos. They'll be appended as enclosure pages in the
+                    Attach up to {MAX_PHOTOS} photos. They&apos;ll be appended as enclosure pages in the
                     PDF.
                   </p>
                 </div>

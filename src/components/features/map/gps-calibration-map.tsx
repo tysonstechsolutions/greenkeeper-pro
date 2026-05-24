@@ -50,8 +50,13 @@ interface GpsCalibrationMapProps {
   center: LatLng;
   /** Initial zoom level. Default 18 (close in on a single hole). */
   initialZoom?: number;
-  /** Picks captured so far. The next tap replaces or appends. */
-  picks: LatLng[];
+  /**
+   * Picks for each slot, in the SAME order as `labels`. Use `null` for
+   * unfilled slots so labels stay aligned with their slot index — passing
+   * a filter-collapsed array would silently re-label picks when an earlier
+   * slot is empty.
+   */
+  picks: (LatLng | null)[];
   /** Labels for each pick slot, e.g. ["Tee", "Green Flag"]. */
   labels: string[];
   /** Which pick slot the next tap should fill. */
@@ -110,23 +115,25 @@ export function GpsCalibrationMap({
       />
       <Recenter center={center} />
       <MapClickHandler activeIndex={activeIndex} onPickSet={onPickSet} />
-      {picks.map((pick, i) => (
-        <CircleMarker
-          key={`${i}-${pick[0]}-${pick[1]}`}
-          center={pick}
-          radius={9}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 3,
-            fillColor: PICK_COLORS[i % PICK_COLORS.length],
-            fillOpacity: 1,
-          }}
-        >
-          <Tooltip permanent direction="top" offset={[0, -10]}>
-            {labels[i] ?? `Point ${i + 1}`}
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      {picks.map((pick, i) =>
+        pick ? (
+          <CircleMarker
+            key={`${i}-${pick[0]}-${pick[1]}`}
+            center={pick}
+            radius={9}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 3,
+              fillColor: PICK_COLORS[i % PICK_COLORS.length],
+              fillOpacity: 1,
+            }}
+          >
+            <Tooltip permanent direction="top" offset={[0, -10]}>
+              {labels[i] ?? `Point ${i + 1}`}
+            </Tooltip>
+          </CircleMarker>
+        ) : null,
+      )}
     </MapContainer>
   );
 }

@@ -378,7 +378,9 @@ export function GpsCalibrationDialog({
             <div className="w-full h-64 sm:h-72 rounded-lg overflow-hidden border border-border">
               <GpsCalibrationMap
                 center={mapCenter}
-                picks={mapPicks.filter((p): p is [number, number] => !!p)}
+                // Pass with nulls preserved so slot 0 stays "Tee" and slot 1
+                // stays "Green Flag" even if the user fills them out of order.
+                picks={mapPicks}
                 labels={["Tee", "Green Flag"]}
                 activeIndex={stepIndex}
                 onPickSet={handleMapPickSet}

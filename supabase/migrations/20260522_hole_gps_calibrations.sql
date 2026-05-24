@@ -52,11 +52,13 @@ ALTER TABLE hole_gps_calibrations ENABLE ROW LEVEL SECURITY;
 
 -- Anyone authenticated can read — needed so all roles' "Use My Location"
 -- buttons work, not just the admins who set up the calibration.
+DROP POLICY IF EXISTS "auth users can read hole_gps_calibrations" ON hole_gps_calibrations;
 CREATE POLICY "auth users can read hole_gps_calibrations"
   ON hole_gps_calibrations FOR SELECT
   USING (auth.uid() IS NOT NULL);
 
 -- Only management roles can create / update / delete calibrations.
+DROP POLICY IF EXISTS "management can insert hole_gps_calibrations" ON hole_gps_calibrations;
 CREATE POLICY "management can insert hole_gps_calibrations"
   ON hole_gps_calibrations FOR INSERT
   WITH CHECK (
@@ -67,6 +69,7 @@ CREATE POLICY "management can insert hole_gps_calibrations"
     )
   );
 
+DROP POLICY IF EXISTS "management can update hole_gps_calibrations" ON hole_gps_calibrations;
 CREATE POLICY "management can update hole_gps_calibrations"
   ON hole_gps_calibrations FOR UPDATE
   USING (
@@ -77,6 +80,7 @@ CREATE POLICY "management can update hole_gps_calibrations"
     )
   );
 
+DROP POLICY IF EXISTS "management can delete hole_gps_calibrations" ON hole_gps_calibrations;
 CREATE POLICY "management can delete hole_gps_calibrations"
   ON hole_gps_calibrations FOR DELETE
   USING (
@@ -87,7 +91,20 @@ CREATE POLICY "management can delete hole_gps_calibrations"
     )
   );
 
+-- Ensure the shared updated_at trigger function exists. It was originally
+-- created by the 20260407_*_observations.sql migrations; we redeclare with
+-- CREATE OR REPLACE so this migration is self-sufficient even on a fresh
+-- database where the earlier ones haven't been applied.
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Auto-update updated_at on any change.
+DROP TRIGGER IF EXISTS hole_gps_calibrations_updated_at ON hole_gps_calibrations;
 CREATE TRIGGER hole_gps_calibrations_updated_at
   BEFORE UPDATE ON hole_gps_calibrations
   FOR EACH ROW

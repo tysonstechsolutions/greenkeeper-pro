@@ -16,8 +16,23 @@ import type { HoleGpsCalibration } from "@/types/database";
 
 const EARTH_RADIUS_M = 6_378_137;
 
-/** Convert (lat, lng) → planar (east_m, north_m) using a local
- * equirectangular projection centred on `refLat`. East is +x, North is +y. */
+/** Convert (lat, lng) → planar (east_m, south_m) using a local
+ * equirectangular projection centred on `refLat`.
+ *
+ * IMPORTANT: this uses Y-DOWN convention (south is positive) to match how
+ * HTML/image coordinates work (image-y grows downward). If we used the
+ * standard cartographic Y-UP convention (north positive), a similarity
+ * transform without reflection couldn't represent a typical "north-up
+ * east-right" map image, because that mapping flips one axis (world
+ * y-up → image y-down) which requires a reflection. Pre-flipping the
+ * world y here puts both spaces in the same chirality so a no-reflection
+ * similarity is sufficient. See the bug fix in tests/gps-to-pixel.test.
+ *
+ * Field name kept as `north` for readability; the value is actually the
+ * SOUTHward distance in meters from the equator. Consumers only ever use
+ * differences (Δsouth between two points), so the absolute sign doesn't
+ * matter as long as we're consistent.
+ */
 function latLngToLocalMeters(
   lat: number,
   lng: number,
@@ -28,7 +43,8 @@ function latLngToLocalMeters(
   const lngRad = (lng * Math.PI) / 180;
   return {
     east: EARTH_RADIUS_M * Math.cos(refRad) * lngRad,
-    north: EARTH_RADIUS_M * latRad,
+    // Negate so we work in y-down (south positive) — matches image y-down.
+    north: -EARTH_RADIUS_M * latRad,
   };
 }
 
@@ -71,12 +87,10 @@ export function gpsToImageCoords(
   const p2w = latLngToLocalMeters(calibration.p2_lat, calibration.p2_lng, refLat);
   const cw = latLngToLocalMeters(current.lat, current.lng, refLat);
 
-  // Vectors in world (meters) — origin at p1
+  // Vectors in world (meters, y-down convention — see latLngToLocalMeters)
+  // and image (relative 0-1, also y-down), both with origin at p1.
   const Bx = p2w.east - p1w.east;
   const By = p2w.north - p1w.north;
-  // Vectors in image (relative 0-1) — origin at p1.
-  // jsPDF and HTML images share the convention that Y grows DOWNWARD, so
-  // a "north" world vector should map to a NEGATIVE image-Y delta.
   const Ax = calibration.p2_x - calibration.p1_x;
   const Ay = calibration.p2_y - calibration.p1_y;
 
@@ -87,12 +101,12 @@ export function gpsToImageCoords(
     return { x: calibration.p1_x, y: calibration.p1_y };
   }
 
-  // Solve the similarity that sends B → A.
+  // Solve the similarity transform that sends B → A.
   // If A = M·B with M = [[c, -s], [s, c]] (rotation+scale), then:
   //   c = (Ax·Bx + Ay·By) / |B|²
   //   s = (Ay·Bx - Ax·By) / |B|²
-  // Note the sign flip on s vs the standard math convention because image
-  // Y points down while our local "north" projection points up.
+  // Both image and world are now in y-down convention so a pure similarity
+  // (no reflection) maps between them correctly.
   const c = (Ax * Bx + Ay * By) / bLenSq;
   const s = (Ay * Bx - Ax * By) / bLenSq;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   Circle,
   Pause,
   PlayCircle,
+  X,
 } from "lucide-react";
 import type { GapPlan, PlanEntry, Status, Priority } from "./types";
 
@@ -72,7 +73,13 @@ export default function StandardsPlanPage() {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterOwner, setFilterOwner] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterSubsection, setFilterSubsection] = useState<string>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Ref to the entries list so we can scroll it into view when a subsection
+  // tile is clicked. Smooth-scrolls so the user sees the filter take effect
+  // rather than wondering whether the click did anything.
+  const entriesListRef = useRef<HTMLDivElement | null>(null);
 
   // Load the plan
   useEffect(() => {
@@ -143,6 +150,8 @@ export default function StandardsPlanPage() {
     return plan.entries.filter((e) => {
       const status: Status = statusMap[e.id] ?? (e.status as Status);
       if (filterSection !== "all" && e.section_name !== filterSection) return false;
+      if (filterSubsection !== "all" && e.subsection !== filterSubsection)
+        return false;
       if (filterPriority !== "all" && e.priority !== filterPriority) return false;
       if (filterOwner !== "all" && e.owner !== filterOwner) return false;
       if (filterStatus !== "all" && status !== filterStatus) return false;
@@ -162,11 +171,30 @@ export default function StandardsPlanPage() {
     plan,
     search,
     filterSection,
+    filterSubsection,
     filterPriority,
     filterOwner,
     filterStatus,
     statusMap,
   ]);
+
+  /**
+   * Toggle the subsection filter from a tile click. Clicking the active
+   * tile a second time clears the filter so the user has a fast way to
+   * see everything again. Smoothly scrolls to the entries list so the
+   * filter result is visible immediately.
+   */
+  function handleSubsectionTileClick(sub: string) {
+    setFilterSubsection((prev) => (prev === sub ? "all" : sub));
+    // Defer scroll until after React has flushed the filter result so the
+    // browser scrolls to the new list height, not the old one.
+    requestAnimationFrame(() => {
+      entriesListRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
 
   // Stats
   const stats = useMemo(() => {
@@ -282,9 +310,22 @@ export default function StandardsPlanPage() {
 
       {/* Subsection scores */}
       <div className="mb-6">
-        <h2 className="text-sm font-semibold text-muted-foreground mb-2">
-          Current standards score by subsection (from your filled questionnaire)
-        </h2>
+        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            Current standards score by subsection (from your filled questionnaire)
+          </h2>
+          {filterSubsection !== "all" && (
+            <button
+              type="button"
+              onClick={() => setFilterSubsection("all")}
+              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-muted hover:bg-accent transition-colors"
+              title="Clear subsection filter"
+            >
+              <X className="w-3 h-3" />
+              Clear {filterSubsection} filter
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
           {Object.entries(plan.subsection_scores).map(([sub, sc]) => (
             <ScoreTile
@@ -293,9 +334,14 @@ export default function StandardsPlanPage() {
               earned={sc.earned}
               possible={sc.possible}
               percent={sc.percent}
+              active={filterSubsection === sub}
+              onClick={() => handleSubsectionTileClick(sub)}
             />
           ))}
         </div>
+        <p className="text-[11px] text-muted-foreground mt-1.5">
+          Tap a tile to filter the gaps list below to that subsection.
+        </p>
       </div>
 
       {/* Filters */}
@@ -359,7 +405,7 @@ export default function StandardsPlanPage() {
       </Card>
 
       {/* Entries list */}
-      <div className="space-y-2">
+      <div ref={entriesListRef} className="space-y-2 scroll-mt-4">
         {filtered.map((entry) => {
           const status = getStatus(entry);
           const isOpen = expanded.has(entry.id);
@@ -566,11 +612,17 @@ function ScoreTile({
   earned,
   possible,
   percent,
+  active,
+  onClick,
 }: {
   subsection: string;
   earned: number;
   possible: number;
   percent: number;
+  /** Visually mark this tile as the current filter. */
+  active?: boolean;
+  /** Called when the user clicks/taps the tile. */
+  onClick?: () => void;
 }) {
   const tone =
     percent >= 80
@@ -578,14 +630,29 @@ function ScoreTile({
       : percent >= 50
         ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
         : "bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-300";
+  // Active state: thicker ring + slight scale so you can tell at a glance
+  // which subsection the list is filtered to.
+  const activeCls = active
+    ? "ring-2 ring-offset-1 ring-foreground/60 shadow-sm scale-[1.02]"
+    : "hover:shadow-md hover:scale-[1.01] active:scale-[0.99]";
   return (
-    <div className={`rounded-md border p-2 text-xs ${tone}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={
+        active
+          ? `Clear filter (currently showing only ${subsection})`
+          : `Filter gaps to subsection ${subsection}`
+      }
+      className={`rounded-md border p-2 text-xs text-left transition-all cursor-pointer ${tone} ${activeCls}`}
+    >
       <p className="font-semibold">{subsection}</p>
       <p className="font-mono">{percent.toFixed(1)}%</p>
       <p className="opacity-80">
         {earned}/{possible} pts
       </p>
-    </div>
+    </button>
   );
 }
 
