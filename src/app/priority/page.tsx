@@ -52,6 +52,7 @@ import {
   type ItemStatus,
 } from "@/lib/priority/auto-prioritize";
 import type { HoleObservationStatus } from "@/types/database";
+import TreatmentPlanView from "@/components/treatment-plan-view";
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
@@ -136,6 +137,8 @@ interface CustomItem {
   status: ItemStatus;
   reportedAt: string;
   hole?: number;
+  fixSteps?: string[];
+  photos?: string[];
 }
 
 interface OverrideRecord {
@@ -154,6 +157,8 @@ interface StandardsPlanFile {
     short_title: string;
     standard_text: string;
     current_state: string;
+    target_state: string;
+    actions: string[];
     section_name: string;
     priority: "P1" | "P2" | "P3" | "P4";
     effort: "Low" | "Medium" | "High";
@@ -249,6 +254,10 @@ export default function PriorityPage() {
         priority: obs.priority,
         title: obs.title,
         description: obs.description,
+        fix_instructions: obs.fix_instructions,
+        photo_url: obs.photo_url,
+        resolution_photos: obs.resolution_photos,
+        diagnosis_result: obs.diagnosis_result,
         created_at: obs.created_at,
       });
       out.push(applyOverrides(base, overrides));
@@ -279,6 +288,8 @@ export default function PriorityPage() {
             status: c.status,
             reportedAt: c.reportedAt,
             hole: c.hole,
+            fixSteps: c.fixSteps,
+            photos: c.photos,
           },
           overrides,
         ),
@@ -678,6 +689,28 @@ function ItemCard({
               </Detail>
             )}
 
+            {/* Photos */}
+            <PhotoGallery
+              primary={item.photoUrl}
+              extras={item.photos}
+              resolution={item.resolutionPhotos}
+            />
+
+            {/* How to fix - step by step */}
+            <FixSteps
+              steps={item.fixSteps}
+              text={item.fixInstructions}
+            />
+
+            {/* AI treatment plan (course issues with a diagnosis) */}
+            {item.diagnosisResult && (
+              <Detail label="AI diagnosis + treatment plan">
+                <div className="rounded-lg bg-background p-2">
+                  <TreatmentPlanView data={item.diagnosisResult} />
+                </div>
+              </Detail>
+            )}
+
             {/* Score explanation */}
             <Detail label="Why this score">
               <div className="flex flex-wrap gap-1">
@@ -828,30 +861,29 @@ function AddDialog({
   onAdd,
 }: {
   onClose: () => void;
-  onAdd: (
-    data: Omit<{
-      id: string;
-      title: string;
-      description?: string;
-      category: string;
-      status: ItemStatus;
-      reportedAt: string;
-      hole?: number;
-    }, "id" | "reportedAt" | "status">,
-  ) => void;
+  onAdd: (data: {
+    title: string;
+    description?: string;
+    category: string;
+    hole?: number;
+    fixSteps?: string[];
+    photos?: string[];
+  }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [category, setCategory] = useState(CATEGORY_OPTIONS[0]);
   const [hole, setHole] = useState<string>("");
+  const [fixStepsText, setFixStepsText] = useState("");
+  const [photoUrlsText, setPhotoUrlsText] = useState("");
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >
       <Card
-        className="w-full max-w-md"
+        className="w-full max-w-md my-8"
         onClick={(e) => e.stopPropagation()}
       >
         <CardContent className="p-4 space-y-3">
@@ -859,7 +891,8 @@ function AddDialog({
           <p className="text-xs text-muted-foreground">
             For one-off items that aren&apos;t in the course-issue system yet.
             Use a course issue (Report Issue page) for anything tied to a
-            specific hole.
+            specific hole &mdash; that flow captures GPS, photos, and routes
+            into the same queue here automatically.
           </p>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">
@@ -914,6 +947,38 @@ function AddDialog({
               className="mt-1 w-full h-9 px-3 rounded-md bg-background border border-input text-sm"
             />
           </label>
+          <label className="block">
+            <span className="text-xs font-medium text-muted-foreground">
+              How to fix &mdash; one step per line (optional)
+            </span>
+            <textarea
+              value={fixStepsText}
+              onChange={(e) => setFixStepsText(e.target.value)}
+              rows={4}
+              placeholder={
+                "Spot-spray weeds with selective herbicide\n" +
+                "Wait 7 days, then re-inspect\n" +
+                "Overseed bare areas with KBG blend"
+              }
+              className="mt-1 w-full px-3 py-2 rounded-md bg-background border border-input text-sm font-mono"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-muted-foreground">
+              Photo URLs &mdash; one per line (optional)
+            </span>
+            <textarea
+              value={photoUrlsText}
+              onChange={(e) => setPhotoUrlsText(e.target.value)}
+              rows={2}
+              placeholder="https://… (paste a public photo URL)"
+              className="mt-1 w-full px-3 py-2 rounded-md bg-background border border-input text-sm font-mono"
+            />
+            <span className="block mt-1 text-[10px] text-muted-foreground">
+              Tip: photos taken through the Report Issue flow are uploaded
+              automatically and appear here without needing a URL.
+            </span>
+          </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={onClose}>
               Cancel
@@ -923,12 +988,22 @@ function AddDialog({
               disabled={!title.trim()}
               onClick={() => {
                 const h = parseInt(hole, 10);
+                const fixSteps = fixStepsText
+                  .split(/\r?\n/)
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+                const photos = photoUrlsText
+                  .split(/\r?\n/)
+                  .map((s) => s.trim())
+                  .filter(Boolean);
                 onAdd({
                   title: title.trim(),
                   description: desc.trim() || undefined,
                   category,
                   hole:
                     Number.isFinite(h) && h >= 1 && h <= 18 ? h : undefined,
+                  fixSteps: fixSteps.length > 0 ? fixSteps : undefined,
+                  photos: photos.length > 0 ? photos : undefined,
                 });
               }}
             >
@@ -1015,6 +1090,130 @@ function Detail({
       {children}
     </div>
   );
+}
+
+// ─── PhotoGallery ──────────────────────────────────────────────────────
+
+function PhotoGallery({
+  primary,
+  extras,
+  resolution,
+}: {
+  primary?: string;
+  extras?: string[];
+  resolution?: string[];
+}) {
+  const before = [primary, ...(extras ?? [])].filter(
+    (u): u is string => Boolean(u),
+  );
+  const after = (resolution ?? []).filter(Boolean);
+  if (before.length === 0 && after.length === 0) return null;
+
+  return (
+    <>
+      {before.length > 0 && (
+        <Detail label={`Photos${before.length > 1 ? ` (${before.length})` : ""}`}>
+          <PhotoStrip urls={before} />
+        </Detail>
+      )}
+      {after.length > 0 && (
+        <Detail label={`After-fix proof photos (${after.length})`}>
+          <PhotoStrip urls={after} small />
+        </Detail>
+      )}
+    </>
+  );
+}
+
+function PhotoStrip({ urls, small }: { urls: string[]; small?: boolean }) {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const size = small ? "w-16 h-16" : "w-24 h-24";
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {urls.map((url, i) => (
+          <button
+            type="button"
+            key={`${url}-${i}`}
+            onClick={() => setLightboxUrl(url)}
+            className={`${size} rounded-lg overflow-hidden border border-border bg-muted relative shrink-0 hover:ring-2 hover:ring-ring transition`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`Photo ${i + 1}`}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+            />
+          </button>
+        ))}
+      </div>
+      {lightboxUrl && (
+        <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      )}
+    </>
+  );
+}
+
+function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt="Full size"
+        className="max-w-full max-h-full object-contain rounded-md shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 px-3 py-1.5 text-sm font-medium rounded-md bg-white text-black hover:bg-gray-100"
+      >
+        Close
+      </button>
+    </div>
+  );
+}
+
+// ─── FixSteps ──────────────────────────────────────────────────────────
+
+function FixSteps({ steps, text }: { steps?: string[]; text?: string }) {
+  // Prefer structured array; fall back to free-text split by newlines / bullets
+  const list = steps && steps.length > 0 ? steps : splitFreeText(text);
+  if (list.length === 0 && !text) return null;
+  if (list.length === 0 && text) {
+    return (
+      <Detail label="How to fix">
+        <p className="whitespace-pre-wrap">{text}</p>
+      </Detail>
+    );
+  }
+  return (
+    <Detail label="How to fix — step by step">
+      <ol className="list-decimal pl-5 space-y-1">
+        {list.map((step, i) => (
+          <li key={i}>{step}</li>
+        ))}
+      </ol>
+    </Detail>
+  );
+}
+
+function splitFreeText(text?: string): string[] {
+  if (!text) return [];
+  // Split on newlines first; if it looks like a single paragraph, return [].
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^[\s\-*•\d.)]+/, "").trim())
+    .filter((l) => l.length > 0);
+  return lines.length > 1 ? lines : [];
 }
 
 // ─── Helpers for status translation ────────────────────────────────────

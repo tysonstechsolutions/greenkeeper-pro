@@ -13,6 +13,7 @@
  */
 
 import type {
+  DiagnosisResult,
   HoleIssueType,
   HoleObservationStatus,
   TaskPriority,
@@ -45,6 +46,23 @@ export interface PriorityInput {
 
   // Optional priority hints from the source
   sourcePriority?: TaskPriority | "P1" | "P2" | "P3" | "P4";
+
+  // How to fix it (step-by-step)
+  /** Free-text fix instructions (from hole_observations or custom items). */
+  fixInstructions?: string;
+  /** Structured ordered steps (from standards-plan entries' actions array). */
+  fixSteps?: string[];
+
+  // Photos
+  /** Primary photo (from course issue). */
+  photoUrl?: string;
+  /** Additional supporting photos. */
+  photos?: string[];
+  /** After-fix proof photos (from course issue's resolution_photos). */
+  resolutionPhotos?: string[];
+
+  /** Full AI diagnosis + treatment plan blob (course issues only). */
+  diagnosisResult?: DiagnosisResult | null;
 
   // For standards-plan items
   possibleScore?: number;     // points at stake on the standards scoresheet
@@ -364,6 +382,10 @@ export function fromHoleObservation(obs: {
   priority: TaskPriority;
   title: string;
   description?: string | null;
+  fix_instructions?: string | null;
+  photo_url?: string | null;
+  resolution_photos?: string[] | null;
+  diagnosis_result?: DiagnosisResult | null;
   created_at?: string;
 }): PriorityInput {
   const statusMap: Record<HoleObservationStatus, ItemStatus> = {
@@ -383,6 +405,10 @@ export function fromHoleObservation(obs: {
     reportedAt: obs.created_at,
     status: statusMap[obs.status] ?? "open",
     sourcePriority: obs.priority,
+    fixInstructions: obs.fix_instructions ?? undefined,
+    photoUrl: obs.photo_url ?? undefined,
+    resolutionPhotos: obs.resolution_photos ?? undefined,
+    diagnosisResult: obs.diagnosis_result ?? undefined,
   };
 }
 
@@ -392,6 +418,8 @@ export function fromStandardsEntry(entry: {
   short_title: string;
   standard_text: string;
   current_state: string;
+  target_state?: string;
+  actions?: string[];
   section_name: string;
   priority: "P1" | "P2" | "P3" | "P4";
   effort: "Low" | "Medium" | "High";
@@ -414,5 +442,6 @@ export function fromStandardsEntry(entry: {
     cost: entry.cost_value,
     owner: entry.owner,
     dependencies: entry.dependencies,
+    fixSteps: entry.actions,
   };
 }
