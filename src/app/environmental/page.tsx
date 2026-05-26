@@ -922,7 +922,7 @@ export default function EnvironmentalCompliancePage() {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-sm">AST Monthly Inspections</p>
           <p className="text-xs text-muted-foreground">
-            STI SP001 fuel &amp; cooking-oil tank checklist &middot; download PDF
+            STI SP001 gasoline, diesel &amp; cooking-oil tank checklist &middot; download PDF
           </p>
         </div>
         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />

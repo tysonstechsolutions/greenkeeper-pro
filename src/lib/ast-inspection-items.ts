@@ -11,6 +11,7 @@
  */
 
 import { formatLocalDate } from "@/lib/utils/date";
+import type { AstInspectionItems } from "@/types/database";
 
 export type AstSection =
   | "Tank and Piping"
@@ -228,16 +229,24 @@ export function computeRetainUntilDate(inspectionDate: string): string {
  *
  * Each preset auto-fills the "Tank(s) Inspected ID" field. The user can
  * still override the IDs by hand if a tank is added/decommissioned.
+ *
+ * Gasoline and diesel each get their own inspection — SP001 treats different
+ * products in different tanks as separate inspections even when the tanks
+ * sit on the same containment pad.
  */
-export type AstTankType = "fuel" | "used_cooking_oil";
+export type AstTankType = "gasoline" | "diesel" | "used_cooking_oil";
 
 export const AST_TANK_TYPES: Record<
   AstTankType,
   { label: string; tankIds: string }
 > = {
-  fuel: {
-    label: "Fuel AST",
-    tankIds: "3311-01A, 3311-02A",
+  gasoline: {
+    label: "Gasoline AST",
+    tankIds: "3311-01A",
+  },
+  diesel: {
+    label: "Diesel AST",
+    tankIds: "3311-02A",
   },
   used_cooking_oil: {
     label: "Used Cooking Oil AST",
@@ -249,4 +258,38 @@ export const AST_TANK_TYPES: Record<
  * Legacy single-string default — kept so existing callers don't break.
  * New code should use AST_TANK_TYPES[type].tankIds instead.
  */
-export const DEFAULT_TANK_IDS = AST_TANK_TYPES.fuel.tankIds;
+export const DEFAULT_TANK_IDS = AST_TANK_TYPES.gasoline.tankIds;
+
+/**
+ * Infer the tank type from a saved `tank_ids` string. Used in edit mode to
+ * reflect the right selection in the Tank Type picker.
+ *
+ * Legacy records may have both 3311-01A and 3311-02A in one row (the old
+ * combined "Fuel AST" inspection); those fall through to gasoline so the
+ * picker still resolves to something sensible.
+ */
+export function inferTankType(tankIds: string): AstTankType {
+  const ids = tankIds.toLowerCase();
+  if (ids.includes("uco") || ids.includes("cooking")) return "used_cooking_oil";
+  if (ids.includes("02a")) return "diesel";
+  return "gasoline";
+}
+
+/**
+ * Build a fully-answered items map representing a "pass" inspection — every
+ * item set to its conforming answer. Used by the Quick Pass PDF flow so the
+ * user can skip the 19-click form when nothing is wrong.
+ *
+ * Items 1-15, 17-19 → "yes". Item 16 → "no" (it's the only item where YES is
+ * the bad answer — "any cracks larger than 1/16"?").
+ */
+export function getDefaultPassItems(): AstInspectionItems {
+  const out: AstInspectionItems = {};
+  for (const def of AST_INSPECTION_ITEMS) {
+    out[String(def.number)] = {
+      status: def.yesIsNonConforming ? "no" : "yes",
+      comment: null,
+    };
+  }
+  return out;
+}

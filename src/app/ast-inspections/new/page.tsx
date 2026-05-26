@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ShieldAlert,
   Loader2,
+  Download,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -20,6 +21,8 @@ import {
   AST_SECTIONS,
   AST_TANK_TYPES,
   computeRetainUntilDate,
+  getDefaultPassItems,
+  inferTankType,
   isNonConforming,
   type AstSection,
   type AstTankType,
@@ -30,6 +33,12 @@ import type {
   AstInspectionItemStatus,
 } from "@/types/database";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
+import {
+  AstInspectionReportError,
+  astInspectionFilename,
+  generateAstInspectionReport,
+} from "@/lib/reports/ast-inspection-report";
+import { saveBlobToDevice } from "@/lib/utils/download-blob";
 
 function todayIso(): string {
   return todayLocal();
@@ -73,8 +82,8 @@ function NewAstInspectionPageInner() {
   const [inspectorId, setInspectorId] = useState<string>(""); // profile id
   const [inspectorTitle, setInspectorTitle] = useState("");
   const [inspectorSignature, setInspectorSignature] = useState("");
-  const [tankType, setTankType] = useState<AstTankType>("fuel");
-  const [tankIds, setTankIds] = useState(AST_TANK_TYPES.fuel.tankIds);
+  const [tankType, setTankType] = useState<AstTankType>("gasoline");
+  const [tankIds, setTankIds] = useState(AST_TANK_TYPES.gasoline.tankIds);
   const [facilityName, setFacilityName] = useState("");
   // Facility ID is fixed at 8400 (Veterans Memorial Golf Course) for every
   // inspection — pre-fill so the user never has to type it. The field is
@@ -85,6 +94,7 @@ function NewAstInspectionPageInner() {
 
   const [loadingExisting, setLoadingExisting] = useState(!!editId);
   const [saving, setSaving] = useState(false);
+  const [quickPassing, setQuickPassing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Manual override — used when the profiles list can't be loaded or the
@@ -166,9 +176,7 @@ function NewAstInspectionPageInner() {
       setTankIds(row.tank_ids);
       // Infer tank type from saved IDs so the picker reflects the right
       // selection in edit mode.
-      const ids = row.tank_ids.toLowerCase();
-      if (ids.includes("uco") || ids.includes("cooking")) setTankType("used_cooking_oil");
-      else setTankType("fuel");
+      setTankType(inferTankType(row.tank_ids));
       setFacilityName(row.facility_name || "");
       setFacilityId(row.facility_id || "");
       setItems({ ...emptyItems(), ...(row.items || {}) });
@@ -339,6 +347,174 @@ function NewAstInspectionPageInner() {
         return;
       }
     }
+  }
+
+  /**
+   * One-click "everything passes" workflow.
+   *
+   * Pre-fills every item with its conforming answer (Yes for 1-15/17-19, No
+   * for item 16), saves the record as completed, generates the SP001 PDF,
+   * hands it to the share sheet / download, then jumps to the view page.
+   *
+   * Falls back gracefully if PDF generation fails — the record is already
+   * saved at that point, so we just surface the PDF error and let the view
+   * page re-attempt the download.
+   */
+  async function handleQuickPass() {
+    if (!user) {
+      setError("Not signed in.");
+      return;
+    }
+    if (!inspectorName.trim()) {
+      setError("Pick an inspector from the staff list.");
+      return;
+    }
+    if (!tankIds.trim()) {
+      setError("At least one tank ID is required.");
+      return;
+    }
+
+    // If the user already started answering items, warn before wiping
+    // them out. Fresh forms (0 answered) skip the prompt.
+    if (totals.answered > 0) {
+      const ok = window.confirm(
+        editId
+          ? `This will overwrite all ${totals.total} answers on this inspection and mark every item as Pass. Continue?`
+          : `This will overwrite ${totals.answered} answered item${
+              totals.answered === 1 ? "" : "s"
+            } and mark all ${totals.total} items as Pass. Continue?`,
+      );
+      if (!ok) return;
+    }
+
+    setQuickPassing(true);
+    setError(null);
+
+    const passItems = getDefaultPassItems();
+    // Reflect the pre-fill in the local UI so the form visually matches
+    // what was saved (in case the user navigates back).
+    setItems(passItems);
+
+    const supabase = createClient();
+    const payload = {
+      inspection_date: inspectionDate,
+      prior_inspection_date: priorInspectionDate || null,
+      retain_until_date: retainUntilDate,
+      inspector_id: inspectorId || user.id,
+      inspector_name: inspectorName.trim(),
+      inspector_title: inspectorTitle.trim() || null,
+      inspector_signature: inspectorSignature.trim() || null,
+      tank_ids: tankIds.trim(),
+      facility_name: facilityName.trim() || null,
+      facility_id: facilityId.trim() || null,
+      items: passItems,
+      additional_comments: additionalComments.trim() || null,
+      status: "completed" as const,
+    };
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    let token: string;
+    try {
+      token = await resolveAccessToken(supabase, supabaseUrl, anonKey);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Auth lookup failed");
+      setQuickPassing(false);
+      return;
+    }
+    const restHeaders: HeadersInit = {
+      apikey: anonKey,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    let savedRecord: AstInspection | null = null;
+
+    if (editId) {
+      try {
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/ast_inspections?id=eq.${encodeURIComponent(editId)}`,
+          {
+            method: "PATCH",
+            headers: { ...restHeaders, Prefer: "return=representation" },
+            body: JSON.stringify(payload),
+          },
+        );
+        if (!res.ok) {
+          let message = `Update failed: ${res.status} ${res.statusText}`;
+          try {
+            const errBody = (await res.json()) as { message?: string };
+            if (errBody?.message) message = errBody.message;
+          } catch {
+            /* ignore */
+          }
+          setError(message);
+          setQuickPassing(false);
+          return;
+        }
+        const json = (await res.json()) as AstInspection[];
+        savedRecord = json?.[0] ?? null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update failed");
+        setQuickPassing(false);
+        return;
+      }
+    } else {
+      try {
+        const res = await fetch(`${supabaseUrl}/rest/v1/ast_inspections`, {
+          method: "POST",
+          headers: { ...restHeaders, Prefer: "return=representation" },
+          body: JSON.stringify({ ...payload, created_by: user.id }),
+        });
+        if (!res.ok) {
+          let message = `Save failed: ${res.status} ${res.statusText}`;
+          try {
+            const errBody = (await res.json()) as { message?: string };
+            if (errBody?.message) message = errBody.message;
+          } catch {
+            /* ignore */
+          }
+          setError(message);
+          setQuickPassing(false);
+          return;
+        }
+        const json = (await res.json()) as AstInspection[];
+        savedRecord = json?.[0] ?? null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Save failed");
+        setQuickPassing(false);
+        return;
+      }
+    }
+
+    if (!savedRecord || !savedRecord.id) {
+      setError("Saved, but no record was returned. Refresh the list.");
+      setQuickPassing(false);
+      return;
+    }
+
+    // Generate + save the PDF. If this leg fails, the record itself is
+    // already persisted — surface the error but still navigate so the
+    // user can retry the download from the view page.
+    let pdfError: string | null = null;
+    try {
+      const blob = await generateAstInspectionReport(savedRecord);
+      const filename = astInspectionFilename(savedRecord);
+      await saveBlobToDevice({ blob, filename, shareTitle: filename });
+    } catch (err) {
+      pdfError =
+        err instanceof AstInspectionReportError
+          ? `PDF generation failed at "${err.step}": ${err.message}`
+          : err instanceof Error
+            ? err.message
+            : "Failed to generate PDF";
+    }
+
+    if (pdfError) {
+      setError(`Saved, but PDF download failed: ${pdfError}`);
+    }
+
+    router.push(`/ast-inspections/view?id=${savedRecord.id}`);
   }
 
   // ── Render guards ─────────────────────────────────────────────────────────
@@ -551,6 +727,38 @@ function NewAstInspectionPageInner() {
         </Field>
       </section>
 
+      {/* Quick Pass shortcut — skip the questions, generate a pre-filled
+          PDF in one click. Use this when nothing on the tank is wrong. */}
+      <section className="mt-3 rounded-xl border border-green-500/40 bg-green-500/10 p-3">
+        <h2 className="font-semibold text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-green-700 dark:text-green-400" />
+          Quick Pass
+        </h2>
+        <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+          Auto-fills every item as Pass and downloads the PDF. Use this when
+          the tank looks fine and you don&apos;t need to answer the 19
+          questions. If something&apos;s wrong, scroll down and fill out the
+          form manually instead.
+        </p>
+        <button
+          type="button"
+          onClick={handleQuickPass}
+          disabled={saving || quickPassing}
+          className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-50 active:scale-[0.98] transition-all"
+        >
+          {quickPassing ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4" />
+          )}
+          {quickPassing
+            ? "Generating PDF..."
+            : editId
+              ? "Mark All Pass & Download PDF"
+              : "Save & Download Pre-Filled PDF"}
+        </button>
+      </section>
+
       {/* Status badge — sticky-ish summary */}
       <div className="mt-3 flex items-center gap-2 text-sm flex-wrap">
         <span
@@ -605,7 +813,7 @@ function NewAstInspectionPageInner() {
       <div className="mt-3 flex flex-col gap-2">
         <button
           onClick={() => handleSave(false)}
-          disabled={saving}
+          disabled={saving || quickPassing}
           className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 active:scale-[0.98] transition-all"
         >
           {saving ? (
@@ -617,7 +825,7 @@ function NewAstInspectionPageInner() {
         </button>
         <button
           onClick={() => handleSave(true)}
-          disabled={saving}
+          disabled={saving || quickPassing}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition-all"
         >
           <Save className="w-4 h-4" />
