@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowUpRight,
   Save,
   AlertTriangle,
   CheckCircle2,
@@ -20,6 +21,7 @@ import {
   X,
   FileText,
   ChevronLeft,
+  Truck,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
@@ -1140,6 +1142,34 @@ function NewPurchaseRequestPageInner() {
   }
   function addItem() {
     setItems((prev) => [...prev, emptyItem(prev.length + 1)]);
+  }
+  /**
+   * Quick-add a Freight/Shipping line so it's included in the PR total.
+   * Until the extract-quote edge function redeploys (which now extracts
+   * Shipping/Freight automatically), this is the manual escape hatch.
+   * Prompts for the dollar amount up front so the user only taps twice.
+   */
+  function addFreight() {
+    const raw = window.prompt(
+      "Freight / shipping amount in dollars (e.g. 10.00):",
+      "",
+    );
+    if (raw === null) return;
+    const amount = parseFloat(raw.replace(/[$,\s]/g, ""));
+    if (!Number.isFinite(amount) || amount < 0) {
+      window.alert("Enter a positive number, e.g. 10 or 10.00.");
+      return;
+    }
+    setItems((prev) => [
+      ...prev,
+      {
+        ...emptyItem(prev.length + 1),
+        description: "Freight",
+        qty: 1,
+        unit: "EA",
+        unit_price: amount,
+      },
+    ]);
   }
   function removeItem(idx: number) {
     setItems((prev) => {
@@ -2933,13 +2963,23 @@ function NewPurchaseRequestPageInner() {
               </div>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={addItem}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-border text-sm font-medium hover:bg-muted transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Line Item
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+            <button
+              type="button"
+              onClick={addItem}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-border text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Line Item
+            </button>
+            <button
+              type="button"
+              onClick={addFreight}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-border text-sm font-medium hover:bg-muted transition-colors"
+              title="Add a Freight / Shipping line so it counts in the PR total"
+            >
+              <Truck className="w-4 h-4" /> + Freight / Shipping
+            </button>
+          </div>
         </div>
       </Section>
 
