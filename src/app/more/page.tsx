@@ -25,6 +25,7 @@ import {
   ClipboardList,
   Scale,
   Wrench,
+  Droplets,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
@@ -53,6 +54,7 @@ interface AppItem {
 const leadershipApps: AppItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
@@ -80,6 +82,7 @@ const leadershipApps: AppItem[] = [
 const foremanApps: AppItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: Coffee, color: "from-amber-500 to-yellow-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
@@ -100,6 +103,7 @@ const mechanicApps: AppItem[] = [
   { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
@@ -111,6 +115,7 @@ const crewApps: AppItem[] = [
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/course-map", label: "Map", icon: Map, color: "from-teal-500 to-cyan-600" },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
   { href: "/parking-lot", label: "Parking", icon: Car, color: "from-slate-500 to-gray-600" },
   { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
   { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
@@ -120,6 +125,7 @@ const crewApps: AppItem[] = [
 const proApps: AppItem[] = [
   { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
   { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },

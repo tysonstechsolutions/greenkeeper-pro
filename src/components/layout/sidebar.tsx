@@ -32,6 +32,7 @@ import {
   Wrench,
   ShieldCheck,
   Flame,
+  Droplets,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -72,6 +73,7 @@ const leadershipApps: SidebarItem[] = [
   { href: "/assets", label: "Assets", icon: Archive },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/course-map", label: "Course Map", icon: Map },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },
   { href: "/staff", label: "Staff", icon: Users },
@@ -103,6 +105,7 @@ const foremanApps: SidebarItem[] = [
   { href: "/assets", label: "Assets", icon: Archive },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/course-map", label: "Course Map", icon: Map },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },
   { href: "/staff", label: "Staff", icon: Users },
@@ -130,6 +133,7 @@ const mechanicApps: SidebarItem[] = [
   { href: "/assets", label: "Assets", icon: Archive },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/course-map", label: "Course Map", icon: Map },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
   { href: "/parking-lot", label: "Parking & Paths", icon: Car },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },
   { href: "/photos", label: "Photos", icon: Camera },
@@ -148,6 +152,7 @@ const crewApps: SidebarItem[] = [
   { href: "/weather", label: "Weather", icon: Cloud },
   { href: "/photos", label: "Photos", icon: Camera },
   { href: "/course-map", label: "Course Map", icon: Map },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
   { href: "/parking-lot", label: "Parking", icon: Car },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
@@ -162,6 +167,7 @@ const proPinned: SidebarItem[] = [
 
 const proApps: SidebarItem[] = [
   { href: "/course-map", label: "Course Map", icon: Map },
+  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
   { href: "/weather", label: "Weather", icon: Cloud },
   { href: "/photos", label: "Photos", icon: Camera },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
