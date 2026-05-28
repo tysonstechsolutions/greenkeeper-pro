@@ -253,18 +253,23 @@ export async function generateAstInspectionReport(
       try {
         const dataUrl = await loadImageAsDataUrl(sigUrl);
         if (dataUrl) {
-          // Sized to fit comfortably above the signature line. Width is
-          // ~60mm, height auto-scales — most signatures are wider than
-          // they are tall.
-          const sigW = 55;
-          const sigH = 14;
-          // X: just past the "Inspector's Signature" label (~50mm in).
-          // Y: nudge up so the bottom of the image touches the line.
+          // The form box rows are stacked tightly (~5-6mm apart), so the
+          // signature has to be small enough to live inside the signature
+          // row without bleeding into the Inspector Name row above or the
+          // Tank IDs row below. Aspect (~2.8:1) matches the source PNG's
+          // natural proportions so the handwriting isn't squashed.
+          const sigH = 6;
+          const sigW = 17; // ≈ 6 × 2.83
+          // X: just past the "Inspector's Signature" label.
+          // Y: bottom of the image lands ~0.5mm below the signature
+          //    underline (which is at boxTop + 17.5), so the cursive's
+          //    descenders cross the line like real ink-on-paper while
+          //    the top of the image clears the Inspector Name row above.
           doc.addImage(
             dataUrl,
             "PNG",
             MARGIN_X + 50,
-            boxTop + 17 - sigH + 2,
+            boxTop + 18 - sigH,
             sigW,
             sigH,
             undefined,

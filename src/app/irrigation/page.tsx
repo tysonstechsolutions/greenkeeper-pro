@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Droplets,
   Plus,
@@ -15,6 +16,7 @@ import {
   X,
   Power,
   PowerOff,
+  MapPin,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -471,6 +473,13 @@ export default function IrrigationPage() {
         description="Zone management and schedules"
         icon={Droplets}
       >
+        <Link
+          href="/irrigation/map"
+          className="inline-flex items-center justify-center gap-1.5 h-10 rounded-md px-4 text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          <MapPin className="w-4 h-4" />
+          <span className="hidden sm:inline">Sprinkler Map</span>
+        </Link>
         <Button
           size="sm"
           variant={showScheduleView ? "default" : "outline"}
