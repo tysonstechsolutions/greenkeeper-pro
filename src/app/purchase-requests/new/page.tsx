@@ -3204,6 +3204,20 @@ function NewPurchaseRequestPageInner() {
             </button>
             <button
               onClick={() => {
+                // Bypasses the iframe CSP issue — opens the blob in a new
+                // browser tab where the native PDF viewer can render it.
+                // Required until the vercel.json CSP redeploys (which adds
+                // 'frame-src blob:' so the inline iframe can render too).
+                window.open(previewUrl, "_blank", "noopener");
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border hover:bg-muted transition-colors"
+              title="Opens in a new browser tab — works even if the inline preview is blocked"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              Open in new tab
+            </button>
+            <button
+              onClick={() => {
                 URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
               }}
@@ -3214,13 +3228,19 @@ function NewPurchaseRequestPageInner() {
             </button>
           </div>
         </div>
-        {/* PDF embed */}
-        <div className="flex-1 min-h-0">
+        {/* PDF embed. Some browsers / production CSP block blob: PDFs in
+            iframes — if you see "This content is blocked", use the
+            "Open in new tab" button above. */}
+        <div className="flex-1 min-h-0 relative">
           <iframe
             src={previewUrl}
             className="w-full h-full border-0"
             title="PR PDF Preview"
           />
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-foreground/80 text-background text-[11px] pointer-events-none backdrop-blur-sm">
+            Inline preview blocked? Use{" "}
+            <span className="font-semibold">Open in new tab</span> above.
+          </div>
         </div>
       </div>
     )}
