@@ -29,6 +29,11 @@ import {
   Wrench,
   Plus,
   History,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -352,7 +357,12 @@ export default function SprinklerMapPage() {
   const [stationError, setStationError] = useState<string | null>(null);
 
   // Image container — used to compute click coordinates relative to image.
+  // Separate refs for inline and fullscreen modes so each has its own bounds.
   const imageRef = useRef<HTMLDivElement>(null);
+  const fullscreenImageRef = useRef<HTMLDivElement>(null);
+
+  // Fullscreen map editor state
+  const [fullscreen, setFullscreen] = useState(false);
 
   // ── Load ────────────────────────────────────────────────────────────────
 
@@ -548,7 +558,9 @@ export default function SprinklerMapPage() {
       ) {
         return;
       }
-      const container = imageRef.current;
+      // Use currentTarget so the same handler works for both inline and
+      // fullscreen wrappers — each has its own bounding rect.
+      const container = e.currentTarget as HTMLDivElement;
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
@@ -1077,6 +1089,7 @@ export default function SprinklerMapPage() {
               onImageTap={handleImageTap}
               onPinTap={handlePinTap}
               highlightId={highlightId}
+              onExpand={() => setFullscreen(true)}
             />
           )}
           {view === "satellite" && (
@@ -1598,6 +1611,28 @@ export default function SprinklerMapPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Fullscreen map editor ──────────────────────────────────── */}
+      {fullscreen && !loading && !loadError && (
+        <FullscreenMapEditor
+          // Key ensures zoom/pan state resets cleanly when the hole changes.
+          key={holeNumber}
+          holeNumber={holeNumber}
+          setHoleNumber={setHoleNumber}
+          visiblePins={visiblePinsOnHole}
+          issues={issues}
+          areaFilter={areaFilter}
+          setAreaFilter={setAreaFilter}
+          satelliteFilter={satelliteFilter}
+          setSatelliteFilter={setSatelliteFilter}
+          distinctSatellites={distinctSatellites}
+          imageRef={fullscreenImageRef}
+          onImageTap={handleImageTap}
+          onPinTap={handlePinTap}
+          highlightId={highlightId}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1654,6 +1689,7 @@ interface MapViewProps {
   ) => void;
   onPinTap: (s: Sprinkler) => void;
   highlightId: string | null;
+  onExpand: () => void;
 }
 
 function MapView({
@@ -1675,6 +1711,7 @@ function MapView({
   onImageTap,
   onPinTap,
   highlightId,
+  onExpand,
 }: MapViewProps) {
   const goPrev = () => setHoleNumber(holeNumber === 1 ? 18 : holeNumber - 1);
   const goNext = () => setHoleNumber(holeNumber === 18 ? 1 : holeNumber + 1);
@@ -1760,7 +1797,7 @@ function MapView({
           onClick={onImageTap}
         >
           {imgError ? (
-            <div className="aspect-[2/1] flex items-center justify-center">
+            <div className="aspect-[1/2] flex items-center justify-center">
               <div className="text-center">
                 <Flag className="w-12 h-12 text-muted-foreground/40 mx-auto mb-1" />
                 <span className="text-4xl font-bold text-muted-foreground/30">
@@ -1771,9 +1808,14 @@ function MapView({
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/holes/hole-${holeNumber}-landscape.png`}
+              src={`/holes/hole-${holeNumber}.png`}
               alt={`Hole ${holeNumber} layout`}
+              // Portrait hole images have tee at the top in the source file.
+              // Rotate 180° so the green ends up at the top — long axis
+              // matches the phone, green forward / tee behind, the way the
+              // superintendent reads the course.
               className="block w-full h-auto"
+              style={{ transform: "rotate(180deg)" }}
               draggable={false}
               onLoad={() => setImgLoaded(true)}
               onError={() => setImgError(true)}
@@ -1794,12 +1836,29 @@ function MapView({
                 }}
               />
             ))}
+
+          {/* Expand-to-fullscreen overlay button */}
+          {imgLoaded && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExpand();
+              }}
+              title="Open fullscreen map with zoom and pan"
+              className="absolute top-2 right-2 z-20 inline-flex items-center gap-1.5 px-3 h-9 rounded-md bg-foreground/85 text-background text-xs font-medium shadow-lg backdrop-blur-sm hover:bg-foreground active:scale-95 transition-transform"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              Expand
+            </button>
+          )}
         </div>
 
         {/* Bottom hint inside the card */}
         <div className="px-3 py-2 bg-muted/30 border-t text-[11px] text-muted-foreground flex items-center justify-between gap-2">
           <span>
-            Tap an empty spot to add a sprinkler. Tap a pin to edit it.
+            Tap <span className="font-semibold">Expand</span> for a bigger
+            zoomable view. Tap a pin to edit.
           </span>
           <Legend />
         </div>
@@ -1893,6 +1952,527 @@ function Legend() {
   );
 }
 
+// ── Fullscreen map viewer with pinch-zoom and pan ────────────────────────
+//
+// Mobile-first map editor. Image fills the viewport. Two-finger pinch zooms
+// (1x..5x), single-finger drag pans when zoomed. Tap (no drag) on empty
+// space adds a new pin; tap on a pin opens edit. The same handleImageTap
+// and pin-tap callbacks from the inline view are reused so adds/edits go
+// through one code path.
+
+interface PointerSample {
+  x: number;
+  y: number;
+}
+
+interface PinchStart {
+  distance: number;
+  scale: number;
+  /** Centroid in screen coords at pinch start. */
+  centroidX: number;
+  centroidY: number;
+  /** Translation at pinch start. */
+  tx: number;
+  ty: number;
+}
+
+interface DragStart {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+}
+
+const MIN_SCALE = 1;
+const MAX_SCALE = 5;
+const TAP_MOVEMENT_THRESHOLD = 8; // px
+
+function FullscreenMapEditor({
+  holeNumber,
+  setHoleNumber,
+  visiblePins,
+  issues,
+  areaFilter,
+  setAreaFilter,
+  satelliteFilter,
+  setSatelliteFilter,
+  distinctSatellites,
+  imageRef,
+  onImageTap,
+  onPinTap,
+  highlightId,
+  onClose,
+}: {
+  holeNumber: number;
+  setHoleNumber: (n: number) => void;
+  visiblePins: Sprinkler[];
+  issues: SprinklerIssue[];
+  areaFilter: "all" | AreaType;
+  setAreaFilter: (v: "all" | AreaType) => void;
+  satelliteFilter: string;
+  setSatelliteFilter: (v: string) => void;
+  distinctSatellites: number[];
+  imageRef: React.RefObject<HTMLDivElement | null>;
+  onImageTap: (
+    e: ReactMouseEvent<HTMLDivElement> | ReactTouchEvent<HTMLDivElement>,
+  ) => void;
+  onPinTap: (s: Sprinkler) => void;
+  highlightId: string | null;
+  onClose: () => void;
+}) {
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  // Active pointers tracked by id so two-finger pinch works regardless of
+  // which finger went down first.
+  const pointers = useRef<Map<number, PointerSample>>(new Map());
+  const pinchStart = useRef<PinchStart | null>(null);
+  const dragStart = useRef<DragStart | null>(null);
+  const wasDrag = useRef(false);
+  // Canvas (parent of the transformed image) — used to compute initial
+  // centering offset once the image natural size is known.
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Hole-change reset is handled by a `key` prop on this component at the
+  // render site — when the key changes, the component remounts and all
+  // useState values start over. Cleaner than chasing dependency arrays.
+
+  // ESC to close (desktop convenience).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Reset = scale 1 + re-center on the canvas (same math as image onLoad).
+  const resetZoom = useCallback(() => {
+    setScale(1);
+    const canvas = canvasRef.current;
+    const wrapper = imageRef.current;
+    if (canvas && wrapper) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const img = wrapper.querySelector("img");
+      if (img && img.naturalWidth > 0) {
+        const naturalRatio = img.naturalWidth / img.naturalHeight;
+        const canvasRatio = canvasRect.width / canvasRect.height;
+        let fitW: number;
+        let fitH: number;
+        if (naturalRatio > canvasRatio) {
+          fitW = canvasRect.width;
+          fitH = fitW / naturalRatio;
+        } else {
+          fitH = canvasRect.height;
+          fitW = fitH * naturalRatio;
+        }
+        setTx((canvasRect.width - fitW) / 2);
+        setTy((canvasRect.height - fitH) / 2);
+        return;
+      }
+    }
+    setTx(0);
+    setTy(0);
+  }, [imageRef]);
+
+  // Zoom buttons anchor at the *visible image center* so the image stays
+  // on screen as it scales. Falls back to viewport center if the ref isn't
+  // mounted yet.
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
+      if (newScale === scale) return;
+      let cx = window.innerWidth / 2;
+      let cy = window.innerHeight / 2;
+      const wrapper = imageRef.current;
+      if (wrapper) {
+        const rect = wrapper.getBoundingClientRect();
+        cx = rect.left + rect.width / 2;
+        cy = rect.top + rect.height / 2;
+      }
+      // Scale around (cx, cy): the additional translation needed equals
+      // (1 - factor) * (cx - currentTranslate).
+      const ratio = newScale / scale;
+      const newTx = cx - (cx - tx) * ratio;
+      const newTy = cy - (cy - ty) * ratio;
+      setScale(newScale);
+      setTx(newTx);
+      setTy(newTy);
+    },
+    [scale, tx, ty, imageRef],
+  );
+
+  // ── Pointer event handlers ────────────────────────────────────────────
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      // Don't capture pointer events that started on a pin button — let
+      // those bubble to the pin's own onClick.
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-pin]")) return;
+
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      wasDrag.current = false;
+
+      if (pointers.current.size === 2) {
+        const samples = Array.from(pointers.current.values());
+        const a = samples[0];
+        const b = samples[1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        pinchStart.current = {
+          distance: Math.hypot(dx, dy),
+          scale,
+          centroidX: (a.x + b.x) / 2,
+          centroidY: (a.y + b.y) / 2,
+          tx,
+          ty,
+        };
+        dragStart.current = null;
+      } else if (pointers.current.size === 1) {
+        dragStart.current = { x: e.clientX, y: e.clientY, tx, ty };
+      }
+    },
+    [scale, tx, ty],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!pointers.current.has(e.pointerId)) return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // Two-finger pinch: scale + reposition centroid.
+      if (pointers.current.size === 2 && pinchStart.current) {
+        const samples = Array.from(pointers.current.values());
+        const a = samples[0];
+        const b = samples[1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distance = Math.hypot(dx, dy);
+        const ratio = distance / pinchStart.current.distance;
+        const newScale = Math.max(
+          MIN_SCALE,
+          Math.min(MAX_SCALE, pinchStart.current.scale * ratio),
+        );
+        const currentCx = (a.x + b.x) / 2;
+        const currentCy = (a.y + b.y) / 2;
+        // Keep the image-space point under the initial centroid pinned to
+        // the current centroid.
+        const imageCx =
+          (pinchStart.current.centroidX - pinchStart.current.tx) /
+          pinchStart.current.scale;
+        const imageCy =
+          (pinchStart.current.centroidY - pinchStart.current.ty) /
+          pinchStart.current.scale;
+        setScale(newScale);
+        setTx(currentCx - imageCx * newScale);
+        setTy(currentCy - imageCy * newScale);
+        wasDrag.current = true;
+        return;
+      }
+
+      // Single-finger pan — only when zoomed in.
+      if (pointers.current.size === 1 && dragStart.current && scale > 1) {
+        const dx = e.clientX - dragStart.current.x;
+        const dy = e.clientY - dragStart.current.y;
+        setTx(dragStart.current.tx + dx);
+        setTy(dragStart.current.ty + dy);
+        if (
+          Math.abs(dx) > TAP_MOVEMENT_THRESHOLD ||
+          Math.abs(dy) > TAP_MOVEMENT_THRESHOLD
+        ) {
+          wasDrag.current = true;
+        }
+        return;
+      }
+
+      // Single finger at zoom=1 — just track whether it moved enough to be
+      // a drag so the impending click doesn't trigger an add.
+      if (pointers.current.size === 1 && dragStart.current) {
+        const dx = e.clientX - dragStart.current.x;
+        const dy = e.clientY - dragStart.current.y;
+        if (
+          Math.abs(dx) > TAP_MOVEMENT_THRESHOLD ||
+          Math.abs(dy) > TAP_MOVEMENT_THRESHOLD
+        ) {
+          wasDrag.current = true;
+        }
+      }
+    },
+    [scale],
+  );
+
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      pointers.current.delete(e.pointerId);
+      if (pointers.current.size < 2) pinchStart.current = null;
+      if (pointers.current.size === 0) dragStart.current = null;
+    },
+    [],
+  );
+
+  // Wrapper click — fires after a clean tap (pointerdown→pointerup with no
+  // significant movement). If wasDrag is set we ate the gesture for pan/pinch.
+  const handleWrapperClick = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (wasDrag.current) {
+        wasDrag.current = false;
+        return;
+      }
+      onImageTap(e);
+    },
+    [onImageTap],
+  );
+
+  const goPrev = () => setHoleNumber(holeNumber === 1 ? 18 : holeNumber - 1);
+  const goNext = () => setHoleNumber(holeNumber === 18 ? 1 : holeNumber + 1);
+
+  return (
+    <div
+      // Full-screen overlay above the bottom nav and other UI.
+      className="fixed inset-0 z-[60] flex flex-col bg-black text-white select-none"
+      // Block native browser gestures so our pinch handler owns them.
+      style={{ touchAction: "none" }}
+    >
+      {/* Top control bar */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-black/80 backdrop-blur-sm border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={goPrev}
+            title="Previous hole"
+            className="p-2 rounded hover:bg-white/10 active:bg-white/20"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-1.5 px-2 min-w-[90px] justify-center">
+            <Flag className="w-4 h-4 opacity-70" />
+            <span className="text-sm font-semibold">Hole {holeNumber}</span>
+          </div>
+          <button
+            type="button"
+            onClick={goNext}
+            title="Next hole"
+            className="p-2 rounded hover:bg-white/10 active:bg-white/20"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => zoomBy(1 / 1.4)}
+            disabled={scale <= MIN_SCALE + 0.01}
+            title="Zoom out"
+            className="p-2 rounded hover:bg-white/10 active:bg-white/20 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <ZoomOut className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-mono w-12 text-center tabular-nums">
+            {Math.round(scale * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => zoomBy(1.4)}
+            disabled={scale >= MAX_SCALE - 0.01}
+            title="Zoom in"
+            className="p-2 rounded hover:bg-white/10 active:bg-white/20 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <ZoomIn className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={resetZoom}
+            disabled={scale === 1 && tx === 0 && ty === 0}
+            title="Reset zoom"
+            className="p-2 rounded hover:bg-white/10 active:bg-white/20 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <RotateCcw className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close fullscreen"
+            className="p-2 rounded hover:bg-white/10 active:bg-white/20 ml-1"
+          >
+            <Minimize2 className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Filter chips bar */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-black/60 border-b border-white/10 overflow-x-auto shrink-0">
+        <Filter className="w-3.5 h-3.5 opacity-60 shrink-0" />
+        <FullscreenChip
+          label="All"
+          active={areaFilter === "all"}
+          onClick={() => setAreaFilter("all")}
+        />
+        {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
+          <FullscreenChip
+            key={a}
+            label={AREA_META[a].label}
+            active={areaFilter === a}
+            onClick={() => setAreaFilter(a)}
+            dotColor={AREA_META[a].pin}
+          />
+        ))}
+        {distinctSatellites.length > 0 && (
+          <div className="flex items-center gap-1.5 ml-auto shrink-0">
+            <span className="text-[10px] opacity-60">Sat:</span>
+            <select
+              value={satelliteFilter}
+              onChange={(e) => setSatelliteFilter(e.target.value)}
+              className="bg-white/10 text-white text-xs rounded px-2 h-7 border border-white/20"
+            >
+              <option value="all">All</option>
+              {distinctSatellites.map((n) => (
+                <option key={n} value={n.toString()}>
+                  Sat {n}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Image canvas. The wrapper inside is absolutely positioned and
+          translated; initial centering is computed once the image natural
+          size is known (see onLoad below). */}
+      <div
+        ref={canvasRef}
+        className="relative flex-1 overflow-hidden cursor-grab active:cursor-grabbing"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {/* Transformed image + pins layer. The wrapper holds the click
+            handler because its bounding rect (post-transform) is what
+            handleImageTap needs to compute x_pct/y_pct correctly. */}
+        <div
+          ref={imageRef}
+          onClick={handleWrapperClick}
+          className="absolute top-0 left-0 origin-top-left"
+          style={{
+            transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+            cursor: "crosshair",
+          }}
+        >
+          {imgError ? (
+            <div className="w-screen h-[60vh] flex items-center justify-center bg-neutral-900">
+              <div className="text-center">
+                <Flag className="w-12 h-12 text-white/40 mx-auto mb-1" />
+                <span className="text-5xl font-bold text-white/30">
+                  {holeNumber}
+                </span>
+              </div>
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/holes/hole-${holeNumber}.png`}
+              alt={`Hole ${holeNumber} layout`}
+              // Portrait source has tee at top; rotate so green is at top
+              // (long axis matches the phone, green where the player is
+              // headed). At scale=1 we fit the image to the canvas.
+              className="block pointer-events-none"
+              style={{ transform: "rotate(180deg)" }}
+              draggable={false}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                const canvas = canvasRef.current;
+                if (canvas) {
+                  const canvasRect = canvas.getBoundingClientRect();
+                  // Fit image to the canvas while preserving aspect ratio.
+                  // (180° rotation doesn't change the bounding box.)
+                  const naturalRatio = img.naturalWidth / img.naturalHeight;
+                  const canvasRatio = canvasRect.width / canvasRect.height;
+                  let fitW: number;
+                  let fitH: number;
+                  if (naturalRatio > canvasRatio) {
+                    fitW = canvasRect.width;
+                    fitH = fitW / naturalRatio;
+                  } else {
+                    fitH = canvasRect.height;
+                    fitW = fitH * naturalRatio;
+                  }
+                  // Set explicit dimensions so the transform math is stable.
+                  img.style.width = `${fitW}px`;
+                  img.style.height = `${fitH}px`;
+                  // Center the wrapper inside the canvas.
+                  setTx((canvasRect.width - fitW) / 2);
+                  setTy((canvasRect.height - fitH) / 2);
+                }
+                setImgLoaded(true);
+              }}
+              onError={() => setImgError(true)}
+            />
+          )}
+
+          {imgLoaded &&
+            visiblePins.map((s) => (
+              <PinDot
+                key={s.id}
+                sprinkler={s}
+                highlight={s.id === highlightId}
+                openIssue={highestOpenIssue(s.id, issues)}
+                onTap={(e) => {
+                  e.stopPropagation();
+                  onPinTap(s);
+                }}
+              />
+            ))}
+        </div>
+
+        {/* Bottom hint */}
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/70 text-white/80 text-[11px] backdrop-blur-sm pointer-events-none">
+          {scale > 1
+            ? "Drag to pan · pinch or buttons to zoom"
+            : "Pinch or + to zoom · tap empty area to add"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FullscreenChip({
+  label,
+  active,
+  onClick,
+  dotColor,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  dotColor?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 px-2.5 h-7 rounded-full text-xs font-medium border whitespace-nowrap transition-colors shrink-0 ${
+        active
+          ? "bg-white text-black border-white"
+          : "bg-white/5 text-white/80 border-white/20 hover:bg-white/10"
+      }`}
+    >
+      {dotColor && (
+        <span
+          className="w-2 h-2 rounded-full"
+          style={{ background: dotColor }}
+        />
+      )}
+      {label}
+    </button>
+  );
+}
+
 // ── Pin dot ──────────────────────────────────────────────────────────────
 
 function PinDot({
@@ -1917,6 +2497,7 @@ function PinDot({
   return (
     <button
       type="button"
+      data-pin="1"
       onClick={onTap}
       className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 group focus:outline-none flex items-center justify-center ${
         highlight ? "animate-pulse" : ""

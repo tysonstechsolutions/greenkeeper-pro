@@ -487,10 +487,24 @@ VENDOR
 
 THINGS TO SKIP
 - Header rows ("Item / Description / Qty / Price")
-- Subtotal / Tax / Shipping / Handling / Discount / Total / Grand Total rows
+- Subtotal / Tax / Discount / Total / Grand Total rows
 - Notes, terms, signatures, page numbers
 - Availability / lead-time blurbs ("Typically available in 5-10 business days")
 - "Save for Later", "Remove", or icon-only buttons
+
+EXTRACT AS LINE ITEMS (do NOT skip these)
+- Shipping / Handling / Freight / Delivery charges. The PR total has to
+  include them so the superintendent isn't surprised at receiving.
+  - description: use exactly "Shipping", "Handling", "Freight", or
+    "Delivery" matching what the quote calls it. If the quote just says
+    "S&H" or "Shipping & Handling", use "Shipping & Handling".
+  - part_number: null
+  - qty: 1
+  - unit: null
+  - unit_price: the charge amount (a single number, not "$10.00" or "10 USD")
+  - If the quote shows shipping as TBD/$0/"included", skip it (no row).
+  - Only emit one shipping/freight row per quote — pick the one labeled
+    as the final/total shipping charge (not per-item shipping).
 
 WARNINGS
 - One short string per low-confidence field. e.g. "couldn't read PN for Toro switch row".
