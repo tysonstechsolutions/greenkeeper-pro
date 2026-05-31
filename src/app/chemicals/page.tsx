@@ -248,14 +248,13 @@ function REIAlertBanner({ activeREIs }: { activeREIs: ActiveREI[] }) {
 
 export default function ChemicalsPage() {
   const router = useRouter();
-  const { user, canManageChemicals, isManager, isForeman } = useAuth();
+  const { canManageChemicals, isManager, isForeman } = useAuth();
   const {
     products,
     loading,
     error,
     fetchProducts,
     fetchInventoryStats,
-    getLowStockProducts,
     getActiveREIs,
   } = useChemicals();
 

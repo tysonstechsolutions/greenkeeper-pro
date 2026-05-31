@@ -44,7 +44,7 @@ interface FormData extends CreateEquipmentData {
 
 export default function NewEquipmentPage() {
   const router = useRouter();
-  const { user, profile, canManageEquipment } = useAuth();
+  const { profile, canManageEquipment } = useAuth();
   const { createEquipment, uploadEquipmentPhoto, updateEquipment } = useEquipment();
 
   const [submitting, setSubmitting] = useState(false);
@@ -316,6 +316,7 @@ export default function NewEquipmentPage() {
                 <Input
                   id="year"
                   type="number"
+                  inputMode="numeric"
                   min={1900}
                   max={2100}
                   value={formData.year ?? ""}
@@ -438,6 +439,7 @@ export default function NewEquipmentPage() {
                 <Input
                   id="repair_cost"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={formData.estimated_repair_cost ?? ""}

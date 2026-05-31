@@ -66,7 +66,7 @@ interface PhotoStats {
 }
 
 export default function PhotosPage() {
-  const { user, profile, isManager, isForeman } = useAuth();
+  const { user, isManager, isForeman } = useAuth();
   const {
     photos,
     loading,
@@ -88,7 +88,6 @@ export default function PhotosPage() {
   const [showCameraModal, setShowCameraModal] = useState(false);
 
   // Filter state
-  const [filters, setFilters] = useState<PhotoFilters>({});
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   const [selectedZone, setSelectedZone] = useState("");

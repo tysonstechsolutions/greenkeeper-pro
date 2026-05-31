@@ -36,7 +36,7 @@ export function OnlineStatus() {
     // see the comment on the `useState("online")` initializer above.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (typeof navigator !== "undefined" && "onLine" in navigator && !navigator.onLine) setStatus("offline");
-    updateQueueCount(); // eslint-disable-line react-hooks/set-state-in-effect
+    updateQueueCount();
 
     // Setup offline listeners
     const cleanupOfflineListeners = setupOfflineListeners();

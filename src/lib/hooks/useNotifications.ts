@@ -13,7 +13,7 @@ import {
   directSelectCount,
   directSelectList,
 } from "@/lib/supabase/rest";
-import type { Notification, NotificationType, Database } from "@/types/database";
+import type { Notification, NotificationType } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 // TODO(#4): Batch push-mirror send — currently createNotification fires one

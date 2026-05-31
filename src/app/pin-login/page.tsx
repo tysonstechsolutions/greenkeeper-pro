@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Delete, Loader2, Leaf, CheckCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { persistSessionDirect } from "@/lib/supabase/persist-session";
@@ -21,7 +21,6 @@ interface PinLoginResponse {
 }
 
 function PinLoginInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
 
@@ -120,7 +119,58 @@ function PinLoginInner() {
       setPin("");
       setLoading(false);
     }
-  }, [pin, router, returnTo]);
+  }, [pin, returnTo]);
+
+  // Hardware keyboard support: digits 0-9, Backspace, Enter, Escape.
+  // The page renders no <input>, so without this the user can't type the
+  // PIN on a desktop or with a Bluetooth keyboard plugged into a tablet.
+  useEffect(() => {
+    if (userName) return; // success screen — no input
+    const onKey = (e: KeyboardEvent) => {
+      if (loading) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        handleDigit(e.key);
+        return;
+      }
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        handleDelete();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (pin.length >= 4) handleSubmit();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleClear();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    loading,
+    userName,
+    pin.length,
+    handleDigit,
+    handleDelete,
+    handleSubmit,
+    handleClear,
+  ]);
+
+  // Auto-submit when the full 6-digit PIN is entered. Most PIN pads do
+  // this — saves a tap. We still require an explicit Sign In for the
+  // shorter 4-5 digit fallback (because we don't know if the user is
+  // done typing). handleSubmit calls setState internally, which is the
+  // intent — the user typing the 6th digit IS the submit gesture.
+  useEffect(() => {
+    if (loading) return;
+    if (pin.length !== maxDigits) return;
+    handleSubmit(); // eslint-disable-line react-hooks/set-state-in-effect -- intentional auto-submit
+  }, [pin, loading, handleSubmit]);
 
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -192,7 +242,7 @@ function PinLoginInner() {
         ) : (
           <>
             {/* Label */}
-            <p className="text-center text-sm font-semibold text-gray-500 mb-5 tracking-wide uppercase text-xs">
+            <p className="text-center text-xs font-semibold text-gray-500 mb-5 tracking-wide uppercase">
               Enter your PIN
             </p>
 
@@ -285,13 +335,11 @@ function PinLoginInner() {
             <button
               onClick={handleSubmit}
               disabled={loading || pin.length < 4}
-              className="w-full mt-4 h-13 rounded-xl font-bold text-base transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-white"
+              className="w-full mt-4 rounded-xl font-bold text-base transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-white"
               style={{
                 height: "52px",
                 background:
-                  pin.length >= 4 && !loading
-                    ? "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)"
-                    : "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)",
+                  "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)",
               }}
             >
               {loading ? (

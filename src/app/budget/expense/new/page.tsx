@@ -397,6 +397,7 @@ export default function NewExpensePage() {
                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={amount}

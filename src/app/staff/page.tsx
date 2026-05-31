@@ -324,7 +324,7 @@ export default function StaffPage() {
     <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
       {/* Show loading skeleton while data is loading */}
       {loading ? (
-        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+        <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-6 max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <div className="h-8 w-48 bg-muted rounded animate-pulse" />
@@ -343,7 +343,7 @@ export default function StaffPage() {
           </div>
         </div>
       ) : (
-    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>

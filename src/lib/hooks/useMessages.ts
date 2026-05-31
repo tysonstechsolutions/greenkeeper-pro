@@ -7,7 +7,6 @@ import type {
   Message,
   MessageType,
   Profile,
-  Database,
 } from "@/types/database";
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { translateSafe } from "@/lib/utils/translate";

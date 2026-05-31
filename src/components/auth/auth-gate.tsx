@@ -17,6 +17,10 @@ import { useAuth } from "@/lib/hooks/useAuth";
  * there is no Next.js server to do SSR redirects.
  */
 
+// Keep in sync with PUBLIC_ROUTES in src/components/layout/app-shell.tsx and
+// src/lib/providers/auth-provider.tsx. /install and /offline must be public —
+// the install prompt redirects here from the PWA banner, and /offline is the
+// fallback served by the service worker when the network is down.
 const PUBLIC_PREFIXES = [
   "/login",
   "/pin-login",
@@ -24,6 +28,8 @@ const PUBLIC_PREFIXES = [
   "/auth/callback",
   "/auth/confirm",
   "/join",
+  "/install",
+  "/offline",
   "/.well-known",
   "/manifest.json",
   "/sw.js",

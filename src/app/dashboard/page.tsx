@@ -31,10 +31,8 @@ import {
   FileText,
   CalendarOff,
   Coffee,
-  Shield,
   MessageSquare,
   Flag,
-  Lightbulb,
   Printer,
 } from "lucide-react";
 import { WeatherWidget } from "@/components/features/weather/weather-widget";

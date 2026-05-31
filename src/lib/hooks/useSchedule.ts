@@ -8,7 +8,6 @@ import type {
   Schedule,
   ShiftType,
   Profile,
-  Database,
 } from "@/types/database";
 
 // Extended schedule type with joined profile data

@@ -1,7 +1,9 @@
 // src/app/global-error.tsx
 "use client";
 
+import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import * as Sentry from "@sentry/nextjs";
 
 interface GlobalErrorProps {
   error: Error & { digest?: string };
@@ -9,6 +11,10 @@ interface GlobalErrorProps {
 }
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+
   return (
     <html>
       <body>
@@ -18,6 +24,11 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           <p className="text-gray-600 mb-6 text-center max-w-md">
             A critical error occurred. Please refresh the page to continue.
           </p>
+          {error?.digest && (
+            <p className="text-xs text-muted-foreground mb-4 font-mono">
+              Error ID: {error.digest}
+            </p>
+          )}
           <button
             onClick={reset}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"

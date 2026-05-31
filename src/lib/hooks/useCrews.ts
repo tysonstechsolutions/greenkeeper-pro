@@ -7,7 +7,7 @@ import {
   directPatchByFilter,
 } from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
-import type { Profile, UserRole, Database } from "@/types/database";
+import type { Profile, UserRole } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 
 // Crew is stored by unique crew_assignment values across profiles

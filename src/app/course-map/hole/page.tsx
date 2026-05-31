@@ -22,7 +22,6 @@ import {
   ArrowUpRight,
   Sparkles,
   Wrench,
-  Save,
   Edit3,
   Move,
   Trash2,
@@ -30,7 +29,6 @@ import {
   Locate,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineCamera } from "@/components/ui/inline-camera";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,7 +96,6 @@ function PageContent() {
   const holeNumber = parseInt(searchParams.get("n") ?? "", 10);
 
   const {
-    observations,
     loading,
     getObservationsForHole,
     createObservation,
@@ -182,7 +179,6 @@ function PageContent() {
     issue_type: "other" as HoleIssueType,
     priority: "normal" as TaskPriority,
   });
-  const [savingEdit, setSavingEdit] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -523,7 +519,6 @@ function PageContent() {
   // Manual save (still available as backup)
   const handleSaveEdit = useCallback(async () => {
     if (!selectedObs) return;
-    setSavingEdit(true);
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     const updates: Partial<HoleObservation> = {
       title: issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type,
@@ -540,7 +535,6 @@ function PageContent() {
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to update observation." });
     }
-    setSavingEdit(false);
   }, [selectedObs, editFormData, updateObservation]);
 
   const handleGenerateFixForEdit = useCallback(async () => {
@@ -1175,7 +1169,10 @@ function PageContent() {
 
                   <button
                     className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md"
-                    onClick={() => setShowInlineCamera(true)}
+                    onClick={() => {
+                      savePinState();
+                      setShowInlineCamera(true);
+                    }}
                   >
                     <Camera className="w-5 h-5" />
                     Open Camera

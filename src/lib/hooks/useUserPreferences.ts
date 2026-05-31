@@ -131,7 +131,6 @@ export function useUserPreferences(): UseUserPreferencesReturn {
         return false;
       }
       // `supabase` is a stable singleton, intentionally excluded from deps.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [user, preferences]
   );
@@ -177,7 +176,6 @@ export function useUserPreferences(): UseUserPreferencesReturn {
         return false;
       }
       // `supabase` is a stable singleton, intentionally excluded from deps.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [user, preferences]
   );

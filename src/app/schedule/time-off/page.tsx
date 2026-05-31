@@ -90,7 +90,7 @@ function formatRelativeTime(dateString: string): string {
 
 export default function TimeOffPage() {
   const router = useRouter();
-  const { user, profile, isManager, loading: authLoading } = useAuth();
+  const { profile, isManager, loading: authLoading } = useAuth();
   const {
     fetchMyRequests,
     fetchAllRequests,

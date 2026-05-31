@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   BarChart3,
   Plus,
-  Settings2,
   Trash2,
   Play,
   Square,
@@ -116,7 +115,12 @@ export default function ManagePollsPage() {
   }, [isAuthorized]);
 
   const fetchPolls = async () => {
-    setLoading(true);
+    const isInitialLoad = polls.length === 0;
+    if (isInitialLoad) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
 
     const query = supabase
@@ -134,6 +138,7 @@ export default function ManagePollsPage() {
       setPolls(result.data || []);
     }
     setLoading(false);
+    setRefreshing(false);
   };
 
   const handleAddOption = () => {
@@ -239,7 +244,7 @@ export default function ManagePollsPage() {
 
       // Refresh polls
       await fetchPolls();
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
     } finally {
       setSubmitting(false);

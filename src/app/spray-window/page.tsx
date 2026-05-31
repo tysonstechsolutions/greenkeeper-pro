@@ -67,7 +67,7 @@ function formatChartTime(iso: string): string {
 }
 
 export default function SprayWindowPage() {
-  const { profile, user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [data, setData] = useState<SprayWindowResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

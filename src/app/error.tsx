@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
@@ -13,8 +14,8 @@ interface ErrorPageProps {
 
 export default function ErrorPage({ error, reset }: ErrorPageProps) {
   useEffect(() => {
-    // Log to error reporting service
     console.error("Page error:", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

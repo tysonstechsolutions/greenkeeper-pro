@@ -27,7 +27,6 @@ import {
   Crosshair,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { InlineCamera } from "@/components/ui/inline-camera";
@@ -74,7 +73,6 @@ import {
 } from "@/lib/hooks/useGreenObservations";
 import { greenIssueTypeDescriptions, greenIssueTypeFixTemplates } from "@/lib/green-constants";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { createClient } from "@/lib/supabase/client";
 import { directInsertRow } from "@/lib/supabase/rest";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
@@ -99,7 +97,6 @@ function PageContent() {
   const holeNumber = parseInt(searchParams.get("n") ?? "", 10);
 
   const {
-    observations,
     loading,
     getObservationsForGreen,
     createObservation,
@@ -139,9 +136,6 @@ function PageContent() {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [diagnosisResult, setDiagnosisResult] = useState<DiagnosisResult | null>(null);
 
-  // Camera input ref for triggering
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-
   // Persist drawn path state before camera opens (Android kills background tabs)
   const STORAGE_KEY = `green-obs-pending-${holeNumber}`;
   const saveDrawnState = useCallback(() => {
@@ -176,7 +170,6 @@ function PageContent() {
     issue_type: "other" as GreenIssueType,
     priority: "normal" as TaskPriority,
   });
-  const [savingEdit, setSavingEdit] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [generatingFixForObs, setGeneratingFixForObs] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -452,7 +445,6 @@ function PageContent() {
   // Manual save (still available as backup)
   const handleSaveEdit = useCallback(async () => {
     if (!selectedObs) return;
-    setSavingEdit(true);
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     const updates: Partial<GreenObservation> = {
       title: greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type,
@@ -469,7 +461,6 @@ function PageContent() {
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to update observation." });
     }
-    setSavingEdit(false);
   }, [selectedObs, editFormData, updateObservation]);
 
   const handleGenerateFixForEdit = useCallback(async () => {
@@ -991,7 +982,10 @@ function PageContent() {
 
                   <button
                     className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl cursor-pointer transition-colors text-sm font-medium shadow-md"
-                    onClick={() => setShowInlineCamera(true)}
+                    onClick={() => {
+                      saveDrawnState();
+                      setShowInlineCamera(true);
+                    }}
                   >
                     <Camera className="w-5 h-5" />
                     Open Camera

@@ -41,7 +41,6 @@ import {
 } from "@/lib/hooks/useEquipment";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
-import { createClient } from "@/lib/supabase/client";
 import { directSelectList } from "@/lib/supabase/rest";
 import type { Equipment, EquipmentType, EquipmentCondition } from "@/types/database";
 import { downloadEquipmentReport } from "@/lib/reports/equipment-report";

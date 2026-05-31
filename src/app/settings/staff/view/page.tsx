@@ -10,7 +10,6 @@ import {
   Loader2,
   Shield,
   Phone,
-  Mail,
   Calendar,
   AlertCircle,
 } from "lucide-react";

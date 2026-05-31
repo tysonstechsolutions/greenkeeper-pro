@@ -136,7 +136,7 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export default function BudgetPage() {
   const router = useRouter();
-  const { user, isSuper: isSuperRole } = useAuth();
+  const { isSuper: isSuperRole } = useAuth();
   const {
     fetchBudgetSummary,
     fetchMonthlySpend,

@@ -91,7 +91,7 @@ export default function AstInspectionsListPage() {
 
   useEffect(() => {
     if (!isAllowed) return;
-    fetchInspections(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetch
+    fetchInspections();
   }, [isAllowed, fetchInspections]);
 
   useRefreshOnFocus(fetchInspections, isAllowed);

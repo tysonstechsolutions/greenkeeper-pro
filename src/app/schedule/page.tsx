@@ -387,7 +387,7 @@ export default function SchedulePage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-screen-2xl">
+    <div className="container mx-auto px-4 py-6 pb-24 md:pb-6 max-w-screen-2xl">
       <PageHeader
         title="Schedule"
         description="Drag a template onto a cell to schedule · click to edit"

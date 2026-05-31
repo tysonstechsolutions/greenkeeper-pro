@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { RoleGuard, RoleVisible, MANAGEMENT_ROLES, STAFF_ROLES } from "@/components/auth/role-guard";
-import { useAuth } from "@/lib/hooks/useAuth";
 import { useDroneFlights } from "@/lib/hooks/useDroneFlights";
 import type { DroneFlight } from "@/types/database";
 
@@ -51,7 +50,6 @@ function todayIso(): string {
 }
 
 export default function DronePage() {
-  const { profile } = useAuth();
   const { flights, loading, error, fetchFlights, uploadFlight, deleteFlight } =
     useDroneFlights();
 

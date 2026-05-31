@@ -578,7 +578,7 @@ export default function TasksPage() {
       </div>
 
       {/* Task List */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-4">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-4 pb-24 md:pb-6">
         {tasksLoading ? (
           <SkeletonList count={5} variant="task" />
         ) : filteredTasks.length === 0 ? (

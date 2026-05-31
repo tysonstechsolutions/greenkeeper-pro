@@ -7,8 +7,6 @@ import {
   Save,
   Loader2,
   DollarSign,
-  Plus,
-  Trash2,
   Copy,
   ChevronLeft,
   ChevronRight,
@@ -18,13 +16,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,11 +30,9 @@ import {
   useBudget,
   budgetCategoryLabels,
   budgetCategoryColors,
-  type CreateBudgetItemData,
 } from "@/lib/hooks/useBudget";
-import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard, ADMIN_ROLES } from "@/components/auth/role-guard";
-import type { BudgetCategory, BudgetItem } from "@/types/database";
+import type { BudgetCategory } from "@/types/database";
 
 // Month names
 const monthNames = [
@@ -74,14 +63,11 @@ function formatCurrency(amount: number): string {
 
 export default function BudgetSetupPage() {
   const router = useRouter();
-  const { user } = useAuth();
   const {
     budgetItems,
     fetchBudget,
     createBudgetItem,
     updateBudgetItem,
-    deleteBudgetItem,
-    loading,
   } = useBudget();
 
   const currentYear = new Date().getFullYear();
@@ -386,6 +372,7 @@ export default function BudgetSetupPage() {
                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       type="number"
+                      inputMode="decimal"
                       min={0}
                       step="100"
                       value={item.annual_amount || ""}
@@ -430,6 +417,7 @@ export default function BudgetSetupPage() {
                         </label>
                         <Input
                           type="number"
+                          inputMode="decimal"
                           min={0}
                           step="100"
                           value={item.monthly_breakdown[index] || ""}

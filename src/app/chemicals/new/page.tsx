@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -48,7 +48,7 @@ const UNIT_OPTIONS = [
 
 export default function NewChemicalProductPage() {
   const router = useRouter();
-  const { user, canManageChemicals } = useAuth();
+  const { canManageChemicals } = useAuth();
   const { createProduct, loading, error } = useChemicals();
 
   const [submitting, setSubmitting] = useState(false);
@@ -294,6 +294,7 @@ export default function NewChemicalProductPage() {
                   <Input
                     id="rei"
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     value={formData.rei_hours ?? ""}
                     onChange={(e) =>
@@ -367,6 +368,7 @@ export default function NewChemicalProductPage() {
                 <Input
                   id="inventory"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={formData.current_inventory ?? ""}
@@ -387,6 +389,7 @@ export default function NewChemicalProductPage() {
                 <Input
                   id="reorder"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={formData.reorder_threshold ?? ""}
@@ -411,6 +414,7 @@ export default function NewChemicalProductPage() {
                 <Input
                   id="cost"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={formData.cost_per_unit ?? ""}

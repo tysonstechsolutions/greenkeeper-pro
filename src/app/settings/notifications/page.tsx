@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bell, Save, Loader2, Check, X } from "lucide-react";
+import { ArrowLeft, Loader2, Check, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -56,6 +56,14 @@ export default function NotificationSettingsPage() {
           <p className="text-sm text-muted-foreground">Push and email preferences</p>
         </div>
       </div>
+
+      {/* Persistent migration / load error */}
+      {error && !saveMessage && (
+        <div className="mb-4 p-3 rounded-lg flex items-start gap-2 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
 
       {/* Save Message */}
       {saveMessage && (

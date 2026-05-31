@@ -7,7 +7,6 @@ import type {
   TaskTemplate,
   TaskCategory,
   TaskPriority,
-  Database,
 } from "@/types/database";
 
 export interface CreateTemplateData {

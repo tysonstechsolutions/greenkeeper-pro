@@ -93,7 +93,7 @@ function PageContent() {
   const searchParams = useSearchParams();
   const goalId = searchParams.get("id") ?? "";
   const router = useRouter();
-  const { user, isSuper, isAsstSuper } = useAuth();
+  const { isSuper, isAsstSuper } = useAuth();
   const {
     fetchGoal,
     updateGoalStatus,

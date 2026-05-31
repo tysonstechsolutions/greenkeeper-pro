@@ -370,7 +370,7 @@ export function CourseMapComponent({
   useEffect(() => {
     if (!ndviEnabled) {
       setNdviFlight(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on toggle
-      setNdviUrl(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset on toggle
+      setNdviUrl(null);
       return;
     }
 

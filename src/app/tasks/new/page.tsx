@@ -168,7 +168,7 @@ const initialFormData: FormData = {
 
 export default function NewTaskPage() {
   const router = useRouter();
-  const { profile, isManager, isForeman, loading: authLoading } = useAuth();
+  const { isManager, isForeman, loading: authLoading } = useAuth();
   const { createTask } = useTasks();
   const { templates, loading: templatesLoading } = useTaskTemplates();
   const { profiles, allStaff, loading: profilesLoading } = useProfiles();

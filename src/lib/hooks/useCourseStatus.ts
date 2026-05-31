@@ -130,7 +130,7 @@ export function useCourseStatus() {
 
   // Subscribe to realtime updates
   useEffect(() => {
-    fetchCourseStatus(); // eslint-disable-line react-hooks/set-state-in-effect
+    fetchCourseStatus();
 
     const channel = supabase
       .channel("course_status_changes")

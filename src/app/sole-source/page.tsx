@@ -34,7 +34,6 @@ import { callApi } from "@/lib/api/client";
 import { downloadSoleSourceReport, type SoleSourceData } from "@/lib/reports/sole-source-report";
 import { directSelectList } from "@/lib/supabase/rest";
 import { format889Date } from "@/lib/section-889";
-import { todayLocal } from "@/lib/utils/date";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

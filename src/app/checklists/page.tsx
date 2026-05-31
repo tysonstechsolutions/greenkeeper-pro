@@ -6,12 +6,9 @@ import {
   Check,
   Circle,
   Loader2,
-  Clock,
   ChevronDown,
   ChevronRight,
-  AlertTriangle,
   RefreshCw,
-  Plus,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,7 +23,7 @@ interface DailyTask extends Task {
 }
 
 export default function ChecklistsPage() {
-  const { profile, user, isSuper, isAsstSuper } = useAuth();
+  const { user, isSuper, isAsstSuper } = useAuth();
   const isManager = isSuper || isAsstSuper;
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [allCrewTasks, setAllCrewTasks] = useState<DailyTask[]>([]);

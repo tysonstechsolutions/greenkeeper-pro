@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -72,7 +72,7 @@ function formatDate(dateString: string): string {
 
 export default function ExpensesListPage() {
   const router = useRouter();
-  const { user, isSuper } = useAuth();
+  const { isSuper } = useAuth();
   const {
     expenses,
     fetchExpenses,
@@ -103,25 +103,28 @@ export default function ExpensesListPage() {
   const canApprove = isSuper;
 
   // Calculate date range filters
-  const getDateFilter = () => {
+  const getDateFilter = useCallback(() => {
     const now = new Date();
     switch (dateRange) {
-      case "week":
+      case "week": {
         const weekAgo = new Date(now);
         weekAgo.setDate(weekAgo.getDate() - 7);
         return formatLocalDate(weekAgo);
-      case "month":
+      }
+      case "month": {
         const monthAgo = new Date(now);
         monthAgo.setMonth(monthAgo.getMonth() - 1);
         return formatLocalDate(monthAgo);
-      case "year":
+      }
+      case "year": {
         const yearAgo = new Date(now);
         yearAgo.setFullYear(yearAgo.getFullYear() - 1);
         return formatLocalDate(yearAgo);
+      }
       default:
         return undefined;
     }
-  };
+  }, [dateRange]);
 
   // Load expenses on mount and when filters change
   useEffect(() => {
@@ -131,7 +134,7 @@ export default function ExpensesListPage() {
       category: categoryFilter !== "all" ? categoryFilter : undefined,
       startDate,
     });
-  }, [fetchExpenses, statusFilter, categoryFilter, dateRange]);
+  }, [fetchExpenses, statusFilter, categoryFilter, getDateFilter]);
 
   // Filter expenses by search query
   const filteredExpenses = useMemo(() => {

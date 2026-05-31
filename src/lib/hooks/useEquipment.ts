@@ -9,7 +9,6 @@ import type {
   EquipmentLogType,
   PartUsed,
   EquipmentInspection,
-  InspectionChecklistItem,
   EquipmentCondition,
   FuelType,
   InspectionType,

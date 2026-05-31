@@ -133,10 +133,10 @@ function PageContent() {
   const searchParams = useSearchParams();
   const taskId = searchParams.get("id") ?? "";
 
-  const { user, profile, isManager, isForeman, loading: authLoading } = useAuth();
+  const { user, isManager, isForeman, loading: authLoading } = useAuth();
   const { getTask, updateTask } = useTasks();
-  const { profiles, allStaff, loading: profilesLoading } = useProfiles();
-  const { zones, loading: zonesLoading } = useCourseZones();
+  const { profiles, allStaff } = useProfiles();
+  const { zones } = useCourseZones();
 
   const [task, setTask] = useState<TaskWithRelations | null>(null);
   const [loading, setLoading] = useState(true);

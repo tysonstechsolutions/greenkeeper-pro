@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
   Lightbulb,
   ThumbsUp,
@@ -13,7 +12,6 @@ import {
   Clock,
   Filter,
 } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -26,19 +24,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DetailPageHeader } from "@/components/ui/back-button";
-import { useAuth } from "@/lib/hooks/useAuth";
 import {
   useGolferFeedback,
   feedbackTypeLabels,
-  feedbackTypeColors,
   feedbackAreaLabels,
   feedbackStatusLabels,
   type FeedbackType,
   type FeedbackArea,
   type FeedbackStatus,
-  type GolferFeedback,
 } from "@/lib/hooks/useGolferFeedback";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 const feedbackTypeIcons: Record<FeedbackType, React.ComponentType<{ className?: string }>> = {
@@ -48,8 +43,6 @@ const feedbackTypeIcons: Record<FeedbackType, React.ComponentType<{ className?: 
 };
 
 export default function FeedbackPage() {
-  const router = useRouter();
-  const { profile, isSuper, isAsstSuper } = useAuth();
   const {
     feedback,
     loading,

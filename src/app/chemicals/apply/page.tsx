@@ -9,7 +9,6 @@ import {
   Loader2,
   CloudSun,
   RefreshCw,
-  AlertTriangle,
   MapPin,
   Clock,
   Wind,
@@ -72,7 +71,7 @@ function ChemicalApplicationPageContent() {
   const searchParams = useSearchParams();
   const preselectedProductId = searchParams.get("product");
 
-  const { user, isManager, isForeman } = useAuth();
+  const { isManager, isForeman } = useAuth();
   const { products, fetchProducts, createApplication, loading, error } = useChemicals();
   const { currentWeather, fetchCurrentWeather, loading: weatherLoading } = useWeather();
 
@@ -461,6 +460,7 @@ function ChemicalApplicationPageContent() {
                   <Input
                     id="amount"
                     type="number"
+                    inputMode="decimal"
                     step="0.01"
                     min={0}
                     value={formData.total_amount_used ?? ""}
@@ -486,6 +486,7 @@ function ChemicalApplicationPageContent() {
                 <Input
                   id="area"
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   value={formData.area_treated_sqft ?? ""}
                   onChange={(e) =>
@@ -606,6 +607,7 @@ function ChemicalApplicationPageContent() {
                   <Input
                     id="temp"
                     type="number"
+                    inputMode="decimal"
                     value={formData.weather_temp_f ?? ""}
                     onChange={(e) =>
                       updateField(
@@ -628,6 +630,7 @@ function ChemicalApplicationPageContent() {
                   <Input
                     id="wind"
                     type="number"
+                    inputMode="decimal"
                     value={formData.weather_wind_mph ?? ""}
                     onChange={(e) =>
                       updateField(
@@ -658,6 +661,7 @@ function ChemicalApplicationPageContent() {
                   <Input
                     id="humidity"
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     max={100}
                     value={formData.weather_humidity ?? ""}

@@ -238,7 +238,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Notifications list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
         {loading && notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mb-4" />

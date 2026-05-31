@@ -43,7 +43,7 @@ import { formatLocalDate } from "@/lib/utils/date";
 function NewGoalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isSuper, isAsstSuper } = useAuth();
+  const { isSuper, isAsstSuper } = useAuth();
   const { createGoal, fetchGoal, fetchGoals, goals, loading } = usePlanGoals();
 
   const [submitting, setSubmitting] = useState(false);
