@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -27,9 +27,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useFormValidation } from "@/lib/hooks/useFormValidation";
 import { useTasks, type UpdateTaskData, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useProfiles, getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
 import { useCourseZones, formatZoneName, zoneTypeLabels } from "@/lib/hooks/useCourseZones";
+import { useChemicals, type ActiveREI } from "@/lib/hooks/useChemicals";
+import { findREIConflicts } from "@/lib/utils/rei-conflicts";
+import { REIWarningBanner } from "@/components/features/chemicals/rei-warning-banner";
 import type {
   TaskCategory,
   TaskPriority,
@@ -137,13 +141,52 @@ function PageContent() {
   const { getTask, updateTask } = useTasks();
   const { profiles, allStaff } = useProfiles();
   const { zones } = useCourseZones();
+  const { getActiveREIs } = useChemicals();
 
   const [task, setTask] = useState<TaskWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<FormData | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Active Restricted Entry Intervals, for the zone/hole conflict warning.
+  const [activeREIs, setActiveREIs] = useState<ActiveREI[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getActiveREIs()
+      .then((reis) => {
+        if (!cancelled) setActiveREIs(reis);
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getActiveREIs]);
+  const {
+    errors,
+    clearError,
+    validate,
+  } = useFormValidation<{
+    title: string;
+    category: string;
+    priority: string;
+    due_date: string;
+  }>();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Active REI conflicts for the currently-selected zone/holes.
+  const reiConflicts = useMemo(
+    () =>
+      findREIConflicts(
+        {
+          zone_id: formData?.zone_id || null,
+          hole_numbers: formData?.hole_numbers ?? [],
+        },
+        activeREIs,
+      ),
+    [formData?.zone_id, formData?.hole_numbers, activeREIs],
+  );
 
   // Dropdown states
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
@@ -222,12 +265,13 @@ function PageContent() {
   const updateField = <K extends keyof FormData>(field: K, value: FormData[K]) => {
     if (!formData) return;
     setFormData((prev) => prev ? { ...prev, [field]: value } : null);
-    if (errors[field]) {
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
+    if (
+      field === "title" ||
+      field === "category" ||
+      field === "priority" ||
+      field === "due_date"
+    ) {
+      clearError(field);
     }
   };
 
@@ -321,26 +365,15 @@ function PageContent() {
     updateField("recurring_rule", { ...formData.recurring_rule, days_of_week: newDays });
   };
 
-  // Validate form
+  // Validate form. Hook handles scroll + focus on the first invalid field.
   const validateForm = (): boolean => {
     if (!formData) return false;
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.title.trim()) {
-      newErrors.title = "Title is required";
-    }
-    if (!formData.category) {
-      newErrors.category = "Category is required";
-    }
-    if (!formData.priority) {
-      newErrors.priority = "Priority is required";
-    }
-    if (!formData.due_date) {
-      newErrors.due_date = "Due date is required";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return validate({
+      title: formData.title.trim() ? null : "Title is required",
+      category: formData.category ? null : "Category is required",
+      priority: formData.priority ? null : "Priority is required",
+      due_date: formData.due_date ? null : "Due date is required",
+    });
   };
 
   // Handle submit
@@ -461,13 +494,15 @@ function PageContent() {
       <form onSubmit={handleSubmit} className="p-4 space-y-6">
         {/* Title */}
         <div>
-          <label className="block text-sm font-medium mb-1.5">
+          <label htmlFor="title" className="block text-sm font-medium mb-1.5">
             Title <span className="text-red-500">*</span>
           </label>
           <input
+            id="title"
             type="text"
             value={formData.title}
             onChange={(e) => updateField("title", e.target.value)}
+            aria-invalid={!!errors.title}
             className={`w-full px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 ${
               errors.title ? "border-red-500" : "border-border"
             }`}
@@ -492,12 +527,14 @@ function PageContent() {
 
         {/* Category */}
         <div>
-          <label className="block text-sm font-medium mb-1.5">
+          <label htmlFor="category" className="block text-sm font-medium mb-1.5">
             Category <span className="text-red-500">*</span>
           </label>
           <select
+            id="category"
             value={formData.category}
             onChange={(e) => updateField("category", e.target.value as TaskCategory)}
+            aria-invalid={!!errors.category}
             className={`w-full px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 ${
               errors.category ? "border-red-500" : "border-border"
             }`}
@@ -514,7 +551,7 @@ function PageContent() {
         </div>
 
         {/* Priority */}
-        <div>
+        <div id="priority">
           <label className="block text-sm font-medium mb-1.5">
             Priority <span className="text-red-500">*</span>
           </label>
@@ -644,14 +681,16 @@ function PageContent() {
         {/* Due Date & Time */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1.5">
+            <label htmlFor="due_date" className="block text-sm font-medium mb-1.5">
               <Calendar className="w-4 h-4 inline mr-1" />
               Due Date <span className="text-red-500">*</span>
             </label>
             <input
+              id="due_date"
               type="date"
               value={formData.due_date}
               onChange={(e) => updateField("due_date", e.target.value)}
+              aria-invalid={!!errors.due_date}
               className={`w-full px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 ${
                 errors.due_date ? "border-red-500" : "border-border"
               }`}
@@ -682,6 +721,7 @@ function PageContent() {
           </label>
           <input
             type="number"
+            inputMode="numeric"
             value={formData.estimated_minutes}
             onChange={(e) => updateField("estimated_minutes", e.target.value)}
             min="0"
@@ -790,6 +830,9 @@ function PageContent() {
             </p>
           )}
         </div>
+
+        {/* REI conflict warning */}
+        <REIWarningBanner conflicts={reiConflicts} />
 
         {/* Equipment Needed */}
         <div>
@@ -902,6 +945,7 @@ function PageContent() {
             />
             <input
               type="number"
+              inputMode="decimal"
               value={newMaterialQty}
               onChange={(e) => setNewMaterialQty(e.target.value)}
               className="w-20 px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
@@ -1024,6 +1068,7 @@ function PageContent() {
                   </label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     value={formData.weather_conditions.min_temp || ""}
                     onChange={(e) =>
                       updateField("weather_conditions", {
@@ -1041,6 +1086,7 @@ function PageContent() {
                   </label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     value={formData.weather_conditions.max_temp || ""}
                     onChange={(e) =>
                       updateField("weather_conditions", {
@@ -1059,6 +1105,7 @@ function PageContent() {
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   value={formData.weather_conditions.max_wind || ""}
                   onChange={(e) =>
                     updateField("weather_conditions", {

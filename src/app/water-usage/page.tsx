@@ -525,6 +525,7 @@ function WaterUsageContent() {
                         <span className="inline-flex items-center gap-1">
                           <input
                             type="number"
+                            inputMode="decimal"
                             className="w-28 px-2 py-1 text-right rounded border border-border bg-background text-sm"
                             value={editingValue}
                             onChange={(e) => setEditingValue(e.target.value)}
@@ -773,6 +774,7 @@ function AddReadingForm({
           </label>
           <input
             type="number"
+            inputMode="decimal"
             className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
             value={readingValue}
             onChange={(e) => setReadingValue(e.target.value)}
@@ -864,6 +866,7 @@ function AnnualBudgetForm({
           </label>
           <input
             type="number"
+            inputMode="decimal"
             className="w-48 px-3 py-2 rounded-lg border border-border bg-background text-sm"
             value={total}
             onChange={(e) => setTotal(e.target.value)}

@@ -211,17 +211,27 @@ function ChemicalApplicationPageContent() {
     e.preventDefault();
     setFormError(null);
 
-    // Validation
+    // Validation. On failure, fail closed AND scroll the error banner into
+    // view — the form is long enough that the banner above the first card
+    // is off-screen by the time the user reaches the bottom submit row.
+    const fail = (msg: string) => {
+      setFormError(msg);
+      requestAnimationFrame(() => {
+        document
+          .querySelector('[role="alert"]')
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    };
     if (!formData.product_id) {
-      setFormError("Please select a product");
+      fail("Please select a product");
       return;
     }
     if (formData.zone_ids.length === 0) {
-      setFormError("Please select at least one zone");
+      fail("Please select at least one zone");
       return;
     }
     if (!formData.application_date) {
-      setFormError("Application date is required");
+      fail("Application date is required");
       return;
     }
 
@@ -308,7 +318,11 @@ function ChemicalApplicationPageContent() {
 
       {/* Error message */}
       {(formError || error) && (
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400"
+        >
           <p className="text-sm">{formError || error}</p>
         </div>
       )}

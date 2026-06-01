@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Filter,
   ChevronRight,
-  Loader2,
   Package,
   DollarSign,
   Clock,
@@ -28,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SkeletonList } from "@/components/ui/skeleton-card";
 import {
   useChemicals,
   productTypeLabels,
@@ -503,14 +503,17 @@ export default function ChemicalsPage() {
 
       {/* Product List */}
       {loading && products.length === 0 ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
+        <SkeletonList count={5} variant="default" />
       ) : products.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 px-6 max-w-md mx-auto">
           <FlaskConical className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">
-            {showLowStock ? "No low stock products" : "No products found"}
+          <h3 className="font-semibold mb-1">
+            {showLowStock ? "You're fully stocked" : "No chemical products yet"}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {showLowStock
+              ? "Nothing is below its reorder threshold."
+              : "Add your first product to track inventory, applications, and REI windows."}
           </p>
           {canAddProduct && !showLowStock && (
             <Button onClick={handleAddClick} variant="outline" className="mt-4">

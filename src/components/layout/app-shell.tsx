@@ -7,7 +7,7 @@ import { Sidebar } from "./sidebar";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
 import { OnlineStatus } from "@/components/ui/online-status";
-import { InstallPrompt } from "@/components/ui/install-prompt";
+import { PwaInstallCapture } from "@/lib/hooks/usePwaInstall";
 import { ChatBubble } from "@/components/features/ai/chat-bubble";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { DebugOverlay } from "@/components/debug-overlay";
@@ -58,6 +58,10 @@ export function AppShell({ children }: AppShellProps) {
     return (
       <div className="min-h-screen bg-background">
         <OnlineStatus />
+        {/* Capture the install prompt even on public routes (it can fire on
+            the login screen) so Settings → Install App can offer one-tap
+            install later. Renders nothing. */}
+        <PwaInstallCapture />
         <main>{children}</main>
         <DebugOverlay />
       </div>
@@ -90,8 +94,9 @@ export function AppShell({ children }: AppShellProps) {
       {/* Floating AI Chat Bubble */}
       {user && <ChatBubble />}
 
-      {/* PWA Install Prompt */}
-      <InstallPrompt />
+      {/* Capture the PWA install prompt (no auto-popup — the install entry
+          point now lives in Settings → Install App). Renders nothing. */}
+      <PwaInstallCapture />
 
       {/* Floating debug overlay — diagnoses "nothing loads" hangs and
           exposes a one-tap "Reset app state" escape hatch without a

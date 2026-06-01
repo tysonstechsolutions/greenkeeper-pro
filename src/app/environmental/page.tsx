@@ -568,7 +568,8 @@ function BufferZonesTab({ userId }: { userId: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Buffer Distance (ft)</label>
-              <input type="number" value={formDistance} onChange={(e) => setFormDistance(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+              <input type="number"
+ inputMode="decimal" value={formDistance} onChange={(e) => setFormDistance(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Status</label>

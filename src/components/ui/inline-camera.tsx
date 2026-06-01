@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Capacitor } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 
 interface InlineCameraProps {
   open: boolean;
@@ -29,6 +30,11 @@ interface InlineCameraProps {
  */
 export function InlineCamera({ open, onCapture, onClose }: InlineCameraProps) {
   const isNative = Capacitor.isNativePlatform();
+
+  // Web preview takes over the viewport — lock body scroll so the page
+  // behind doesn't slide when the user pinches/scrolls on the preview.
+  // (Native path renders nothing; the OS camera handles its own focus.)
+  useBodyScrollLock(open && !isNative);
 
   // ── Native path ────────────────────────────────────────────────────────────
   // When `open` flips to true on native, launch the Capacitor camera and pipe

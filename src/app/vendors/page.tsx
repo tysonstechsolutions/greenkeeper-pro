@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SkeletonList } from "@/components/ui/skeleton-card";
 import {
   Select,
   SelectContent,
@@ -883,15 +884,25 @@ export default function VendorsPage() {
 
       {/* ── Vendor List ── */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
+        <SkeletonList count={4} variant="default" />
       ) : filtered.length === 0 ? (
-        <p className="text-center text-muted-foreground py-12">
-          {vendors.length === 0
-            ? "No vendors yet. Add your first vendor above."
-            : "No vendors match your search."}
-        </p>
+        <div className="text-center py-12 px-6 max-w-md mx-auto">
+          {vendors.length === 0 ? (
+            <>
+              <h3 className="font-semibold mb-1">No vendors yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Add your first vendor above to start tracking suppliers, contacts, and Section 889 documentation.
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 className="font-semibold mb-1">No matches</h3>
+              <p className="text-sm text-muted-foreground">
+                Nothing matches your search. Try a partial name or product category.
+              </p>
+            </>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {filtered.map((v) => {

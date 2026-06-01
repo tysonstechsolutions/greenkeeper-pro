@@ -771,6 +771,7 @@ export default function ClubhousePage() {
                   id="estimatedCost"
                   name="estimatedCost"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0"
                   value={formData.estimatedCost}

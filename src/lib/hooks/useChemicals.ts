@@ -166,6 +166,10 @@ export interface ActiveREI {
   application_id: string;
   product_name: string;
   zone_names: string[];
+  /** Raw zone ids still under the active REI (for conflict matching). */
+  zone_ids: string[];
+  /** Hole numbers still under the active REI (for conflict matching). */
+  hole_numbers: number[];
   rei_expires_at: string;
   hours_remaining: number;
 }
@@ -703,13 +707,14 @@ export function useChemicals(): UseChemicalsReturn {
         id: string;
         rei_expires_at: string | null;
         zone_ids: string[] | null;
+        hole_numbers: number[] | null;
         product: { product_name: string } | null;
       }
 
       const typedData = await directSelectList<REIApplicationData>(
         "chemical_applications",
         {
-          columns: "id, rei_expires_at, zone_ids, product:chemical_products!product_id(product_name)",
+          columns: "id, rei_expires_at, zone_ids, hole_numbers, product:chemical_products!product_id(product_name)",
           filters: [`rei_expires_at=gt.${encodeURIComponent(now)}`],
           orderBy: [{ column: "rei_expires_at", ascending: true }],
           label: "useChemicals.getActiveREIs",
@@ -753,6 +758,8 @@ export function useChemicals(): UseChemicalsReturn {
           zone_names: (app.zone_ids || []).map(
             (id: string) => zoneNames[id] || id
           ),
+          zone_ids: app.zone_ids || [],
+          hole_numbers: app.hole_numbers || [],
           rei_expires_at: app.rei_expires_at as string,
           hours_remaining: Math.round(hoursRemaining * 10) / 10,
         };

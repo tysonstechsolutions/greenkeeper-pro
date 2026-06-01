@@ -865,6 +865,7 @@ function EditForm({
             <Input
               id="edit-players"
               type="number"
+              inputMode="decimal"
               min={1}
               value={players}
               onChange={(e) => setPlayers(e.target.value)}

@@ -367,6 +367,7 @@ export default function CapitalProjectsPage() {
                   <Input
                     id="proj-budget"
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     step="0.01"
                     placeholder="0"
@@ -566,6 +567,7 @@ export default function CapitalProjectsPage() {
                               <Input
                                 id="spend-amount"
                                 type="number"
+                                inputMode="decimal"
                                 min="0"
                                 step="0.01"
                                 placeholder="0.00"

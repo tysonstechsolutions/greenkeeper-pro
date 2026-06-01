@@ -508,6 +508,7 @@ function NewGoalContent() {
                 <Input
                   id="budget"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={formData.budget_allocated ?? ""}
@@ -538,6 +539,7 @@ function NewGoalContent() {
                 <Input
                   id="target"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   value={formData.target_value ?? ""}
                   onChange={(e) =>

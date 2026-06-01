@@ -1080,13 +1080,13 @@ function PageContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="part-qty" className="text-xs">Quantity</Label>
-                  <Input id="part-qty" type="number" min="1" value={newPart.quantity} onChange={(e) => setNewPart({ ...newPart, quantity: e.target.value })} />
+                  <Input id="part-qty" type="number" inputMode="numeric" min="1" value={newPart.quantity} onChange={(e) => setNewPart({ ...newPart, quantity: e.target.value })} />
                 </div>
                 <div>
                   <Label htmlFor="part-cost" className="text-xs">Estimated Cost</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                    <Input id="part-cost" type="number" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newPart.estimated_cost} onChange={(e) => setNewPart({ ...newPart, estimated_cost: e.target.value })} />
+                    <Input id="part-cost" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newPart.estimated_cost} onChange={(e) => setNewPart({ ...newPart, estimated_cost: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -1361,13 +1361,13 @@ function PageContent() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="svc-hours" className="text-xs">Hours at Service</Label>
-                      <Input id="svc-hours" type="number" step="0.1" placeholder="0.0" value={newService.hours_at_service} onChange={(e) => setNewService({ ...newService, hours_at_service: e.target.value })} />
+                      <Input id="svc-hours" type="number" inputMode="decimal" step="0.1" placeholder="0.0" value={newService.hours_at_service} onChange={(e) => setNewService({ ...newService, hours_at_service: e.target.value })} />
                     </div>
                     <div>
                       <Label htmlFor="svc-cost" className="text-xs">Cost</Label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                        <Input id="svc-cost" type="number" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
+                        <Input id="svc-cost" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
                       </div>
                     </div>
                   </div>
@@ -1640,6 +1640,7 @@ function PageContent() {
                 <Input
                   id="year"
                   type="number"
+                  inputMode="numeric"
                   value={editForm.year}
                   onChange={(e) => setEditForm({ ...editForm, year: e.target.value })}
                 />
@@ -1721,6 +1722,7 @@ function PageContent() {
                 <Input
                   id="estimated_repair_cost"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0"
                   placeholder="0.00"
@@ -1765,6 +1767,7 @@ function PageContent() {
                 <Input
                   id="current_hours"
                   type="number"
+                  inputMode="decimal"
                   step="0.1"
                   value={editForm.current_hours}
                   onChange={(e) => setEditForm({ ...editForm, current_hours: e.target.value })}
@@ -1776,6 +1779,7 @@ function PageContent() {
                 <Input
                   id="service_interval_hours"
                   type="number"
+                  inputMode="decimal"
                   step="0.1"
                   value={editForm.service_interval_hours}
                   onChange={(e) => setEditForm({ ...editForm, service_interval_hours: e.target.value })}
@@ -1876,6 +1880,7 @@ function PageContent() {
               <Input
                 id="engine-hours"
                 type="number"
+                inputMode="decimal"
                 step="0.1"
                 value={engineHours}
                 onChange={(e) => setEngineHours(e.target.value)}

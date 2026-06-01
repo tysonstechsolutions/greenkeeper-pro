@@ -19,6 +19,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SkeletonList } from "@/components/ui/skeleton-card";
 import {
   useNotifications,
   formatTimeAgo,
@@ -240,9 +241,8 @@ export default function NotificationsPage() {
       {/* Notifications list */}
       <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
         {loading && notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">Loading notifications...</p>
+          <div className="p-4">
+            <SkeletonList count={5} variant="message" />
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4">

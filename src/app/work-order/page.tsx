@@ -657,6 +657,7 @@ export default function WorkOrderPage() {
                 <Input
                   id="enclosures"
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   placeholder="0"
                   value={form.numberOfEnclosures}

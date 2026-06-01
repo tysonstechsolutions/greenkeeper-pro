@@ -107,6 +107,13 @@ export default function NewChemicalProductPage() {
     // Validation
     if (!formData.product_name.trim()) {
       setFormError("Product name is required");
+      requestAnimationFrame(() => {
+        document
+          .querySelector('[role="alert"]')
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        const nameInput = document.getElementById("product_name") as HTMLInputElement | null;
+        nameInput?.focus({ preventScroll: true });
+      });
       return;
     }
 
@@ -161,7 +168,11 @@ export default function NewChemicalProductPage() {
 
       {/* Error message */}
       {(formError || error) && (
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400"
+        >
           <p className="text-sm">{formError || error}</p>
         </div>
       )}
@@ -174,9 +185,9 @@ export default function NewChemicalProductPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Product Name *</Label>
+              <Label htmlFor="product_name">Product Name *</Label>
               <Input
-                id="name"
+                id="product_name"
                 value={formData.product_name}
                 onChange={(e) => updateField("product_name", e.target.value)}
                 placeholder="e.g., Primo Maxx 1MEC"

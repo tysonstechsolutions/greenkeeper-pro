@@ -7,6 +7,7 @@ import {
   QUICK_ACTION_CATALOGUE,
   useQuickActions,
 } from "@/lib/hooks/useQuickActions";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 
 interface CustomizeSheetProps {
   open: boolean;
@@ -30,6 +31,20 @@ export function QuickActionsCustomizeSheet({ open, onClose }: CustomizeSheetProp
   useEffect(() => {
     setDraft(selectedIds);
   }, [selectedIds]);
+
+  // Lock body scroll while the sheet is open so internal scrolling doesn't
+  // chain to the page behind the backdrop.
+  useBodyScrollLock(open);
+
+  // Close on Escape for keyboard users.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 

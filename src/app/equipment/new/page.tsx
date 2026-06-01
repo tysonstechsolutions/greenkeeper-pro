@@ -124,6 +124,14 @@ export default function NewEquipmentPage() {
 
     if (!formData.name.trim()) {
       setFormError("Equipment name is required");
+      requestAnimationFrame(() => {
+        document
+          .querySelector('[role="alert"]')
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        (document.getElementById("equipment_name") as HTMLInputElement | null)?.focus({
+          preventScroll: true,
+        });
+      });
       return;
     }
 
@@ -180,7 +188,11 @@ export default function NewEquipmentPage() {
       />
 
       {(formError) && (
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-6 p-4 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400"
+        >
           <p className="text-sm">{formError}</p>
         </div>
       )}
@@ -236,9 +248,9 @@ export default function NewEquipmentPage() {
         <Card>
           <CardContent className="pt-6 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
+              <Label htmlFor="equipment_name">Name *</Label>
               <Input
-                id="name"
+                id="equipment_name"
                 value={formData.name}
                 onChange={(e) => updateField("name", e.target.value)}
                 placeholder="e.g., Greens Mower #1"
@@ -486,6 +498,7 @@ export default function NewEquipmentPage() {
                 <Input
                   id="current_hours"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   step="0.1"
                   value={formData.current_hours ?? ""}
@@ -501,6 +514,7 @@ export default function NewEquipmentPage() {
                 <Input
                   id="service_interval"
                   type="number"
+                  inputMode="decimal"
                   min={0}
                   value={formData.service_interval_hours ?? ""}
                   onChange={(e) =>

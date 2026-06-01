@@ -42,6 +42,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { useHoleObservations } from "@/lib/hooks/useHoleObservations";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import {
   prioritizeAll,
   fromHoleObservation,
@@ -877,6 +878,8 @@ function AddDialog({
   const [fixStepsText, setFixStepsText] = useState("");
   const [photoUrlsText, setPhotoUrlsText] = useState("");
 
+  useBodyScrollLock();
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
@@ -940,6 +943,7 @@ function AddDialog({
             </span>
             <input
               type="number"
+              inputMode="decimal"
               min={1}
               max={18}
               value={hole}
@@ -1159,6 +1163,7 @@ function PhotoStrip({ urls, small }: { urls: string[]; small?: boolean }) {
 }
 
 function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  useBodyScrollLock();
   return (
     <div
       className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"

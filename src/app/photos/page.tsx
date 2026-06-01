@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import {
   usePhotos,
   photoTypeLabels,
@@ -113,6 +114,10 @@ export default function PhotosPage() {
   // Compare mode for timeline
   const [compareMode, setCompareMode] = useState(false);
   const [comparePhotos, setComparePhotos] = useState<PhotoWithUploader[]>([]);
+
+  // Lock body scroll while the compare view is showing (the two-photo
+  // full-screen overlay should behave like a modal).
+  useBodyScrollLock(compareMode && comparePhotos.length === 2);
 
   // Stats
   const [stats, setStats] = useState<PhotoStats>({
@@ -386,7 +391,10 @@ export default function PhotosPage() {
     setDeleteConfirm(false);
   };
 
-  // Keyboard navigation
+  // Body scroll lock while the lightbox is open.
+  useBodyScrollLock(lightboxOpen);
+
+  // Keyboard navigation for the lightbox.
   useEffect(() => {
     if (!lightboxOpen) return;
 
@@ -399,6 +407,30 @@ export default function PhotosPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lightboxOpen, lightboxIndex, currentPhotos.length]);
+
+  // Touch swipe for lightbox — horizontal swipes switch photos, mirroring
+  // native photo viewers. Threshold ignores incidental scrolling.
+  const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onLightboxTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t) return;
+    touchStartRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+  const onLightboxTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    const dt = Date.now() - start.t;
+    // Treat as a horizontal swipe only when |dx| dominates |dy|, the
+    // distance crosses 50px, and the gesture finished within 600ms.
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
+      navigateLightbox(dx > 0 ? "prev" : "next");
+    }
+  };
 
   // Save caption
   const saveCaption = async () => {
@@ -925,7 +957,11 @@ export default function PhotosPage() {
 
       {/* Lightbox */}
       {lightboxOpen && currentPhoto && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col">
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+          onTouchStart={onLightboxTouchStart}
+          onTouchEnd={onLightboxTouchEnd}
+        >
           {/* Header */}
           <div className="flex items-center justify-between p-4 text-white">
             <span className="text-sm">

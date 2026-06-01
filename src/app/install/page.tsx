@@ -12,8 +12,10 @@ import {
   ArrowDown,
   Monitor,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePwaInstall } from "@/lib/hooks/usePwaInstall";
 
 type Platform = "ios" | "android" | "desktop" | "unknown";
 
@@ -38,6 +40,8 @@ export default function InstallPage() {
   const [platform, setPlatform] = useState<Platform>("unknown");
   const [installed, setInstalled] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const { canInstall, isInstalled, promptInstall } = usePwaInstall();
 
   useEffect(() => {
     // Defer to next tick to avoid the cascading-render warning while
@@ -49,7 +53,14 @@ export default function InstallPage() {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  if (installed) {
+  const handleNativeInstall = async () => {
+    setInstalling(true);
+    const outcome = await promptInstall();
+    setInstalling(false);
+    if (outcome === "accepted") setInstalled(true);
+  };
+
+  if (installed || isInstalled) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] p-6 text-center">
         <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mb-4">
@@ -95,6 +106,37 @@ export default function InstallPage() {
           ))}
         </div>
       </div>
+
+      {/* One-tap native install (Android / desktop Chrome / Edge). Only
+          rendered when the browser actually fired beforeinstallprompt, so it
+          never shows a button that can't do anything. */}
+      {canInstall && (
+        <div className="gk-card p-4 mb-6 text-center">
+          <p className="text-sm font-medium mb-3">
+            Your browser supports one-tap install.
+          </p>
+          <Button
+            onClick={handleNativeInstall}
+            disabled={installing}
+            className="w-full h-11 gap-2"
+          >
+            {installing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Installing…
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Install VMGC
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-3">
+            Or follow the manual steps below.
+          </p>
+        </div>
+      )}
 
       {/* Platform-specific instructions */}
       {(platform === "ios" || showAll) && (

@@ -50,6 +50,7 @@ import {
   greenPriorityLabels,
   greenPriorityColors,
 } from "@/lib/hooks/useGreenObservations";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import type {
   GreenIssueType,
   GreenObservation,
@@ -89,6 +90,8 @@ export default function ResolutionHistoryPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<UnifiedHistoryItem | null>(null);
   const [photoOverlayUrl, setPhotoOverlayUrl] = useState<string | null>(null);
+  // Lock body scroll while the full-screen photo overlay is up.
+  useBodyScrollLock(!!photoOverlayUrl);
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 

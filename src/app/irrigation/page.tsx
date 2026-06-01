@@ -910,6 +910,7 @@ export default function IrrigationPage() {
               <Input
                 placeholder="Zone #"
                 type="number"
+                inputMode="decimal"
                 value={newZone.zone_number}
                 onChange={(e) =>
                   setNewZone({ ...newZone, zone_number: e.target.value })
@@ -950,6 +951,7 @@ export default function IrrigationPage() {
               <Input
                 placeholder="GPM"
                 type="number"
+                inputMode="decimal"
                 step="0.1"
                 value={newZone.gpm}
                 onChange={(e) => setNewZone({ ...newZone, gpm: e.target.value })}
@@ -957,6 +959,7 @@ export default function IrrigationPage() {
               <Input
                 placeholder="Heads"
                 type="number"
+                inputMode="decimal"
                 value={newZone.head_count}
                 onChange={(e) =>
                   setNewZone({ ...newZone, head_count: e.target.value })
@@ -1041,6 +1044,7 @@ export default function IrrigationPage() {
                 <p className="text-xs text-muted-foreground mb-1">Run minutes</p>
                 <Input
                   type="number"
+                  inputMode="decimal"
                   value={newSchedule.run_minutes}
                   onChange={(e) =>
                     setNewSchedule({ ...newSchedule, run_minutes: e.target.value })
@@ -1111,6 +1115,7 @@ export default function IrrigationPage() {
               <p className="text-xs text-muted-foreground mb-1">Run minutes</p>
               <Input
                 type="number"
+                inputMode="decimal"
                 value={quickRunMinutes}
                 onChange={(e) => setQuickRunMinutes(e.target.value)}
               />

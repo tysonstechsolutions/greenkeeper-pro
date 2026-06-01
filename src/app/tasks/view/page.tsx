@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -41,6 +41,9 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { getLocalized, type SupportedLocale } from "@/lib/utils/localized-text";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { formatZoneName } from "@/lib/hooks/useCourseZones";
+import { useChemicals, type ActiveREI } from "@/lib/hooks/useChemicals";
+import { findREIConflicts } from "@/lib/utils/rei-conflicts";
+import { REIWarningBanner } from "@/components/features/chemicals/rei-warning-banner";
 import { getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
 import { createClient } from "@/lib/supabase/client";
 import { usePhotos, photoTypeLabels } from "@/lib/hooks/usePhotos";
@@ -181,11 +184,40 @@ function PageContent() {
   const { user, profile, isManager, isSuper } = useAuth();
   const locale: SupportedLocale = profile?.language_preference === "es" ? "es" : "en";
   const { getTask, updateTask, updateTaskStatus, completeTask, verifyTask, deleteTask } = useTasks();
+  const { getActiveREIs } = useChemicals();
 
   const [task, setTask] = useState<TaskWithRelations | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Active Restricted Entry Intervals — so the assignee sees a warning before
+  // heading out to a zone/hole that's still chemically restricted.
+  const [activeREIs, setActiveREIs] = useState<ActiveREI[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getActiveREIs()
+      .then((reis) => {
+        if (!cancelled) setActiveREIs(reis);
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getActiveREIs]);
+
+  const reiConflicts = useMemo(
+    () =>
+      task
+        ? findREIConflicts(
+            { zone_id: task.zone_id, hole_numbers: task.hole_numbers ?? [] },
+            activeREIs,
+          )
+        : [],
+    [task, activeREIs],
+  );
 
   // UI state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -672,6 +704,10 @@ function PageContent() {
 
       {/* Content */}
       <div className="p-4 space-y-4">
+        {/* REI conflict warning — surfaced at the top so the assignee sees it
+            before doing the work. */}
+        <REIWarningBanner conflicts={reiConflicts} />
+
         {/* Details Section */}
         <section className="bg-card border border-border rounded-xl overflow-hidden">
           <button

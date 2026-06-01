@@ -31,6 +31,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { useProfiles, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
 import {
   directSelectList,
@@ -162,6 +163,8 @@ function CheckOutModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useBodyScrollLock();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -283,6 +286,8 @@ function ReturnModal({
   const [notesIn, setNotesIn] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useBodyScrollLock();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

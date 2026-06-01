@@ -24,6 +24,7 @@ import {
   Truck,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { callApi, resolveAccessToken } from "@/lib/api/client";
 import {
@@ -181,6 +182,7 @@ function SowAttachModal({
 }) {
   const [mode, setMode] = useState<"fill" | "attach">("fill");
   const [step, setStep] = useState<"form" | "review">("form");
+  useBodyScrollLock();
   const roleLabel = profile?.role ? (roleLabels[profile.role as UserRole] ?? "") : "";
   const fromName = [profile?.full_name, roleLabel, COURSE_NAME].filter(Boolean).join(", ");
   const userPhone = profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone;
@@ -803,6 +805,8 @@ function NewPurchaseRequestPageInner() {
   const [previewing, setPreviewing] = useState(false);
   /** Object URL for the in-app PDF preview overlay. */
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Lock body scroll while the full-screen PDF preview is open.
+  useBodyScrollLock(!!previewUrl);
   const [error, setError] = useState<string | null>(null);
   // Tick-counter so the spinner can show seconds elapsed during save —
   // gives the user feedback when the supabase-js auth lock or the

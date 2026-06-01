@@ -293,6 +293,7 @@ export default function RevenuePage() {
                 <Input
                   id="amount"
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="0.01"
                   placeholder="0.00"
@@ -306,6 +307,7 @@ export default function RevenuePage() {
                   <Input
                     id="rounds"
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     placeholder="0"
                     value={roundsCount}

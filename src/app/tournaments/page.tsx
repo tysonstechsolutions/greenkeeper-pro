@@ -344,6 +344,7 @@ export default function TournamentsPage() {
                 <Input
                   id="players"
                   type="number"
+                  inputMode="decimal"
                   min={1}
                   placeholder="e.g. 144"
                   value={formPlayers}

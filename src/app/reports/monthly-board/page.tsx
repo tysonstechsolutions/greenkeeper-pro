@@ -139,6 +139,7 @@ function MonthlyBoardReportContent() {
               <Input
                 id="year-input"
                 type="number"
+                inputMode="decimal"
                 min={2000}
                 max={2100}
                 value={year}

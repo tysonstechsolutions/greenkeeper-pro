@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SkeletonList } from "@/components/ui/skeleton-card";
 import {
   useEquipment,
   equipmentTypeLabels,
@@ -598,13 +599,14 @@ export default function EquipmentPage() {
 
       {/* Equipment List */}
       {loading && equipment.length === 0 ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
+        <SkeletonList count={5} variant="default" />
       ) : filteredEquipment.length === 0 && equipment.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 px-6 max-w-md mx-auto">
           <Camera className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground mb-4">No equipment yet. Upload photos of your equipment to get started.</p>
+          <h3 className="font-semibold mb-1">No equipment yet</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Add your fleet to track service hours, parts, and condition over time.
+          </p>
           {canAddEquipment && (
             <Button onClick={handleAddClick} variant="outline">
               <Plus className="w-4 h-4 mr-2" />
@@ -613,9 +615,12 @@ export default function EquipmentPage() {
           )}
         </div>
       ) : filteredEquipment.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 px-6 max-w-md mx-auto">
           <AlertTriangle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No equipment matches this condition</p>
+          <h3 className="font-semibold mb-1">No matches</h3>
+          <p className="text-sm text-muted-foreground">
+            Nothing matches your current filters. Clear them to see the full fleet.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

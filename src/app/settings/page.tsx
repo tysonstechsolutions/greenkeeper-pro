@@ -19,6 +19,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleVisible } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { usePwaInstall } from "@/lib/hooks/usePwaInstall";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type { UserRole } from "@/types/database";
 
@@ -43,6 +44,13 @@ const settingsSections = [
     icon: Palette,
     href: "/settings/appearance",
     color: "from-violet-500 to-purple-600",
+  },
+  {
+    title: "Install App",
+    description: "Add VMGC to your home screen",
+    icon: Smartphone,
+    href: "/install",
+    color: "from-teal-500 to-cyan-600",
   },
 ];
 
@@ -79,6 +87,12 @@ const adminSections = [
 
 export default function SettingsPage() {
   const { profile, loading, signOut } = useAuth();
+  const { isInstalled } = usePwaInstall();
+
+  // Hide the "Install App" row once running as an installed standalone app.
+  const generalSections = isInstalled
+    ? settingsSections.filter((s) => s.href !== "/install")
+    : settingsSections;
 
   if (loading) {
     return (
@@ -144,7 +158,7 @@ export default function SettingsPage() {
           General
         </h2>
         <div className="space-y-2">
-          {settingsSections.map((section) => (
+          {generalSections.map((section) => (
             <Link
               key={section.title}
               href={section.href}

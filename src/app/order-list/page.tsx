@@ -23,6 +23,7 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet';
+import { SkeletonList } from '@/components/ui/skeleton-card';
 
 import { useRefreshOnFocus } from '@/lib/hooks/useRefreshOnFocus';
 import {
@@ -637,9 +638,7 @@ export default function OrderListPage() {
 
         {/* Items List */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          </div>
+          <SkeletonList count={5} variant="default" />
         ) : filteredItems.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
@@ -808,6 +807,7 @@ export default function OrderListPage() {
                 <Input
                   id="cost"
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0"
                   placeholder="0.00"

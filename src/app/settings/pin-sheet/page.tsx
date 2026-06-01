@@ -218,6 +218,7 @@ function PinSheetEditor() {
                   </label>
                   <Input
                     type="number"
+                    inputMode="decimal"
                     min={0}
                     max={50}
                     value={d.paces_from_front}
@@ -232,6 +233,7 @@ function PinSheetEditor() {
                   </label>
                   <Input
                     type="number"
+                    inputMode="decimal"
                     min={0}
                     max={40}
                     value={d.paces_from_left}

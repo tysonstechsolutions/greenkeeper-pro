@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import {
   generatePurchaseRequestReport,
@@ -121,6 +122,7 @@ function SowWizardModal({
     .join("; ");
 
   const [step, setStep] = useState<"form" | "review">("form");
+  useBodyScrollLock();
   const [form, setForm] = useState<SowQuickForm>({
     workDescription: autoDescription,
     requisitionType: "",

@@ -78,6 +78,7 @@ export default function CourseSettingsPage() {
                   <Input
                     id="holeCount"
                     type="number"
+                    inputMode="numeric"
                     value={holeCount}
                     onChange={(e) => setHoleCount(e.target.value)}
                   />
@@ -87,6 +88,7 @@ export default function CourseSettingsPage() {
                   <Input
                     id="acreage"
                     type="number"
+                    inputMode="decimal"
                     value={acreage}
                     onChange={(e) => setAcreage(e.target.value)}
                   />
@@ -111,6 +113,7 @@ export default function CourseSettingsPage() {
                   <Input
                     id="latitude"
                     type="number"
+                    inputMode="decimal"
                     step="0.0001"
                     value={latitude}
                     onChange={(e) => setLatitude(e.target.value)}
@@ -121,6 +124,7 @@ export default function CourseSettingsPage() {
                   <Input
                     id="longitude"
                     type="number"
+                    inputMode="decimal"
                     step="0.0001"
                     value={longitude}
                     onChange={(e) => setLongitude(e.target.value)}

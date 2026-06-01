@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { directSelectList, directPatchRow } from "@/lib/supabase/rest";
 import { type Fy26Asset } from "@/types/fy26-assets";
 import { parseAssetLabel } from "@/lib/utils/parse-asset-label";
@@ -53,6 +54,9 @@ export default function AssetScanPage() {
   const router = useRouter();
 
   const [scanning, setScanning] = useState(false);
+  // The scanner overlay covers the viewport — lock body scroll so a stray
+  // touch on the surrounding page doesn't move the camera viewport.
+  useBodyScrollLock(scanning);
   const [manualMode, setManualMode] = useState(false);
   const [manualInput, setManualInput] = useState("");
   // The last raw query (scan or typed) that produced the current match.
