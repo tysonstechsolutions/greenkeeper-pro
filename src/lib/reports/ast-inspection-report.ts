@@ -59,6 +59,11 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
+const MONTHS_UPPER = [
+  "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+  "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
+];
+
 function formatDateUS(iso: string | null | undefined): string {
   if (!iso) return "";
   // Anchor date-only strings (yyyy-mm-dd) at noon local so timezone
@@ -67,11 +72,9 @@ function formatDateUS(iso: string | null | undefined): string {
   const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
   const d = new Date(anchored);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  // Match the official form's date style: DDMONTHYYYY, e.g. "03APRIL2026".
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${dd}${MONTHS_UPPER[d.getMonth()]}${d.getFullYear()}`;
 }
 
 export class AstInspectionReportError extends Error {
@@ -84,17 +87,20 @@ export class AstInspectionReportError extends Error {
 }
 
 /**
- * Layout constants for the form. Letter-portrait, all in mm.
+ * Layout constants for the form. Letter-LANDSCAPE (11" x 8.5"), all in mm.
+ * Coordinates mirror the official STI SP001 form (792 x 612 pt). 1pt =
+ * 0.35278mm; the table spans the original's 56→758pt = 19.8→267.5mm.
  */
-const PAGE_WIDTH = 215.9;
-const PAGE_HEIGHT = 279.4;
-const MARGIN_X = 14;
-const CONTENT_W = PAGE_WIDTH - MARGIN_X * 2;
+const PAGE_WIDTH = 279.4;
+const PAGE_HEIGHT = 215.9;
+const MARGIN_X = 19.8;
+const CONTENT_W = 247.7;
 
-// Item table column widths (must sum to CONTENT_W)
-const COL_NUM_W = 8;
-const COL_STATUS_W = 38;
-const COL_COMMENT_W = 60;
+// Item table column widths (must sum to CONTENT_W), matched to the original:
+//   NUM 56→79pt, ITEM 80→424pt, STATUS 425→532pt, COMMENTS 533→758pt.
+const COL_NUM_W = 8.1;
+const COL_STATUS_W = 37.7;
+const COL_COMMENT_W = 79.4;
 const COL_ITEM_W = CONTENT_W - COL_NUM_W - COL_STATUS_W - COL_COMMENT_W;
 
 const FONT = "helvetica";
@@ -106,7 +112,7 @@ export async function generateAstInspectionReport(
   try {
     step = "pdf-init";
     const doc = new jsPDF({
-      orientation: "portrait",
+      orientation: "landscape",
       unit: "mm",
       format: "letter",
     });
@@ -167,9 +173,22 @@ export async function generateAstInspectionReport(
     doc.setFont(FONT, "normal");
     doc.setFontSize(7.2);
     for (const b of bullets) {
-      // Indented bullet — diamond marker followed by wrapped text.
+      // Indented right-pointing triangle marker (matches the original
+      // form's "▶" bullet). Drawn as a filled triangle primitive instead
+      // of a Unicode character because jsPDF's default Helvetica only
+      // supports WinAnsi — geometric-shape codepoints come out as
+      // mangled "%Æ"-style garbage otherwise.
       const wrapped = doc.splitTextToSize(b, CONTENT_W - 6);
-      doc.text("◆", MARGIN_X + 1, y);
+      const triH = 1.9;
+      const triW = 1.6;
+      const triTopY = y - 1.9;
+      doc.setFillColor(...BLACK);
+      doc.triangle(
+        MARGIN_X + 1, triTopY,
+        MARGIN_X + 1, triTopY + triH,
+        MARGIN_X + 1 + triW, triTopY + triH / 2,
+        "F",
+      );
       doc.text(wrapped, MARGIN_X + 5, y);
       y += wrapped.length * 3.2 + 0.6;
     }
@@ -253,23 +272,24 @@ export async function generateAstInspectionReport(
       try {
         const dataUrl = await loadImageAsDataUrl(sigUrl);
         if (dataUrl) {
-          // The form box rows are stacked tightly (~5-6mm apart), so the
-          // signature has to be small enough to live inside the signature
-          // row without bleeding into the Inspector Name row above or the
-          // Tank IDs row below. Aspect (~2.8:1) matches the source PNG's
-          // natural proportions so the handwriting isn't squashed.
-          const sigH = 6;
-          const sigW = 17; // ≈ 6 × 2.83
-          // X: just past the "Inspector's Signature" label.
-          // Y: bottom of the image lands ~0.5mm below the signature
-          //    underline (which is at boxTop + 17.5), so the cursive's
-          //    descenders cross the line like real ink-on-paper while
-          //    the top of the image clears the Inspector Name row above.
+          // The info-box rows sit only ~5-6mm apart (Inspector Name at
+          // boxTop+11, the signature line at boxTop+17.5, Tank IDs at
+          // boxTop+22). So the signature is HEIGHT-constrained to live in the
+          // clear band on the line without bleeding into the rows above or
+          // below, and the WIDTH is derived from the image's natural aspect
+          // (754×258 ≈ 2.92:1) so it's never squashed.
+          const SIG_ASPECT = 754 / 258;
+          const sigH = 6.5;
+          const sigW = sigH * SIG_ASPECT;
+          // Sit on the line: place the image so its bottom rests ~1mm below
+          // the underline (boxTop+17.5), letting descenders cross like ink,
+          // with the top safely below the printed Inspector Name row.
+          const sigBottom = boxTop + 18.5;
           doc.addImage(
             dataUrl,
             "PNG",
             MARGIN_X + 50,
-            boxTop + 18 - sigH,
+            sigBottom - sigH,
             sigW,
             sigH,
             undefined,

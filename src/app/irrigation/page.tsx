@@ -480,6 +480,13 @@ export default function IrrigationPage() {
           <MapPin className="w-4 h-4" />
           <span className="hidden sm:inline">Sprinkler Map</span>
         </Link>
+        <Link
+          href="/irrigation/schedule"
+          className="inline-flex items-center justify-center gap-1.5 h-10 rounded-md px-4 text-sm font-medium border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground"
+        >
+          <Clock className="w-4 h-4" />
+          <span className="hidden sm:inline">Auto Water</span>
+        </Link>
         <Button
           size="sm"
           variant={showScheduleView ? "default" : "outline"}

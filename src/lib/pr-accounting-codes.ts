@@ -31,6 +31,10 @@ export const PR_COST_CENTERS: AccountingCode[] = [
 
 /** G/L accounts authorized for purchase requests. */
 export const PR_GL_ACCOUNTS: AccountingCode[] = [
+  { value: "151110", label: "151110 — RESALE INVENTORY FOOD" },
+  { value: "151120", label: "151120 — RESALE INVENTORY ALCOHOL" },
+  { value: "151130", label: "151130 — RESALE INVENTORY MERCHANDISE" },
+  { value: "152000", label: "152000 — CENTRAL STOREROOM INVENTORIES" },
   { value: "641000", label: "641000 — UTILITIES" },
   { value: "681000", label: "681000 — REPAIRS & MAINT VEHICLES" },
   { value: "683000", label: "683000 — FURNITURE, FIXTURES & EQUIPMENT" },

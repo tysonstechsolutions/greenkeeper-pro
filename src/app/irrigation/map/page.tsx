@@ -1810,12 +1810,10 @@ function MapView({
             <img
               src={`/holes/hole-${holeNumber}.png`}
               alt={`Hole ${holeNumber} layout`}
-              // Portrait hole images have tee at the top in the source file.
-              // Rotate 180° so the green ends up at the top — long axis
-              // matches the phone, green forward / tee behind, the way the
-              // superintendent reads the course.
+              // Display in the source's natural orientation (hole number
+              // upright at top). The prior 180° rotation flipped the artwork
+              // upside down.
               className="block w-full h-auto"
-              style={{ transform: "rotate(180deg)" }}
               draggable={false}
               onLoad={() => setImgLoaded(true)}
               onError={() => setImgError(true)}
@@ -2378,11 +2376,9 @@ function FullscreenMapEditor({
             <img
               src={`/holes/hole-${holeNumber}.png`}
               alt={`Hole ${holeNumber} layout`}
-              // Portrait source has tee at top; rotate so green is at top
-              // (long axis matches the phone, green where the player is
-              // headed). At scale=1 we fit the image to the canvas.
+              // Natural orientation (hole number upright at top). At scale=1
+              // we fit the image to the canvas.
               className="block pointer-events-none"
-              style={{ transform: "rotate(180deg)" }}
               draggable={false}
               onLoad={(e) => {
                 const img = e.currentTarget;
@@ -2390,7 +2386,6 @@ function FullscreenMapEditor({
                 if (canvas) {
                   const canvasRect = canvas.getBoundingClientRect();
                   // Fit image to the canvas while preserving aspect ratio.
-                  // (180° rotation doesn't change the bounding box.)
                   const naturalRatio = img.naturalWidth / img.naturalHeight;
                   const canvasRatio = canvasRect.width / canvasRect.height;
                   let fitW: number;
