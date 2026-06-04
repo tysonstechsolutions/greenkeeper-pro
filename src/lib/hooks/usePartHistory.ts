@@ -19,6 +19,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { isCcFeeItem } from "@/lib/pr-cc-fee";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 
 export interface PartHistoryEntry {
@@ -78,6 +79,9 @@ export function usePartHistory() {
           const items = (row.items as PurchaseRequestItem[] | null) || [];
           for (const it of items) {
             if (!it) continue;
+            // Skip the auto-managed credit-card fee — it's not a "part" the
+            // user would ever want to re-order from history.
+            if (isCcFeeItem(it)) continue;
             const desc = (it.description || "").trim();
             const pn = (it.part_number || "").trim();
             if (!desc && !pn) continue; // skip blanks

@@ -41,6 +41,7 @@ import {
   PR_GL_ACCOUNTS,
 } from "@/lib/pr-accounting-codes";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
+import { isCcFeeItem, rebalanceWithCcFee } from "@/lib/pr-cc-fee";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
@@ -136,6 +137,25 @@ function formatMoney(n: number): string {
   });
 }
 
+// ── Quote source / IGE methodology ───────────────────────────────────────────
+// The "IGE Based On" field captures the methodology used to determine the
+// Independent Government Estimate. These are the common evaluation factors
+// procurement accepts. The selected option drives auto-fill of both
+// "IGE Based On" and the "Other (specify)" attachment field.
+type QuoteSource =
+  | "vendor_quote"
+  | "vendor_website"
+  | "vendor_cart"
+  | "in_store"
+  | "";
+
+const QUOTE_SOURCE_LABELS: Record<Exclude<QuoteSource, "">, string> = {
+  vendor_quote: "Vendor Quote",
+  vendor_website: "Vendor Website Pricing",
+  vendor_cart: "Vendor Cart",
+  in_store: "In Store Pricing",
+};
+
 // ── SOW constants (same as /sow page) ────────────────────────────────────────
 
 const COURSE_NAME = "Veterans Memorial Golf Course";
@@ -186,7 +206,13 @@ function SowAttachModal({
   const roleLabel = profile?.role ? (roleLabels[profile.role as UserRole] ?? "") : "";
   const fromName = [profile?.full_name, roleLabel, COURSE_NAME].filter(Boolean).join(", ");
   const userPhone = profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone;
-  const autoDescription = items.map((it) => it.description).filter(Boolean).join("; ");
+  // Exclude the 3% CC fee from the SOW work description — contractors
+  // don't need to see a payment-method surcharge in their scope of work.
+  const autoDescription = items
+    .filter((it) => !isCcFeeItem(it))
+    .map((it) => it.description)
+    .filter(Boolean)
+    .join("; ");
 
   const [form, setForm] = useState<SowQuickForm>({
     workDescription: autoDescription,
@@ -221,13 +247,18 @@ function SowAttachModal({
         // reference actual line items, part numbers, qty, and pricing.
         vendorName,
         vendorContact,
-        items: items.map((it) => ({
-          description: it.description || "",
-          part_number: it.part_number,
-          qty: Number(it.qty) || 0,
-          unit: it.unit,
-          unit_price: Number(it.unit_price) || 0,
-        })),
+        // Same reasoning as autoDescription above — exclude the auto fee
+        // so the AI writes scope-of-work language about real work, not
+        // about a 3% credit-card surcharge.
+        items: items
+          .filter((it) => !isCcFeeItem(it))
+          .map((it) => ({
+            description: it.description || "",
+            part_number: it.part_number,
+            qty: Number(it.qty) || 0,
+            unit: it.unit,
+            unit_price: Number(it.unit_price) || 0,
+          })),
         totalAmount: totalAmount ?? 0,
         justification,
       });
@@ -763,8 +794,25 @@ function NewPurchaseRequestPageInner() {
     editId ? "" : PR_ACCOUNTING_DEFAULTS.program,
   );
 
-  // Line items
-  const [items, setItems] = useState<PurchaseRequestItem[]>([emptyItem(1)]);
+  // Line items. New PRs start with one blank item PLUS the auto-managed
+  // 3% credit-card fee line at $0 (becomes 3% of the subtotal as soon as
+  // the user enters real prices). Edit/clone modes start with a single
+  // empty placeholder that gets overwritten by the load effect.
+  const [items, setItems] = useState<PurchaseRequestItem[]>(() =>
+    editId || fromId
+      ? [emptyItem(1)]
+      : rebalanceWithCcFee([emptyItem(1)]),
+  );
+
+  // Keep the CC-fee line invariant after every items change:
+  //   • exactly one fee row
+  //   • always the last row
+  //   • unit_price always 3% of the other items' extended subtotal
+  // rebalanceWithCcFee returns the same array reference when nothing
+  // changed, so React bails out of the re-render and we don't loop.
+  useEffect(() => {
+    setItems((prev) => rebalanceWithCcFee(prev));
+  }, [items]);
 
   // IGE / approvals
   const [igeExcessPct, setIgeExcessPct] = useState(0);
@@ -776,8 +824,16 @@ function NewPurchaseRequestPageInner() {
   const [secondApproval, setSecondApproval] = useState("");
   const [secondDate, setSecondDate] = useState("");
 
-  // Quote source — drives IGE Based On and the "Other" attachment label
-  const [quoteSource, setQuoteSource] = useState<"vendor_quote" | "online_pricing" | "">("");
+  // Quote source — the IGE evaluation factor (i.e. HOW pricing was
+  // determined). Drives auto-fill of both "IGE Based On" and the "Other
+  // (specify)" attachment label. Default to "vendor_quote" on new PRs so
+  // the Other attachment is pre-checked with "Vendor Quote" without the
+  // user having to remember (procurement convention). Edit/clone modes
+  // start blank and let the saved IGE Based On text drive the dropdown
+  // via the load effect below.
+  const [quoteSource, setQuoteSource] = useState<QuoteSource>(
+    editId || fromId ? "" : "vendor_quote",
+  );
 
   // Attached items — Section 889 checked by default per procurement rules
   const [attached, setAttached] = useState({
@@ -1038,12 +1094,26 @@ function NewPurchaseRequestPageInner() {
       // overwrite it when loadingExisting flips to false.
       if (row.justification) justificationTouched.current = true;
       setIgeBasedOn(row.ige_based_on || "");
-      // Infer quote source from saved IGE Based On text
+      // Infer quote source from saved IGE Based On text. Order matters —
+      // "vendor quote" must come before "vendor" so it doesn't accidentally
+      // match "vendor cart" / "vendor website". Legacy PRs saved before
+      // the methodology dropdown expanded say "Online Pricing"; treat them
+      // as the equivalent "Vendor Website Pricing" so the dropdown reflects
+      // the current taxonomy without losing the user's prior selection.
       const savedIge = (row.ige_based_on || "").toLowerCase();
       if (savedIge.includes("vendor quote")) {
         setQuoteSource("vendor_quote");
+      } else if (savedIge.includes("vendor website")) {
+        setQuoteSource("vendor_website");
+      } else if (savedIge.includes("vendor cart")) {
+        setQuoteSource("vendor_cart");
+      } else if (
+        savedIge.includes("in store") ||
+        savedIge.includes("in-store")
+      ) {
+        setQuoteSource("in_store");
       } else if (savedIge.includes("online pricing")) {
-        setQuoteSource("online_pricing");
+        setQuoteSource("vendor_website");
       }
       // Clone: drop signatures and approver names so the new draft starts
       // unsigned. Edit: keep what was there.
@@ -1079,18 +1149,32 @@ function NewPurchaseRequestPageInner() {
     [items],
   );
 
-  // Auto-fill IGE Based On + attached "Other" when quote source or total changes
+  // Auto-fill IGE Based On + attached "Other" when quote source or total
+  // changes. The "IGE Based On" amount is the vendor-quote / online-price
+  // value the IGE is justified against — NOT the post-fee charge total —
+  // so we use the subtotal of non-fee items, never the full igeAmount.
+  const igeBaseSubtotal = useMemo(
+    () =>
+      items
+        .filter((it) => !isCcFeeItem(it))
+        .reduce(
+          (s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0),
+          0,
+        ),
+    [items],
+  );
+
   useEffect(() => {
     if (!quoteSource) return;
-    const label = quoteSource === "vendor_quote" ? "Vendor Quote" : "Online Pricing";
-    const amt = igeAmount.toLocaleString("en-US", {
+    const label = QUOTE_SOURCE_LABELS[quoteSource];
+    const amt = igeBaseSubtotal.toLocaleString("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
     });
     setIgeBasedOn(`${label} - ${amt}`);
     setAttachedOther(label);
-  }, [quoteSource, igeAmount]);
+  }, [quoteSource, igeBaseSubtotal]);
 
   // Auto-fill "Justification for Purchase" from item descriptions, vendor &
   // total.  Skipped when editing/cloning (saved value wins) or after the user
@@ -1115,12 +1199,11 @@ function NewPurchaseRequestPageInner() {
       : "requested items";
 
     const vendor = v1.name.trim();
-    const sourceLabel =
-      quoteSource === "vendor_quote"
-        ? "vendor quote"
-        : quoteSource === "online_pricing"
-          ? "online pricing"
-          : "";
+    // Lowercase the methodology label for in-sentence use ("Pricing based
+    // on vendor website pricing.").
+    const sourceLabel = quoteSource
+      ? QUOTE_SOURCE_LABELS[quoteSource].toLowerCase()
+      : "";
 
     const amt = igeAmount
       ? ` Total: ${igeAmount.toLocaleString("en-US", {
@@ -1145,7 +1228,14 @@ function NewPurchaseRequestPageInner() {
     );
   }
   function addItem() {
-    setItems((prev) => [...prev, emptyItem(prev.length + 1)]);
+    setItems((prev) => {
+      // Insert the new blank item BEFORE the CC-fee line so the fee stays
+      // visually last. The rebalance effect will renumber afterwards.
+      const feeIdx = prev.findIndex(isCcFeeItem);
+      const blank = emptyItem(0); // number gets assigned by rebalance
+      if (feeIdx === -1) return [...prev, blank];
+      return [...prev.slice(0, feeIdx), blank, ...prev.slice(feeIdx)];
+    });
   }
   /**
    * Quick-add a Freight/Shipping line so it's included in the PR total.
@@ -1164,24 +1254,37 @@ function NewPurchaseRequestPageInner() {
       window.alert("Enter a positive number, e.g. 10 or 10.00.");
       return;
     }
-    setItems((prev) => [
-      ...prev,
-      {
-        ...emptyItem(prev.length + 1),
+    setItems((prev) => {
+      const feeIdx = prev.findIndex(isCcFeeItem);
+      const freightItem: PurchaseRequestItem = {
+        ...emptyItem(0),
         description: "Freight",
         qty: 1,
         unit: "EA",
         unit_price: amount,
-      },
-    ]);
+      };
+      // Freight counts toward the 3% — insert before the fee line so the
+      // rebalance picks it up in the subtotal and the fee jumps accordingly.
+      if (feeIdx === -1) return [...prev, freightItem];
+      return [...prev.slice(0, feeIdx), freightItem, ...prev.slice(feeIdx)];
+    });
   }
   function removeItem(idx: number) {
     setItems((prev) => {
+      // The CC-fee line is auto-managed; ignore the click so the user
+      // doesn't have to fight the rebalance effect re-adding it.
+      if (isCcFeeItem(prev[idx])) return prev;
       const out = prev.filter((_, i) => i !== idx);
-      // Renumber 1..n
-      return out.length === 0
-        ? [emptyItem(1)]
-        : out.map((it, i) => ({ ...it, item: i + 1 }));
+      const nonFeeRemaining = out.filter((it) => !isCcFeeItem(it)).length;
+      if (nonFeeRemaining === 0) {
+        // User removed the last real item — replace with a blank so they
+        // always have somewhere to type. Fee (if present) stays last.
+        const fee = out.find(isCcFeeItem);
+        return fee ? [emptyItem(1), fee] : [emptyItem(1)];
+      }
+      // Rebalance handles renumbering, but renumber here too so the
+      // intermediate state stays consistent.
+      return out.map((it, i) => ({ ...it, item: i + 1 }));
     });
   }
 
@@ -1203,19 +1306,27 @@ function NewPurchaseRequestPageInner() {
       unit_price: entry.unit_price,
     };
     setItems((prev) => {
-      const lastIdx = prev.length - 1;
-      const last = prev[lastIdx];
+      // Work on the non-fee items so the "fill the last empty row" shortcut
+      // doesn't accidentally target the auto-managed fee line; the
+      // rebalance effect will re-add the fee at the end.
+      const fee = prev.find(isCcFeeItem) ?? null;
+      const nonFee = prev.filter((it) => !isCcFeeItem(it));
+      const lastIdx = nonFee.length - 1;
+      const last = nonFee[lastIdx];
       const lastIsEmpty =
+        !!last &&
         !last.description.trim() &&
         !(last.part_number || "").trim() &&
         (last.qty || 0) === 0 &&
         (last.unit_price || 0) === 0;
-      if (lastIsEmpty) {
-        const next = [...prev];
-        next[lastIdx] = { ...filled, item: lastIdx + 1 };
-        return next;
+      let updatedNonFee: PurchaseRequestItem[];
+      if (last && lastIsEmpty) {
+        updatedNonFee = [...nonFee];
+        updatedNonFee[lastIdx] = { ...filled, item: lastIdx + 1 };
+      } else {
+        updatedNonFee = [...nonFee, { ...filled, item: nonFee.length + 1 }];
       }
-      return [...prev, { ...filled, item: prev.length + 1 }];
+      return fee ? [...updatedNonFee, fee] : updatedNonFee;
     });
     setHistoryOpen(false);
     setHistoryQuery("");
@@ -2852,121 +2963,156 @@ function NewPurchaseRequestPageInner() {
         )}
 
         <div className="space-y-3">
-          {items.map((item, idx) => (
-            <div
-              key={idx}
-              className="rounded-lg border border-border bg-background p-3 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-muted-foreground">
-                  Item #{item.item}
-                </span>
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeItem(idx)}
-                    className="p-1.5 rounded-md text-red-600 hover:bg-red-500/10"
-                    aria-label="Remove item"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              <Field label="Item Name / Description">
-                <textarea
-                  value={item.description}
-                  onChange={(e) => updateItem(idx, { description: e.target.value })}
-                  rows={2}
-                  placeholder="e.g. Toro Greensmaster 3150 mower blade"
-                  className={`${inputCls} resize-none`}
-                />
-              </Field>
-              <Field label="Part / Item Number">
-                <input
-                  type="text"
-                  value={item.part_number || ""}
-                  onChange={(e) => updateItem(idx, { part_number: e.target.value })}
-                  placeholder="e.g. 100-1234 or SKU"
-                  className={inputCls}
-                />
-              </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Site">
-                  <select
-                    value={item.site}
-                    onChange={(e) => updateItem(idx, { site: e.target.value })}
-                    className={inputCls}
-                  >
-                    <option value="">— pick —</option>
-                    {PR_SITES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Cost Ctr">
-                  <select
-                    value={item.cost_ctr}
-                    onChange={(e) => updateItem(idx, { cost_ctr: e.target.value })}
-                    className={inputCls}
-                  >
-                    <option value="">— pick —</option>
-                    {PR_COST_CENTERS.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <Field label="G/L Account">
-                <select
-                  value={item.gl_acct}
-                  onChange={(e) => updateItem(idx, { gl_acct: e.target.value })}
-                  className={inputCls}
+          {items.map((item, idx) => {
+            const isFee = isCcFeeItem(item);
+            // The fee row is rendered as a read-only summary card so users
+            // can see what's about to be charged but can't accidentally
+            // edit the auto-managed amount. They can still set the fee's
+            // site/cost_ctr/G-L the same way they would for any item.
+            const readOnlyCls = `${inputCls} bg-muted/40 text-muted-foreground cursor-not-allowed`;
+            return (
+              <div
+                key={idx}
+                className={`rounded-lg border p-3 space-y-2 ${
+                  isFee
+                    ? "border-amber-500/40 bg-amber-500/5"
+                    : "border-border bg-background"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground flex items-center gap-2">
+                    Item #{item.item}
+                    {isFee && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wide">
+                        Auto
+                      </span>
+                    )}
+                  </span>
+                  {!isFee && items.filter((it) => !isCcFeeItem(it)).length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeItem(idx)}
+                      className="p-1.5 rounded-md text-red-600 hover:bg-red-500/10"
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <Field
+                  label="Item Name / Description"
+                  hint={
+                    isFee
+                      ? "Auto-managed — 3% of the subtotal of every other line."
+                      : undefined
+                  }
                 >
-                  <option value="">— pick —</option>
-                  {PR_GL_ACCOUNTS.map((g) => (
-                    <option key={g.value} value={g.value}>
-                      {g.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Qty">
+                  <textarea
+                    value={item.description}
+                    onChange={(e) => updateItem(idx, { description: e.target.value })}
+                    rows={2}
+                    placeholder="e.g. Toro Greensmaster 3150 mower blade"
+                    className={`${isFee ? readOnlyCls : inputCls} resize-none`}
+                    readOnly={isFee}
+                  />
+                </Field>
+                {!isFee && (
+                  <Field label="Part / Item Number">
+                    <input
+                      type="text"
+                      value={item.part_number || ""}
+                      onChange={(e) => updateItem(idx, { part_number: e.target.value })}
+                      placeholder="e.g. 100-1234 or SKU"
+                      className={inputCls}
+                    />
+                  </Field>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Site">
+                    <select
+                      value={item.site}
+                      onChange={(e) => updateItem(idx, { site: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">— pick —</option>
+                      {PR_SITES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Cost Ctr">
+                    <select
+                      value={item.cost_ctr}
+                      onChange={(e) => updateItem(idx, { cost_ctr: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">— pick —</option>
+                      {PR_COST_CENTERS.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                <Field label="G/L Account">
+                  <select
+                    value={item.gl_acct}
+                    onChange={(e) => updateItem(idx, { gl_acct: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="">— pick —</option>
+                    {PR_GL_ACCOUNTS.map((g) => (
+                      <option key={g.value} value={g.value}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Qty">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      value={item.qty || ""}
+                      onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value) || 0 })}
+                      className={isFee ? readOnlyCls : inputCls}
+                      readOnly={isFee}
+                    />
+                  </Field>
+                  <Field label="Unit">
+                    <input
+                      type="text"
+                      value={item.unit}
+                      onChange={(e) => updateItem(idx, { unit: e.target.value })}
+                      className={isFee ? readOnlyCls : inputCls}
+                      readOnly={isFee}
+                    />
+                  </Field>
+                </div>
+                <Field label="Unit Price ($)">
                   <input
                     type="number"
                     inputMode="decimal"
-                    step="any"
-                    value={item.qty || ""}
-                    onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value) || 0 })}
-                    className={inputCls}
+                    step="0.01"
+                    value={item.unit_price || ""}
+                    onChange={(e) => updateItem(idx, { unit_price: parseFloat(e.target.value) || 0 })}
+                    className={isFee ? readOnlyCls : inputCls}
+                    readOnly={isFee}
                   />
                 </Field>
-                <Field label="Unit">
-                  <input type="text" value={item.unit} onChange={(e) => updateItem(idx, { unit: e.target.value })} className={inputCls} />
-                </Field>
+                <div className="text-right text-sm font-semibold pt-1">
+                  Extended:{" "}
+                  <span className={isFee ? "text-amber-700 dark:text-amber-400" : "text-primary"}>
+                    {formatMoney((item.qty || 0) * (item.unit_price || 0))}
+                  </span>
+                </div>
               </div>
-              <Field label="Unit Price ($)">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  value={item.unit_price || ""}
-                  onChange={(e) => updateItem(idx, { unit_price: parseFloat(e.target.value) || 0 })}
-                  className={inputCls}
-                />
-              </Field>
-              <div className="text-right text-sm font-semibold pt-1">
-                Extended:{" "}
-                <span className="text-primary">
-                  {formatMoney((item.qty || 0) * (item.unit_price || 0))}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
             <button
               type="button"
@@ -3006,19 +3152,20 @@ function NewPurchaseRequestPageInner() {
             className={inputCls}
           />
         </Field>
-        <Field label="Quote Source">
+        <Field
+          label="Quote Source"
+          hint="How you determined the price — drives IGE Based On and the Other attachment label."
+        >
           <select
             value={quoteSource}
-            onChange={(e) =>
-              setQuoteSource(
-                e.target.value as "vendor_quote" | "online_pricing" | "",
-              )
-            }
+            onChange={(e) => setQuoteSource(e.target.value as QuoteSource)}
             className={inputCls}
           >
             <option value="">Select quote source…</option>
             <option value="vendor_quote">Vendor Quote</option>
-            <option value="online_pricing">Online Pricing</option>
+            <option value="vendor_website">Vendor Website Pricing</option>
+            <option value="vendor_cart">Vendor Cart</option>
+            <option value="in_store">In Store Pricing</option>
           </select>
         </Field>
         <Field label="IGE Based On">
@@ -3030,7 +3177,7 @@ function NewPurchaseRequestPageInner() {
             placeholder={
               quoteSource
                 ? "Auto-filled from quote source + total"
-                : "Select a quote source above, or type manually"
+                : "Select a quote source above, or type manually (e.g. 'Vendor Cart - $123.45')"
             }
           />
         </Field>

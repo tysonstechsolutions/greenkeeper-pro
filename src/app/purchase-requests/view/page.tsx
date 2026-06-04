@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
+import { isCcFeeItem } from "@/lib/pr-cc-fee";
 import {
   generatePurchaseRequestReport,
   PurchaseRequestReportError,
@@ -115,8 +116,11 @@ function SowWizardModal({
   const fromName = [profile?.full_name, roleLabel, COURSE_NAME].filter(Boolean).join(", ");
   const userPhone = profile?.phone ?? PR_REQUESTOR_DEFAULTS.phone;
 
-  // Pre-fill work description from PR line item descriptions
+  // Pre-fill work description from PR line item descriptions.
+  // Skip the 3% credit-card fee line — it's a payment surcharge, not work
+  // a contractor needs to see described in the SOW.
   const autoDescription = (pr.items || [])
+    .filter((it: PurchaseRequestItem) => !isCcFeeItem(it))
     .map((it: PurchaseRequestItem) => it.description)
     .filter(Boolean)
     .join("; ");
@@ -159,13 +163,18 @@ function SowWizardModal({
         vendorContact: [pr.vendor1_poc, pr.vendor1_phone, pr.vendor1_email]
           .filter(Boolean)
           .join(" · ") || null,
-        items: (pr.items || []).map((it: PurchaseRequestItem) => ({
-          description: it.description || "",
-          part_number: it.part_number,
-          qty: Number(it.qty) || 0,
-          unit: it.unit,
-          unit_price: Number(it.unit_price) || 0,
-        })),
+        // Exclude the 3% credit-card fee line — the AI generating SOW
+        // contracting language doesn't need to think about payment-method
+        // surcharges as if they were work scope.
+        items: (pr.items || [])
+          .filter((it: PurchaseRequestItem) => !isCcFeeItem(it))
+          .map((it: PurchaseRequestItem) => ({
+            description: it.description || "",
+            part_number: it.part_number,
+            qty: Number(it.qty) || 0,
+            unit: it.unit,
+            unit_price: Number(it.unit_price) || 0,
+          })),
         totalAmount: Number(pr.ige_amount) || 0,
         justification: pr.justification,
       });
