@@ -337,10 +337,24 @@ export async function generatePurchaseRequestReport(
       setText(form, `Center${withDot}`, it.cost_ctr || "", written);
       setText(form, `Acct${withDot}`, it.gl_acct || "", written);
       setText(form, `Description${noDot}`, desc, written);
-      setText(form, `QTY${noDot}`, qty ? String(qty) : "", written);
       setText(form, `Unit${withDot}`, it.unit || "", written);
-      setText(form, `Price${noDot}`, unitPrice ? unitPrice.toFixed(2) : "", written);
-      setText(form, `Extended${noDot}`, ext ? fmtMoney(ext) : "", written);
+      // For "free with order" items (qty > 0 but unit_price == 0), the
+      // user wants the row to print "0.00" / "$0.00" explicitly instead
+      // of blank cells — otherwise the procurement reader sees "QTY: 1"
+      // next to an empty price and wonders if the form is broken. Saved
+      // items have already passed the description/qty/price filter, so
+      // any item reaching the PDF is a real line; show its actual values.
+      if (qty > 0) {
+        setText(form, `QTY${noDot}`, String(qty), written);
+        setText(form, `Price${noDot}`, unitPrice.toFixed(2), written);
+        setText(form, `Extended${noDot}`, fmtMoney(ext), written);
+      } else {
+        // Note-style row (description only, no quantity) — leave the
+        // numeric cells blank so the form isn't cluttered with "$0.00".
+        setText(form, `QTY${noDot}`, "", written);
+        setText(form, `Price${noDot}`, unitPrice ? unitPrice.toFixed(2) : "", written);
+        setText(form, `Extended${noDot}`, ext ? fmtMoney(ext) : "", written);
+      }
 
       if (page === 1) pg1Total += ext;
       else pg2Total += ext;

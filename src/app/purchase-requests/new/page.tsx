@@ -794,14 +794,13 @@ function NewPurchaseRequestPageInner() {
     editId ? "" : PR_ACCOUNTING_DEFAULTS.program,
   );
 
-  // Line items. New PRs start with one blank item PLUS the auto-managed
-  // 3% credit-card fee line at $0 (becomes 3% of the subtotal as soon as
-  // the user enters real prices). Edit/clone modes start with a single
-  // empty placeholder that gets overwritten by the load effect.
+  // Line items. New PRs start with ONLY the auto-managed 3% credit-card
+  // fee line at $0 — no phantom blank user item to delete. The user adds
+  // their first real item via the "+ Add Line Item" button. Edit/clone
+  // modes start with a single empty placeholder that gets overwritten by
+  // the load effect.
   const [items, setItems] = useState<PurchaseRequestItem[]>(() =>
-    editId || fromId
-      ? [emptyItem(1)]
-      : rebalanceWithCcFee([emptyItem(1)]),
+    editId || fromId ? [emptyItem(1)] : rebalanceWithCcFee([]),
   );
 
   // Keep the CC-fee line invariant after every items change:
@@ -1149,32 +1148,15 @@ function NewPurchaseRequestPageInner() {
     [items],
   );
 
-  // Auto-fill IGE Based On + attached "Other" when quote source or total
-  // changes. The "IGE Based On" amount is the vendor-quote / online-price
-  // value the IGE is justified against — NOT the post-fee charge total —
-  // so we use the subtotal of non-fee items, never the full igeAmount.
-  const igeBaseSubtotal = useMemo(
-    () =>
-      items
-        .filter((it) => !isCcFeeItem(it))
-        .reduce(
-          (s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0),
-          0,
-        ),
-    [items],
-  );
-
+  // Auto-fill IGE Based On + attached "Other" when the quote source changes.
+  // The IGE Based On field captures METHODOLOGY only — just the label, no
+  // dollar amount. The subtotal is already shown elsewhere on the form.
   useEffect(() => {
     if (!quoteSource) return;
     const label = QUOTE_SOURCE_LABELS[quoteSource];
-    const amt = igeBaseSubtotal.toLocaleString("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    });
-    setIgeBasedOn(`${label} - ${amt}`);
+    setIgeBasedOn(label);
     setAttachedOther(label);
-  }, [quoteSource, igeBaseSubtotal]);
+  }, [quoteSource]);
 
   // Auto-fill "Justification for Purchase" from item descriptions, vendor &
   // total.  Skipped when editing/cloning (saved value wins) or after the user
@@ -1275,15 +1257,9 @@ function NewPurchaseRequestPageInner() {
       // doesn't have to fight the rebalance effect re-adding it.
       if (isCcFeeItem(prev[idx])) return prev;
       const out = prev.filter((_, i) => i !== idx);
-      const nonFeeRemaining = out.filter((it) => !isCcFeeItem(it)).length;
-      if (nonFeeRemaining === 0) {
-        // User removed the last real item — replace with a blank so they
-        // always have somewhere to type. Fee (if present) stays last.
-        const fee = out.find(isCcFeeItem);
-        return fee ? [emptyItem(1), fee] : [emptyItem(1)];
-      }
-      // Rebalance handles renumbering, but renumber here too so the
-      // intermediate state stays consistent.
+      // Renumber non-fee items 1..N. If this was the user's last real
+      // item, leave only the fee — no phantom blank item is re-added.
+      // The rebalance effect ensures the fee always exists at $0 minimum.
       return out.map((it, i) => ({ ...it, item: i + 1 }));
     });
   }
@@ -2988,7 +2964,7 @@ function NewPurchaseRequestPageInner() {
                       </span>
                     )}
                   </span>
-                  {!isFee && items.filter((it) => !isCcFeeItem(it)).length > 1 && (
+                  {!isFee && (
                     <button
                       type="button"
                       onClick={() => removeItem(idx)}
@@ -3093,11 +3069,19 @@ function NewPurchaseRequestPageInner() {
                     />
                   </Field>
                 </div>
-                <Field label="Unit Price ($)">
+                <Field
+                  label="Unit Price ($)"
+                  hint={
+                    isFee
+                      ? undefined
+                      : "Leave blank or enter 0 for a free item (e.g. vendor freebie)."
+                  }
+                >
                   <input
                     type="number"
                     inputMode="decimal"
                     step="0.01"
+                    min="0"
                     value={item.unit_price || ""}
                     onChange={(e) => updateItem(idx, { unit_price: parseFloat(e.target.value) || 0 })}
                     className={isFee ? readOnlyCls : inputCls}
@@ -3176,8 +3160,8 @@ function NewPurchaseRequestPageInner() {
             className={`${inputCls} resize-none`}
             placeholder={
               quoteSource
-                ? "Auto-filled from quote source + total"
-                : "Select a quote source above, or type manually (e.g. 'Vendor Cart - $123.45')"
+                ? "Auto-filled from quote source"
+                : "Select a quote source above, or type manually (e.g. 'Vendor Cart')"
             }
           />
         </Field>
