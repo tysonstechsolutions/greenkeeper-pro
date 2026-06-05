@@ -34,6 +34,8 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  Ban,
+  PowerOff,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -71,6 +73,7 @@ import { saveBlobToDevice } from "@/lib/utils/download-blob";
 type AreaType = "green" | "tee" | "fairway";
 
 type IssueType =
+  // Original set (kept so previously-saved issues still render).
   | "low_pressure"
   | "one_side_only"
   | "no_spray"
@@ -79,7 +82,17 @@ type IssueType =
   | "clogged"
   | "stuck_on"
   | "stuck_off"
-  | "other";
+  | "other"
+  // Added: more common sprinkler problems.
+  | "wont_pop_up"
+  | "stuck_up"
+  | "not_rotating"
+  | "misaligned"
+  | "sunken"
+  | "mower_damage"
+  | "valve"
+  | "wiring"
+  | "no_comm";
 
 type IssueSeverity = "low" | "medium" | "high";
 
@@ -113,7 +126,32 @@ interface SprinklerIssue {
   resolution_notes: string | null;
   created_at: string;
   updated_at: string;
+  // The valve that was shut for this issue, if any. While the issue is open,
+  // every head that valve feeds shows offline. Optional because the column is
+  // absent until the 20260605 migration is applied.
+  valve_id?: string | null;
 }
+
+/**
+ * A reusable isolation valve: feeds a set of sprinkler heads. When an open
+ * issue references it (issue.valve_id), those heads are offline until resolved.
+ */
+interface Valve {
+  id: string;
+  label: string;
+  member_sprinkler_ids: string[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Why a head is offline: the valve that was shut and the head that caused it. */
+interface OfflineInfo {
+  valveLabel: string;
+  byHeadLabel: string;
+  issueId: string;
+}
+type OfflineMap = Map<string, OfflineInfo>;
 
 interface SatelliteStation {
   id: string;
@@ -189,25 +227,45 @@ const EMPTY_FORM: FormState = {
 // Issue type labels and severity ordering (high > medium > low).
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   low_pressure: "Low pressure",
-  one_side_only: "One side only",
   no_spray: "No spray",
-  broken: "Broken head",
+  one_side_only: "One side only",
+  not_rotating: "Not rotating",
+  clogged: "Clogged nozzle",
+  misaligned: "Misaligned / overspray",
   leaking: "Leaking",
-  clogged: "Clogged",
-  stuck_on: "Stuck on",
-  stuck_off: "Stuck off",
-  other: "Other",
+  wont_pop_up: "Won't pop up",
+  stuck_up: "Stuck up (won't retract)",
+  stuck_on: "Stuck on (won't shut off)",
+  stuck_off: "Stuck off (won't run)",
+  sunken: "Sunken / low head",
+  broken: "Broken head",
+  mower_damage: "Mower / cart damage",
+  valve: "Valve issue",
+  wiring: "Wiring / solenoid",
+  no_comm: "No communication",
+  other: "Other (type it)",
 };
 
+// Dropdown order: coverage/spray problems, then mechanical, physical damage,
+// electrical, and finally the free-text catch-all.
 const ISSUE_TYPES: IssueType[] = [
   "low_pressure",
-  "one_side_only",
   "no_spray",
-  "broken",
-  "leaking",
+  "one_side_only",
+  "not_rotating",
   "clogged",
+  "misaligned",
+  "leaking",
+  "wont_pop_up",
+  "stuck_up",
   "stuck_on",
   "stuck_off",
+  "sunken",
+  "broken",
+  "mower_damage",
+  "valve",
+  "wiring",
+  "no_comm",
   "other",
 ];
 
@@ -314,6 +372,7 @@ export default function SprinklerMapPage() {
   // Data
   const [sprinklers, setSprinklers] = useState<Sprinkler[]>([]);
   const [issues, setIssues] = useState<SprinklerIssue[]>([]);
+  const [valves, setValves] = useState<Valve[]>([]);
   const [stationNotes, setStationNotes] = useState<SatelliteStation[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -352,6 +411,17 @@ export default function SprinklerMapPage() {
     severity: IssueSeverity;
     description: string;
   }>({ issue_type: "low_pressure", severity: "medium", description: "" });
+  // Valve-shutoff draft (part of the new-issue form). When `shutoff` is on, the
+  // issue marks a valve's heads offline — either an existing valve
+  // (mode 'existing' + valveId) or a freshly-created one (mode 'new').
+  const [issueValve, setIssueValve] = useState<{
+    shutoff: boolean;
+    mode: "existing" | "new";
+    valveId: string;
+    newLabel: string;
+    newHeadIds: string[];
+  }>({ shutoff: false, mode: "new", valveId: "", newLabel: "", newHeadIds: [] });
+  const [valveHeadFilter, setValveHeadFilter] = useState("");
   const [issueActionLoading, setIssueActionLoading] = useState<string | null>(
     null,
   );
@@ -386,33 +456,49 @@ export default function SprinklerMapPage() {
       // Three parallel reads. Issues and station notes are layered on top of
       // sprinklers but loaded independently so a slow query on one doesn't
       // block the others.
-      const [sprinklersData, issuesData, stationsData] = await Promise.all([
-        directSelectList<Sprinkler>("irrigation_sprinklers", {
-          columns: "*",
-          orderBy: [
-            { column: "hole_number", ascending: true },
-            { column: "satellite_num", ascending: true },
-            { column: "station_num", ascending: true },
-          ],
-          label: "sprinkler-map.load.sprinklers",
-        }),
-        directSelectList<SprinklerIssue>("irrigation_sprinkler_issues", {
-          columns: "*",
-          orderBy: [{ column: "reported_at", ascending: false }],
-          label: "sprinkler-map.load.issues",
-        }),
-        directSelectList<SatelliteStation>("irrigation_satellite_stations", {
-          columns: "*",
-          orderBy: [
-            { column: "satellite_num", ascending: true },
-            { column: "station_num", ascending: true },
-          ],
-          label: "sprinkler-map.load.stations",
-        }),
-      ]);
+      const [sprinklersData, issuesData, stationsData, valvesData] =
+        await Promise.all([
+          directSelectList<Sprinkler>("irrigation_sprinklers", {
+            columns: "*",
+            orderBy: [
+              { column: "hole_number", ascending: true },
+              { column: "satellite_num", ascending: true },
+              { column: "station_num", ascending: true },
+            ],
+            label: "sprinkler-map.load.sprinklers",
+          }),
+          directSelectList<SprinklerIssue>("irrigation_sprinkler_issues", {
+            columns: "*",
+            orderBy: [{ column: "reported_at", ascending: false }],
+            label: "sprinkler-map.load.issues",
+          }),
+          directSelectList<SatelliteStation>("irrigation_satellite_stations", {
+            columns: "*",
+            orderBy: [
+              { column: "satellite_num", ascending: true },
+              { column: "station_num", ascending: true },
+            ],
+            label: "sprinkler-map.load.stations",
+          }),
+          // Valves are loaded resiliently: the table doesn't exist until the
+          // 20260605 migration is applied, and a missing table must not break
+          // the whole page. Degrade to an empty list in that case.
+          directSelectList<Valve>("irrigation_valves", {
+            columns: "*",
+            orderBy: [{ column: "label", ascending: true }],
+            label: "sprinkler-map.load.valves",
+          }).catch((e) => {
+            console.warn(
+              "irrigation_valves unavailable — apply the 20260605 migration to enable valve shutoffs.",
+              e,
+            );
+            return [] as Valve[];
+          }),
+        ]);
       setSprinklers(sprinklersData);
       setIssues(issuesData);
       setStationNotes(stationsData);
+      setValves(valvesData);
     } catch (err) {
       console.error("Failed to load sprinkler map data:", err);
       setLoadError(
@@ -561,6 +647,66 @@ export default function SprinklerMapPage() {
     ? lastServicedAt(editingPin.id, issues)
     : null;
 
+  // ── Valve shutoffs → offline heads ──────────────────────────────────────
+  // A head is "offline" when a valve that feeds it was shut for an OPEN issue.
+  // Derived purely from open issues, so resolving the issue automatically
+  // brings every affected head back online (no extra bookkeeping).
+  const offlineMap = useMemo<OfflineMap>(() => {
+    const m: OfflineMap = new Map();
+    for (const iss of issues) {
+      if (iss.status !== "open" || !iss.valve_id) continue;
+      const valve = valves.find((v) => v.id === iss.valve_id);
+      if (!valve) continue;
+      const blocker = sprinklers.find((s) => s.id === iss.sprinkler_id);
+      const byHeadLabel = blocker
+        ? `${blocker.satellite_num}-${blocker.station_num}`
+        : "another head";
+      for (const hid of valve.member_sprinkler_ids) {
+        // First open issue to claim a head wins the attribution.
+        if (!m.has(hid)) {
+          m.set(hid, { valveLabel: valve.label, byHeadLabel, issueId: iss.id });
+        }
+      }
+    }
+    return m;
+  }, [issues, valves, sprinklers]);
+
+  // One row per open valve-shutoff, for the summary banner.
+  const activeShutoffs = useMemo(() => {
+    const existing = new Set(sprinklers.map((s) => s.id));
+    return issues
+      .filter((i) => i.status === "open" && i.valve_id)
+      .map((i) => {
+        const valve = valves.find((v) => v.id === i.valve_id);
+        if (!valve) return null;
+        const blocker = sprinklers.find((s) => s.id === i.sprinkler_id) ?? null;
+        return {
+          issueId: i.id,
+          issueType: i.issue_type,
+          valveLabel: valve.label,
+          headCount: valve.member_sprinkler_ids.filter((id) => existing.has(id))
+            .length,
+          blocker,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+  }, [issues, valves, sprinklers]);
+
+  // Placed heads for the valve head-picker, in play order (hole → tee/fairway/
+  // green → satellite → station).
+  const valveHeadOptions = useMemo(() => {
+    const areaRank: Record<AreaType, number> = { tee: 0, fairway: 1, green: 2 };
+    return sprinklers
+      .slice()
+      .sort(
+        (a, b) =>
+          a.hole_number - b.hole_number ||
+          areaRank[a.area_type] - areaRank[b.area_type] ||
+          a.satellite_num - b.satellite_num ||
+          a.station_num - b.station_num,
+      );
+  }, [sprinklers]);
+
   // ── Image tap handler ──────────────────────────────────────────────────
 
   const handleImageTap = useCallback(
@@ -649,6 +795,14 @@ export default function SprinklerMapPage() {
       severity: "medium",
       description: "",
     });
+    setIssueValve({
+      shutoff: false,
+      mode: "new",
+      valveId: "",
+      newLabel: "",
+      newHeadIds: [],
+    });
+    setValveHeadFilter("");
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -797,17 +951,66 @@ export default function SprinklerMapPage() {
 
   const handleAddIssue = useCallback(async () => {
     if (!editingPin) return;
+
+    // ── Validate before touching the network ──
+    const desc = newIssueForm.description.trim();
+    if (newIssueForm.issue_type === "other" && !desc) {
+      setSaveError("Add a short description of what's wrong.");
+      return;
+    }
+    let valveId: string | null = null;
+    if (issueValve.shutoff) {
+      if (issueValve.mode === "existing") {
+        if (!issueValve.valveId) {
+          setSaveError("Pick the valve that was shut, or add a new one.");
+          return;
+        }
+        valveId = issueValve.valveId;
+      } else {
+        if (!issueValve.newLabel.trim()) {
+          setSaveError("Give the new valve a name.");
+          return;
+        }
+        if (issueValve.newHeadIds.length === 0) {
+          setSaveError("Pick at least one head this valve feeds.");
+          return;
+        }
+      }
+    }
+
+    setSaveError(null);
     setIssueActionLoading("new");
     try {
+      // Create the valve first when the user is defining a new one, and add it
+      // to local state immediately so it's reusable even if the issue insert
+      // hiccups.
+      if (issueValve.shutoff && issueValve.mode === "new") {
+        const created = await directInsertRow<Valve>(
+          "irrigation_valves",
+          {
+            label: issueValve.newLabel.trim(),
+            member_sprinkler_ids: issueValve.newHeadIds,
+          },
+          "sprinkler-map.addValve",
+        );
+        valveId = created.id;
+        setValves((prev) => [...prev, created]);
+      }
+
+      const payload: Record<string, unknown> = {
+        sprinkler_id: editingPin.id,
+        issue_type: newIssueForm.issue_type,
+        severity: newIssueForm.severity,
+        description: desc || null,
+        status: "open",
+      };
+      // Only send valve_id when there's a shutoff — keeps ordinary issues
+      // working even before the 20260605 migration adds the column.
+      if (valveId) payload.valve_id = valveId;
+
       const inserted = await directInsertRow<SprinklerIssue>(
         "irrigation_sprinkler_issues",
-        {
-          sprinkler_id: editingPin.id,
-          issue_type: newIssueForm.issue_type,
-          severity: newIssueForm.severity,
-          description: newIssueForm.description.trim() || null,
-          status: "open",
-        },
+        payload,
         "sprinkler-map.addIssue",
       );
       setIssues((prev) => [inserted, ...prev]);
@@ -817,6 +1020,14 @@ export default function SprinklerMapPage() {
         severity: "medium",
         description: "",
       });
+      setIssueValve({
+        shutoff: false,
+        mode: "new",
+        valveId: "",
+        newLabel: "",
+        newHeadIds: [],
+      });
+      setValveHeadFilter("");
     } catch (err) {
       console.error("Failed to add issue:", err);
       setSaveError(
@@ -825,7 +1036,7 @@ export default function SprinklerMapPage() {
     } finally {
       setIssueActionLoading(null);
     }
-  }, [editingPin, newIssueForm]);
+  }, [editingPin, newIssueForm, issueValve]);
 
   const handleResolveIssue = useCallback(
     async (issueId: string) => {
@@ -1157,6 +1368,47 @@ export default function SprinklerMapPage() {
         </Card>
       ) : (
         <>
+          {/* Active valve shutoffs — heads offline until the issue is fixed */}
+          {activeShutoffs.length > 0 && (
+            <div className="mb-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <PowerOff className="w-4 h-4 shrink-0" />
+                {activeShutoffs.length === 1
+                  ? "1 valve shut off"
+                  : `${activeShutoffs.length} valves shut off`}
+                <span className="font-normal text-muted-foreground">
+                  — heads offline until fixed
+                </span>
+              </div>
+              <div className="space-y-1">
+                {activeShutoffs.map((so) => (
+                  <div
+                    key={so.issueId}
+                    className="flex items-center gap-2 text-[11px]"
+                  >
+                    <Ban className="w-3 h-3 shrink-0 text-slate-500" />
+                    <span className="font-medium">{so.valveLabel}</span>
+                    <span className="text-muted-foreground truncate">
+                      — {so.headCount} {so.headCount === 1 ? "head" : "heads"}{" "}
+                      offline
+                      {so.blocker
+                        ? ` · ${so.blocker.satellite_num}-${so.blocker.station_num} ${ISSUE_TYPE_LABELS[so.issueType]}`
+                        : ""}
+                    </span>
+                    {so.blocker && (
+                      <button
+                        type="button"
+                        onClick={() => jumpToPin(so.blocker!)}
+                        className="ml-auto shrink-0 text-[10px] underline text-muted-foreground hover:text-foreground"
+                      >
+                        View head
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {view === "map" && (
             <MapView
               holeNumber={holeNumber}
@@ -1164,6 +1416,7 @@ export default function SprinklerMapPage() {
               sprinklersOnHole={sprinklersOnHole}
               visiblePins={visiblePinsOnHole}
               issues={issues}
+              offlineMap={offlineMap}
               areaFilter={areaFilter}
               setAreaFilter={setAreaFilter}
               satelliteFilter={satelliteFilter}
@@ -1184,6 +1437,7 @@ export default function SprinklerMapPage() {
             <SatelliteView
               groups={satelliteGroups}
               issues={issues}
+              offlineMap={offlineMap}
               stationNotes={stationNotes}
               expanded={expandedSats}
               setExpanded={setExpandedSats}
@@ -1195,6 +1449,7 @@ export default function SprinklerMapPage() {
             <SprinklerSearchView
               results={searchResults}
               issues={issues}
+              offlineMap={offlineMap}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               onJumpToPin={jumpToPin}
@@ -1339,8 +1594,31 @@ export default function SprinklerMapPage() {
                     <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-xs font-semibold">Status &amp; Issues</span>
                   </div>
-                  <StatusPill openIssue={editingPinStatus} />
+                  <StatusPill
+                    openIssue={editingPinStatus}
+                    offline={
+                      editingPin ? offlineMap.get(editingPin.id) ?? null : null
+                    }
+                  />
                 </div>
+
+                {/* This head is knocked out by another head's valve shutoff */}
+                {editingPin &&
+                  !editingPinStatus &&
+                  offlineMap.has(editingPin.id) && (
+                    <div className="rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2 text-[11px] flex items-start gap-2">
+                      <Ban className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-500" />
+                      <span>
+                        <span className="font-medium">Offline.</span> Valve{" "}
+                        <span className="font-medium">
+                          {offlineMap.get(editingPin.id)!.valveLabel}
+                        </span>{" "}
+                        was shut for head{" "}
+                        {offlineMap.get(editingPin.id)!.byHeadLabel}. It works
+                        again once that issue is resolved.
+                      </span>
+                    </div>
+                  )}
 
                 {editingPinLastService && (
                   <p className="text-[11px] text-muted-foreground">
@@ -1356,6 +1634,14 @@ export default function SprinklerMapPage() {
                   <div className="space-y-1.5">
                     {editingPinOpenIssues.map((iss) => {
                       const sev = SEVERITY_META[iss.severity];
+                      const shutoffValve = iss.valve_id
+                        ? valves.find((v) => v.id === iss.valve_id)
+                        : null;
+                      const shutoffCount = shutoffValve
+                        ? shutoffValve.member_sprinkler_ids.filter((id) =>
+                            sprinklers.some((s) => s.id === id),
+                          ).length
+                        : 0;
                       return (
                         <div
                           key={iss.id}
@@ -1382,6 +1668,17 @@ export default function SprinklerMapPage() {
                             {iss.description && (
                               <p className="text-[11px] text-muted-foreground mt-0.5 break-words">
                                 {iss.description}
+                              </p>
+                            )}
+                            {shutoffValve && (
+                              <p className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                                <Ban className="w-3 h-3 shrink-0" />
+                                Shut valve{" "}
+                                <span className="font-medium">
+                                  {shutoffValve.label}
+                                </span>{" "}
+                                — {shutoffCount}{" "}
+                                {shutoffCount === 1 ? "head" : "heads"} offline
                               </p>
                             )}
                           </div>
@@ -1411,26 +1708,25 @@ export default function SprinklerMapPage() {
                         <label className="text-[10px] text-muted-foreground mb-0.5 block">
                           Issue type
                         </label>
-                        <Select
+                        {/* Native select — the browser draws the option list on
+                            top of everything, so it can't get trapped behind the
+                            dialog the way the portal-based Select did. */}
+                        <select
                           value={newIssueForm.issue_type}
-                          onValueChange={(v) =>
+                          onChange={(e) =>
                             setNewIssueForm({
                               ...newIssueForm,
-                              issue_type: v as IssueType,
+                              issue_type: e.target.value as IssueType,
                             })
                           }
+                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
                         >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ISSUE_TYPES.map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {ISSUE_TYPE_LABELS[t]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          {ISSUE_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {ISSUE_TYPE_LABELS[t]}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground mb-0.5 block">
@@ -1460,18 +1756,259 @@ export default function SprinklerMapPage() {
                         </div>
                       </div>
                     </div>
-                    <Textarea
-                      placeholder="Description (optional) — e.g. 'spraying weak since last Friday'"
-                      value={newIssueForm.description}
-                      onChange={(e) =>
-                        setNewIssueForm({
-                          ...newIssueForm,
-                          description: e.target.value,
-                        })
-                      }
-                      rows={2}
-                      className="text-xs"
-                    />
+                    <div>
+                      {newIssueForm.issue_type === "other" && (
+                        <label className="text-[10px] text-muted-foreground mb-0.5 block">
+                          What&apos;s wrong?{" "}
+                          <span className="text-destructive">(required)</span>
+                        </label>
+                      )}
+                      <Textarea
+                        placeholder={
+                          newIssueForm.issue_type === "other"
+                            ? "Describe the problem…"
+                            : "Description (optional) — e.g. 'spraying weak since last Friday'"
+                        }
+                        value={newIssueForm.description}
+                        onChange={(e) =>
+                          setNewIssueForm({
+                            ...newIssueForm,
+                            description: e.target.value,
+                          })
+                        }
+                        rows={2}
+                        className="text-xs"
+                      />
+                    </div>
+
+                    {/* Valve shutoff — this issue is knocking out other heads */}
+                    <div className="rounded border border-input bg-background p-2 space-y-2">
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={issueValve.shutoff}
+                          onChange={(e) =>
+                            setIssueValve((prev) => ({
+                              ...prev,
+                              shutoff: e.target.checked,
+                              mode: valves.length === 0 ? "new" : prev.mode,
+                              newHeadIds:
+                                e.target.checked &&
+                                prev.newHeadIds.length === 0 &&
+                                editingPin
+                                  ? [editingPin.id]
+                                  : prev.newHeadIds,
+                            }))
+                          }
+                          className="mt-0.5"
+                        />
+                        <span className="text-[11px] leading-tight">
+                          <span className="font-medium">
+                            This issue shut off a valve
+                          </span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — mark the heads it feeds offline until it&apos;s
+                            fixed.
+                          </span>
+                        </span>
+                      </label>
+
+                      {issueValve.shutoff && (
+                        <div className="space-y-2 pl-1">
+                          {valves.length > 0 && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setIssueValve((p) => ({
+                                    ...p,
+                                    mode: "existing",
+                                  }))
+                                }
+                                className={`h-7 px-2 rounded border text-[11px] font-medium ${
+                                  issueValve.mode === "existing"
+                                    ? "bg-accent border-current"
+                                    : "border-input text-muted-foreground hover:bg-accent"
+                                }`}
+                              >
+                                Pick a valve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setIssueValve((p) => ({
+                                    ...p,
+                                    mode: "new",
+                                    newHeadIds:
+                                      p.newHeadIds.length === 0 && editingPin
+                                        ? [editingPin.id]
+                                        : p.newHeadIds,
+                                  }))
+                                }
+                                className={`h-7 px-2 rounded border text-[11px] font-medium ${
+                                  issueValve.mode === "new"
+                                    ? "bg-accent border-current"
+                                    : "border-input text-muted-foreground hover:bg-accent"
+                                }`}
+                              >
+                                + New valve
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Existing valve */}
+                          {issueValve.mode === "existing" && valves.length > 0 && (
+                            <div>
+                              <select
+                                value={issueValve.valveId}
+                                onChange={(e) =>
+                                  setIssueValve((p) => ({
+                                    ...p,
+                                    valveId: e.target.value,
+                                  }))
+                                }
+                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                <option value="">— pick a valve —</option>
+                                {valves.map((v) => {
+                                  const n = v.member_sprinkler_ids.filter((id) =>
+                                    sprinklers.some((s) => s.id === id),
+                                  ).length;
+                                  return (
+                                    <option key={v.id} value={v.id}>
+                                      {v.label} ({n} {n === 1 ? "head" : "heads"})
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              {(() => {
+                                const v = valves.find(
+                                  (x) => x.id === issueValve.valveId,
+                                );
+                                if (!v) return null;
+                                const n = v.member_sprinkler_ids.filter((id) =>
+                                  sprinklers.some((s) => s.id === id),
+                                ).length;
+                                return (
+                                  <p className="text-[10px] text-muted-foreground mt-1">
+                                    {n} {n === 1 ? "head" : "heads"} will show
+                                    offline until this is resolved.
+                                  </p>
+                                );
+                              })()}
+                            </div>
+                          )}
+
+                          {/* New valve — name + head checklist */}
+                          {issueValve.mode === "new" && (
+                            <div className="space-y-1.5">
+                              <input
+                                type="text"
+                                value={issueValve.newLabel}
+                                onChange={(e) =>
+                                  setIssueValve((p) => ({
+                                    ...p,
+                                    newLabel: e.target.value,
+                                  }))
+                                }
+                                placeholder="Valve name — e.g. 'Fairway 1 isolation'"
+                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                              />
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] text-muted-foreground">
+                                  Heads this valve feeds (
+                                  {issueValve.newHeadIds.length} selected)
+                                </span>
+                                {issueValve.newHeadIds.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setIssueValve((p) => ({
+                                        ...p,
+                                        newHeadIds: [],
+                                      }))
+                                    }
+                                    className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                              {valveHeadOptions.length > 8 && (
+                                <input
+                                  type="text"
+                                  value={valveHeadFilter}
+                                  onChange={(e) =>
+                                    setValveHeadFilter(e.target.value)
+                                  }
+                                  placeholder="Filter heads… (e.g. '1-12' or 'hole 1')"
+                                  className="h-7 w-full rounded-md border border-input bg-background px-2 text-[11px] focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                              )}
+                              <div className="max-h-40 overflow-y-auto overscroll-contain rounded border border-input divide-y divide-border/60">
+                                {valveHeadOptions
+                                  .filter((s) => {
+                                    const q = valveHeadFilter
+                                      .trim()
+                                      .toLowerCase();
+                                    if (!q) return true;
+                                    const hay =
+                                      `${s.satellite_num}-${s.station_num} hole ${s.hole_number} ${AREA_META[s.area_type].label} ${s.label ?? ""}`.toLowerCase();
+                                    return hay.includes(q);
+                                  })
+                                  .map((s) => {
+                                    const checked =
+                                      issueValve.newHeadIds.includes(s.id);
+                                    const isCurrent = editingPin?.id === s.id;
+                                    return (
+                                      <label
+                                        key={s.id}
+                                        className="flex items-center gap-2 px-2 py-1 text-[11px] cursor-pointer hover:bg-accent"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={(e) =>
+                                            setIssueValve((p) => ({
+                                              ...p,
+                                              newHeadIds: e.target.checked
+                                                ? [...p.newHeadIds, s.id]
+                                                : p.newHeadIds.filter(
+                                                    (id) => id !== s.id,
+                                                  ),
+                                            }))
+                                          }
+                                        />
+                                        <span
+                                          className="w-2 h-2 rounded-full shrink-0"
+                                          style={{
+                                            background: AREA_META[s.area_type].pin,
+                                          }}
+                                        />
+                                        <span className="font-mono font-medium">
+                                          {s.satellite_num}-{s.station_num}
+                                        </span>
+                                        <span className="text-muted-foreground truncate">
+                                          Hole {s.hole_number} ·{" "}
+                                          {AREA_META[s.area_type].label}
+                                          {isCurrent ? " · this head" : ""}
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                {valveHeadOptions.length === 0 && (
+                                  <p className="px-2 py-2 text-[11px] text-muted-foreground">
+                                    No heads placed yet.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex justify-end gap-2">
                       <Button
                         size="xs"
@@ -1496,7 +2033,18 @@ export default function SprinklerMapPage() {
                   <Button
                     size="xs"
                     variant="outline"
-                    onClick={() => setShowNewIssueForm(true)}
+                    onClick={() => {
+                      setShowNewIssueForm(true);
+                      setSaveError(null);
+                      setIssueValve({
+                        shutoff: false,
+                        mode: valves.length > 0 ? "existing" : "new",
+                        valveId: "",
+                        newLabel: "",
+                        newHeadIds: editingPin ? [editingPin.id] : [],
+                      });
+                      setValveHeadFilter("");
+                    }}
                   >
                     <Plus className="w-3 h-3" />
                     Report issue
@@ -1711,6 +2259,7 @@ export default function SprinklerMapPage() {
           setHoleNumber={setHoleNumber}
           visiblePins={visiblePinsOnHole}
           issues={issues}
+          offlineMap={offlineMap}
           areaFilter={areaFilter}
           setAreaFilter={setAreaFilter}
           satelliteFilter={satelliteFilter}
@@ -1766,6 +2315,7 @@ interface MapViewProps {
   sprinklersOnHole: Sprinkler[];
   visiblePins: Sprinkler[];
   issues: SprinklerIssue[];
+  offlineMap: OfflineMap;
   areaFilter: AreaType;
   setAreaFilter: (v: AreaType) => void;
   satelliteFilter: string;
@@ -1790,6 +2340,7 @@ function MapView({
   sprinklersOnHole,
   visiblePins,
   issues,
+  offlineMap,
   areaFilter,
   setAreaFilter,
   satelliteFilter,
@@ -1915,6 +2466,7 @@ function MapView({
                 sprinkler={s}
                 highlight={s.id === highlightId}
                 openIssue={highestOpenIssue(s.id, issues)}
+                offline={offlineMap.get(s.id) ?? null}
                 onTap={(e) => {
                   e.stopPropagation();
                   onPinTap(s);
@@ -1978,6 +2530,7 @@ function MapView({
                   key={s.id}
                   sprinkler={s}
                   openIssue={highestOpenIssue(s.id, issues)}
+                  offline={offlineMap.get(s.id) ?? null}
                   onClick={() => onPinTap(s)}
                 />
               ))}
@@ -2077,6 +2630,7 @@ function FullscreenMapEditor({
   setHoleNumber,
   visiblePins,
   issues,
+  offlineMap,
   areaFilter,
   setAreaFilter,
   satelliteFilter,
@@ -2094,6 +2648,7 @@ function FullscreenMapEditor({
   setHoleNumber: (n: number) => void;
   visiblePins: Sprinkler[];
   issues: SprinklerIssue[];
+  offlineMap: OfflineMap;
   areaFilter: AreaType;
   setAreaFilter: (v: AreaType) => void;
   satelliteFilter: string;
@@ -2611,6 +3166,7 @@ function FullscreenMapEditor({
                 sprinkler={s}
                 highlight={s.id === highlightId}
                 openIssue={highestOpenIssue(s.id, issues)}
+                offline={offlineMap.get(s.id) ?? null}
                 onTap={(e) => {
                   e.stopPropagation();
                   onPinTap(s);
@@ -2669,20 +3225,38 @@ function PinDot({
   sprinkler,
   highlight,
   openIssue,
+  offline,
   onTap,
 }: {
   sprinkler: Sprinkler;
   highlight: boolean;
   openIssue: SprinklerIssue | null;
+  offline?: OfflineInfo | null;
   onTap: (e: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   const meta = AREA_META[sprinkler.area_type];
   const sev = openIssue ? SEVERITY_META[openIssue.severity] : null;
+  // A head's own issue takes visual precedence; "offline" only styles heads
+  // that are knocked out by another head's valve shutoff.
+  const isOffline = !!offline && !openIssue;
 
+  const pinBg = isOffline ? "#64748b" : meta.pin; // slate-500 when offline
   const baseShadow = "0 2px 4px rgba(0,0,0,0.3)";
   const issueRing = sev ? `0 0 0 3px ${sev.dot}` : "";
+  const offlineRing = isOffline ? "0 0 0 3px #475569" : ""; // slate-600
   const highlightRing = highlight ? `0 0 0 5px ${meta.pin}66` : "";
-  const shadow = [issueRing, highlightRing, baseShadow].filter(Boolean).join(", ");
+  const shadow = [issueRing, offlineRing, highlightRing, baseShadow]
+    .filter(Boolean)
+    .join(", ");
+
+  const baseTitle = `Sat ${sprinkler.satellite_num} / Sta ${sprinkler.station_num}${
+    sprinkler.label ? " — " + sprinkler.label : ""
+  }`;
+  const title = openIssue
+    ? `${baseTitle} — ${ISSUE_TYPE_LABELS[openIssue.issue_type]} (${openIssue.severity})`
+    : isOffline
+      ? `${baseTitle} — OFFLINE: ${offline!.valveLabel} shut for ${offline!.byHeadLabel}`
+      : baseTitle;
 
   return (
     <button
@@ -2699,27 +3273,19 @@ function PinDot({
         width: 56,
         height: 56,
       }}
-      title={
-        openIssue
-          ? `Sat ${sprinkler.satellite_num} / Sta ${sprinkler.station_num}${
-              sprinkler.label ? " — " + sprinkler.label : ""
-            } — ${ISSUE_TYPE_LABELS[openIssue.issue_type]} (${openIssue.severity})`
-          : `Sat ${sprinkler.satellite_num} / Sta ${sprinkler.station_num}${
-              sprinkler.label ? " — " + sprinkler.label : ""
-            }`
-      }
+      title={title}
     >
       <span
         className="relative flex items-center justify-center rounded-full border-2 border-white text-[14px] font-bold text-white leading-none px-1.5"
         style={{
-          background: meta.pin,
+          background: pinBg,
           minWidth: 38,
           height: 34,
           boxShadow: shadow,
         }}
       >
         {sprinkler.satellite_num}-{sprinkler.station_num}
-        {openIssue && (
+        {openIssue ? (
           <span
             className="absolute -top-1 -right-1 rounded-full border border-white flex items-center justify-center"
             style={{
@@ -2729,37 +3295,68 @@ function PinDot({
             }}
             aria-hidden
           >
-            <span className="text-white text-[9px] font-extrabold leading-none">!</span>
+            <span className="text-white text-[9px] font-extrabold leading-none">
+              !
+            </span>
           </span>
-        )}
+        ) : isOffline ? (
+          <span
+            className="absolute -top-1 -right-1 rounded-full border border-white flex items-center justify-center bg-slate-700"
+            style={{ width: 14, height: 14 }}
+            aria-hidden
+          >
+            <Ban className="w-2.5 h-2.5 text-white" />
+          </span>
+        ) : null}
       </span>
       <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
         Sat {sprinkler.satellite_num} / Sta {sprinkler.station_num}
         {sprinkler.label ? ` · ${sprinkler.label}` : ""}
-        {openIssue ? ` · ${ISSUE_TYPE_LABELS[openIssue.issue_type]}` : ""}
+        {openIssue
+          ? ` · ${ISSUE_TYPE_LABELS[openIssue.issue_type]}`
+          : isOffline
+            ? ` · Offline (valve ${offline!.valveLabel})`
+            : ""}
       </span>
     </button>
   );
 }
 
 /** Small status pill used in lists/tables. */
-function StatusPill({ openIssue }: { openIssue: SprinklerIssue | null }) {
-  if (!openIssue) {
+function StatusPill({
+  openIssue,
+  offline,
+}: {
+  openIssue: SprinklerIssue | null;
+  offline?: OfflineInfo | null;
+}) {
+  if (openIssue) {
+    const sev = SEVERITY_META[openIssue.severity];
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
-        <CheckCircle2 className="w-2.5 h-2.5" />
-        OK
+      <span
+        className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${sev.chipBg} ${sev.chipText}`}
+        title={`${ISSUE_TYPE_LABELS[openIssue.issue_type]} (${sev.label.toLowerCase()} severity)`}
+      >
+        <AlertCircle className="w-2.5 h-2.5" />
+        {ISSUE_TYPE_LABELS[openIssue.issue_type]}
       </span>
     );
   }
-  const sev = SEVERITY_META[openIssue.severity];
+  if (offline) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+        title={`Offline — valve ${offline.valveLabel} shut for ${offline.byHeadLabel}`}
+      >
+        <Ban className="w-2.5 h-2.5" />
+        Offline
+      </span>
+    );
+  }
   return (
-    <span
-      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${sev.chipBg} ${sev.chipText}`}
-      title={`${ISSUE_TYPE_LABELS[openIssue.issue_type]} (${sev.label.toLowerCase()} severity)`}
-    >
-      <AlertCircle className="w-2.5 h-2.5" />
-      {ISSUE_TYPE_LABELS[openIssue.issue_type]}
+    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+      <CheckCircle2 className="w-2.5 h-2.5" />
+      OK
     </span>
   );
 }
@@ -2769,10 +3366,12 @@ function StatusPill({ openIssue }: { openIssue: SprinklerIssue | null }) {
 function SprinklerRow({
   sprinkler,
   openIssue,
+  offline,
   onClick,
 }: {
   sprinkler: Sprinkler;
   openIssue: SprinklerIssue | null;
+  offline?: OfflineInfo | null;
   onClick: () => void;
 }) {
   const meta = AREA_META[sprinkler.area_type];
@@ -2798,7 +3397,7 @@ function SprinklerRow({
       <span className="text-xs text-muted-foreground truncate flex-1">
         {sprinkler.label ?? ""}
       </span>
-      <StatusPill openIssue={openIssue} />
+      <StatusPill openIssue={openIssue} offline={offline} />
     </button>
   );
 }
@@ -2815,6 +3414,7 @@ interface SatelliteGroup {
 function SatelliteView({
   groups,
   issues,
+  offlineMap,
   stationNotes,
   expanded,
   setExpanded,
@@ -2823,6 +3423,7 @@ function SatelliteView({
 }: {
   groups: SatelliteGroup[];
   issues: SprinklerIssue[];
+  offlineMap: OfflineMap;
   stationNotes: SatelliteStation[];
   expanded: number[];
   setExpanded: React.Dispatch<React.SetStateAction<number[]>>;
@@ -2887,6 +3488,7 @@ function SatelliteView({
                     (n) => n.satellite_num === g.satellite_num,
                   )}
                   issues={issues}
+                  offlineMap={offlineMap}
                   onJumpToPin={onJumpToPin}
                   onSetStationStatus={onSetStationStatus}
                 />
@@ -2945,7 +3547,10 @@ function SatelliteView({
                               {s.label ?? "—"}
                             </td>
                             <td className="px-2 py-1.5">
-                              <StatusPill openIssue={openIssue} />
+                              <StatusPill
+                                openIssue={openIssue}
+                                offline={offlineMap.get(s.id) ?? null}
+                              />
                             </td>
                             <td className="px-4 py-1.5 text-right">1</td>
                           </tr>
@@ -2958,6 +3563,7 @@ function SatelliteView({
                           stationNum={st.station_num}
                           heads={st.heads}
                           issues={issues}
+                          offlineMap={offlineMap}
                           onJumpToPin={onJumpToPin}
                         />
                       );
@@ -2977,11 +3583,13 @@ function MultiHeadStation({
   stationNum,
   heads,
   issues,
+  offlineMap,
   onJumpToPin,
 }: {
   stationNum: number;
   heads: Sprinkler[];
   issues: SprinklerIssue[];
+  offlineMap: OfflineMap;
   onJumpToPin: (s: Sprinkler) => void;
 }) {
   return (
@@ -3024,7 +3632,10 @@ function MultiHeadStation({
               {s.label ?? "—"}
             </td>
             <td className="px-2 py-1.5">
-              <StatusPill openIssue={openIssue} />
+              <StatusPill
+                openIssue={openIssue}
+                offline={offlineMap.get(s.id) ?? null}
+              />
             </td>
             <td className="px-4 py-1.5 text-right">—</td>
           </tr>
@@ -3041,6 +3652,7 @@ function StationInventoryGrid({
   sprinklers,
   stationNotes,
   issues,
+  offlineMap,
   onJumpToPin,
   onSetStationStatus,
 }: {
@@ -3048,6 +3660,7 @@ function StationInventoryGrid({
   sprinklers: Sprinkler[];
   stationNotes: SatelliteStation[];
   issues: SprinklerIssue[];
+  offlineMap: OfflineMap;
   onJumpToPin: (s: Sprinkler) => void;
   onSetStationStatus: (sat: number, sta: number) => void;
 }) {
@@ -3093,6 +3706,12 @@ function StationInventoryGrid({
           const headWithOpenIssue = hasHeads
             ? heads.find((h) => highestOpenIssue(h.id, issues))
             : null;
+          // A head here that's offline from a valve shutoff (and isn't already
+          // flagged for its own open issue).
+          const headOffline =
+            hasHeads && !headWithOpenIssue
+              ? heads.find((h) => offlineMap.has(h.id))
+              : null;
 
           let bg = "bg-background";
           let textColor = "text-muted-foreground/60";
@@ -3133,6 +3752,13 @@ function StationInventoryGrid({
               {headWithOpenIssue && (
                 <span
                   className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-600 border border-background"
+                  aria-hidden
+                />
+              )}
+              {headOffline && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-slate-500 border border-background"
+                  title="Offline — valve shut"
                   aria-hidden
                 />
               )}
@@ -3178,12 +3804,14 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 function SprinklerSearchView({
   results,
   issues,
+  offlineMap,
   searchQuery,
   setSearchQuery,
   onJumpToPin,
 }: {
   results: Sprinkler[];
   issues: SprinklerIssue[];
+  offlineMap: OfflineMap;
   searchQuery: string;
   setSearchQuery: (v: string) => void;
   onJumpToPin: (s: Sprinkler) => void;
@@ -3269,7 +3897,10 @@ function SprinklerSearchView({
                         {s.label ?? "—"}
                       </td>
                       <td className="px-3 py-2">
-                        <StatusPill openIssue={openIssue} />
+                        <StatusPill
+                          openIssue={openIssue}
+                          offline={offlineMap.get(s.id) ?? null}
+                        />
                       </td>
                     </tr>
                   );
