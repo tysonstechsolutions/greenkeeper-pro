@@ -5,7 +5,6 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
-  Plus,
   FileText,
   Calendar,
   ChevronRight,
@@ -26,6 +25,7 @@ import {
   directSelectList,
 } from "@/lib/supabase/rest";
 import { workOrderDisplayName } from "@/lib/reports/wo-naming";
+import { NewWorkOrderForm } from "./new-work-order-form";
 
 // ── Work order type (matches the DB columns we SELECT) ──────────────────────
 
@@ -407,12 +407,9 @@ export default function WorkOrdersListPage() {
         </div>
       </div>
 
-      <Link
-        href="/work-order"
-        className="mt-4 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
-      >
-        <Plus className="w-5 h-5" /> New Work Order
-      </Link>
+      <div className="mt-4">
+        <NewWorkOrderForm onCreated={fetchOrders} />
+      </div>
 
       {/* ── Status Summary ──────────────────────────────────────────────── */}
       {!loading && orders.length > 0 && (

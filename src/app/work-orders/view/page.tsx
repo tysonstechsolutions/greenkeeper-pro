@@ -118,7 +118,6 @@ function ViewWorkOrderInner() {
     try {
       const data: WorkOrderData = {
         date: formatDateMmDdYyyy(wo.date_submitted),
-        natureOfRequest: wo.nature_of_request ?? "",
         facilityBldg: wo.facility_bldg ?? "",
         programAreaRoom: wo.program_area_room ?? "",
         costCenter: wo.cost_center ?? "",

@@ -22,10 +22,10 @@ import {
   ChevronDown,
   Flag,
   Radio,
-  Filter,
   AlertCircle,
   CheckCircle2,
   FileDown,
+  Printer,
   Wrench,
   Plus,
   History,
@@ -63,6 +63,8 @@ import {
   directDeleteRow,
 } from "@/lib/supabase/rest";
 import { generateSprinklerReport } from "@/lib/reports/sprinkler-report";
+import { generateSprinklerMapReport } from "@/lib/reports/sprinkler-map-report";
+import { saveBlobToDevice } from "@/lib/utils/download-blob";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -165,6 +167,16 @@ const AREA_META: Record<
     chipText: "text-blue-800 dark:text-blue-300",
   },
 };
+
+/**
+ * Per-part hole image. Each hole has three pictures (fairway / tees / green)
+ * under /public/irrigation, named like "hole 7 fairway.png", "hole 7 tees.png"
+ * and "hole 7.png" (green). Spaces are URL-encoded by the browser.
+ */
+function partImageSrc(hole: number, part: AreaType): string {
+  const suffix = part === "tee" ? " tees" : part === "fairway" ? " fairway" : "";
+  return `/irrigation/hole ${hole}${suffix}.png`;
+}
 
 const EMPTY_FORM: FormState = {
   satellite_num: "",
@@ -306,6 +318,7 @@ export default function SprinklerMapPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
+  const [downloadingMapReport, setDownloadingMapReport] = useState(false);
 
   // Top-level view
   const [view, setView] = useState<ViewMode>("map");
@@ -314,7 +327,7 @@ export default function SprinklerMapPage() {
   const [holeNumber, setHoleNumber] = useState(1);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
-  const [areaFilter, setAreaFilter] = useState<"all" | AreaType>("all");
+  const [areaFilter, setAreaFilter] = useState<AreaType>("green");
   const [satelliteFilter, setSatelliteFilter] = useState<string>("all");
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
@@ -414,11 +427,13 @@ export default function SprinklerMapPage() {
     loadData();
   }, [loadData]);
 
-  // Reset img-loaded state when switching holes.
+  // Reset img-loaded/error state when switching holes OR parts (each part has
+  // its own picture, so a fresh load/error must be tracked per part too —
+  // otherwise one missing part image would stick the error placeholder on).
   useEffect(() => {
     setImgLoaded(false);
     setImgError(false);
-  }, [holeNumber]);
+  }, [holeNumber, areaFilter]);
 
   // ── Derived data ────────────────────────────────────────────────────────
 
@@ -429,7 +444,7 @@ export default function SprinklerMapPage() {
 
   const visiblePinsOnHole = useMemo(() => {
     return sprinklersOnHole.filter((s) => {
-      if (areaFilter !== "all" && s.area_type !== areaFilter) return false;
+      if (s.area_type !== areaFilter) return false;
       if (
         satelliteFilter !== "all" &&
         s.satellite_num.toString() !== satelliteFilter
@@ -591,11 +606,12 @@ export default function SprinklerMapPage() {
       setForm((prev) => ({
         ...EMPTY_FORM,
         satellite_num: prev.satellite_num,
-        area_type: prev.area_type,
+        // Default the new pin's area to the part currently being viewed.
+        area_type: areaFilter,
       }));
       setSaveError(null);
     },
-    [imgLoaded],
+    [imgLoaded, areaFilter],
   );
 
   // ── Open edit dialog when a pin is tapped ──────────────────────────────
@@ -952,7 +968,7 @@ export default function SprinklerMapPage() {
   const jumpToPin = useCallback((sprinkler: Sprinkler) => {
     setView("map");
     setHoleNumber(sprinkler.hole_number);
-    setAreaFilter("all");
+    setAreaFilter("green");
     setSatelliteFilter("all");
     setHighlightId(sprinkler.id);
     // Clear highlight after the pulse completes (~2s).
@@ -986,6 +1002,26 @@ export default function SprinklerMapPage() {
     }
   }, []);
 
+  // ── Download printable map report (one part per page, with pins) ─────────
+  const handleDownloadMapReport = useCallback(async () => {
+    setDownloadingMapReport(true);
+    try {
+      const { blob, filename } = await generateSprinklerMapReport();
+      await saveBlobToDevice({
+        blob,
+        filename,
+        shareTitle: "Irrigation Sprinkler Maps",
+      });
+    } catch (err) {
+      console.error("Failed to generate sprinkler map report:", err);
+      alert(
+        `Failed to generate map report: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    } finally {
+      setDownloadingMapReport(false);
+    }
+  }, []);
+
   // ── Render ─────────────────────────────────────────────────────────────
 
   const dialogOpen = pendingPin !== null || editingPin !== null;
@@ -1010,6 +1046,20 @@ export default function SprinklerMapPage() {
             <FileDown className="w-4 h-4" />
           )}
           <span className="hidden lg:inline">Download Report</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownloadMapReport}
+          disabled={downloadingMapReport || loading}
+          title="Print-ready maps: every hole's tee, fairway & green with sprinkler placements"
+        >
+          {downloadingMapReport ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Printer className="w-4 h-4" />
+          )}
+          <span className="hidden lg:inline">Map Report</span>
         </Button>
         <Link
           href="/irrigation"
@@ -1122,7 +1172,9 @@ export default function SprinklerMapPage() {
           if (!open) closeDialog();
         }}
       >
-        <DialogContent>
+        {/* z-[70] keeps this above the fullscreen map editor (z-[60]) so
+            tapping to add a sprinkler works in Expand mode. */}
+        <DialogContent className="z-[70]">
           <DialogHeader>
             <DialogTitle>
               {editingPin
@@ -1615,8 +1667,8 @@ export default function SprinklerMapPage() {
       {/* ── Fullscreen map editor ──────────────────────────────────── */}
       {fullscreen && !loading && !loadError && (
         <FullscreenMapEditor
-          // Key ensures zoom/pan state resets cleanly when the hole changes.
-          key={holeNumber}
+          // Key resets zoom/pan when the hole OR part changes (new image).
+          key={`${holeNumber}-${areaFilter}`}
           holeNumber={holeNumber}
           setHoleNumber={setHoleNumber}
           visiblePins={visiblePinsOnHole}
@@ -1674,8 +1726,8 @@ interface MapViewProps {
   sprinklersOnHole: Sprinkler[];
   visiblePins: Sprinkler[];
   issues: SprinklerIssue[];
-  areaFilter: "all" | AreaType;
-  setAreaFilter: (v: "all" | AreaType) => void;
+  areaFilter: AreaType;
+  setAreaFilter: (v: AreaType) => void;
   satelliteFilter: string;
   setSatelliteFilter: (v: string) => void;
   distinctSatellites: number[];
@@ -1753,12 +1805,7 @@ function MapView({
 
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2 items-center">
-        <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-        <FilterChip
-          label="All areas"
-          active={areaFilter === "all"}
-          onClick={() => setAreaFilter("all")}
-        />
+        <span className="text-xs font-semibold text-muted-foreground mr-1">Part:</span>
         {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
           <FilterChip
             key={a}
@@ -1808,7 +1855,7 @@ function MapView({
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/holes/hole-${holeNumber}.png`}
+              src={partImageSrc(holeNumber, areaFilter)}
               alt={`Hole ${holeNumber} layout`}
               // Display in the source's natural orientation (hole number
               // upright at top). The prior 180° rotation flipped the artwork
@@ -2005,8 +2052,8 @@ function FullscreenMapEditor({
   setHoleNumber: (n: number) => void;
   visiblePins: Sprinkler[];
   issues: SprinklerIssue[];
-  areaFilter: "all" | AreaType;
-  setAreaFilter: (v: "all" | AreaType) => void;
+  areaFilter: AreaType;
+  setAreaFilter: (v: AreaType) => void;
   satelliteFilter: string;
   setSatelliteFilter: (v: string) => void;
   distinctSatellites: number[];
@@ -2305,12 +2352,7 @@ function FullscreenMapEditor({
 
       {/* Filter chips bar */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-black/60 border-b border-white/10 overflow-x-auto shrink-0">
-        <Filter className="w-3.5 h-3.5 opacity-60 shrink-0" />
-        <FullscreenChip
-          label="All"
-          active={areaFilter === "all"}
-          onClick={() => setAreaFilter("all")}
-        />
+        <span className="text-[10px] font-semibold opacity-60 shrink-0 mr-0.5">Part:</span>
         {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
           <FullscreenChip
             key={a}
@@ -2374,7 +2416,7 @@ function FullscreenMapEditor({
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={`/holes/hole-${holeNumber}.png`}
+              src={partImageSrc(holeNumber, areaFilter)}
               alt={`Hole ${holeNumber} layout`}
               // Natural orientation (hole number upright at top). At scale=1
               // we fit the image to the canvas.

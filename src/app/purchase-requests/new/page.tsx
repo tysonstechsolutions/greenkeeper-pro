@@ -41,7 +41,13 @@ import {
   PR_GL_ACCOUNTS,
 } from "@/lib/pr-accounting-codes";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
-import { isCcFeeItem, rebalanceWithCcFee } from "@/lib/pr-cc-fee";
+import {
+  isCcFeeItem,
+  rebalanceWithCcFee,
+  CC_FEE_RATE,
+  parseCcFeeRate,
+  formatCcFeePct,
+} from "@/lib/pr-cc-fee";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
@@ -799,19 +805,30 @@ function NewPurchaseRequestPageInner() {
   // their first real item via the "+ Add Line Item" button. Edit/clone
   // modes start with a single empty placeholder that gets overwritten by
   // the load effect.
+  // Credit-card surcharge rate, editable per-PR (some vendors charge 3.5%).
+  // Held as the raw "%" text the user types so typing "3." mid-edit isn't
+  // reformatted out from under them; the decimal rate is derived below.
+  const [ccFeePctText, setCcFeePctText] = useState<string>(
+    formatCcFeePct(CC_FEE_RATE),
+  );
+  const parsedCcFeePct = parseFloat(ccFeePctText);
+  const ccFeeRate =
+    Number.isFinite(parsedCcFeePct) && parsedCcFeePct >= 0
+      ? parsedCcFeePct / 100
+      : 0;
   const [items, setItems] = useState<PurchaseRequestItem[]>(() =>
-    editId || fromId ? [emptyItem(1)] : rebalanceWithCcFee([]),
+    editId || fromId ? [emptyItem(1)] : rebalanceWithCcFee([], CC_FEE_RATE),
   );
 
-  // Keep the CC-fee line invariant after every items change:
+  // Keep the CC-fee line invariant after every items/rate change:
   //   • exactly one fee row
   //   • always the last row
-  //   • unit_price always 3% of the other items' extended subtotal
+  //   • unit_price always = ccFeeRate × the other items' extended subtotal
   // rebalanceWithCcFee returns the same array reference when nothing
   // changed, so React bails out of the re-render and we don't loop.
   useEffect(() => {
-    setItems((prev) => rebalanceWithCcFee(prev));
-  }, [items]);
+    setItems((prev) => rebalanceWithCcFee(prev, ccFeeRate));
+  }, [items, ccFeeRate]);
 
   // IGE / approvals
   const [igeExcessPct, setIgeExcessPct] = useState(0);
@@ -845,8 +862,9 @@ function NewPurchaseRequestPageInner() {
   });
   const [attachedOther, setAttachedOther] = useState("");
 
-  // UI state for collapsible sections
-  const [openSection, setOpenSection] = useState<string | null>("header");
+  // UI state for collapsible sections. The IGE & Justification section opens
+  // by default so the requestor fills the justification themselves.
+  const [openSection, setOpenSection] = useState<string | null>("ige");
 
   // Part-history library (past line items for re-ordering).
   const partHistory = usePartHistory();
@@ -854,8 +872,6 @@ function NewPurchaseRequestPageInner() {
   const [historyQuery, setHistoryQuery] = useState("");
 
   const [loadingExisting, setLoadingExisting] = useState(!!editId || !!fromId);
-  /** True once the user manually types in the justification box — stops auto-fill from overwriting. */
-  const justificationTouched = useRef(false);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   /** Object URL for the in-app PDF preview overlay. */
@@ -1086,12 +1102,13 @@ function NewPurchaseRequestPageInner() {
       // Backfill blank program for older PRs that pre-date the
       // "always golf" rule.
       setProgram(row.program || PR_ACCOUNTING_DEFAULTS.program);
-      setItems(row.items?.length ? row.items : [emptyItem(1)]);
+      const loadedItems = row.items?.length ? row.items : [emptyItem(1)];
+      setItems(loadedItems);
+      // Recover the surcharge rate from the saved fee line (e.g. 3.5%).
+      const savedFee = loadedItems.find(isCcFeeItem);
+      if (savedFee) setCcFeePctText(formatCcFeePct(parseCcFeeRate(savedFee.description)));
       setIgeExcessPct(Number(row.ige_excess_pct) || 0);
       setJustification(row.justification || "");
-      // Preserve saved justification — mark touched so auto-fill doesn't
-      // overwrite it when loadingExisting flips to false.
-      if (row.justification) justificationTouched.current = true;
       setIgeBasedOn(row.ige_based_on || "");
       // Infer quote source from saved IGE Based On text. Order matters —
       // "vendor quote" must come before "vendor" so it doesn't accidentally
@@ -1157,51 +1174,6 @@ function NewPurchaseRequestPageInner() {
     setIgeBasedOn(label);
     setAttachedOther(label);
   }, [quoteSource]);
-
-  // Auto-fill "Justification for Purchase" from item descriptions, vendor &
-  // total.  Skipped when editing/cloning (saved value wins) or after the user
-  // manually types in the field (justificationTouched ref).
-  useEffect(() => {
-    if (loadingExisting) return;            // still hydrating edit/clone
-    if (justificationTouched.current) return; // user typed their own text
-
-    const descriptions = items
-      .map((it) => it.description.trim())
-      .filter(Boolean);
-
-    if (descriptions.length === 0 && !v1.name.trim()) {
-      // Nothing meaningful yet — leave field empty rather than writing a
-      // useless sentence.
-      setJustification("");
-      return;
-    }
-
-    const itemList = descriptions.length
-      ? descriptions.join(", ")
-      : "requested items";
-
-    const vendor = v1.name.trim();
-    // Lowercase the methodology label for in-sentence use ("Pricing based
-    // on vendor website pricing.").
-    const sourceLabel = quoteSource
-      ? QUOTE_SOURCE_LABELS[quoteSource].toLowerCase()
-      : "";
-
-    const amt = igeAmount
-      ? ` Total: ${igeAmount.toLocaleString("en-US", {
-          style: "currency",
-          currency: "USD",
-          minimumFractionDigits: 2,
-        })}.`
-      : "";
-
-    let text = `Purchase of ${itemList} required for golf course maintenance operations.`;
-    if (vendor) text += ` Source: ${vendor}.`;
-    if (sourceLabel) text += ` Pricing based on ${sourceLabel}.`;
-    if (amt) text += amt;
-
-    setJustification(text);
-  }, [items, v1.name, quoteSource, igeAmount, loadingExisting]);
 
   // ── Item helpers ─────────────────────────────────────────────────────────
   function updateItem(idx: number, patch: Partial<PurchaseRequestItem>) {
@@ -2979,7 +2951,7 @@ function NewPurchaseRequestPageInner() {
                   label="Item Name / Description"
                   hint={
                     isFee
-                      ? "Auto-managed — 3% of the subtotal of every other line."
+                      ? `Auto-managed — ${formatCcFeePct(ccFeeRate)}% of the subtotal of every other line.`
                       : undefined
                   }
                 >
@@ -2992,6 +2964,22 @@ function NewPurchaseRequestPageInner() {
                     readOnly={isFee}
                   />
                 </Field>
+                {isFee && (
+                  <Field
+                    label="Fee Rate (%)"
+                    hint="Default 3%. Change for vendors with a different surcharge (e.g. 3.5%)."
+                  >
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      value={ccFeePctText}
+                      onChange={(e) => setCcFeePctText(e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                )}
                 {!isFee && (
                   <Field label="Part / Item Number">
                     <input
@@ -3168,13 +3156,10 @@ function NewPurchaseRequestPageInner() {
         <Field label="Justification for Purchase">
           <textarea
             value={justification}
-            onChange={(e) => {
-              justificationTouched.current = true;
-              setJustification(e.target.value);
-            }}
+            onChange={(e) => setJustification(e.target.value)}
             rows={4}
             className={`${inputCls} resize-none`}
-            placeholder="Auto-filled from items, vendor & total — or type manually"
+            placeholder="Type the justification for this purchase"
           />
         </Field>
       </Section>

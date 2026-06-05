@@ -8,6 +8,9 @@ import {
   isCcFeeItem,
   computeCcFeeAmount,
   rebalanceWithCcFee,
+  formatCcFeePct,
+  ccFeeDescription,
+  parseCcFeeRate,
 } from "@/lib/pr-cc-fee";
 import type { PurchaseRequestItem } from "@/types/database";
 
@@ -190,5 +193,52 @@ describe("rebalanceWithCcFee", () => {
 
   it("uses the documented 3% rate", () => {
     expect(CC_FEE_RATE).toBe(0.03);
+  });
+});
+
+describe("custom fee rate", () => {
+  it("formats percentages without trailing zeros", () => {
+    expect(formatCcFeePct(0.03)).toBe("3");
+    expect(formatCcFeePct(0.035)).toBe("3.5");
+    expect(formatCcFeePct(0.0325)).toBe("3.25");
+  });
+
+  it("builds a rate-specific description", () => {
+    expect(ccFeeDescription(0.03)).toBe("3% Credit Card Fee");
+    expect(ccFeeDescription(0.035)).toBe("3.5% Credit Card Fee");
+  });
+
+  it("recognizes any-rate fee descriptions", () => {
+    expect(isCcFeeItem({ description: "3.5% Credit Card Fee" })).toBe(true);
+    expect(isCcFeeItem({ description: "10% Credit Card Fee" })).toBe(true);
+  });
+
+  it("parses the rate back out of a description", () => {
+    expect(parseCcFeeRate("3% Credit Card Fee")).toBe(0.03);
+    expect(parseCcFeeRate("3.5% Credit Card Fee")).toBe(0.035);
+    expect(parseCcFeeRate("Toro blade")).toBe(CC_FEE_RATE);
+    expect(parseCcFeeRate(null)).toBe(CC_FEE_RATE);
+  });
+
+  it("computes the fee at a custom rate", () => {
+    expect(computeCcFeeAmount([mkItem({ qty: 1, unit_price: 100 })], 0.035)).toBe(3.5);
+  });
+
+  it("rebalances at a custom rate and labels the line", () => {
+    const after = rebalanceWithCcFee([mkItem({ qty: 1, unit_price: 100 })], 0.035);
+    const fee = after.find(isCcFeeItem)!;
+    expect(fee.unit_price).toBe(3.5);
+    expect(fee.description).toBe("3.5% Credit Card Fee");
+  });
+
+  it("recomputes and relabels a stale 3% fee line when the rate changes", () => {
+    const before = [
+      mkItem({ description: "X", qty: 1, unit_price: 100 }),
+      mkItem({ description: "3% Credit Card Fee", unit_price: 3 }),
+    ];
+    const after = rebalanceWithCcFee(before, 0.035);
+    const fee = after.find(isCcFeeItem)!;
+    expect(fee.unit_price).toBe(3.5);
+    expect(fee.description).toBe("3.5% Credit Card Fee");
   });
 });
