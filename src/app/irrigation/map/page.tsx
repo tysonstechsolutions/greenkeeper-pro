@@ -2320,17 +2320,15 @@ function FullscreenMapEditor({
   const goPrev = () => setHoleNumber(holeNumber === 1 ? 18 : holeNumber - 1);
   const goNext = () => setHoleNumber(holeNumber === 18 ? 1 : holeNumber + 1);
 
-  // ── Place-heads panel: pick a satellite + station count → draggable chips ──
+  // ── Place-heads panel: pick a satellite (1-11) → 60 draggable head chips ──
   const [placeSatText, setPlaceSatText] = useState("");
-  const [placeCountText, setPlaceCountText] = useState("");
   const placeSat = parseInt(placeSatText, 10);
-  const placeCount = parseInt(placeCountText, 10);
+  // Satellites are numbered 1-11 and every satellite has 60 stations.
+  const SATELLITE_COUNT = 11;
+  const STATIONS_PER_SAT = 60;
   const stations =
-    Number.isFinite(placeSat) &&
-    placeSat >= 0 &&
-    Number.isFinite(placeCount) &&
-    placeCount > 0
-      ? Array.from({ length: Math.min(placeCount, 200) }, (_, i) => i + 1)
+    Number.isFinite(placeSat) && placeSat >= 1
+      ? Array.from({ length: STATIONS_PER_SAT }, (_, i) => i + 1)
       : [];
   const placedCount = (sta: number) =>
     partPins.filter(
@@ -2471,40 +2469,35 @@ function FullscreenMapEditor({
 
       {/* Place-heads panel (left) + image canvas (right), side by side */}
       <div className="flex flex-1 min-h-0">
-        {/* Left: pick a satellite + station count, then drag chips onto the map */}
-        <aside className="w-[150px] shrink-0 bg-black/70 border-r border-white/10 flex flex-col">
+        {/* Left: pick a satellite, then drag its head chips onto the map */}
+        <aside className="w-[180px] shrink-0 bg-black/70 border-r border-white/10 flex flex-col">
           <div className="p-2 border-b border-white/10 space-y-1.5 shrink-0">
             <p className="text-[11px] font-semibold opacity-80">Place heads</p>
             <label className="flex items-center gap-1.5">
               <span className="text-[10px] opacity-60 w-[52px] shrink-0">Satellite</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
+              <select
                 value={placeSatText}
                 onChange={(e) => setPlaceSatText(e.target.value)}
-                placeholder="#"
                 className="w-full bg-white/10 rounded px-1.5 py-1 text-xs text-white outline-none focus:bg-white/20"
-              />
+              >
+                <option value="" className="text-black">
+                  Select…
+                </option>
+                {Array.from({ length: SATELLITE_COUNT }, (_, i) => i + 1).map(
+                  (n) => (
+                    <option key={n} value={n} className="text-black">
+                      Satellite {n}
+                    </option>
+                  ),
+                )}
+              </select>
             </label>
-            <label className="flex items-center gap-1.5">
-              <span className="text-[10px] opacity-60 w-[52px] shrink-0">Stations</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="1"
-                value={placeCountText}
-                onChange={(e) => setPlaceCountText(e.target.value)}
-                placeholder="count"
-                className="w-full bg-white/10 rounded px-1.5 py-1 text-xs text-white outline-none focus:bg-white/20"
-              />
-            </label>
+            <p className="text-[10px] opacity-50">60 stations each.</p>
           </div>
           <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
             {stations.length === 0 ? (
               <p className="text-[10px] opacity-50 leading-snug px-0.5">
-                Enter a satellite # and how many stations it has to build a
-                draggable list of heads.
+                Pick a satellite to get its 60 draggable heads.
               </p>
             ) : (
               stations.map((sta) => {
@@ -2520,15 +2513,15 @@ function FullscreenMapEditor({
                       );
                       e.dataTransfer.effectAllowed = "copy";
                     }}
-                    className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-white/10 hover:bg-white/20 cursor-grab active:cursor-grabbing text-xs select-none"
-                    style={{ borderLeft: `3px solid ${AREA_META[areaFilter].pin}` }}
+                    className="flex items-center justify-between gap-1.5 px-3 py-2.5 rounded-md bg-white/10 hover:bg-white/20 cursor-grab active:cursor-grabbing text-base select-none"
+                    style={{ borderLeft: `4px solid ${AREA_META[areaFilter].pin}` }}
                     title={`Drag ${placeSat}-${sta} onto the map`}
                   >
-                    <span className="font-semibold">
+                    <span className="font-bold">
                       {placeSat}-{sta}
                     </span>
                     {cnt > 0 && (
-                      <span className="text-[10px] px-1 rounded bg-emerald-500/30 text-emerald-200 font-semibold">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-semibold">
                         x{cnt}
                       </span>
                     )}
