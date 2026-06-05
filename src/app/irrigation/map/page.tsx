@@ -2470,7 +2470,7 @@ function FullscreenMapEditor({
       {/* Place-heads panel (left) + image canvas (right), side by side */}
       <div className="flex flex-1 min-h-0">
         {/* Left: pick a satellite, then drag its head chips onto the map */}
-        <aside className="w-[180px] shrink-0 bg-black/70 border-r border-white/10 flex flex-col">
+        <aside className="w-[150px] shrink-0 bg-black/70 border-r border-white/10 flex flex-col">
           <div className="p-2 border-b border-white/10 space-y-1.5 shrink-0">
             <p className="text-[11px] font-semibold opacity-80">Place heads</p>
             <label className="flex items-center gap-1.5">
@@ -2513,15 +2513,15 @@ function FullscreenMapEditor({
                       );
                       e.dataTransfer.effectAllowed = "copy";
                     }}
-                    className="flex items-center justify-between gap-1.5 px-3 py-2.5 rounded-md bg-white/10 hover:bg-white/20 cursor-grab active:cursor-grabbing text-base select-none"
-                    style={{ borderLeft: `4px solid ${AREA_META[areaFilter].pin}` }}
+                    className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-white/10 hover:bg-white/20 cursor-grab active:cursor-grabbing text-xs select-none"
+                    style={{ borderLeft: `3px solid ${AREA_META[areaFilter].pin}` }}
                     title={`Drag ${placeSat}-${sta} onto the map`}
                   >
-                    <span className="font-bold">
+                    <span className="font-semibold">
                       {placeSat}-{sta}
                     </span>
                     {cnt > 0 && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 font-semibold">
+                      <span className="text-[10px] px-1 rounded bg-emerald-500/30 text-emerald-200 font-semibold">
                         x{cnt}
                       </span>
                     )}
@@ -2692,12 +2692,12 @@ function PinDot({
       className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 group focus:outline-none flex items-center justify-center ${
         highlight ? "animate-pulse" : ""
       }`}
-      // Hit area is 36x36 (finger-friendly) while the visible pin stays 22px.
+      // Hit area sized generously around the larger visible pill.
       style={{
         left: `${sprinkler.x_pct * 100}%`,
         top: `${sprinkler.y_pct * 100}%`,
-        width: 36,
-        height: 36,
+        width: 56,
+        height: 56,
       }}
       title={
         openIssue
@@ -2710,11 +2710,11 @@ function PinDot({
       }
     >
       <span
-        className="relative flex items-center justify-center rounded-full border-2 border-white text-[9px] font-bold text-white leading-none px-1"
+        className="relative flex items-center justify-center rounded-full border-2 border-white text-[14px] font-bold text-white leading-none px-1.5"
         style={{
           background: meta.pin,
-          minWidth: 22,
-          height: 20,
+          minWidth: 38,
+          height: 34,
           boxShadow: shadow,
         }}
       >
@@ -2724,12 +2724,12 @@ function PinDot({
             className="absolute -top-1 -right-1 rounded-full border border-white flex items-center justify-center"
             style={{
               background: sev!.dot,
-              width: 10,
-              height: 10,
+              width: 14,
+              height: 14,
             }}
             aria-hidden
           >
-            <span className="text-white text-[7px] font-extrabold leading-none">!</span>
+            <span className="text-white text-[9px] font-extrabold leading-none">!</span>
           </span>
         )}
       </span>
