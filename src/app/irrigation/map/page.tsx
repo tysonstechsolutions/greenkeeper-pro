@@ -455,6 +455,13 @@ export default function SprinklerMapPage() {
     });
   }, [sprinklersOnHole, areaFilter, satelliteFilter]);
 
+  // All heads on the current hole + part (any satellite). Feeds the fullscreen
+  // "place heads" panel so each station chip can show how many are placed.
+  const partPins = useMemo(
+    () => sprinklersOnHole.filter((s) => s.area_type === areaFilter),
+    [sprinklersOnHole, areaFilter],
+  );
+
   const distinctSatellites = useMemo(() => {
     const set = new Set<number>();
     for (const s of sprinklers) set.add(s.satellite_num);
@@ -723,6 +730,37 @@ export default function SprinklerMapPage() {
       setSaving(false);
     }
   }, [form, editingPin, pendingPin, holeNumber, closeDialog]);
+
+  // ── Place a head from the fullscreen drag-and-drop panel ────────────────
+  // Inserts a sprinkler directly (satellite + station come from the dragged
+  // chip; position from the drop point; hole + area from the current view).
+  const handlePlaceHead = useCallback(
+    async (sat: number, sta: number, x: number, y: number) => {
+      try {
+        const inserted = await directInsertRow<Sprinkler>(
+          "irrigation_sprinklers",
+          {
+            satellite_num: sat,
+            station_num: sta,
+            hole_number: holeNumber,
+            area_type: areaFilter,
+            x_pct: Math.max(0, Math.min(1, x)),
+            y_pct: Math.max(0, Math.min(1, y)),
+            label: null,
+            notes: null,
+          },
+          "sprinkler-map.place",
+        );
+        setSprinklers((prev) => [...prev, inserted]);
+      } catch (err) {
+        console.error("Failed to place sprinkler head:", err);
+        alert(
+          `Couldn't place head: ${err instanceof Error ? err.message : "unknown error"}`,
+        );
+      }
+    },
+    [holeNumber, areaFilter],
+  );
 
   // ── Delete ─────────────────────────────────────────────────────────────
 
@@ -1681,6 +1719,8 @@ export default function SprinklerMapPage() {
           imageRef={fullscreenImageRef}
           onImageTap={handleImageTap}
           onPinTap={handlePinTap}
+          onPlaceHead={handlePlaceHead}
+          partPins={partPins}
           highlightId={highlightId}
           onClose={() => setFullscreen(false)}
         />
@@ -2045,6 +2085,8 @@ function FullscreenMapEditor({
   imageRef,
   onImageTap,
   onPinTap,
+  onPlaceHead,
+  partPins,
   highlightId,
   onClose,
 }: {
@@ -2062,6 +2104,8 @@ function FullscreenMapEditor({
     e: ReactMouseEvent<HTMLDivElement> | ReactTouchEvent<HTMLDivElement>,
   ) => void;
   onPinTap: (s: Sprinkler) => void;
+  onPlaceHead: (sat: number, sta: number, x: number, y: number) => void;
+  partPins: Sprinkler[];
   highlightId: string | null;
   onClose: () => void;
 }) {
@@ -2276,6 +2320,50 @@ function FullscreenMapEditor({
   const goPrev = () => setHoleNumber(holeNumber === 1 ? 18 : holeNumber - 1);
   const goNext = () => setHoleNumber(holeNumber === 18 ? 1 : holeNumber + 1);
 
+  // ── Place-heads panel: pick a satellite + station count → draggable chips ──
+  const [placeSatText, setPlaceSatText] = useState("");
+  const [placeCountText, setPlaceCountText] = useState("");
+  const placeSat = parseInt(placeSatText, 10);
+  const placeCount = parseInt(placeCountText, 10);
+  const stations =
+    Number.isFinite(placeSat) &&
+    placeSat >= 0 &&
+    Number.isFinite(placeCount) &&
+    placeCount > 0
+      ? Array.from({ length: Math.min(placeCount, 200) }, (_, i) => i + 1)
+      : [];
+  const placedCount = (sta: number) =>
+    partPins.filter(
+      (p) => p.satellite_num === placeSat && p.station_num === sta,
+    ).length;
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const raw = e.dataTransfer.getData("application/x-sprinkler-head");
+      if (!raw) return;
+      let parsed: { sat: number; sta: number };
+      try {
+        parsed = JSON.parse(raw) as { sat: number; sta: number };
+      } catch {
+        return;
+      }
+      const el = imageRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+      onPlaceHead(parsed.sat, parsed.sta, x, y);
+    },
+    [imageRef, onPlaceHead],
+  );
+
   return (
     <div
       // Full-screen overlay above the bottom nav and other UI.
@@ -2381,17 +2469,88 @@ function FullscreenMapEditor({
         )}
       </div>
 
-      {/* Image canvas. The wrapper inside is absolutely positioned and
-          translated; initial centering is computed once the image natural
-          size is known (see onLoad below). */}
-      <div
-        ref={canvasRef}
-        className="relative flex-1 overflow-hidden cursor-grab active:cursor-grabbing"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
+      {/* Place-heads panel (left) + image canvas (right), side by side */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left: pick a satellite + station count, then drag chips onto the map */}
+        <aside className="w-[150px] shrink-0 bg-black/70 border-r border-white/10 flex flex-col">
+          <div className="p-2 border-b border-white/10 space-y-1.5 shrink-0">
+            <p className="text-[11px] font-semibold opacity-80">Place heads</p>
+            <label className="flex items-center gap-1.5">
+              <span className="text-[10px] opacity-60 w-[52px] shrink-0">Satellite</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={placeSatText}
+                onChange={(e) => setPlaceSatText(e.target.value)}
+                placeholder="#"
+                className="w-full bg-white/10 rounded px-1.5 py-1 text-xs text-white outline-none focus:bg-white/20"
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              <span className="text-[10px] opacity-60 w-[52px] shrink-0">Stations</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                value={placeCountText}
+                onChange={(e) => setPlaceCountText(e.target.value)}
+                placeholder="count"
+                className="w-full bg-white/10 rounded px-1.5 py-1 text-xs text-white outline-none focus:bg-white/20"
+              />
+            </label>
+          </div>
+          <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
+            {stations.length === 0 ? (
+              <p className="text-[10px] opacity-50 leading-snug px-0.5">
+                Enter a satellite # and how many stations it has to build a
+                draggable list of heads.
+              </p>
+            ) : (
+              stations.map((sta) => {
+                const cnt = placedCount(sta);
+                return (
+                  <div
+                    key={sta}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        "application/x-sprinkler-head",
+                        JSON.stringify({ sat: placeSat, sta }),
+                      );
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-white/10 hover:bg-white/20 cursor-grab active:cursor-grabbing text-xs select-none"
+                    style={{ borderLeft: `3px solid ${AREA_META[areaFilter].pin}` }}
+                    title={`Drag ${placeSat}-${sta} onto the map`}
+                  >
+                    <span className="font-semibold">
+                      {placeSat}-{sta}
+                    </span>
+                    {cnt > 0 && (
+                      <span className="text-[10px] px-1 rounded bg-emerald-500/30 text-emerald-200 font-semibold">
+                        x{cnt}
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </aside>
+
+        {/* Image canvas (drop target). Wrapper inside is absolutely positioned
+            and translated; centering is computed once the image loads. */}
+        <div
+          ref={canvasRef}
+          className="relative flex-1 overflow-hidden cursor-grab active:cursor-grabbing"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
         {/* Transformed image + pins layer. The wrapper holds the click
             handler because its bounding rect (post-transform) is what
             handleImageTap needs to compute x_pct/y_pct correctly. */}
@@ -2473,6 +2632,7 @@ function FullscreenMapEditor({
             ? "Drag to pan · pinch or buttons to zoom"
             : "Pinch or + to zoom · tap empty area to add"}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -2557,15 +2717,15 @@ function PinDot({
       }
     >
       <span
-        className="relative flex items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white leading-none"
+        className="relative flex items-center justify-center rounded-full border-2 border-white text-[9px] font-bold text-white leading-none px-1"
         style={{
           background: meta.pin,
-          width: 22,
-          height: 22,
+          minWidth: 22,
+          height: 20,
           boxShadow: shadow,
         }}
       >
-        {sprinkler.station_num}
+        {sprinkler.satellite_num}-{sprinkler.station_num}
         {openIssue && (
           <span
             className="absolute -top-1 -right-1 rounded-full border border-white flex items-center justify-center"
