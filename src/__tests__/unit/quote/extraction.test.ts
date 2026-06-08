@@ -268,6 +268,57 @@ describe("combineExtractions — sales tax", () => {
   });
 });
 
+describe("combineExtractions — duplicate fees across pages", () => {
+  it("collapses 'Estimated Processing Fees' + 'Processing Fees' into one (keeps the final label)", () => {
+    const cart = mkResult({
+      items: [
+        mkExtractedItem({ description: "Widget", part_number: "W1", qty: 1, unit_price: 100 }),
+        mkExtractedItem({ description: "Estimated Processing Fees", part_number: null, qty: 1, unit: "fee", unit_price: 32.2 }),
+      ],
+    });
+    const summary = mkResult({
+      items: [mkExtractedItem({ description: "Processing Fees", part_number: null, qty: 1, unit: "fee", unit_price: 32.2 })],
+    });
+    const proc = combineExtractions([cart, summary]).items.filter((i) => /processing/i.test(i.description));
+    expect(proc).toHaveLength(1);
+    expect(proc[0].description).toBe("Processing Fees");
+  });
+
+  it("collapses an estimated/final processing pair even when the amounts differ (keeps the final)", () => {
+    const cart = mkResult({ items: [mkExtractedItem({ description: "Estimated Processing Fees", part_number: null, qty: 1, unit_price: 30 })] });
+    const summary = mkResult({
+      items: [
+        mkExtractedItem({ description: "Processing Fees", part_number: null, qty: 1, unit_price: 32.2 }),
+        mkExtractedItem({ description: "Widget", part_number: "W1", unit_price: 5 }),
+      ],
+    });
+    const proc = combineExtractions([cart, summary]).items.filter((i) => /processing/i.test(i.description));
+    expect(proc).toHaveLength(1);
+    expect(proc[0].description).toBe("Processing Fees");
+    expect(proc[0].unit_price).toBe(32.2);
+  });
+
+  it("keeps distinct charge categories (delivery vs processing) separate", () => {
+    const p1 = mkResult({
+      items: [
+        mkExtractedItem({ description: "Delivery", part_number: null, qty: 1, unit_price: 125 }),
+        mkExtractedItem({ description: "Processing Fees", part_number: null, qty: 1, unit_price: 32 }),
+      ],
+    });
+    const p2 = mkResult({ items: [mkExtractedItem({ description: "Widget", part_number: "W1", unit_price: 50 })] });
+    const items = combineExtractions([p1, p2]).items;
+    expect(items.some((i) => /delivery/i.test(i.description))).toBe(true);
+    expect(items.some((i) => /processing/i.test(i.description))).toBe(true);
+  });
+
+  it("does NOT merge two same-category charges with different amounts and no estimate marker", () => {
+    const p1 = mkResult({ items: [mkExtractedItem({ description: "Handling Fee A", part_number: null, qty: 1, unit_price: 5 })] });
+    const p2 = mkResult({ items: [mkExtractedItem({ description: "Handling Fee B", part_number: null, qty: 1, unit_price: 9 })] });
+    const handling = combineExtractions([p1, p2]).items.filter((i) => /handling/i.test(i.description));
+    expect(handling).toHaveLength(2);
+  });
+});
+
 describe("hasRealItems", () => {
   it("is false for an empty list", () => {
     expect(hasRealItems([])).toBe(false);

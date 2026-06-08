@@ -9,7 +9,7 @@
  * edge-function redeploy is needed and every page keeps its full resolution.
  */
 import type { PurchaseRequestItem } from "@/types/database";
-import { isSalesTaxItem } from "@/lib/pr-cc-fee";
+import { feeCategory } from "@/lib/pr-cc-fee";
 
 /** Vendor block as returned by the extract-quote edge function. */
 export interface ExtractedVendor {
@@ -111,19 +111,51 @@ function isPageScopeNoise(warning: string): boolean {
   return PAGE_SCOPE_NOISE_PATTERNS.some((re) => re.test(warning));
 }
 
-/**
- * Reduce multiple sales-tax lines to a single one — the largest (final)
- * amount. A multi-page upload can surface tax on more than one page (an
- * estimate on the cart page, the final tax on the order-summary page); the
- * Purchase Request must never be taxed twice.
- */
-function collapseSalesTaxLines(items: ExtractedItem[]): ExtractedItem[] {
-  const taxItems = items.filter(isSalesTaxItem);
-  if (taxItems.length <= 1) return items;
-  const keep = taxItems.reduce((best, it) =>
-    (Number(it.unit_price) || 0) > (Number(best.unit_price) || 0) ? it : best,
+/** Description begins with "Estimated" (a preliminary value). */
+function isEstimated(it: ExtractedItem): boolean {
+  return /^estimated\b/i.test((it.description || "").trim());
+}
+
+/** Among same-category fee lines, the one to keep: prefer a final (non-
+ *  estimated) label, then the largest amount, then the first. */
+function pickBestFee(lines: ExtractedItem[]): ExtractedItem {
+  const finals = lines.filter((l) => !isEstimated(l));
+  const pool = finals.length > 0 ? finals : lines;
+  return pool.reduce((best, l) =>
+    (Number(l.unit_price) || 0) > (Number(best.unit_price) || 0) ? l : best,
   );
-  return items.filter((it) => !isSalesTaxItem(it) || it === keep);
+}
+
+/**
+ * Collapse the SAME fee/tax captured on multiple pages of one quote into a
+ * single line, grouped by fee category (see `feeCategory`). Sales tax is
+ * always reduced to one (an order has one tax). Other charges are only
+ * collapsed when they're clearly the same fee — identical amount, or an
+ * estimated/final pair (e.g. "Estimated Processing Fees" + "Processing Fees")
+ * — so two genuinely distinct same-category charges are preserved.
+ */
+function collapseDuplicateFees(items: ExtractedItem[]): ExtractedItem[] {
+  const groups = new Map<string, number[]>();
+  items.forEach((it, i) => {
+    const cat = feeCategory(it);
+    if (!cat) return;
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat)!.push(i);
+  });
+
+  const drop = new Set<number>();
+  for (const [cat, idxs] of groups) {
+    if (idxs.length < 2) continue;
+    const lines = idxs.map((i) => items[i]);
+    if (cat !== "tax") {
+      const amounts = new Set(lines.map((l) => Number(l.unit_price) || 0));
+      // Different amounts with no estimate marker → likely distinct charges; keep all.
+      if (amounts.size > 1 && !lines.some(isEstimated)) continue;
+    }
+    const keep = pickBestFee(lines);
+    for (const i of idxs) if (items[i] !== keep) drop.add(i);
+  }
+  return items.filter((_, i) => !drop.has(i));
 }
 
 /**
@@ -158,7 +190,7 @@ export function combineExtractions(results: ExtractedQuote[]): ExtractedQuote {
       deduped.push(it);
     }
   }
-  const items = collapseSalesTaxLines(deduped);
+  const items = collapseDuplicateFees(deduped);
 
   // Vendor — first non-empty value per field across pages.
   const vendor: ExtractedVendor = {

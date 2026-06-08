@@ -30,6 +30,7 @@ import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
  */
 const SLOW_DIRECT_ROUTES: ReadonlySet<string> = new Set<string>([
   "extract-quote",
+  "extract-pr",
   "extract-889",
   "ai-assistant",
   "fix-instructions",
@@ -51,6 +52,7 @@ const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
   "drone/upload",
   "extract-889",
   "extract-quote",
+  "extract-pr",
   "fix-instructions",
   "get-weather",
   "green-fix-instructions",

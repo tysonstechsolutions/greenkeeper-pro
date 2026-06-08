@@ -44,6 +44,7 @@ import { formatInternalOrder } from "@/lib/pr-internal-order";
 import {
   isCcFeeItem,
   isSalesTaxItem,
+  orderPurchaseItems,
   rebalanceWithCcFee,
   CC_FEE_RATE,
   parseCcFeeRate,
@@ -97,7 +98,7 @@ function emptyItem(n: number): PurchaseRequestItem {
     description: "",
     part_number: "",
     qty: 0,
-    unit: "",
+    unit: "Each",
     unit_price: 0,
   };
 }
@@ -1393,20 +1394,26 @@ function NewPurchaseRequestPageInner() {
         description: ex.description || "",
         part_number: ex.part_number || "",
         qty: Number(ex.qty) || 0,
-        unit: ex.unit || "",
+        unit: ex.unit || "Each",
         unit_price: Number(ex.unit_price) || 0,
       }));
 
+      // Group for display: products first, then charges, then tax, then the
+      // CC fee (added by the rebalance effect). Renumber after ordering.
       if (hasRealItems(items)) {
-        setItems((prev) => {
-          const combined = [...prev, ...extracted];
-          return combined.map((it, i) => ({ ...it, item: i + 1 }));
-        });
+        setItems((prev) =>
+          orderPurchaseItems([...prev, ...extracted]).map((it, i) => ({
+            ...it,
+            item: i + 1,
+          })),
+        );
         setExtractInfo(
           `Added ${incomingItems.length} line items from ${source}.${note}`,
         );
       } else {
-        setItems(extracted);
+        setItems(
+          orderPurchaseItems(extracted).map((it, i) => ({ ...it, item: i + 1 })),
+        );
         setExtractInfo(
           `Filled ${incomingItems.length} line items from ${source}.${note}`,
         );

@@ -57,6 +57,69 @@ export function isSalesTaxItem(it: { description?: string | null }): boolean {
   return SALES_TAX_PATTERNS.some((re) => re.test(d));
 }
 
+/** Patterns for a vendor charge line (shipping/handling/freight/etc.). */
+const CHARGE_PATTERNS: readonly RegExp[] = [
+  /\bshipping\b/i,
+  /\bhandling\b/i,
+  /\bfreight\b/i,
+  /\bdelivery\b/i,
+  /\bprocessing\b/i,
+  /\bsurcharge\b/i,
+];
+
+/**
+ * True when the item is a vendor charge (shipping, handling, freight,
+ * delivery, processing, surcharge) — grouped below the purchased products
+ * and above sales tax.
+ */
+export function isChargeItem(it: { description?: string | null }): boolean {
+  const d = (it.description || "").trim();
+  return d !== "" && CHARGE_PATTERNS.some((re) => re.test(d));
+}
+
+/**
+ * Coarse category for a fee/charge/tax line, used to collapse the SAME fee
+ * captured on multiple pages of one quote (e.g. "Estimated Processing Fees"
+ * on the cart page and "Processing Fees" on the order-summary page). Returns
+ * null for products and the auto CC-fee line, which are never collapsed.
+ * Delivery is checked before surcharge so "Delivery … Fuel Surcharge" lands
+ * in one category instead of splitting.
+ */
+export function feeCategory(it: { description?: string | null }): string | null {
+  if (isCcFeeItem(it)) return null;
+  if (isSalesTaxItem(it)) return "tax";
+  const d = (it.description || "").toLowerCase();
+  if (/\bdelivery\b/.test(d)) return "delivery";
+  if (/\bshipping\b/.test(d)) return "shipping";
+  if (/\bfreight\b/.test(d)) return "freight";
+  if (/\bhandling\b/.test(d)) return "handling";
+  if (/\bprocessing\b/.test(d)) return "processing";
+  if (/\bsurcharge\b/.test(d)) return "surcharge";
+  return null;
+}
+
+/**
+ * Order line items for display/printing: the things being purchased first (in
+ * their existing order), then vendor charges, then sales tax, then the
+ * auto-managed CC-fee line last. Stable within each group. Pure — the caller
+ * renumbers. Applied at quote-extraction time, NOT on every keystroke (the
+ * line-item rows are keyed by index, so live re-sorting would scramble focus).
+ */
+export function orderPurchaseItems(
+  items: PurchaseRequestItem[],
+): PurchaseRequestItem[] {
+  const rank = (it: PurchaseRequestItem): number => {
+    if (isCcFeeItem(it)) return 3;
+    if (isSalesTaxItem(it)) return 2;
+    if (isChargeItem(it)) return 1;
+    return 0;
+  };
+  return items
+    .map((it, i) => ({ it, i }))
+    .sort((a, b) => rank(a.it) - rank(b.it) || a.i - b.i)
+    .map((x) => x.it);
+}
+
 /**
  * Recover the fee rate (decimal) from a fee line's description.
  * "3.5% Credit Card Fee" → 0.035. Falls back to the default rate.
@@ -144,7 +207,7 @@ export function rebalanceWithCcFee(
     description: ccFeeDescription(rate),
     part_number: existingFee?.part_number || "",
     qty: 1,
-    unit: "EA",
+    unit: "Each",
     unit_price: feePrice,
   };
   const next = [...renumbered, feeItem];

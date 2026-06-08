@@ -2,6 +2,10 @@
 // Auto-generated types for Supabase integration
 // Based on the complete schema from greenkeeper-pro-spec.md
 
+// Audit findings are produced by the deterministic PR-audit engine and stored
+// as JSONB on pr_audits. Type-only import (erased at compile) — no runtime cycle.
+import type { AuditFinding } from "@/lib/pr-audit/audit";
+
 export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director" | "gm";
 
 export type ZoneType =
@@ -1663,6 +1667,61 @@ export interface PurchaseRequest {
 
   status: "draft" | "submitted" | "sent" | "approved" | "received";
 
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── PR Audit (team PR inbox + per-cost-center budget) ──
+
+export type PrAuditReviewStatus = "pending" | "approved" | "sent_back";
+
+export interface PrAudit {
+  id: string;
+
+  // Uploaded source file (in the private `vendor-files` bucket, `pr-audit/` prefix).
+  file_path: string | null;
+  file_name: string | null;
+  file_uploaded_at: string | null;
+
+  // Extracted / reviewer-corrected header. pr_date drives FY + month bucketing.
+  pr_date: string;
+  vendor_name: string | null;
+  requestor_name: string | null;
+  internal_order: string | null;
+
+  // Same line-item shape as purchase_requests.items.
+  items: PurchaseRequestItem[];
+
+  attached_other: string | null;
+  printed_total: number | null;
+
+  // Frozen audit output (from lib/pr-audit/audit.ts) at save time.
+  audit_findings: AuditFinding[];
+  audit_error_count: number;
+  audit_warning_count: number;
+  computed_total: number;
+
+  review_status: PrAuditReviewStatus;
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+
+  /** Set the first time the reviewer opens this PR. NULL = not looked at yet. */
+  viewed_at: string | null;
+
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CostCenterBudget {
+  id: string;
+  /** Federal fiscal year (Oct–Sep), 4-digit, e.g. 2026. */
+  fiscal_year: number;
+  cost_ctr: string;
+  annual_amount: number;
+  notes: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

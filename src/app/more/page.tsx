@@ -25,6 +25,7 @@ import {
   Scale,
   Wrench,
   Droplets,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
@@ -68,6 +69,7 @@ const leadershipApps: AppItem[] = [
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
   { href: "/assistant", label: "AI Assistant", icon: Bot, color: "from-violet-500 to-fuchsia-600" },
   { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-blue-600 to-indigo-700" },
+  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-cyan-600 to-blue-700" },
   { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-green-600 to-emerald-700" },
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
   { href: "/vendors", label: "Vendors", icon: Phone, color: "from-purple-500 to-fuchsia-700" },

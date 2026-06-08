@@ -7,6 +7,9 @@ import {
   CC_FEE_RATE,
   isCcFeeItem,
   isSalesTaxItem,
+  isChargeItem,
+  feeCategory,
+  orderPurchaseItems,
   computeCcFeeAmount,
   rebalanceWithCcFee,
   formatCcFeePct,
@@ -97,7 +100,7 @@ describe("rebalanceWithCcFee", () => {
     expect(isCcFeeItem(after[1])).toBe(true);
     expect(after[1].unit_price).toBe(3);
     expect(after[1].qty).toBe(1);
-    expect(after[1].unit).toBe("EA");
+    expect(after[1].unit).toBe("Each");
     expect(after[1].item).toBe(2);
   });
 
@@ -258,6 +261,74 @@ describe("isSalesTaxItem", () => {
     expect(isSalesTaxItem({ description: "Syntax checker" })).toBe(false);
     expect(isSalesTaxItem({ description: "" })).toBe(false);
     expect(isSalesTaxItem({ description: null })).toBe(false);
+  });
+});
+
+describe("isChargeItem", () => {
+  it("matches shipping/handling/freight/delivery/processing/surcharge lines", () => {
+    for (const d of [
+      "Shipping",
+      "Shipping & Handling",
+      "Freight",
+      "Delivery Charges (includes Fuel Surcharge of $7.83)",
+      "Processing Fees",
+      "Fuel Surcharge",
+    ]) {
+      expect(isChargeItem({ description: d })).toBe(true);
+    }
+  });
+
+  it("does not match products, tax, or the CC-fee line", () => {
+    expect(isChargeItem({ description: "Toro mower blade" })).toBe(false);
+    expect(isChargeItem({ description: "Sales Tax" })).toBe(false);
+    expect(isChargeItem({ description: CC_FEE_DESCRIPTION })).toBe(false);
+    expect(isChargeItem({ description: "" })).toBe(false);
+  });
+});
+
+describe("feeCategory", () => {
+  it("maps tax and charge variants to a shared category, null otherwise", () => {
+    expect(feeCategory({ description: "Sales Tax" })).toBe("tax");
+    expect(feeCategory({ description: "Estimated Tax" })).toBe("tax");
+    expect(feeCategory({ description: "Processing Fees" })).toBe("processing");
+    expect(feeCategory({ description: "Estimated Processing Fees" })).toBe("processing");
+    expect(feeCategory({ description: "Delivery Charges (includes Fuel Surcharge of $7.83)" })).toBe("delivery");
+    expect(feeCategory({ description: "Shipping & Handling" })).toBe("shipping");
+    expect(feeCategory({ description: "Freight" })).toBe("freight");
+    expect(feeCategory({ description: "Toro mower blade" })).toBeNull();
+    expect(feeCategory({ description: CC_FEE_DESCRIPTION })).toBeNull();
+  });
+});
+
+describe("orderPurchaseItems", () => {
+  it("orders products, then charges, then tax, then the CC fee", () => {
+    const items = [
+      mkItem({ description: "Shipping", unit_price: 15 }),
+      mkItem({ description: "Widget", unit_price: 100 }),
+      mkItem({ description: "Sales Tax", unit_price: 8 }),
+      mkItem({ description: CC_FEE_DESCRIPTION, unit_price: 3 }),
+      mkItem({ description: "Bracket", unit_price: 10 }),
+      mkItem({ description: "Delivery", unit_price: 20 }),
+    ];
+    expect(orderPurchaseItems(items).map((i) => i.description)).toEqual([
+      "Widget",
+      "Bracket",
+      "Shipping",
+      "Delivery",
+      "Sales Tax",
+      CC_FEE_DESCRIPTION,
+    ]);
+  });
+
+  it("is stable within a group and neither drops nor duplicates items", () => {
+    const items = [
+      mkItem({ description: "B" }),
+      mkItem({ description: "A" }),
+      mkItem({ description: "Freight" }),
+    ];
+    const ordered = orderPurchaseItems(items);
+    expect(ordered).toHaveLength(3);
+    expect(ordered.map((i) => i.description)).toEqual(["B", "A", "Freight"]);
   });
 });
 
