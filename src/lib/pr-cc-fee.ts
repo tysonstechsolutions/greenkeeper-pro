@@ -6,7 +6,8 @@
  * defaults to 3% but is editable per-PR — some vendors charge a different
  * surcharge (e.g. 3.5%). This module owns the rate math and the invariant
  * that the fee line is always present, always last, and always equal to
- * `rate × the extended subtotal of every OTHER line item on the PR`.
+ * `rate × the extended subtotal of every OTHER non-tax line item on the PR`
+ * (sales tax is a line item but is excluded from the surcharge base).
  *
  * The fee line is identified by its description ("<rate>% Credit Card Fee"),
  * so `isCcFeeItem` matches any rate and `parseCcFeeRate` recovers the rate
@@ -38,6 +39,24 @@ export function isCcFeeItem(it: { description?: string | null }): boolean {
   return CC_FEE_RE.test((it.description || "").trim());
 }
 
+/** Patterns for a sales-tax line ("Sales Tax", "Estimated Tax", bare "Tax"). */
+const SALES_TAX_PATTERNS: readonly RegExp[] = [
+  /\bsales tax\b/i,
+  /\bestimated tax\b/i,
+  /^tax$/i,
+];
+
+/**
+ * True when the item is a sales-tax line. Sales tax is a real line item (the
+ * card is charged it on online orders that can't apply the exemption), but it
+ * is EXCLUDED from the credit-card-fee base — the surcharge applies to the
+ * pre-tax amount only.
+ */
+export function isSalesTaxItem(it: { description?: string | null }): boolean {
+  const d = (it.description || "").trim();
+  return SALES_TAX_PATTERNS.some((re) => re.test(d));
+}
+
 /**
  * Recover the fee rate (decimal) from a fee line's description.
  * "3.5% Credit Card Fee" → 0.035. Falls back to the default rate.
@@ -55,7 +74,7 @@ export function computeCcFeeAmount(
   rate: number = CC_FEE_RATE,
 ): number {
   const subtotal = items
-    .filter((it) => !isCcFeeItem(it))
+    .filter((it) => !isCcFeeItem(it) && !isSalesTaxItem(it))
     .reduce(
       (s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0),
       0,
@@ -82,8 +101,9 @@ function itemsShallowEqual(
 
 /**
  * Ensure exactly one CC-fee line item exists as the LAST entry in `items`,
- * with `unit_price` equal to `rate` × every other line's extended subtotal
- * and its description reflecting that rate ("3% Credit Card Fee").
+ * with `unit_price` equal to `rate` × every other NON-TAX line's extended
+ * subtotal and its description reflecting that rate ("3% Credit Card Fee").
+ * Sales-tax lines stay in the list but are excluded from the fee base.
  *
  * Non-fee items keep their order and have their `item` numbers renumbered
  * 1..N. The fee line gets number N+1.
@@ -104,10 +124,14 @@ export function rebalanceWithCcFee(
 ): PurchaseRequestItem[] {
   const nonFee = items.filter((it) => !isCcFeeItem(it));
   const existingFee = items.find(isCcFeeItem);
-  const subtotal = nonFee.reduce(
-    (s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0),
-    0,
-  );
+  // Sales tax stays a normal line item but is NOT part of the fee base —
+  // the credit-card surcharge applies to the pre-tax amount only.
+  const subtotal = nonFee
+    .filter((it) => !isSalesTaxItem(it))
+    .reduce(
+      (s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0),
+      0,
+    );
   const feePrice = Math.round(subtotal * rate * 100) / 100;
 
   const renumbered = nonFee.map((it, i) => ({ ...it, item: i + 1 }));

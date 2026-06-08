@@ -43,6 +43,7 @@ import {
 import { formatInternalOrder } from "@/lib/pr-internal-order";
 import {
   isCcFeeItem,
+  isSalesTaxItem,
   rebalanceWithCcFee,
   CC_FEE_RATE,
   parseCcFeeRate,
@@ -68,47 +69,13 @@ import type {
   UserRole,
   VendorWith889,
 } from "@/types/database";
-
-// Response shape from the extract-quote edge function.
-interface ExtractedQuote {
-  vendor: {
-    name: string | null;
-    address: string | null;
-    line2: string | null;
-    city_state_zip: string | null;
-    poc: string | null;
-    email: string | null;
-    phone: string | null;
-  } | null;
-  items: Array<{
-    description: string;
-    part_number: string | null;
-    qty: number;
-    unit: string | null;
-    unit_price: number;
-  }>;
-  warnings: string[];
-  // Surfaced when the AI had to make a guess between multiple valid prices
-  // (rental tiers, bulk-discount tiers, package levels, etc.). Items are
-  // populated with the best guess; clicking an option here applies the
-  // option's overrides to the matching line items in place — no second AI
-  // call needed.
-  clarifications?: Array<{
-    question: string;
-    options?: ClarificationOption[] | null;
-    applies_to?: string[] | null;
-  }>;
-}
-
-interface ClarificationOption {
-  label: string;
-  item_overrides: Array<{
-    match_description: string;
-    unit_price: number;
-    qty?: number | null;
-    unit?: string | null;
-  }>;
-}
+import {
+  combineExtractions,
+  hasRealItems,
+  type ExtractedQuote,
+  type ClarificationOption,
+} from "@/lib/quote/extraction";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 function todayIso(): string {
   return todayLocal();
@@ -707,6 +674,55 @@ async function stitchImagesToQuotePdf(files: File[]): Promise<File> {
     doc.addImage(dataUrl, f.type.includes("png") ? "PNG" : "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h);
   }
   return new File([doc.output("blob")], "quote.pdf", { type: "application/pdf" });
+}
+
+/**
+ * Vendors whose ONLINE checkout can't apply the org's tax exemption, so the
+ * purchase card is charged sales tax (reclaimed from the vendor later). Only
+ * for these vendors is an extracted "Sales Tax" line kept on the PR; every
+ * other vendor stays tax-exempt and the tax line is dropped. Add more
+ * vendors here as needed — no edge-function redeploy required.
+ */
+const TAX_CHARGING_VENDORS: readonly RegExp[] = [/\bmenards\b/i];
+
+/** Max number of pages a single quote can carry (UI + bundle stay sane). */
+const MAX_QUOTE_PAGES = 10;
+/** How many quote pages to read with the vision endpoint at once. Small so a
+ *  big multi-page upload doesn't trip per-minute API rate limits. */
+const EXTRACT_CONCURRENCY = 3;
+
+/** One upload-ready quote page: the resized file plus its base64 payload. */
+interface QuotePage {
+  file: File;
+  base64: string;
+  mediaType: string;
+}
+
+/**
+ * Resize raw quote files into upload-ready pages, ONE AT A TIME. Sequential
+ * (not parallel) on purpose: decoding several multi-megapixel photos at once
+ * is what OOMs the Capacitor Android WebView. A file that can't be decoded is
+ * reported back in `errors` instead of sinking the whole batch.
+ */
+async function resizeQuotePages(
+  rawFiles: File[],
+): Promise<{ pages: QuotePage[]; errors: string[] }> {
+  const pages: QuotePage[] = [];
+  const errors: string[] = [];
+  for (const raw of rawFiles) {
+    try {
+      const resized = await resizeImageFile(raw, { maxDim: 1600, quality: 0.82 });
+      pages.push({
+        file: resized.file,
+        base64: resized.base64,
+        mediaType: resized.mediaType,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`${raw.name || "file"}: ${msg}`);
+    }
+  }
+  return { pages, errors };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1321,7 +1337,124 @@ function NewPurchaseRequestPageInner() {
   }
 
   // ── Quote upload + AI extraction ─────────────────────────────────────────
-  async function handleQuoteUpload(file: File) {
+  /**
+   * Apply a (possibly combined) extraction result to the form: merge vendor
+   * fields without clobbering anything typed, replace-or-append the line
+   * items (the CC-fee rebalance effect then keeps the fee row last), and
+   * surface warnings + clarifications. `extraWarnings` carries page-level
+   * notes (a page that couldn't be read, a page-cap hit).
+   */
+  function applyExtractedQuote(
+    result: ExtractedQuote,
+    extraWarnings: string[],
+    pageCount = 1,
+  ) {
+    // Merge vendor fields if any are present and the existing form vendor
+    // is empty — don't clobber what the user already typed.
+    if (result.vendor) {
+      setV1((prev) => ({
+        name: prev.name || result.vendor!.name || "",
+        address: prev.address || result.vendor!.address || "",
+        line2: prev.line2 || result.vendor!.line2 || "",
+        city_state_zip:
+          prev.city_state_zip || result.vendor!.city_state_zip || "",
+        poc: prev.poc || result.vendor!.poc || "",
+        email: prev.email || result.vendor!.email || "",
+        phone: prev.phone || result.vendor!.phone || "",
+        sap_no: prev.sap_no,
+        gsa_naf_no: prev.gsa_naf_no,
+      }));
+    }
+
+    const note = extraWarnings.length > 0 ? ` (${extraWarnings.join("; ")})` : "";
+    const source = pageCount > 1 ? `${pageCount} pages of the quote` : "the quote";
+
+    // Sales tax only belongs on PRs for vendors whose online checkout can't
+    // apply the exemption (currently just Menards). For any other vendor,
+    // drop the tax line the extractor may have captured — the vendor name
+    // comes from the merged extraction (the cart page) or the form, so this
+    // works even when the tax sits on an unbranded order-summary page.
+    const vendorText = `${result.vendor?.name ?? ""} ${v1.name ?? ""}`;
+    const keepTax = TAX_CHARGING_VENDORS.some((re) => re.test(vendorText));
+    const incomingItems = (result.items ?? []).filter(
+      (it) => keepTax || !isSalesTaxItem(it),
+    );
+
+    // Replace line items with extracted ones (renumbering 1..n).
+    // If the form only had empty defaults, this is the natural expectation.
+    // If the user already had real items typed in (or an earlier page filled
+    // some), append. The CC-fee useEffect rebalances afterward.
+    if (incomingItems.length > 0) {
+      const extracted: PurchaseRequestItem[] = incomingItems.map((ex, i) => ({
+        item: i + 1,
+        site: "",
+        cost_ctr: "",
+        gl_acct: "",
+        description: ex.description || "",
+        part_number: ex.part_number || "",
+        qty: Number(ex.qty) || 0,
+        unit: ex.unit || "",
+        unit_price: Number(ex.unit_price) || 0,
+      }));
+
+      if (hasRealItems(items)) {
+        setItems((prev) => {
+          const combined = [...prev, ...extracted];
+          return combined.map((it, i) => ({ ...it, item: i + 1 }));
+        });
+        setExtractInfo(
+          `Added ${incomingItems.length} line items from ${source}.${note}`,
+        );
+      } else {
+        setItems(extracted);
+        setExtractInfo(
+          `Filled ${incomingItems.length} line items from ${source}.${note}`,
+        );
+      }
+      setOpenSection("items");
+    } else if (!result.vendor) {
+      setError(
+        "Couldn't pull anything useful from that file. Try a clearer photo or a PDF version.",
+      );
+    } else {
+      setExtractInfo(`Filled in vendor info from the quote.${note}`);
+    }
+
+    const warnings = [...extraWarnings, ...(result.warnings ?? [])];
+    if (warnings.length > 0) setExtractWarnings(warnings);
+    if (result.clarifications && result.clarifications.length > 0) {
+      setExtractClarifications(result.clarifications);
+      recordBreadcrumb(
+        "click",
+        `[quote-upload] ${result.clarifications.length} clarification(s) needed`,
+      );
+    }
+  }
+
+  /**
+   * Resize and read one or more quote pages, then merge them into the form.
+   *
+   * The first upload (or camera shot) replaces the staged pages and fills the
+   * form; later additions append. EVERY page is sent to the vision endpoint
+   * (a few at a time) and the line items are combined, so a cart split across
+   * several screenshots comes in complete. Pages are staged before reading,
+   * so they still attach to the bundle even if a read fails.
+   */
+  async function handleQuoteFiles(rawFiles: File[]) {
+    const incoming = Array.from(rawFiles).filter(Boolean);
+    if (incoming.length === 0) return;
+
+    const isAddition = quoteFiles.length > 0;
+    const remainingSlots = MAX_QUOTE_PAGES - quoteFiles.length;
+    if (remainingSlots <= 0) {
+      setError(
+        `A quote can have at most ${MAX_QUOTE_PAGES} pages. Remove a page to add another.`,
+      );
+      return;
+    }
+    const capped = incoming.slice(0, remainingSlots);
+    const droppedForCap = incoming.length - capped.length;
+
     setExtracting(true);
     setExtractElapsed(0);
     setExtractWarnings([]);
@@ -1342,125 +1475,87 @@ function NewPurchaseRequestPageInner() {
 
     recordBreadcrumb(
       "click",
-      `[quote-upload] start: ${file.name} ${file.type} ${file.size}B`,
+      `[quote-upload] start: ${capped.length} page(s)${isAddition ? " (addition)" : ""}`,
     );
 
     try {
-      // 1. Resize the image client-side to keep the request payload small
-      //    and survive Capacitor WebView memory constraints.
-      let payload: { image_base64: string; media_type: string };
-      try {
-        const resized = await resizeImageFile(file, {
-          maxDim: 1600,
-          quality: 0.82,
-        });
-        if (cancel.cancelled) return;
-        recordBreadcrumb(
-          "click",
-          `[quote-upload] resized: ${resized.size}B ${resized.finalSize.width}x${resized.finalSize.height}`,
-        );
-        payload = {
-          image_base64: resized.base64,
-          media_type: resized.mediaType,
-        };
-        // Reset to a single-page quote (replaces any prior selection).
-        setQuoteFiles([resized.file]);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new Error(`Couldn't read image: ${msg}`);
+      // 1. Resize client-side (sequential — keeps WebView memory in check)
+      //    so the payloads stay small and decode reliably.
+      const { pages, errors: resizeErrors } = await resizeQuotePages(capped);
+      if (cancel.cancelled) return;
+      if (pages.length === 0) {
+        throw new Error(resizeErrors[0] || "Couldn't read the selected file(s).");
       }
 
-      // 2. Send JSON (NOT FormData — supabase.functions.invoke + Capacitor
-      //    Android crashes on FormData bodies).
-      const result = await callApi<ExtractedQuote>("extract-quote", {
-        method: "POST",
-        body: payload,
-      });
+      // 2. Stage the resized pages NOW so they attach to the bundle even if
+      //    the AI read fails. Replace on a fresh quote; append when adding.
+      const stagedFiles = pages.map((p) => p.file);
+      if (isAddition) {
+        setQuoteFiles((prev) => [...prev, ...stagedFiles]);
+      } else {
+        setQuoteFiles(stagedFiles);
+      }
+
+      // 3. Read each page (a few at a time). JSON body — NOT FormData —
+      //    because supabase.functions.invoke + Capacitor Android crash on
+      //    FormData bodies. A page that fails to read becomes a warning, not
+      //    a hard error, so the other pages still land.
+      const readErrors: string[] = [];
+      const perPage = await mapWithConcurrency(
+        pages,
+        EXTRACT_CONCURRENCY,
+        async (page, idx) => {
+          if (cancel.cancelled) return null;
+          try {
+            return await callApi<ExtractedQuote>("extract-quote", {
+              method: "POST",
+              body: { image_base64: page.base64, media_type: page.mediaType },
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            recordBreadcrumb(
+              "warn",
+              `[quote-upload] page ${idx + 1} read failed: ${msg}`,
+            );
+            readErrors.push(`Couldn't read page ${idx + 1}`);
+            return null;
+          }
+        },
+      );
       if (cancel.cancelled) {
-        recordBreadcrumb("warn", `[quote-upload] response arrived after cancel — discarding`);
+        recordBreadcrumb("warn", `[quote-upload] cancelled — discarding results`);
         return;
       }
+
+      const results = perPage.filter(
+        (r): r is ExtractedQuote => r !== null,
+      );
       recordBreadcrumb(
         "click",
-        `[quote-upload] got ${result.items?.length || 0} items + ${result.vendor ? "vendor" : "no vendor"} in ${Math.floor((Date.now() - startedAt) / 1000)}s`,
+        `[quote-upload] read ${results.length}/${pages.length} page(s) in ${Math.floor((Date.now() - startedAt) / 1000)}s`,
       );
 
-      // Merge vendor fields if any are present and the existing form vendor
-      // is empty — don't clobber what the user already typed.
-      if (result.vendor) {
-        setV1((prev) => ({
-          name: prev.name || result.vendor!.name || "",
-          address: prev.address || result.vendor!.address || "",
-          line2: prev.line2 || result.vendor!.line2 || "",
-          city_state_zip:
-            prev.city_state_zip || result.vendor!.city_state_zip || "",
-          poc: prev.poc || result.vendor!.poc || "",
-          email: prev.email || result.vendor!.email || "",
-          phone: prev.phone || result.vendor!.phone || "",
-          sap_no: prev.sap_no,
-          gsa_naf_no: prev.gsa_naf_no,
-        }));
-      }
-
-      // Replace line items with extracted ones (renumbering 1..n).
-      // If the form only had one empty default item, this is the natural
-      // expectation. If the user already had real items typed in, merge.
-      if (result.items && result.items.length > 0) {
-        const extracted: PurchaseRequestItem[] = result.items.map((ex, i) => ({
-          item: i + 1,
-          site: "",
-          cost_ctr: "",
-          gl_acct: "",
-          description: ex.description || "",
-          part_number: ex.part_number || "",
-          qty: Number(ex.qty) || 0,
-          unit: ex.unit || "",
-          unit_price: Number(ex.unit_price) || 0,
-        }));
-
-        // Heuristic: if existing items are all empty defaults, replace.
-        // Otherwise append.
-        const hasRealItems = items.some(
-          (it) =>
-            it.description.trim() ||
-            it.part_number ||
-            (it.qty || 0) > 0 ||
-            (it.unit_price || 0) > 0,
-        );
-
-        if (hasRealItems) {
-          setItems((prev) => {
-            const combined = [...prev, ...extracted];
-            return combined.map((it, i) => ({ ...it, item: i + 1 }));
-          });
-          setExtractInfo(
-            `Added ${result.items.length} line items from the quote.`,
-          );
-        } else {
-          setItems(extracted);
-          setExtractInfo(
-            `Filled ${result.items.length} line items from the quote.`,
-          );
-        }
-        setOpenSection("items");
-      } else if (!result.vendor) {
-        setError(
-          "Couldn't pull anything useful from that file. Try a clearer photo or a PDF version.",
-        );
-      } else {
-        setExtractInfo("Filled in vendor info from the quote.");
-      }
-
-      if (result.warnings && result.warnings.length > 0) {
-        setExtractWarnings(result.warnings);
-      }
-      if (result.clarifications && result.clarifications.length > 0) {
-        setExtractClarifications(result.clarifications);
-        recordBreadcrumb(
-          "click",
-          `[quote-upload] ${result.clarifications.length} clarification(s) needed`,
+      const extraWarnings: string[] = [];
+      if (droppedForCap > 0) {
+        extraWarnings.push(
+          `Only added the first ${MAX_QUOTE_PAGES} pages (page limit).`,
         );
       }
+      extraWarnings.push(...readErrors);
+
+      if (results.length === 0) {
+        // Pages are still staged/attached — just report the read failure.
+        setExtractWarnings(
+          extraWarnings.length > 0
+            ? extraWarnings
+            : [
+                "Couldn't read the quote. The pages are attached — enter the line items manually.",
+              ],
+        );
+        return;
+      }
+
+      applyExtractedQuote(combineExtractions(results), extraWarnings, results.length);
     } catch (err) {
       if (cancel.cancelled) return;
       const msg =
@@ -1479,22 +1574,6 @@ function NewPurchaseRequestPageInner() {
     }
   }
 
-  /** Add a subsequent quote page without re-running AI extraction. */
-  async function handleAddQuotePage(rawFile: File) {
-    setError(null);
-    try {
-      const resized = await resizeImageFile(rawFile, { maxDim: 1600, quality: 0.82 });
-      setQuoteFiles((prev) => {
-        recordBreadcrumb("click", `[quote-add-page] page ${prev.length + 1}: ${resized.file.name} ${resized.size}B`);
-        return [...prev, resized.file];
-      });
-      setExtractInfo("Added another page — all pages will be merged into the bundle.");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(`Couldn't add page: ${msg}`);
-    }
-  }
-
   /**
    * Native camera path — uses @capacitor/camera so we don't trip the
    * file-input + WebView OOM crash on high-resolution Android photos.
@@ -1509,13 +1588,9 @@ function NewPurchaseRequestPageInner() {
         "click",
         `[quote-upload] photo captured ${photo.file.size}B`,
       );
-      if (quoteFiles.length === 0) {
-        // First photo — run the full extraction pipeline.
-        await handleQuoteUpload(photo.file);
-      } else {
-        // Additional page — just append, no re-extraction.
-        await handleAddQuotePage(photo.file);
-      }
+      // First shot fills the form; later shots append another page. Either
+      // way the page is read and its items are merged in.
+      await handleQuoteFiles([photo.file]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (
@@ -2290,8 +2365,10 @@ function NewPurchaseRequestPageInner() {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">Quote</p>
             <p className="text-[11px] text-muted-foreground">
-              Snap or upload the vendor quote. Vendor info + line items
-              auto-fill, AND the file gets attached to the PR download bundle.
+              Snap or upload the vendor quote. Cart too big for one picture?
+              Add several photos or select multiple files — every page is read
+              and the items are combined. All pages auto-fill the form and
+              attach to the PR download bundle.
             </p>
           </div>
         </div>
@@ -2353,10 +2430,7 @@ function NewPurchaseRequestPageInner() {
                 className="absolute inset-0 opacity-0 cursor-pointer"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) {
-                    if (quoteFiles.length === 0) handleQuoteUpload(f);
-                    else handleAddQuotePage(f);
-                  }
+                  if (f) handleQuoteFiles([f]);
                   e.target.value = "";
                 }}
                 disabled={extracting}
@@ -2375,13 +2449,11 @@ function NewPurchaseRequestPageInner() {
             <input
               type="file"
               accept="image/*,application/pdf"
+              multiple
               className="absolute inset-0 opacity-0 cursor-pointer"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) {
-                  if (quoteFiles.length === 0) handleQuoteUpload(f);
-                  else handleAddQuotePage(f);
-                }
+                const fs = Array.from(e.target.files ?? []);
+                if (fs.length > 0) handleQuoteFiles(fs);
                 e.target.value = "";
               }}
               disabled={extracting}

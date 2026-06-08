@@ -6,6 +6,7 @@ import {
   CC_FEE_DESCRIPTION,
   CC_FEE_RATE,
   isCcFeeItem,
+  isSalesTaxItem,
   computeCcFeeAmount,
   rebalanceWithCcFee,
   formatCcFeePct,
@@ -240,5 +241,48 @@ describe("custom fee rate", () => {
     const fee = after.find(isCcFeeItem)!;
     expect(fee.unit_price).toBe(3.5);
     expect(fee.description).toBe("3.5% Credit Card Fee");
+  });
+});
+
+describe("isSalesTaxItem", () => {
+  it("matches sales-tax descriptions (any casing/whitespace)", () => {
+    expect(isSalesTaxItem({ description: "Sales Tax" })).toBe(true);
+    expect(isSalesTaxItem({ description: "  sales tax " })).toBe(true);
+    expect(isSalesTaxItem({ description: "Estimated Tax" })).toBe(true);
+    expect(isSalesTaxItem({ description: "Tax" })).toBe(true);
+  });
+
+  it("does not match products, fees, or words that merely contain 'tax'", () => {
+    expect(isSalesTaxItem({ description: "Toro mower blade" })).toBe(false);
+    expect(isSalesTaxItem({ description: CC_FEE_DESCRIPTION })).toBe(false);
+    expect(isSalesTaxItem({ description: "Syntax checker" })).toBe(false);
+    expect(isSalesTaxItem({ description: "" })).toBe(false);
+    expect(isSalesTaxItem({ description: null })).toBe(false);
+  });
+});
+
+describe("sales tax is excluded from the 3% fee base", () => {
+  it("computeCcFeeAmount ignores a Sales Tax line", () => {
+    // products = 100, tax = 8.13 → fee = 3% of 100 = 3, NOT 3% of 108.13.
+    expect(
+      computeCcFeeAmount([
+        mkItem({ qty: 1, unit_price: 100 }),
+        mkItem({ description: "Sales Tax", qty: 1, unit_price: 8.13 }),
+      ]),
+    ).toBe(3);
+  });
+
+  it("rebalanceWithCcFee charges the fee on pre-tax items and keeps the tax line", () => {
+    const after = rebalanceWithCcFee([
+      mkItem({ description: "Widget", qty: 2, unit_price: 50 }), // 100
+      mkItem({ description: "Sales Tax", qty: 1, unit_price: 8.13 }),
+    ]);
+    // The tax line survives as a normal line item.
+    expect(after.some((i) => isSalesTaxItem(i))).toBe(true);
+    // Fee is 3% of the pre-tax subtotal (100), not 108.13.
+    const fee = after.find(isCcFeeItem)!;
+    expect(fee.unit_price).toBe(3);
+    // Fee remains the last row.
+    expect(isCcFeeItem(after[after.length - 1])).toBe(true);
   });
 });

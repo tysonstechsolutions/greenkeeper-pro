@@ -119,18 +119,29 @@ Worked example — single NAPA row:
   Math check: 3 × 10.49 = 31.47 ✓  matches Total — correct column chosen.
 
 ═══════════════════════════════════════════════════════════════════════════
-USER ORG CONTEXT — TAX-FREE
+SALES TAX — INCLUDE IT WHEN THE DOCUMENT CHARGES IT
 ═══════════════════════════════════════════════════════════════════════════
 
-The user's organization is a TAX-EXEMPT NAF activity (US Navy MWR). They
-NEVER pay sales tax. Therefore:
-  • Skip "Sales Tax" / "Tax" / "Estimated Tax" / "Tax Estimated Using …"
-    rows entirely. Do NOT include them as items, do NOT mention them in
-    warnings ("excluded sales tax" is just noise — silently drop).
-  • If the quote shows a tax-inclusive total alongside a pre-tax subtotal,
-    use the pre-tax figures.
-  • Tax-related notes ("Subject to Sales Tax", "Tax-exempt cert required")
-    don't need warnings.
+The user's organization is tax-exempt IN STORE, but on ONLINE / e-commerce
+orders the exemption can't be applied at checkout, so the card IS charged
+sales tax up front (they reclaim it from the vendor afterward). The Purchase
+Request must therefore match what the card is actually charged:
+  • If the document shows a sales-tax amount being charged ("Sales Tax",
+    "Tax", "Estimated Tax", "Tax Estimated Using …", or a tax line in an
+    Order Summary), INCLUDE it as a SINGLE line item:
+       description: "Sales Tax"
+       part_number: null
+       qty: 1
+       unit: null
+       unit_price: the tax dollar amount (a plain number, e.g. 160.81)
+  • Emit only ONE sales-tax line per document — the final total tax, never
+    per-item tax.
+  • If tax is shown as $0 / "TBD" / "included" / "exempt", or is not shown at
+    all, do NOT add a tax line — an in-store tax-exempt quote simply won't
+    have one.
+  • Keep using PRE-tax figures for the products themselves, and still SKIP
+    the Subtotal / Total / Grand Total summary rows — the Sales Tax line is
+    the only summary-area value that becomes a line item.
 
 ═══════════════════════════════════════════════════════════════════════════
 RENTAL QUOTE FEES — INCLUDE THEM AS LINE ITEMS
@@ -487,7 +498,8 @@ VENDOR
 
 THINGS TO SKIP
 - Header rows ("Item / Description / Qty / Price")
-- Subtotal / Tax / Discount / Total / Grand Total rows
+- Subtotal / Discount / Total / Grand Total summary rows (but DO capture
+  Sales Tax as a line item — see the SALES TAX section above)
 - Notes, terms, signatures, page numbers
 - Availability / lead-time blurbs ("Typically available in 5-10 business days")
 - "Save for Later", "Remove", or icon-only buttons

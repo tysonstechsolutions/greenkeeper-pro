@@ -36,6 +36,8 @@ import {
   RotateCcw,
   Ban,
   PowerOff,
+  Check,
+  CheckSquare,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -66,6 +68,7 @@ import {
 } from "@/lib/supabase/rest";
 import { generateSprinklerReport } from "@/lib/reports/sprinkler-report";
 import { generateSprinklerMapReport } from "@/lib/reports/sprinkler-map-report";
+import { generateSprinklerIssuesReport } from "@/lib/reports/sprinkler-issues-report";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -378,6 +381,7 @@ export default function SprinklerMapPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [downloadingMapReport, setDownloadingMapReport] = useState(false);
+  const [downloadingIssuesReport, setDownloadingIssuesReport] = useState(false);
 
   // Top-level view
   const [view, setView] = useState<ViewMode>("map");
@@ -447,6 +451,18 @@ export default function SprinklerMapPage() {
   // Fullscreen map editor state
   const [fullscreen, setFullscreen] = useState(false);
 
+  // Multi-select + bulk actions (fullscreen map)
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedHeadIds, setSelectedHeadIds] = useState<string[]>([]);
+  const [massIssueOpen, setMassIssueOpen] = useState(false);
+  const [massIssueForm, setMassIssueForm] = useState<{
+    issue_type: IssueType;
+    severity: IssueSeverity;
+    description: string;
+  }>({ issue_type: "low_pressure", severity: "medium", description: "" });
+  const [massActionLoading, setMassActionLoading] = useState(false);
+  const [massActionError, setMassActionError] = useState<string | null>(null);
+
   // ── Load ────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
@@ -512,6 +528,19 @@ export default function SprinklerMapPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // The map opens straight into the big fullscreen view. This fires whenever
+  // the map view becomes active (initial mount, or switching back from the
+  // By Satellite / By Sprinkler tabs). Manually closing it stays closed until
+  // you leave and return, since `view` doesn't change on close.
+  useEffect(() => {
+    if (view === "map") setFullscreen(true);
+  }, [view]);
+
+  // Leaving select mode clears any pending selection.
+  useEffect(() => {
+    if (!selectMode) setSelectedHeadIds([]);
+  }, [selectMode]);
 
   // Reset img-loaded/error state when switching holes OR parts (each part has
   // its own picture, so a fresh load/error must be tracked per part too —
@@ -916,6 +945,133 @@ export default function SprinklerMapPage() {
     [holeNumber, areaFilter],
   );
 
+  // ── Move a head (drag-to-reposition in the fullscreen map) ──────────────
+  // Optimistic: update locally immediately, then persist. On failure, resync
+  // from the server so the on-screen position can't drift from the truth.
+  const handleMoveHead = useCallback(
+    async (id: string, x: number, y: number) => {
+      const cx = Math.max(0, Math.min(1, x));
+      const cy = Math.max(0, Math.min(1, y));
+      setSprinklers((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, x_pct: cx, y_pct: cy } : s)),
+      );
+      try {
+        await directPatchRow(
+          "irrigation_sprinklers",
+          "id",
+          id,
+          { x_pct: cx, y_pct: cy, updated_at: new Date().toISOString() },
+          "sprinkler-map.move",
+        );
+      } catch (err) {
+        console.error("Failed to move head:", err);
+        alert(
+          `Couldn't save the new position: ${err instanceof Error ? err.message : "unknown error"}`,
+        );
+        loadData();
+      }
+    },
+    [loadData],
+  );
+
+  // ── Multi-select + bulk actions ─────────────────────────────────────────
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedHeadIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = [...selectedHeadIds];
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${ids.length} selected ${ids.length === 1 ? "head" : "heads"}? This also removes their issue history.`,
+      )
+    ) {
+      return;
+    }
+    setMassActionLoading(true);
+    setMassActionError(null);
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          directDeleteRow(
+            "irrigation_sprinklers",
+            "id",
+            id,
+            "sprinkler-map.bulkDelete",
+          ),
+        ),
+      );
+      const idSet = new Set(ids);
+      setSprinklers((prev) => prev.filter((s) => !idSet.has(s.id)));
+      // Their issues cascade server-side; drop them locally too.
+      setIssues((prev) => prev.filter((i) => !idSet.has(i.sprinkler_id)));
+      setSelectedHeadIds([]);
+      setSelectMode(false);
+    } catch (err) {
+      console.error("Failed to delete heads:", err);
+      setMassActionError(
+        err instanceof Error ? err.message : "Failed to delete the selected heads.",
+      );
+      loadData();
+    } finally {
+      setMassActionLoading(false);
+    }
+  }, [selectedHeadIds, loadData]);
+
+  const openMassIssue = useCallback(() => {
+    if (selectedHeadIds.length === 0) return;
+    setMassIssueForm({
+      issue_type: "low_pressure",
+      severity: "medium",
+      description: "",
+    });
+    setMassActionError(null);
+    setMassIssueOpen(true);
+  }, [selectedHeadIds]);
+
+  const handleMassAddIssue = useCallback(async () => {
+    const ids = [...selectedHeadIds];
+    if (ids.length === 0) return;
+    const desc = massIssueForm.description.trim();
+    if (massIssueForm.issue_type === "other" && !desc) {
+      setMassActionError("Add a short description of what's wrong.");
+      return;
+    }
+    setMassActionLoading(true);
+    setMassActionError(null);
+    try {
+      const inserted = await Promise.all(
+        ids.map((id) =>
+          directInsertRow<SprinklerIssue>(
+            "irrigation_sprinkler_issues",
+            {
+              sprinkler_id: id,
+              issue_type: massIssueForm.issue_type,
+              severity: massIssueForm.severity,
+              description: desc || null,
+              status: "open",
+            },
+            "sprinkler-map.bulkIssue",
+          ),
+        ),
+      );
+      setIssues((prev) => [...inserted, ...prev]);
+      setMassIssueOpen(false);
+      setSelectedHeadIds([]);
+      setSelectMode(false);
+    } catch (err) {
+      console.error("Failed to report issues:", err);
+      setMassActionError(
+        err instanceof Error ? err.message : "Failed to report the issue.",
+      );
+    } finally {
+      setMassActionLoading(false);
+    }
+  }, [selectedHeadIds, massIssueForm]);
+
   // ── Delete ─────────────────────────────────────────────────────────────
 
   const handleDelete = useCallback(async () => {
@@ -1271,6 +1427,26 @@ export default function SprinklerMapPage() {
     }
   }, []);
 
+  // ── Download issues report (open issues + valve-shutoff affected heads) ──
+  const handleDownloadIssuesReport = useCallback(async () => {
+    setDownloadingIssuesReport(true);
+    try {
+      const { blob, filename } = await generateSprinklerIssuesReport();
+      await saveBlobToDevice({
+        blob,
+        filename,
+        shareTitle: "Sprinkler Issues Report",
+      });
+    } catch (err) {
+      console.error("Failed to generate issues report:", err);
+      alert(
+        `Failed to generate issues report: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    } finally {
+      setDownloadingIssuesReport(false);
+    }
+  }, []);
+
   // ── Render ─────────────────────────────────────────────────────────────
 
   const dialogOpen = pendingPin !== null || editingPin !== null;
@@ -1309,6 +1485,20 @@ export default function SprinklerMapPage() {
             <Printer className="w-4 h-4" />
           )}
           <span className="hidden lg:inline">Map Report</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownloadIssuesReport}
+          disabled={downloadingIssuesReport || loading}
+          title="Export open issues — including every head a shut valve takes offline"
+        >
+          {downloadingIssuesReport ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <AlertCircle className="w-4 h-4" />
+          )}
+          <span className="hidden lg:inline">Issues</span>
         </Button>
         <Link
           href="/irrigation"
@@ -1409,7 +1599,7 @@ export default function SprinklerMapPage() {
               </div>
             </div>
           )}
-          {view === "map" && (
+          {view === "map" && !fullscreen && (
             <MapView
               holeNumber={holeNumber}
               setHoleNumber={setHoleNumber}
@@ -1516,7 +1706,7 @@ export default function SprinklerMapPage() {
                 Area
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
+                {(["tee", "fairway", "green"] as AreaType[]).map((a) => (
                   <button
                     key={a}
                     type="button"
@@ -2250,8 +2440,127 @@ export default function SprinklerMapPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Mass report-issue dialog (bulk select) ───────────────────── */}
+      <Dialog
+        open={massIssueOpen}
+        onOpenChange={(open) => {
+          if (!open) setMassIssueOpen(false);
+        }}
+      >
+        {/* z-[70] keeps it above the fullscreen map (z-[60]). */}
+        <DialogContent className="z-[70]">
+          <DialogHeader>
+            <DialogTitle>
+              Report issue on {selectedHeadIds.length}{" "}
+              {selectedHeadIds.length === 1 ? "head" : "heads"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">
+                  Issue type
+                </label>
+                <select
+                  value={massIssueForm.issue_type}
+                  onChange={(e) =>
+                    setMassIssueForm({
+                      ...massIssueForm,
+                      issue_type: e.target.value as IssueType,
+                    })
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {ISSUE_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {ISSUE_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">
+                  Severity
+                </label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(["low", "medium", "high"] as IssueSeverity[]).map((s) => {
+                    const m = SEVERITY_META[s];
+                    const active = massIssueForm.severity === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() =>
+                          setMassIssueForm({ ...massIssueForm, severity: s })
+                        }
+                        className={`h-9 rounded border text-[11px] font-medium ${
+                          active
+                            ? `${m.chipBg} ${m.chipText} border-current`
+                            : "border-input text-muted-foreground hover:bg-accent"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div>
+              {massIssueForm.issue_type === "other" && (
+                <label className="text-[10px] text-muted-foreground mb-0.5 block">
+                  What&apos;s wrong?{" "}
+                  <span className="text-destructive">(required)</span>
+                </label>
+              )}
+              <Textarea
+                placeholder={
+                  massIssueForm.issue_type === "other"
+                    ? "Describe the problem…"
+                    : "Description (optional)"
+                }
+                value={massIssueForm.description}
+                onChange={(e) =>
+                  setMassIssueForm({
+                    ...massIssueForm,
+                    description: e.target.value,
+                  })
+                }
+                rows={2}
+                className="text-sm"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Opens the same issue on all {selectedHeadIds.length} selected{" "}
+              {selectedHeadIds.length === 1 ? "head" : "heads"}.
+            </p>
+            {massActionError && (
+              <p className="text-xs text-destructive">{massActionError}</p>
+            )}
+          </div>
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMassIssueOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleMassAddIssue}
+              disabled={massActionLoading}
+            >
+              {massActionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              Report on {selectedHeadIds.length}{" "}
+              {selectedHeadIds.length === 1 ? "head" : "heads"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Fullscreen map editor ──────────────────────────────────── */}
-      {fullscreen && !loading && !loadError && (
+      {fullscreen && view === "map" && !loading && !loadError && (
         <FullscreenMapEditor
           // Key resets zoom/pan when the hole OR part changes (new image).
           key={`${holeNumber}-${areaFilter}`}
@@ -2269,9 +2578,18 @@ export default function SprinklerMapPage() {
           onImageTap={handleImageTap}
           onPinTap={handlePinTap}
           onPlaceHead={handlePlaceHead}
+          onMoveHead={handleMoveHead}
           partPins={partPins}
           highlightId={highlightId}
           onClose={() => setFullscreen(false)}
+          selectMode={selectMode}
+          selectedHeadIds={selectedHeadIds}
+          onToggleSelectMode={() => setSelectMode((v) => !v)}
+          onToggleSelect={handleToggleSelect}
+          onClearSelection={() => setSelectedHeadIds([])}
+          onBulkDelete={handleBulkDelete}
+          onMassIssue={openMassIssue}
+          bulkBusy={massActionLoading}
         />
       )}
     </div>
@@ -2397,7 +2715,7 @@ function MapView({
       {/* Filter chips */}
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs font-semibold text-muted-foreground mr-1">Part:</span>
-        {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
+        {(["tee", "fairway", "green"] as AreaType[]).map((a) => (
           <FilterChip
             key={a}
             label={AREA_META[a].label}
@@ -2577,7 +2895,7 @@ function FilterChip({
 function Legend() {
   return (
     <span className="inline-flex items-center gap-2">
-      {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
+      {(["tee", "fairway", "green"] as AreaType[]).map((a) => (
         <span key={a} className="inline-flex items-center gap-1">
           <span
             className="w-2.5 h-2.5 rounded-full"
@@ -2640,9 +2958,18 @@ function FullscreenMapEditor({
   onImageTap,
   onPinTap,
   onPlaceHead,
+  onMoveHead,
   partPins,
   highlightId,
   onClose,
+  selectMode,
+  selectedHeadIds,
+  onToggleSelectMode,
+  onToggleSelect,
+  onClearSelection,
+  onBulkDelete,
+  onMassIssue,
+  bulkBusy,
 }: {
   holeNumber: number;
   setHoleNumber: (n: number) => void;
@@ -2660,9 +2987,18 @@ function FullscreenMapEditor({
   ) => void;
   onPinTap: (s: Sprinkler) => void;
   onPlaceHead: (sat: number, sta: number, x: number, y: number) => void;
+  onMoveHead: (id: string, x: number, y: number) => void;
   partPins: Sprinkler[];
   highlightId: string | null;
   onClose: () => void;
+  selectMode: boolean;
+  selectedHeadIds: string[];
+  onToggleSelectMode: () => void;
+  onToggleSelect: (id: string) => void;
+  onClearSelection: () => void;
+  onBulkDelete: () => void;
+  onMassIssue: () => void;
+  bulkBusy: boolean;
 }) {
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
@@ -2867,9 +3203,11 @@ function FullscreenMapEditor({
         wasDrag.current = false;
         return;
       }
+      // In select mode, tapping empty space shouldn't add a head.
+      if (selectMode) return;
       onImageTap(e);
     },
-    [onImageTap],
+    [onImageTap, selectMode],
   );
 
   const goPrev = () => setHoleNumber(holeNumber === 1 ? 18 : holeNumber - 1);
@@ -2947,6 +3285,23 @@ function FullscreenMapEditor({
           >
             <ChevronRight className="w-5 h-5" />
           </button>
+          <button
+            type="button"
+            onClick={onToggleSelectMode}
+            title={
+              selectMode
+                ? "Exit select mode"
+                : "Select heads to delete or report in bulk"
+            }
+            className={`ml-1 px-2.5 py-1.5 rounded inline-flex items-center gap-1.5 text-xs font-medium ${
+              selectMode
+                ? "bg-blue-600 text-white"
+                : "hover:bg-white/10 active:bg-white/20"
+            }`}
+          >
+            <CheckSquare className="w-4 h-4" />
+            {selectMode ? "Done" : "Select"}
+          </button>
         </div>
 
         <div className="flex items-center gap-1">
@@ -2994,7 +3349,7 @@ function FullscreenMapEditor({
       {/* Filter chips bar */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-black/60 border-b border-white/10 overflow-x-auto shrink-0">
         <span className="text-[10px] font-semibold opacity-60 shrink-0 mr-0.5">Part:</span>
-        {(["green", "tee", "fairway"] as AreaType[]).map((a) => (
+        {(["tee", "fairway", "green"] as AreaType[]).map((a) => (
           <FullscreenChip
             key={a}
             label={AREA_META[a].label}
@@ -3171,18 +3526,59 @@ function FullscreenMapEditor({
                   e.stopPropagation();
                   onPinTap(s);
                 }}
+                dragWrapperRef={imageRef}
+                onMoveCommit={onMoveHead}
+                selectMode={selectMode}
+                selected={selectedHeadIds.includes(s.id)}
+                onToggleSelect={onToggleSelect}
               />
             ))}
         </div>
+      </div>
+      </div>
 
-        {/* Bottom hint */}
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/70 text-white/80 text-[11px] backdrop-blur-sm pointer-events-none">
-          {scale > 1
-            ? "Drag to pan · pinch or buttons to zoom"
-            : "Pinch or + to zoom · tap empty area to add"}
+      {/* Select-mode action bar */}
+      {selectMode && (
+        <div className="absolute bottom-0 left-0 right-0 z-10 bg-black/85 backdrop-blur-sm border-t border-white/10 px-3 py-2.5 flex items-center gap-2 shrink-0">
+          <span className="text-sm font-semibold">
+            {selectedHeadIds.length}{" "}
+            {selectedHeadIds.length === 1 ? "head" : "heads"} selected
+          </span>
+          {selectedHeadIds.length > 0 && (
+            <button
+              type="button"
+              onClick={onClearSelection}
+              className="text-xs text-white/60 hover:text-white underline"
+            >
+              Clear
+            </button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onMassIssue}
+              disabled={selectedHeadIds.length === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md bg-white/15 hover:bg-white/25 text-sm font-medium disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <AlertCircle className="w-4 h-4" />
+              Report issue
+            </button>
+            <button
+              type="button"
+              onClick={onBulkDelete}
+              disabled={selectedHeadIds.length === 0 || bulkBusy}
+              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md bg-red-600 hover:bg-red-500 text-sm font-medium disabled:opacity-40 disabled:pointer-events-none"
+            >
+              {bulkBusy ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              Delete
+            </button>
+          </div>
         </div>
-      </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -3227,12 +3623,25 @@ function PinDot({
   openIssue,
   offline,
   onTap,
+  // Fullscreen-only extras (omitted by the inline/list views):
+  dragWrapperRef,
+  onMoveCommit,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   sprinkler: Sprinkler;
   highlight: boolean;
   openIssue: SprinklerIssue | null;
   offline?: OfflineInfo | null;
   onTap: (e: ReactMouseEvent<HTMLButtonElement>) => void;
+  /** Image wrapper used to convert a pointer position into x/y percentages. */
+  dragWrapperRef?: React.RefObject<HTMLDivElement | null>;
+  /** Persist a new position after a drag. Enables drag-to-move when provided. */
+  onMoveCommit?: (id: string, x_pct: number, y_pct: number) => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const meta = AREA_META[sprinkler.area_type];
   const sev = openIssue ? SEVERITY_META[openIssue.severity] : null;
@@ -3240,38 +3649,106 @@ function PinDot({
   // that are knocked out by another head's valve shutoff.
   const isOffline = !!offline && !openIssue;
 
+  // Drag-to-move: live position while dragging, committed on release.
+  const canDrag = !!dragWrapperRef && !!onMoveCommit && !selectMode;
+  const [dragPct, setDragPct] = useState<{ x: number; y: number } | null>(null);
+  const dragInfo = useRef<{ startX: number; startY: number; moved: boolean } | null>(
+    null,
+  );
+  const justDragged = useRef(false);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!canDrag) return;
+    e.stopPropagation();
+    justDragged.current = false; // fresh interaction
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragInfo.current = { startX: e.clientX, startY: e.clientY, moved: false };
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const info = dragInfo.current;
+    if (!canDrag || !info) return;
+    const dx = e.clientX - info.startX;
+    const dy = e.clientY - info.startY;
+    if (!info.moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    info.moved = true;
+    const rect = dragWrapperRef!.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    setDragPct({ x, y });
+  };
+  const handlePointerUp = () => {
+    const info = dragInfo.current;
+    dragInfo.current = null;
+    if (canDrag && info?.moved && dragPct) {
+      justDragged.current = true; // swallow the click that follows a drag
+      onMoveCommit!(sprinkler.id, dragPct.x, dragPct.y);
+    }
+    setDragPct(null);
+  };
+
+  const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    // Never let a pin click bubble to the canvas (which would add a head).
+    e.stopPropagation();
+    if (justDragged.current) {
+      justDragged.current = false;
+      return;
+    }
+    if (selectMode) {
+      onToggleSelect?.(sprinkler.id);
+      return;
+    }
+    onTap(e);
+  };
+
   const pinBg = isOffline ? "#64748b" : meta.pin; // slate-500 when offline
   const baseShadow = "0 2px 4px rgba(0,0,0,0.3)";
+  const selectRing = selected ? "0 0 0 4px #2563eb" : ""; // blue-600
   const issueRing = sev ? `0 0 0 3px ${sev.dot}` : "";
   const offlineRing = isOffline ? "0 0 0 3px #475569" : ""; // slate-600
   const highlightRing = highlight ? `0 0 0 5px ${meta.pin}66` : "";
-  const shadow = [issueRing, offlineRing, highlightRing, baseShadow]
+  const shadow = [selectRing, issueRing, offlineRing, highlightRing, baseShadow]
     .filter(Boolean)
     .join(", ");
 
   const baseTitle = `Sat ${sprinkler.satellite_num} / Sta ${sprinkler.station_num}${
     sprinkler.label ? " — " + sprinkler.label : ""
   }`;
-  const title = openIssue
-    ? `${baseTitle} — ${ISSUE_TYPE_LABELS[openIssue.issue_type]} (${openIssue.severity})`
-    : isOffline
-      ? `${baseTitle} — OFFLINE: ${offline!.valveLabel} shut for ${offline!.byHeadLabel}`
-      : baseTitle;
+  const title = selectMode
+    ? `${baseTitle} — tap to ${selected ? "deselect" : "select"}`
+    : openIssue
+      ? `${baseTitle} — ${ISSUE_TYPE_LABELS[openIssue.issue_type]} (${openIssue.severity})`
+      : isOffline
+        ? `${baseTitle} — OFFLINE: ${offline!.valveLabel} shut for ${offline!.byHeadLabel}`
+        : baseTitle;
+
+  const left = dragPct ? dragPct.x : sprinkler.x_pct;
+  const top = dragPct ? dragPct.y : sprinkler.y_pct;
 
   return (
     <button
       type="button"
       data-pin="1"
-      onClick={onTap}
+      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={() => {
+        dragInfo.current = null;
+        setDragPct(null);
+      }}
       className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 group focus:outline-none flex items-center justify-center ${
-        highlight ? "animate-pulse" : ""
+        highlight && !dragPct ? "animate-pulse" : ""
       }`}
       // Hit area sized generously around the larger visible pill.
       style={{
-        left: `${sprinkler.x_pct * 100}%`,
-        top: `${sprinkler.y_pct * 100}%`,
+        left: `${left * 100}%`,
+        top: `${top * 100}%`,
         width: 56,
         height: 56,
+        cursor: canDrag ? "grab" : selectMode ? "pointer" : undefined,
+        touchAction: canDrag ? "none" : undefined,
+        zIndex: dragPct ? 30 : undefined,
       }}
       title={title}
     >
@@ -3282,10 +3759,21 @@ function PinDot({
           minWidth: 38,
           height: 34,
           boxShadow: shadow,
+          opacity: selectMode && !selected ? 0.8 : 1,
         }}
       >
         {sprinkler.satellite_num}-{sprinkler.station_num}
-        {openIssue ? (
+        {selectMode ? (
+          selected ? (
+            <span
+              className="absolute -top-1 -left-1 rounded-full border border-white flex items-center justify-center bg-blue-600"
+              style={{ width: 15, height: 15 }}
+              aria-hidden
+            >
+              <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            </span>
+          ) : null
+        ) : openIssue ? (
           <span
             className="absolute -top-1 -right-1 rounded-full border border-white flex items-center justify-center"
             style={{
@@ -3309,15 +3797,17 @@ function PinDot({
           </span>
         ) : null}
       </span>
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-        Sat {sprinkler.satellite_num} / Sta {sprinkler.station_num}
-        {sprinkler.label ? ` · ${sprinkler.label}` : ""}
-        {openIssue
-          ? ` · ${ISSUE_TYPE_LABELS[openIssue.issue_type]}`
-          : isOffline
-            ? ` · Offline (valve ${offline!.valveLabel})`
-            : ""}
-      </span>
+      {!selectMode && (
+        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 rounded bg-foreground text-background text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+          Sat {sprinkler.satellite_num} / Sta {sprinkler.station_num}
+          {sprinkler.label ? ` · ${sprinkler.label}` : ""}
+          {openIssue
+            ? ` · ${ISSUE_TYPE_LABELS[openIssue.issue_type]}`
+            : isOffline
+              ? ` · Offline (valve ${offline!.valveLabel})`
+              : ""}
+        </span>
+      )}
     </button>
   );
 }

@@ -27,7 +27,16 @@ type IssueType =
   | "clogged"
   | "stuck_on"
   | "stuck_off"
-  | "other";
+  | "other"
+  | "wont_pop_up"
+  | "stuck_up"
+  | "not_rotating"
+  | "misaligned"
+  | "sunken"
+  | "mower_damage"
+  | "valve"
+  | "wiring"
+  | "no_comm";
 
 type IssueSeverity = "low" | "medium" | "high";
 type IssueStatus = "open" | "resolved";
@@ -70,10 +79,19 @@ const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   no_spray: "No spray",
   broken: "Broken head",
   leaking: "Leaking",
-  clogged: "Clogged",
+  clogged: "Clogged nozzle",
   stuck_on: "Stuck on",
   stuck_off: "Stuck off",
   other: "Other",
+  wont_pop_up: "Won't pop up",
+  stuck_up: "Stuck up",
+  not_rotating: "Not rotating",
+  misaligned: "Misaligned / overspray",
+  sunken: "Sunken / low head",
+  mower_damage: "Mower / cart damage",
+  valve: "Valve issue",
+  wiring: "Wiring / solenoid",
+  no_comm: "No communication",
 };
 
 const AREA_LABELS: Record<AreaType, string> = {
