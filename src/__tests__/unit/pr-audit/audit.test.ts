@@ -279,6 +279,38 @@ describe("costCenterBreakdown", () => {
   });
 });
 
+describe("auditPr — dynamic (DB) code lists", () => {
+  it("accepts codes supplied via a custom valid-code set", () => {
+    const pr = validPr();
+    for (const it of pr.items) {
+      it.site = "8000";
+      it.cost_ctr = "30001";
+      it.gl_acct = "900000";
+    }
+    const r = auditPr(pr, {
+      sites: new Set(["8000"]),
+      costCenters: new Set(["30001"]),
+      glAccounts: new Set(["900000"]),
+    });
+    const codeFindings = r.findings.filter((f) =>
+      ["invalid_site", "invalid_cost_center", "invalid_gl_account"].includes(
+        f.code,
+      ),
+    );
+    expect(codeFindings).toHaveLength(0);
+  });
+
+  it("flags a code that isn't on the supplied list", () => {
+    const pr = validPr(); // uses 25581
+    const r = auditPr(pr, {
+      sites: new Set(["7009"]),
+      costCenters: new Set(["99999"]), // 25581 no longer allowed
+      glAccounts: new Set(["701000"]),
+    });
+    expect(r.findings.some((f) => f.code === "invalid_cost_center")).toBe(true);
+  });
+});
+
 describe("normalizePrItems", () => {
   it("coerces nulls to empty strings, numbers to numbers, and renumbers", () => {
     const out = normalizePrItems([

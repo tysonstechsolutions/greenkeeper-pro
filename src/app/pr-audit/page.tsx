@@ -6,36 +6,45 @@ import {
   ArrowLeft,
   Upload,
   ShieldAlert,
-  ShieldCheck,
   AlertTriangle,
   CheckCircle2,
-  Clock,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Settings,
   FileText,
   Inbox,
   Wallet,
-  ChevronDown,
-  ChevronUp,
   Download,
-  Loader2,
+  Trash2,
+  Undo2,
+  ArrowRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
-import { directSelectList } from "@/lib/supabase/rest";
-import type { PrAudit, CostCenterBudget } from "@/types/database";
+import {
+  directSelectList,
+  directPatchRow,
+  directDeleteRow,
+  directStorageDelete,
+} from "@/lib/supabase/rest";
+import type { PrAudit, CostCenterBudget, PrAuditReviewStatus } from "@/types/database";
 import {
   buildCostCenterRollup,
   rollupTotals,
   type CostCenterRollup,
 } from "@/lib/pr-audit/rollup";
-import { downloadApprovedBundle } from "@/lib/pr-audit/download";
 import {
   currentFederalFiscalYear,
   fiscalYearShort,
   fiscalYearLabel,
 } from "@/lib/pr-audit/fiscal-year";
+import { downloadBundle } from "@/lib/pr-audit/download";
+import { usePrCodes } from "@/lib/hooks/usePrCodes";
+import { REVIEW_META, nextStatus, prevStatus } from "@/lib/pr-audit/lifecycle";
+import { DownloadChecklist } from "@/components/pr-audit/download-checklist";
 
 function formatMoney(n: number): string {
   return (Number(n) || 0).toLocaleString("en-US", {
@@ -62,46 +71,35 @@ function formatDate(iso: string): string {
   });
 }
 
-/** Short cost-center label: "25581 — GLK VMGC GC MAINTENANCE" → "GC Maintenance". */
 function shortCcLabel(label: string): string {
   const afterDash = label.includes("—") ? label.split("—")[1].trim() : label;
   return afterDash.replace(/^GLK VMGC\s*/i, "").trim() || label;
 }
 
-// ── Cost-center budget card ───────────────────────────────────────────────────
+// ── Monthly bars ──────────────────────────────────────────────────────────────
 
 function MonthlyBars({ row }: { row: CostCenterRollup }) {
-  const max = Math.max(
-    1,
-    ...row.byMonth.map((m) => m.approved + m.pending),
-  );
+  const max = Math.max(1, ...row.byMonth.map((m) => m.spent + m.pipeline));
   return (
     <div className="flex items-end gap-[3px] h-10 mt-2">
       {row.byMonth.map((m) => {
-        const total = m.approved + m.pending;
+        const total = m.spent + m.pipeline;
         const h = total > 0 ? Math.max(8, Math.round((total / max) * 40)) : 2;
-        const approvedH =
-          total > 0 ? Math.round((m.approved / total) * h) : 0;
+        const spentH = total > 0 ? Math.round((m.spent / total) * h) : 0;
         return (
           <div
             key={m.index}
             className="flex-1 flex flex-col justify-end items-stretch"
-            title={`${m.label}: ${formatMoney(m.approved)} approved${
-              m.pending > 0 ? ` · ${formatMoney(m.pending)} pending` : ""
+            title={`${m.label}: ${formatMoney(m.spent)} spent${
+              m.pipeline > 0 ? ` · ${formatMoney(m.pipeline)} in pipeline` : ""
             }`}
           >
             <div
               className="rounded-sm bg-muted overflow-hidden flex flex-col justify-end"
               style={{ height: `${h}px` }}
             >
-              <div
-                className="bg-amber-400/70"
-                style={{ height: `${h - approvedH}px` }}
-              />
-              <div
-                className="bg-emerald-500"
-                style={{ height: `${approvedH}px` }}
-              />
+              <div className="bg-amber-400/70" style={{ height: `${h - spentH}px` }} />
+              <div className="bg-emerald-500" style={{ height: `${spentH}px` }} />
             </div>
             <span className="text-[7px] text-muted-foreground text-center mt-0.5 leading-none">
               {m.label[0]}
@@ -119,11 +117,7 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
   const over = row.remaining < 0;
   const pct = Math.min(row.percentUsed, 100);
   const barColor =
-    row.percentUsed > 100
-      ? "bg-red-500"
-      : row.percentUsed > 90
-        ? "bg-amber-500"
-        : "bg-emerald-500";
+    row.percentUsed > 100 ? "bg-red-500" : row.percentUsed > 90 ? "bg-amber-500" : "bg-emerald-500";
 
   return (
     <div className="rounded-xl border border-border bg-card p-3">
@@ -134,6 +128,7 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
           </p>
           <p className="text-[11px] text-muted-foreground">
             {row.cost_ctr || "Unassigned"}
+            {row.category ? ` · ${row.category}` : ""}
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -146,7 +141,6 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
         </div>
       </div>
 
-      {/* Budget bar */}
       <div className="mt-2">
         <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
           <span>
@@ -157,17 +151,14 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
         </div>
         {hasBudget && (
           <div className="h-2 rounded-full bg-muted overflow-hidden">
-            <div
-              className={`h-full ${barColor} transition-all`}
-              style={{ width: `${pct}%` }}
-            />
+            <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
           </div>
         )}
       </div>
 
       {row.pending > 0 && (
         <p className="text-[11px] text-amber-600 mt-1.5">
-          + {formatMoney(row.pending)} pending review
+          + {formatMoney(row.pending)} in pipeline
         </p>
       )}
 
@@ -176,11 +167,7 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
         onClick={() => setOpen((v) => !v)}
         className="mt-1 flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
       >
-        {open ? (
-          <ChevronUp className="w-3 h-3" />
-        ) : (
-          <ChevronDown className="w-3 h-3" />
-        )}
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         Monthly
       </button>
       {open && <MonthlyBars row={row} />}
@@ -188,100 +175,126 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
   );
 }
 
-// ── Audited-PR list row ───────────────────────────────────────────────────────
+// ── Audited-PR row (with inline lifecycle + delete) ───────────────────────────
 
-const REVIEW_META: Record<
-  PrAudit["review_status"],
-  { label: string; badge: string; icon: typeof Clock }
-> = {
-  pending: {
-    label: "Pending",
-    badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-    icon: Clock,
-  },
-  approved: {
-    label: "Approved",
-    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-    icon: ShieldCheck,
-  },
-  sent_back: {
-    label: "Sent Back",
-    badge: "bg-red-500/10 text-red-700 dark:text-red-400",
-    icon: AlertTriangle,
-  },
-};
-
-function AuditRow({ audit }: { audit: PrAudit }) {
+function AuditRow({
+  audit,
+  busy,
+  onAdvance,
+  onRevert,
+  onDelete,
+}: {
+  audit: PrAudit;
+  busy: boolean;
+  onAdvance: () => void;
+  onRevert: () => void;
+  onDelete: () => void;
+}) {
   const meta = REVIEW_META[audit.review_status] ?? REVIEW_META.pending;
   const clean = audit.audit_error_count === 0 && audit.audit_warning_count === 0;
+  const next = nextStatus(audit.review_status);
+  const prev = prevStatus(audit.review_status);
+
   return (
-    <Link
-      href={`/pr-audit/view?id=${audit.id}`}
-      className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-colors"
-    >
-      <div
-        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-          clean
-            ? "bg-emerald-500/10 text-emerald-600"
-            : audit.audit_error_count > 0
-              ? "bg-red-500/10 text-red-600"
-              : "bg-amber-500/10 text-amber-600"
-        }`}
+    <li className="flex items-stretch gap-2 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-colors">
+      <Link
+        href={`/pr-audit/view?id=${audit.id}`}
+        className="flex items-center gap-3 p-3 flex-1 min-w-0 active:scale-[0.99]"
       >
-        {clean ? (
-          <CheckCircle2 className="w-5 h-5" />
-        ) : (
-          <AlertTriangle className="w-5 h-5" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          {!audit.viewed_at && (
-            <span
-              className="w-2 h-2 rounded-full bg-primary shrink-0"
-              title="Not looked at yet"
-              aria-label="Not looked at yet"
-            />
-          )}
-          <p className="font-semibold text-sm truncate">
-            {audit.vendor_name || "Vendor TBD"}
-          </p>
-          <span
-            className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${meta.badge}`}
-          >
-            {meta.label}
-          </span>
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+            clean
+              ? "bg-emerald-500/10 text-emerald-600"
+              : audit.audit_error_count > 0
+                ? "bg-red-500/10 text-red-600"
+                : "bg-amber-500/10 text-amber-600"
+          }`}
+        >
+          {clean ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
         </div>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">
-          {formatDate(audit.pr_date)} · {formatMoney(audit.computed_total)}
-          {audit.requestor_name ? ` · ${audit.requestor_name}` : ""}
-        </p>
-        <p className="text-[11px] mt-0.5">
-          {clean ? (
-            <span className="text-emerald-600">Passed all checks</span>
-          ) : (
-            <span className="text-muted-foreground">
-              {audit.audit_error_count > 0 && (
-                <span className="text-red-600 font-medium">
-                  {audit.audit_error_count} error
-                  {audit.audit_error_count !== 1 ? "s" : ""}
-                </span>
-              )}
-              {audit.audit_error_count > 0 &&
-                audit.audit_warning_count > 0 &&
-                " · "}
-              {audit.audit_warning_count > 0 && (
-                <span className="text-amber-600 font-medium">
-                  {audit.audit_warning_count} warning
-                  {audit.audit_warning_count !== 1 ? "s" : ""}
-                </span>
-              )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {!audit.viewed_at && (
+              <span
+                className="w-2 h-2 rounded-full bg-primary shrink-0"
+                title="Not looked at yet"
+                aria-label="Not looked at yet"
+              />
+            )}
+            <p className="font-semibold text-sm truncate">{audit.vendor_name || "Vendor TBD"}</p>
+            <span
+              className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${meta.badge}`}
+            >
+              {meta.short}
             </span>
-          )}
-        </p>
-      </div>
-      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-    </Link>
+          </div>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {formatDate(audit.pr_date)} · {formatMoney(audit.computed_total)}
+            {audit.requestor_name ? ` · ${audit.requestor_name}` : ""}
+          </p>
+          <p className="text-[11px] mt-0.5">
+            {clean ? (
+              <span className="text-emerald-600">Passed all checks</span>
+            ) : (
+              <span className="text-muted-foreground">
+                {audit.audit_error_count > 0 && (
+                  <span className="text-red-600 font-medium">
+                    {audit.audit_error_count} error{audit.audit_error_count !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {audit.audit_error_count > 0 && audit.audit_warning_count > 0 && " · "}
+                {audit.audit_warning_count > 0 && (
+                  <span className="text-amber-600 font-medium">
+                    {audit.audit_warning_count} warning{audit.audit_warning_count !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </span>
+            )}
+            {audit.fit_suggestion_count > 0 && (
+              <span className="text-violet-600 font-medium">
+                {audit.audit_error_count + audit.audit_warning_count > 0 ? " · " : ""}
+                {audit.fit_suggestion_count} cost-center tip
+                {audit.fit_suggestion_count !== 1 ? "s" : ""}
+              </span>
+            )}
+          </p>
+        </div>
+      </Link>
+      {prev && (
+        <button
+          type="button"
+          aria-label={`Back to ${REVIEW_META[prev].short}`}
+          title={`Back to ${REVIEW_META[prev].short}`}
+          disabled={busy}
+          onClick={onRevert}
+          className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 active:scale-[0.97] transition-all disabled:opacity-50"
+        >
+          <Undo2 className="w-4 h-4" />
+        </button>
+      )}
+      {next && (
+        <button
+          type="button"
+          aria-label={`Advance to ${REVIEW_META[next].short}`}
+          title={`Advance to ${REVIEW_META[next].short}`}
+          disabled={busy}
+          onClick={onAdvance}
+          className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 active:scale-[0.97] transition-all disabled:opacity-50"
+        >
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      )}
+      <button
+        type="button"
+        aria-label="Delete"
+        title="Delete"
+        disabled={busy}
+        onClick={onDelete}
+        className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </li>
   );
 }
 
@@ -289,10 +302,17 @@ function AuditRow({ audit }: { audit: PrAudit }) {
 
 export default function PrAuditPage() {
   const { profile, loading: authLoading } = useAuth();
+  const codes = usePrCodes();
   const [audits, setAudits] = useState<PrAudit[]>([]);
   const [budgets, setBudgets] = useState<CostCenterBudget[]>([]);
   const [loading, setLoading] = useState(true);
   const [fiscalYear, setFiscalYear] = useState(() => currentFederalFiscalYear());
+  const [category, setCategory] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadMsg, setDownloadMsg] = useState<string | null>(null);
 
   const isAllowed =
     profile?.role === "super" ||
@@ -312,7 +332,7 @@ export default function PrAuditPage() {
         }),
         directSelectList<CostCenterBudget>("cost_center_budgets", {
           columns: "*",
-          limit: 200,
+          limit: 400,
           label: "pr-audit.fetchBudgets",
         }),
       ]);
@@ -334,54 +354,124 @@ export default function PrAuditPage() {
 
   useRefreshOnFocus(fetchData, isAllowed);
 
+  // Category list for the switch.
+  const categoryNames = useMemo(() => {
+    if (codes.categories.length > 0) return codes.categories.map((c) => c.name);
+    const set = new Set<string>();
+    for (const cc of codes.costCenters) if (cc.category) set.add(cc.category);
+    return Array.from(set);
+  }, [codes.categories, codes.costCenters]);
+
+  // Does an audit touch the selected category (via its line cost centers)?
+  const auditInCategory = useCallback(
+    (a: PrAudit, cat: string): boolean =>
+      (a.items ?? []).some(
+        (it) => codes.categoryNameForCostCenter((it.cost_ctr ?? "").trim()) === cat,
+      ),
+    [codes],
+  );
+
+  const rollupAll = useMemo(
+    () => buildCostCenterRollup(audits, budgets, fiscalYear, codes.rollupCostCenters),
+    [audits, budgets, fiscalYear, codes.rollupCostCenters],
+  );
   const rollup = useMemo(
-    () => buildCostCenterRollup(audits, budgets, fiscalYear),
-    [audits, budgets, fiscalYear],
+    () => (category ? rollupAll.filter((r) => r.category === category) : rollupAll),
+    [rollupAll, category],
   );
   const totals = useMemo(() => rollupTotals(rollup), [rollup]);
 
-  const notLookedAt = useMemo(
-    () => audits.filter((a) => !a.viewed_at),
-    [audits],
+  const filteredAudits = useMemo(
+    () => (category ? audits.filter((a) => auditInCategory(a, category)) : audits),
+    [audits, category, auditInCategory],
   );
-  const lookedAt = useMemo(
-    () => audits.filter((a) => !!a.viewed_at),
-    [audits],
-  );
-  const approvedCount = useMemo(
-    () => audits.filter((a) => a.review_status === "approved").length,
-    [audits],
+  const notLookedAt = useMemo(() => filteredAudits.filter((a) => !a.viewed_at), [filteredAudits]);
+  const lookedAt = useMemo(() => filteredAudits.filter((a) => !!a.viewed_at), [filteredAudits]);
+
+  // Bulk-downloadable = active PRs in view (everything except sent-back).
+  const downloadable = useMemo(
+    () => filteredAudits.filter((a) => a.review_status !== "sent_back"),
+    [filteredAudits],
   );
 
-  const [downloadingApproved, setDownloadingApproved] = useState(false);
-  const [downloadMsg, setDownloadMsg] = useState<string | null>(null);
+  const currentFy = currentFederalFiscalYear();
 
-  const handleDownloadApproved = useCallback(async () => {
-    setDownloadingApproved(true);
+  // ── Row actions ─────────────────────────────────────────────────────────────
+
+  const changeStatus = useCallback(
+    async (audit: PrAudit, status: PrAuditReviewStatus) => {
+      setBusyId(audit.id);
+      try {
+        await directPatchRow(
+          "pr_audits",
+          "id",
+          audit.id,
+          { review_status: status },
+          "pr-audit.list.status",
+        );
+        setAudits((prev) =>
+          prev.map((a) => (a.id === audit.id ? { ...a, review_status: status } : a)),
+        );
+      } catch (err) {
+        alert(`Couldn't update status: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [],
+  );
+
+  const deleteAudit = useCallback(async (audit: PrAudit) => {
+    if (
+      !confirm(
+        `Delete the PR from ${audit.vendor_name || "Vendor TBD"} (${formatDate(
+          audit.pr_date,
+        )})? This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusyId(audit.id);
+    try {
+      await directDeleteRow("pr_audits", "id", audit.id, "pr-audit.list.delete");
+      if (audit.file_path) {
+        try {
+          await directStorageDelete("vendor-files", [audit.file_path], "pr-audit.list.deleteFile");
+        } catch {
+          /* non-fatal */
+        }
+      }
+      setAudits((prev) => prev.filter((a) => a.id !== audit.id));
+    } catch (err) {
+      alert(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const confirmBulkDownload = useCallback(async () => {
+    setDownloading(true);
     setDownloadMsg(null);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const res = await downloadApprovedBundle(audits, today);
+      const res = await downloadBundle(downloadable, today);
+      setDownloadOpen(false);
       if (res.count === 0) {
-        setDownloadMsg(res.warnings[0] || "No approved PRs to download.");
+        setDownloadMsg(res.warnings[0] || "Nothing to download.");
       } else {
         setDownloadMsg(
-          `Downloaded ${res.count} approved PR${res.count !== 1 ? "s" : ""}.` +
-            (res.warnings.length
-              ? ` ${res.warnings.length} couldn't be included.`
-              : ""),
+          `Downloaded ${res.count} PR${res.count !== 1 ? "s" : ""}.` +
+            (res.warnings.length ? ` ${res.warnings.length} couldn't be included.` : ""),
         );
       }
     } catch (err) {
-      setDownloadMsg(
-        err instanceof Error ? err.message : "Couldn't build the download.",
-      );
+      setDownloadMsg(err instanceof Error ? err.message : "Couldn't build the download.");
     } finally {
-      setDownloadingApproved(false);
+      setDownloading(false);
     }
-  }, [audits]);
+  }, [downloadable]);
 
-  const currentFy = currentFederalFiscalYear();
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (authLoading) {
     return (
@@ -395,10 +485,7 @@ export default function PrAuditPage() {
     return (
       <div className="p-3 pb-32 max-w-lg mx-auto">
         <div className="flex items-center gap-2 mb-6">
-          <Link
-            href="/more"
-            className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors shrink-0"
-          >
+          <Link href="/more" className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <h1 className="text-lg font-bold">PR Audit</h1>
@@ -407,8 +494,8 @@ export default function PrAuditPage() {
           <ShieldAlert className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-50" />
           <p className="font-medium">Access Restricted</p>
           <p className="text-sm text-muted-foreground mt-1">
-            Only superintendents, assistant superintendents, directors, and GMs
-            can audit purchase requests.
+            Only superintendents, assistant superintendents, directors, and GMs can audit purchase
+            requests.
           </p>
         </div>
       </div>
@@ -419,10 +506,7 @@ export default function PrAuditPage() {
     <div className="p-3 pb-32 max-w-2xl mx-auto overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 mb-1">
-        <Link
-          href="/more"
-          className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors shrink-0"
-        >
+        <Link href="/more" className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="min-w-0 flex-1">
@@ -431,6 +515,14 @@ export default function PrAuditPage() {
             Upload team PRs · auto-audit · budget by cost center
           </p>
         </div>
+        <Link
+          href="/pr-audit/codes"
+          aria-label="Manage lists"
+          title="Manage cost centers, G/L, categories"
+          className="p-2 rounded-xl hover:bg-muted transition-colors shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <SlidersHorizontal className="w-5 h-5" />
+        </Link>
         <Link
           href="/pr-audit/budget"
           aria-label="Edit budgets"
@@ -441,27 +533,57 @@ export default function PrAuditPage() {
         </Link>
       </div>
 
-      {/* Upload CTA */}
       <Link
         href="/pr-audit/new"
         className="mt-4 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
       >
-        <Upload className="w-5 h-5" /> Upload &amp; Audit a PR
+        <Upload className="w-5 h-5" /> Upload &amp; Audit PRs
       </Link>
+
+      {/* Category switch */}
+      {categoryNames.length > 0 && (
+        <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+          <button
+            type="button"
+            onClick={() => setCategory(null)}
+            className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+              category === null
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card text-muted-foreground border-border hover:bg-muted/50"
+            }`}
+          >
+            All
+          </button>
+          {categoryNames.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                category === c
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border hover:bg-muted/50"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {notLookedAt.length > 0 && (
         <div className="mt-2 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2">
           <Inbox className="w-4 h-4 shrink-0" />
-          {notLookedAt.length} PR{notLookedAt.length !== 1 ? "s" : ""} you
-          haven&apos;t looked at yet
+          {notLookedAt.length} PR{notLookedAt.length !== 1 ? "s" : ""} you haven&apos;t looked at yet
         </div>
       )}
 
-      {/* FY selector + totals */}
+      {/* Budget header + FY selector */}
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
           <Wallet className="w-4 h-4" />
           Budget — {fiscalYearShort(fiscalYear)}
+          {category ? ` · ${category}` : ""}
         </h2>
         <div className="flex items-center gap-1">
           <button
@@ -486,32 +608,20 @@ export default function PrAuditPage() {
           </button>
         </div>
       </div>
-      <p className="text-[11px] text-muted-foreground -mt-0.5 mb-3">
-        {fiscalYearLabel(fiscalYear)}
-      </p>
+      <p className="text-[11px] text-muted-foreground -mt-0.5 mb-3">{fiscalYearLabel(fiscalYear)}</p>
 
-      {/* Totals strip */}
+      {/* Totals */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Budget
-          </p>
-          <p className="text-base font-bold leading-tight mt-0.5">
-            {formatMoneyShort(totals.budget)}
-          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Budget</p>
+          <p className="text-base font-bold leading-tight mt-0.5">{formatMoneyShort(totals.budget)}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-            Spent
-          </p>
-          <p className="text-base font-bold leading-tight mt-0.5">
-            {formatMoneyShort(totals.spent)}
-          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Spent</p>
+          <p className="text-base font-bold leading-tight mt-0.5">{formatMoneyShort(totals.spent)}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
-            Left
-          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">Left</p>
           <p
             className={`text-base font-bold leading-tight mt-0.5 ${
               totals.remaining < 0 ? "text-red-600" : ""
@@ -521,14 +631,19 @@ export default function PrAuditPage() {
           </p>
         </div>
       </div>
+      {totals.pending > 0 && (
+        <p className="text-[11px] text-amber-600 -mt-2 mb-3">
+          + {formatMoney(totals.pending)} in pipeline (not yet ordered)
+        </p>
+      )}
 
       {totals.budget === 0 && (
         <div className="mb-4 text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">
-          No budget set for {fiscalYearShort(fiscalYear)} yet.{" "}
+          No budget set{category ? ` for ${category}` : ""} in {fiscalYearShort(fiscalYear)} yet.{" "}
           <Link href="/pr-audit/budget" className="text-primary font-medium underline">
             Set annual budgets
           </Link>{" "}
-          to track what&apos;s left in each account.
+          to track what&apos;s left.
         </div>
       )}
 
@@ -538,14 +653,12 @@ export default function PrAuditPage() {
           <CostCenterCard key={row.cost_ctr || "unassigned"} row={row} />
         ))}
       </div>
-
-      {/* Legend */}
       <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Approved
+          <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Spent
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-amber-400/70" /> Pending
+          <span className="w-2 h-2 rounded-sm bg-amber-400/70" /> In pipeline
         </span>
       </div>
 
@@ -556,19 +669,14 @@ export default function PrAuditPage() {
             <FileText className="w-4 h-4" />
             Audited PRs
           </h2>
-          {approvedCount > 0 && (
+          {downloadable.length > 0 && (
             <button
               type="button"
-              onClick={handleDownloadApproved}
-              disabled={downloadingApproved}
-              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-60"
+              onClick={() => setDownloadOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
             >
-              {downloadingApproved ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Download className="w-3.5 h-3.5" />
-              )}
-              Download approved ({approvedCount})
+              <Download className="w-3.5 h-3.5" />
+              Download to sign ({downloadable.length})
             </button>
           )}
         </div>
@@ -585,12 +693,16 @@ export default function PrAuditPage() {
               <div key={i} className="h-20 rounded-xl bg-muted/50 animate-pulse" />
             ))}
           </div>
-        ) : audits.length === 0 ? (
+        ) : filteredAudits.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-6 text-center">
             <Inbox className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-40" />
-            <p className="text-sm font-medium">No PRs audited yet</p>
+            <p className="text-sm font-medium">
+              {audits.length === 0 ? "No PRs audited yet" : "Nothing in this category"}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Upload the PRs your team sent you to check them and track their cost.
+              {audits.length === 0
+                ? "Upload the PRs your team sent you to check them and track their cost."
+                : "Try a different category or 'All'."}
             </p>
           </div>
         ) : (
@@ -603,9 +715,20 @@ export default function PrAuditPage() {
                 </h3>
                 <ul className="space-y-2">
                   {notLookedAt.map((audit) => (
-                    <li key={audit.id}>
-                      <AuditRow audit={audit} />
-                    </li>
+                    <AuditRow
+                      key={audit.id}
+                      audit={audit}
+                      busy={busyId === audit.id}
+                      onAdvance={() => {
+                        const n = nextStatus(audit.review_status);
+                        if (n) changeStatus(audit, n);
+                      }}
+                      onRevert={() => {
+                        const p = prevStatus(audit.review_status);
+                        if (p) changeStatus(audit, p);
+                      }}
+                      onDelete={() => deleteAudit(audit)}
+                    />
                   ))}
                 </ul>
               </div>
@@ -617,9 +740,20 @@ export default function PrAuditPage() {
                 </h3>
                 <ul className="space-y-2">
                   {lookedAt.map((audit) => (
-                    <li key={audit.id}>
-                      <AuditRow audit={audit} />
-                    </li>
+                    <AuditRow
+                      key={audit.id}
+                      audit={audit}
+                      busy={busyId === audit.id}
+                      onAdvance={() => {
+                        const n = nextStatus(audit.review_status);
+                        if (n) changeStatus(audit, n);
+                      }}
+                      onRevert={() => {
+                        const p = prevStatus(audit.review_status);
+                        if (p) changeStatus(audit, p);
+                      }}
+                      onDelete={() => deleteAudit(audit)}
+                    />
                   ))}
                 </ul>
               </div>
@@ -627,6 +761,19 @@ export default function PrAuditPage() {
           </div>
         )}
       </div>
+
+      <DownloadChecklist
+        open={downloadOpen}
+        prTotalText={null}
+        count={downloadable.length}
+        section889={{
+          tone: "muted",
+          text: "Confirm each vendor's Section 889 is on file and not expired.",
+        }}
+        confirming={downloading}
+        onConfirm={confirmBulkDownload}
+        onCancel={() => setDownloadOpen(false)}
+      />
     </div>
   );
 }

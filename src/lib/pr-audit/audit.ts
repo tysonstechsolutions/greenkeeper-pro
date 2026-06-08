@@ -136,15 +136,27 @@ export interface AuditResult {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const SITE_VALUES = new Set(PR_SITES.map((c) => c.value));
-const COST_CENTER_VALUES = new Set(PR_COST_CENTERS.map((c) => c.value));
-const GL_VALUES = new Set(PR_GL_ACCOUNTS.map((c) => c.value));
+/** The set of valid codes the audit validates against. */
+export interface ValidCodes {
+  sites: Set<string>;
+  costCenters: Set<string>;
+  glAccounts: Set<string>;
+}
+
+/**
+ * Built-in golf-course lists, used as the default when the caller doesn't pass
+ * dynamic (DB-loaded) codes — keeps the audit working before the code tables
+ * exist and keeps the unit tests stable.
+ */
+export const DEFAULT_VALID_CODES: ValidCodes = {
+  sites: new Set(PR_SITES.map((c) => c.value)),
+  costCenters: new Set(PR_COST_CENTERS.map((c) => c.value)),
+  glAccounts: new Set(PR_GL_ACCOUNTS.map((c) => c.value)),
+};
+
 const COST_CENTER_LABELS = new Map(
   PR_COST_CENTERS.map((c) => [c.value, c.label]),
 );
-
-const VALID_COST_CENTER_LIST = PR_COST_CENTERS.map((c) => c.value).join(", ");
-const VALID_SITE_LIST = PR_SITES.map((c) => c.value).join(" or ");
 
 /** Coerce anything numeric-ish to a finite number, else 0. */
 function num(v: unknown): number {
@@ -219,9 +231,20 @@ export function costCenterBreakdown(
 // ── The audit ────────────────────────────────────────────────────────────────
 
 /** Run every rule against an extracted PR and return the findings + totals. */
-export function auditPr(pr: ExtractedPr): AuditResult {
+export function auditPr(
+  pr: ExtractedPr,
+  validCodes: ValidCodes = DEFAULT_VALID_CODES,
+): AuditResult {
   const items = pr.items ?? [];
   const findings: AuditFinding[] = [];
+
+  const siteValues = validCodes.sites;
+  const costCenterValues = validCodes.costCenters;
+  const glValues = validCodes.glAccounts;
+  const validSiteList =
+    [...siteValues].join(" or ") || "an approved Site";
+  const validCostCenterList =
+    [...costCenterValues].join(", ") || "an approved Cost Center";
 
   const computedTotal = r2(items.reduce((s, it) => s + extended(it), 0));
   // Fee math reuses the builder's exact routine on the normalized items.
@@ -258,17 +281,17 @@ export function auditPr(pr: ExtractedPr): AuditResult {
         severity: "error",
         title: `Missing Site on ${where}`,
         detail: "Every line needs a Site code.",
-        suggestion: `Set Site to ${VALID_SITE_LIST}.`,
+        suggestion: `Set Site to ${validSiteList}.`,
         itemIndex: i,
         field: "site",
       });
-    } else if (!SITE_VALUES.has(site)) {
+    } else if (!siteValues.has(site)) {
       findings.push({
         code: "invalid_site",
         severity: "error",
         title: `Invalid Site "${site}" on ${where}`,
         detail: `"${site}" isn't an approved Site code.`,
-        suggestion: `Use ${VALID_SITE_LIST}.`,
+        suggestion: `Use ${validSiteList}.`,
         itemIndex: i,
         field: "site",
       });
@@ -280,17 +303,17 @@ export function auditPr(pr: ExtractedPr): AuditResult {
         severity: "error",
         title: `Missing Cost Center on ${where}`,
         detail: "Every line needs a Cost Center.",
-        suggestion: `Pick a Cost Center (valid: ${VALID_COST_CENTER_LIST}).`,
+        suggestion: `Pick a Cost Center (valid: ${validCostCenterList}).`,
         itemIndex: i,
         field: "cost_ctr",
       });
-    } else if (!COST_CENTER_VALUES.has(cc)) {
+    } else if (!costCenterValues.has(cc)) {
       findings.push({
         code: "invalid_cost_center",
         severity: "error",
         title: `Invalid Cost Center "${cc}" on ${where}`,
-        detail: `"${cc}" isn't one of the golf-course cost centers.`,
-        suggestion: `Use one of: ${VALID_COST_CENTER_LIST}.`,
+        detail: `"${cc}" isn't on the approved cost-center list.`,
+        suggestion: `Use one of: ${validCostCenterList}.`,
         itemIndex: i,
         field: "cost_ctr",
       });
@@ -306,7 +329,7 @@ export function auditPr(pr: ExtractedPr): AuditResult {
         itemIndex: i,
         field: "gl_acct",
       });
-    } else if (!GL_VALUES.has(gl)) {
+    } else if (!glValues.has(gl)) {
       findings.push({
         code: "invalid_gl_account",
         severity: "error",
@@ -487,7 +510,7 @@ export function auditPr(pr: ExtractedPr): AuditResult {
     new Set(
       items
         .map((it) => (it.cost_ctr ?? "").trim())
-        .filter((c) => COST_CENTER_VALUES.has(c)),
+        .filter((c) => costCenterValues.has(c)),
     ),
   );
   if (ccUsed.length > 1) {

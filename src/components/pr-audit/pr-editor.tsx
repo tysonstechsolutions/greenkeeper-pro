@@ -1,12 +1,6 @@
 "use client";
 
 import { Plus, Trash2, Calculator } from "lucide-react";
-import {
-  PR_SITES,
-  PR_COST_CENTERS,
-  PR_GL_ACCOUNTS,
-  type AccountingCode,
-} from "@/lib/pr-accounting-codes";
 import { rebalanceWithCcFee } from "@/lib/pr-cc-fee";
 import {
   normalizePrItems,
@@ -16,6 +10,13 @@ import {
   type AuditResult,
 } from "@/lib/pr-audit/audit";
 import { FindingsList } from "@/components/pr-audit/findings";
+import type { PrCodeOption } from "@/lib/hooks/usePrCodes";
+
+export interface EditorCodes {
+  sites: PrCodeOption[];
+  costCenters: PrCodeOption[];
+  glAccounts: PrCodeOption[];
+}
 
 function emptyItem(): ExtractedPrItem {
   return {
@@ -31,7 +32,17 @@ function emptyItem(): ExtractedPrItem {
   };
 }
 
-// ── Code dropdown ─────────────────────────────────────────────────────────────
+// ── Code dropdown (grouped by category) ───────────────────────────────────────
+
+function groupByCategory(options: PrCodeOption[]): Array<[string, PrCodeOption[]]> {
+  const map = new Map<string, PrCodeOption[]>();
+  for (const o of options) {
+    const key = o.category || "Other";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(o);
+  }
+  return Array.from(map.entries());
+}
 
 function CodeSelect({
   value,
@@ -41,13 +52,16 @@ function CodeSelect({
   invalid,
 }: {
   value: string | null;
-  options: AccountingCode[];
+  options: PrCodeOption[];
   onChange: (v: string) => void;
   placeholder: string;
   invalid: boolean;
 }) {
   const v = value ?? "";
-  const known = options.some((o) => o.value === v);
+  const known = options.some((o) => o.code === v);
+  const groups = groupByCategory(options);
+  const multiCat = groups.length > 1;
+
   return (
     <select
       value={v}
@@ -59,11 +73,21 @@ function CodeSelect({
       }`}
     >
       <option value="">{placeholder}</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
+      {multiCat
+        ? groups.map(([cat, opts]) => (
+            <optgroup key={cat} label={cat}>
+              {opts.map((o) => (
+                <option key={o.code} value={o.code}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        : options.map((o) => (
+            <option key={o.code} value={o.code}>
+              {o.label}
+            </option>
+          ))}
       {v !== "" && !known && (
         <option value={v}>{v} (invalid — not on the approved list)</option>
       )}
@@ -76,19 +100,22 @@ function CodeSelect({
 function LineItemCard({
   item,
   index,
+  codes,
   onChange,
   onRemove,
 }: {
   item: ExtractedPrItem;
   index: number;
+  codes: EditorCodes;
   onChange: (patch: Partial<ExtractedPrItem>) => void;
   onRemove: () => void;
 }) {
-  const siteInvalid = !!item.site && !PR_SITES.some((s) => s.value === item.site);
+  const siteInvalid =
+    !!item.site && !codes.sites.some((s) => s.code === item.site);
   const ccInvalid =
-    !!item.cost_ctr && !PR_COST_CENTERS.some((s) => s.value === item.cost_ctr);
+    !!item.cost_ctr && !codes.costCenters.some((s) => s.code === item.cost_ctr);
   const glInvalid =
-    !!item.gl_acct && !PR_GL_ACCOUNTS.some((s) => s.value === item.gl_acct);
+    !!item.gl_acct && !codes.glAccounts.some((s) => s.code === item.gl_acct);
   const extended = (Number(item.qty) || 0) * (Number(item.unit_price) || 0);
 
   return (
@@ -120,7 +147,7 @@ function LineItemCard({
           <label className="text-[10px] text-muted-foreground">Site</label>
           <CodeSelect
             value={item.site}
-            options={PR_SITES}
+            options={codes.sites}
             onChange={(v) => onChange({ site: v || null })}
             placeholder="Site"
             invalid={siteInvalid}
@@ -130,7 +157,7 @@ function LineItemCard({
           <label className="text-[10px] text-muted-foreground">Cost Ctr</label>
           <CodeSelect
             value={item.cost_ctr}
-            options={PR_COST_CENTERS}
+            options={codes.costCenters}
             onChange={(v) => onChange({ cost_ctr: v || null })}
             placeholder="Cost Center"
             invalid={ccInvalid}
@@ -140,7 +167,7 @@ function LineItemCard({
           <label className="text-[10px] text-muted-foreground">G/L Acct</label>
           <CodeSelect
             value={item.gl_acct}
-            options={PR_GL_ACCOUNTS}
+            options={codes.glAccounts}
             onChange={(v) => onChange({ gl_acct: v || null })}
             placeholder="G/L Account"
             invalid={glInvalid}
@@ -211,10 +238,12 @@ function LineItemCard({
 export function PrEditor({
   draft,
   audit,
+  codes,
   onChange,
 }: {
   draft: ExtractedPr;
   audit: AuditResult;
+  codes: EditorCodes;
   onChange: (next: ExtractedPr) => void;
 }) {
   const updateItem = (index: number, patch: Partial<ExtractedPrItem>) => {
@@ -364,6 +393,7 @@ export function PrEditor({
               key={i}
               item={item}
               index={i}
+              codes={codes}
               onChange={(patch) => updateItem(i, patch)}
               onRemove={() => removeItem(i)}
             />

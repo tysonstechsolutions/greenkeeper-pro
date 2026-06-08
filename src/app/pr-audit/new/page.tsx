@@ -36,6 +36,7 @@ import {
 } from "@/lib/pr-audit/extract-client";
 import { FindingsSummary, FindingsList } from "@/components/pr-audit/findings";
 import { emptyItem } from "@/components/pr-audit/pr-editor";
+import { usePrCodes } from "@/lib/hooks/usePrCodes";
 import type { PrAudit } from "@/types/database";
 
 const STORAGE_BUCKET = "vendor-files";
@@ -144,10 +145,17 @@ function BatchCard({
       {open && (
         <div className="p-3 border-t border-border bg-muted/20">
           {row.failed && (
-            <p className="text-xs text-amber-600 mb-2">
-              Couldn&apos;t read this file automatically — open it after saving to
-              fill in the details.
-            </p>
+            <div className="mb-2">
+              <p className="text-xs text-amber-600">
+                Couldn&apos;t read this file automatically — open it after saving
+                to fill in the details.
+              </p>
+              {row.warnings.length > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Reason: {row.warnings[0]}
+                </p>
+              )}
+            </div>
           )}
           <FindingsList findings={audit.findings} />
         </div>
@@ -171,6 +179,8 @@ export default function NewPrAuditPage() {
   const [savedCount, setSavedCount] = useState(0);
   const [creatingManual, setCreatingManual] = useState(false);
 
+  const { validCodes } = usePrCodes();
+
   const isAllowed =
     profile?.role === "super" ||
     profile?.role === "asst_super" ||
@@ -179,8 +189,8 @@ export default function NewPrAuditPage() {
 
   // Live audit per row.
   const audits = useMemo(
-    () => rows.map((r) => auditPr(r.extracted)),
-    [rows],
+    () => rows.map((r) => auditPr(r.extracted, validCodes)),
+    [rows, validCodes],
   );
 
   const totals = useMemo(() => {
@@ -233,7 +243,7 @@ export default function NewPrAuditPage() {
     for (const row of rows) {
       try {
         const ex = row.extracted;
-        const audit = auditPr(ex);
+        const audit = auditPr(ex, validCodes);
         // Upload the original file for the record.
         const folder = crypto.randomUUID();
         const path = `pr-audit/${folder}/${sanitizeFilename(row.file.name)}`;
@@ -279,14 +289,14 @@ export default function NewPrAuditPage() {
       `Saved ${savedKeys.size}. ${failures.length} couldn't be saved:\n${failures.join("\n")}`,
     );
     setSaving(false);
-  }, [rows, router]);
+  }, [rows, router, validCodes]);
 
   const handleManual = useCallback(async () => {
     setCreatingManual(true);
     setError(null);
     try {
       const ex = buildRowFromBlank();
-      const audit = auditPr(ex);
+      const audit = auditPr(ex, validCodes);
       const inserted = await directInsertRow<PrAudit>(
         "pr_audits",
         {
@@ -314,7 +324,7 @@ export default function NewPrAuditPage() {
       setError(err instanceof Error ? err.message : "Couldn't create a PR.");
       setCreatingManual(false);
     }
-  }, [router]);
+  }, [router, validCodes]);
 
   if (authLoading) {
     return (

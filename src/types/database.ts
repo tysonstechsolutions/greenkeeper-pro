@@ -3,8 +3,9 @@
 // Based on the complete schema from greenkeeper-pro-spec.md
 
 // Audit findings are produced by the deterministic PR-audit engine and stored
-// as JSONB on pr_audits. Type-only import (erased at compile) — no runtime cycle.
+// as JSONB on pr_audits. Type-only imports (erased at compile) — no runtime cycle.
 import type { AuditFinding } from "@/lib/pr-audit/audit";
+import type { FitFinding } from "@/lib/pr-audit/fit";
 
 export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director" | "gm";
 
@@ -1674,7 +1675,13 @@ export interface PurchaseRequest {
 
 // ── PR Audit (team PR inbox + per-cost-center budget) ──
 
-export type PrAuditReviewStatus = "pending" | "approved" | "sent_back";
+export type PrAuditReviewStatus =
+  | "pending"
+  | "sent_up"
+  | "ordered"
+  | "received"
+  | "receipt_signed"
+  | "sent_back";
 
 export interface PrAudit {
   id: string;
@@ -1710,6 +1717,40 @@ export interface PrAudit {
   /** Set the first time the reviewer opens this PR. NULL = not looked at yet. */
   viewed_at: string | null;
 
+  // AI cost-center fit-check (advisory). Refreshed on demand, not on every edit.
+  fit_findings: FitFinding[];
+  fit_suggestion_count: number;
+  fit_checked_at: string | null;
+
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── PR Audit code lists (categories + manageable Site / Cost Ctr / G/L) ──
+
+export interface PrCategory {
+  id: string;
+  name: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PrCodeKind = "site" | "cost_center" | "gl_account";
+
+export interface PrCode {
+  id: string;
+  kind: PrCodeKind;
+  code: string;
+  label: string;
+  category_id: string | null;
+  /** Cost-center "answer key" for the AI fit-check (optional for other kinds). */
+  description: string | null;
+  examples: string | null;
+  active: boolean;
+  sort_order: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -1720,6 +1761,9 @@ export interface CostCenterBudget {
   /** Federal fiscal year (Oct–Sep), 4-digit, e.g. 2026. */
   fiscal_year: number;
   cost_ctr: string;
+  /** Calendar month 1-12 for a monthly row; NULL = legacy whole-year amount. */
+  month: number | null;
+  /** Amount for the period — the month's budget, or the whole-year amount. */
   annual_amount: number;
   notes: string | null;
   created_by: string | null;

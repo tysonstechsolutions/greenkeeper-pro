@@ -6,7 +6,7 @@
  *   • If it was entered by hand (no file), we generate a one-page PDF summary
  *     with the line items, codes, total, audit result, and a signature line.
  *
- * `downloadApprovedBundle` zips up every approved PR for sending up in one go.
+ * `downloadBundle` zips up the given PRs for sending up in one go.
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -145,25 +145,24 @@ export interface BundleResult {
 }
 
 /**
- * Zip every approved PR into one download. Each PR contributes its original
- * file (or a generated summary). Files that fail to fetch become warnings so
- * the rest still bundle.
+ * Zip the given PRs into one download. Each PR contributes its original file
+ * (or a generated summary). Files that fail to fetch become warnings so the
+ * rest still bundle. The caller decides which PRs to pass in.
  */
-export async function downloadApprovedBundle(
+export async function downloadBundle(
   audits: PrAudit[],
   todayIso: string,
 ): Promise<BundleResult> {
-  const approved = audits.filter((a) => a.review_status === "approved");
   const warnings: string[] = [];
-  if (approved.length === 0) {
-    return { count: 0, warnings: ["No approved PRs to download yet."] };
+  if (audits.length === 0) {
+    return { count: 0, warnings: ["Nothing to download."] };
   }
 
   const zip = new JSZip();
   const usedNames = new Set<string>();
   let count = 0;
 
-  for (const audit of approved) {
+  for (const audit of audits) {
     try {
       const { blob, ext } = await blobForAudit(audit);
       let name = prAuditFilename(audit, ext);
@@ -188,6 +187,6 @@ export async function downloadApprovedBundle(
   }
 
   const blob = await zip.generateAsync({ type: "blob" });
-  triggerBlobDownload(blob, `PR Audit - Approved - ${todayIso}.zip`);
+  triggerBlobDownload(blob, `PR Audit Bundle - ${todayIso}.zip`);
   return { count, warnings };
 }
