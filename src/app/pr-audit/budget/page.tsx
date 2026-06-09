@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Loader2,
   Check,
   Wallet,
@@ -14,17 +16,23 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
   directSelectList,
-  directInsertRow,
-  directPatchRow,
+  directDeleteByFilter,
+  directInsertRows,
   getCachedUserId,
 } from "@/lib/supabase/rest";
-import { PR_COST_CENTERS } from "@/lib/pr-accounting-codes";
 import type { CostCenterBudget } from "@/types/database";
+import { usePrCodes } from "@/lib/hooks/usePrCodes";
 import {
   currentFederalFiscalYear,
   fiscalYearShort,
   fiscalYearLabel,
+  FISCAL_MONTH_LABELS,
 } from "@/lib/pr-audit/fiscal-year";
+import {
+  splitAnnualToMonths,
+  buildMonthlyBudgetRows,
+  monthlyFromRows,
+} from "@/lib/pr-audit/budget-entry";
 
 function formatMoney(n: number): string {
   return (Number(n) || 0).toLocaleString("en-US", {
@@ -34,16 +42,38 @@ function formatMoney(n: number): string {
   });
 }
 
-interface BudgetEntry {
-  /** Existing row id, if one exists for this FY + cost center. */
-  id: string | null;
-  amount: string; // raw input value
+function parseNum(s: string): number {
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function round2(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function sumMonths(months: string[]): number {
+  return round2(months.reduce((s, m) => s + parseNum(m), 0));
+}
+
+/** Trim the code prefix and the "GLK VMGC" boilerplate for a tidy label. */
+function shortLabel(rawLabel: string, code: string): string {
+  const base = (rawLabel || code).replace(/^GLK VMGC\s*/i, "").trim();
+  return base || code;
+}
+
+interface CcEntry {
+  /** 12 monthly amounts (fiscal order, Oct→Sep) as input strings. Source of truth. */
+  months: string[];
+  /** Transient text in the Annual box (lets the user type freely). */
+  annualText: string;
+  expanded: boolean;
 }
 
 export default function PrAuditBudgetPage() {
   const { profile, loading: authLoading } = useAuth();
+  const { costCenters, loading: codesLoading } = usePrCodes();
   const [fiscalYear, setFiscalYear] = useState(() => currentFederalFiscalYear());
-  const [entries, setEntries] = useState<Record<string, BudgetEntry>>({});
+  const [entries, setEntries] = useState<Record<string, CcEntry>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -58,23 +88,25 @@ export default function PrAuditBudgetPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSaved(false);
     try {
       const rows = await directSelectList<CostCenterBudget>(
         "cost_center_budgets",
         {
           columns: "*",
           filters: [`fiscal_year=eq.${fiscalYear}`],
-          limit: 100,
+          limit: 400,
           label: "pr-audit.budget.fetch",
         },
       );
-      const byCc = new Map(rows.map((r) => [r.cost_ctr, r]));
-      const next: Record<string, BudgetEntry> = {};
-      for (const cc of PR_COST_CENTERS) {
-        const existing = byCc.get(cc.value);
-        next[cc.value] = {
-          id: existing?.id ?? null,
-          amount: existing ? String(existing.annual_amount) : "",
+      const next: Record<string, CcEntry> = {};
+      for (const cc of costCenters) {
+        const monthsNum = monthlyFromRows(rows, cc.code);
+        const annual = round2(monthsNum.reduce((s, v) => s + v, 0));
+        next[cc.code] = {
+          months: monthsNum.map((v) => (v ? String(v) : "")),
+          annualText: annual ? String(annual) : "",
+          expanded: false,
         };
       }
       setEntries(next);
@@ -84,24 +116,59 @@ export default function PrAuditBudgetPage() {
     } finally {
       setLoading(false);
     }
-  }, [fiscalYear]);
+  }, [fiscalYear, costCenters]);
 
   useEffect(() => {
-    if (!isAllowed) return;
+    if (!isAllowed || codesLoading) return;
     load();
-  }, [isAllowed, load]);
+  }, [isAllowed, codesLoading, load]);
 
-  const handleAmountChange = (cc: string, amount: string) => {
+  // Type in the Annual box → keep their text, re-split evenly across 12 months.
+  const handleAnnualChange = useCallback((code: string, text: string) => {
     setSaved(false);
-    setEntries((prev) => ({
-      ...prev,
-      [cc]: { ...prev[cc], amount },
-    }));
-  };
+    setEntries((prev) => {
+      const n = parseNum(text);
+      const months =
+        n > 0
+          ? splitAnnualToMonths(n).map((v) => (v ? String(round2(v)) : ""))
+          : new Array(12).fill("");
+      return { ...prev, [code]: { ...prev[code], annualText: text, months } };
+    });
+  }, []);
 
-  const total = PR_COST_CENTERS.reduce(
-    (s, cc) => s + (parseFloat(entries[cc.value]?.amount || "") || 0),
-    0,
+  // Type in a Month box → set just that month; the annual reflects the new sum.
+  const handleMonthChange = useCallback(
+    (code: string, idx: number, text: string) => {
+      setSaved(false);
+      setEntries((prev) => {
+        const entry = prev[code];
+        if (!entry) return prev;
+        const months = [...entry.months];
+        months[idx] = text;
+        const sum = sumMonths(months);
+        return {
+          ...prev,
+          [code]: { ...entry, months, annualText: sum ? String(sum) : "" },
+        };
+      });
+    },
+    [],
+  );
+
+  const toggleExpand = useCallback((code: string) => {
+    setEntries((prev) => {
+      const entry = prev[code];
+      if (!entry) return prev;
+      return { ...prev, [code]: { ...entry, expanded: !entry.expanded } };
+    });
+  }, []);
+
+  const total = useMemo(
+    () =>
+      round2(
+        Object.values(entries).reduce((s, e) => s + sumMonths(e.months), 0),
+      ),
+    [entries],
   );
 
   const handleSave = useCallback(async () => {
@@ -110,34 +177,29 @@ export default function PrAuditBudgetPage() {
     setSaved(false);
     try {
       const userId = getCachedUserId();
-      for (const cc of PR_COST_CENTERS) {
-        const entry = entries[cc.value];
+      for (const cc of costCenters) {
+        const entry = entries[cc.code];
         if (!entry) continue;
-        const amount = parseFloat(entry.amount || "") || 0;
-        if (entry.id) {
-          await directPatchRow(
+        const monthly = entry.months.map(parseNum);
+        const rows = buildMonthlyBudgetRows({
+          fiscalYear,
+          costCtr: cc.code,
+          monthly,
+          createdBy: userId,
+        });
+        // Replace this cost center's rows for the FY — clears any legacy
+        // whole-year row and stale months, then writes the current ones.
+        await directDeleteByFilter(
+          "cost_center_budgets",
+          [`fiscal_year=eq.${fiscalYear}`, `cost_ctr=eq.${encodeURIComponent(cc.code)}`],
+          "pr-audit.budget.clear",
+        );
+        if (rows.length > 0) {
+          await directInsertRows(
             "cost_center_budgets",
-            "id",
-            entry.id,
-            { annual_amount: amount },
-            "pr-audit.budget.update",
-          );
-        } else if (amount > 0) {
-          // Only create a row when there's an actual amount to store.
-          const inserted = await directInsertRow<CostCenterBudget>(
-            "cost_center_budgets",
-            {
-              fiscal_year: fiscalYear,
-              cost_ctr: cc.value,
-              annual_amount: amount,
-              created_by: userId,
-            },
+            rows as unknown as Record<string, unknown>[],
             "pr-audit.budget.insert",
           );
-          setEntries((prev) => ({
-            ...prev,
-            [cc.value]: { id: inserted.id, amount: String(amount) },
-          }));
         }
       }
       setSaved(true);
@@ -146,9 +208,10 @@ export default function PrAuditBudgetPage() {
     } finally {
       setSaving(false);
     }
-  }, [entries, fiscalYear]);
+  }, [entries, fiscalYear, costCenters]);
 
   const currentFy = currentFederalFiscalYear();
+  const busy = loading || codesLoading;
 
   if (authLoading) {
     return (
@@ -187,7 +250,8 @@ export default function PrAuditBudgetPage() {
             <Wallet className="w-5 h-5" /> Cost Center Budgets
           </h1>
           <p className="text-[11px] text-muted-foreground">
-            Annual allocation per NAF account
+            Set the yearly amount — it splits across 12 months. Expand any to
+            shape seasonal spending.
           </p>
         </div>
       </div>
@@ -219,29 +283,43 @@ export default function PrAuditBudgetPage() {
         </button>
       </div>
 
-      {loading ? (
+      {busy ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-16 rounded-xl bg-muted/50 animate-pulse" />
           ))}
         </div>
+      ) : costCenters.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          No cost centers yet. Add some under{" "}
+          <Link href="/pr-audit/codes" className="text-primary font-medium underline">
+            Manage Lists
+          </Link>
+          .
+        </div>
       ) : (
         <>
           <div className="space-y-2">
-            {PR_COST_CENTERS.map((cc) => {
-              const label = cc.label.includes("—")
-                ? cc.label.split("—")[1].trim()
-                : cc.label;
+            {costCenters.map((cc) => {
+              const entry =
+                entries[cc.code] ?? {
+                  months: new Array(12).fill(""),
+                  annualText: "",
+                  expanded: false,
+                };
               return (
                 <div
-                  key={cc.value}
+                  key={cc.code}
                   className="rounded-xl border border-border bg-card p-3"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-sm truncate">{label}</p>
+                      <p className="font-medium text-sm truncate">
+                        {shortLabel(cc.rawLabel, cc.code)}
+                      </p>
                       <p className="text-[11px] text-muted-foreground">
-                        {cc.value}
+                        {cc.code}
+                        {cc.category ? ` · ${cc.category}` : ""}
                       </p>
                     </div>
                     <div className="relative shrink-0">
@@ -253,15 +331,56 @@ export default function PrAuditBudgetPage() {
                         inputMode="decimal"
                         min="0"
                         step="100"
-                        value={entries[cc.value]?.amount ?? ""}
+                        value={entry.annualText}
                         onChange={(e) =>
-                          handleAmountChange(cc.value, e.target.value)
+                          handleAnnualChange(cc.code, e.target.value)
                         }
                         placeholder="0"
                         className="w-36 text-sm text-right rounded-lg border border-border bg-background pl-6 pr-2 py-2"
                       />
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(cc.code)}
+                    className="mt-2 flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {entry.expanded ? (
+                      <ChevronUp className="w-3 h-3" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3" />
+                    )}
+                    Monthly breakdown
+                  </button>
+
+                  {entry.expanded && (
+                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                      {FISCAL_MONTH_LABELS.map((label, idx) => (
+                        <div key={label}>
+                          <label className="text-[9px] text-muted-foreground block mb-0.5">
+                            {label}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+                              $
+                            </span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min="0"
+                              value={entry.months[idx] ?? ""}
+                              onChange={(e) =>
+                                handleMonthChange(cc.code, idx, e.target.value)
+                              }
+                              placeholder="0"
+                              className="w-full text-xs text-right rounded-md border border-border bg-background pl-4 pr-1.5 py-1.5"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

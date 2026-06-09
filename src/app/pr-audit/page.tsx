@@ -34,12 +34,16 @@ import type { PrAudit, CostCenterBudget, PrAuditReviewStatus } from "@/types/dat
 import {
   buildCostCenterRollup,
   rollupTotals,
+  rollupMonthTotals,
+  monthFor,
   type CostCenterRollup,
 } from "@/lib/pr-audit/rollup";
 import {
   currentFederalFiscalYear,
   fiscalYearShort,
   fiscalYearLabel,
+  fiscalMonthIndex,
+  FISCAL_MONTH_LABELS,
 } from "@/lib/pr-audit/fiscal-year";
 import { downloadBundle } from "@/lib/pr-audit/download";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
@@ -78,7 +82,13 @@ function shortCcLabel(label: string): string {
 
 // ── Monthly bars ──────────────────────────────────────────────────────────────
 
-function MonthlyBars({ row }: { row: CostCenterRollup }) {
+function MonthlyBars({
+  row,
+  selectedIdx,
+}: {
+  row: CostCenterRollup;
+  selectedIdx: number | null;
+}) {
   const max = Math.max(1, ...row.byMonth.map((m) => m.spent + m.pipeline));
   return (
     <div className="flex items-end gap-[3px] h-10 mt-2">
@@ -86,6 +96,7 @@ function MonthlyBars({ row }: { row: CostCenterRollup }) {
         const total = m.spent + m.pipeline;
         const h = total > 0 ? Math.max(8, Math.round((total / max) * 40)) : 2;
         const spentH = total > 0 ? Math.round((m.spent / total) * h) : 0;
+        const isSel = selectedIdx === m.index;
         return (
           <div
             key={m.index}
@@ -95,13 +106,19 @@ function MonthlyBars({ row }: { row: CostCenterRollup }) {
             }`}
           >
             <div
-              className="rounded-sm bg-muted overflow-hidden flex flex-col justify-end"
+              className={`rounded-sm bg-muted overflow-hidden flex flex-col justify-end ${
+                isSel ? "ring-1 ring-primary" : ""
+              }`}
               style={{ height: `${h}px` }}
             >
               <div className="bg-amber-400/70" style={{ height: `${h - spentH}px` }} />
               <div className="bg-emerald-500" style={{ height: `${spentH}px` }} />
             </div>
-            <span className="text-[7px] text-muted-foreground text-center mt-0.5 leading-none">
+            <span
+              className={`text-[7px] text-center mt-0.5 leading-none ${
+                isSel ? "text-primary font-semibold" : "text-muted-foreground"
+              }`}
+            >
               {m.label[0]}
             </span>
           </div>
@@ -111,13 +128,26 @@ function MonthlyBars({ row }: { row: CostCenterRollup }) {
   );
 }
 
-function CostCenterCard({ row }: { row: CostCenterRollup }) {
+function CostCenterCard({
+  row,
+  monthIdx,
+}: {
+  row: CostCenterRollup;
+  monthIdx: number | null;
+}) {
   const [open, setOpen] = useState(false);
-  const hasBudget = row.budget > 0;
-  const over = row.remaining < 0;
-  const pct = Math.min(row.percentUsed, 100);
+  // In month mode, show that fiscal month's figures; otherwise the annual roll-up.
+  const m = monthIdx != null ? monthFor(row, monthIdx) : null;
+  const budget = m ? m.budget : row.budget;
+  const spent = m ? m.spent : row.spent;
+  const pipeline = m ? m.pipeline : row.pending;
+  const remaining = m ? m.remaining : row.remaining;
+  const percentUsed = m ? m.percentUsed : row.percentUsed;
+  const hasBudget = budget > 0;
+  const over = remaining < 0;
+  const pct = Math.min(percentUsed, 100);
   const barColor =
-    row.percentUsed > 100 ? "bg-red-500" : row.percentUsed > 90 ? "bg-amber-500" : "bg-emerald-500";
+    percentUsed > 100 ? "bg-red-500" : percentUsed > 90 ? "bg-amber-500" : "bg-emerald-500";
 
   return (
     <div className="rounded-xl border border-border bg-card p-3">
@@ -133,7 +163,7 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
         </div>
         <div className="text-right shrink-0">
           <p className={`font-bold text-sm ${over ? "text-red-600" : ""}`}>
-            {hasBudget ? formatMoney(row.remaining) : "—"}
+            {hasBudget ? formatMoney(remaining) : "—"}
           </p>
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {hasBudget ? (over ? "over budget" : "left") : "no budget set"}
@@ -144,10 +174,10 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
       <div className="mt-2">
         <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
           <span>
-            {formatMoney(row.spent)}
-            {hasBudget && <> of {formatMoney(row.budget)}</>}
+            {formatMoney(spent)}
+            {hasBudget && <> of {formatMoney(budget)}</>}
           </span>
-          {hasBudget && <span>{row.percentUsed}%</span>}
+          {hasBudget && <span>{percentUsed}%</span>}
         </div>
         {hasBudget && (
           <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -156,9 +186,9 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
         )}
       </div>
 
-      {row.pending > 0 && (
+      {pipeline > 0 && (
         <p className="text-[11px] text-amber-600 mt-1.5">
-          + {formatMoney(row.pending)} in pipeline
+          + {formatMoney(pipeline)} in pipeline
         </p>
       )}
 
@@ -170,7 +200,7 @@ function CostCenterCard({ row }: { row: CostCenterRollup }) {
         {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         Monthly
       </button>
-      {open && <MonthlyBars row={row} />}
+      {open && <MonthlyBars row={row} selectedIdx={monthIdx} />}
     </div>
   );
 }
@@ -308,6 +338,7 @@ export default function PrAuditPage() {
   const [loading, setLoading] = useState(true);
   const [fiscalYear, setFiscalYear] = useState(() => currentFederalFiscalYear());
   const [category, setCategory] = useState<string | null>(null);
+  const [monthIdx, setMonthIdx] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -379,7 +410,26 @@ export default function PrAuditPage() {
     () => (category ? rollupAll.filter((r) => r.category === category) : rollupAll),
     [rollupAll, category],
   );
-  const totals = useMemo(() => rollupTotals(rollup), [rollup]);
+  const totals = useMemo(() => {
+    if (monthIdx != null) {
+      const t = rollupMonthTotals(rollup, monthIdx);
+      return {
+        budget: t.budget,
+        spent: t.spent,
+        pipeline: t.pipeline,
+        remaining: t.remaining,
+        percentUsed: t.percentUsed,
+      };
+    }
+    const t = rollupTotals(rollup);
+    return {
+      budget: t.budget,
+      spent: t.spent,
+      pipeline: t.pending,
+      remaining: t.remaining,
+      percentUsed: t.percentUsed,
+    };
+  }, [rollup, monthIdx]);
 
   const filteredAudits = useMemo(
     () => (category ? audits.filter((a) => auditInCategory(a, category)) : audits),
@@ -395,6 +445,7 @@ export default function PrAuditPage() {
   );
 
   const currentFy = currentFederalFiscalYear();
+  const currentMonthIdx = fiscalMonthIndex(new Date());
 
   // ── Row actions ─────────────────────────────────────────────────────────────
 
@@ -582,7 +633,8 @@ export default function PrAuditPage() {
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
           <Wallet className="w-4 h-4" />
-          Budget — {fiscalYearShort(fiscalYear)}
+          Budget — {monthIdx != null ? `${FISCAL_MONTH_LABELS[monthIdx]} ` : ""}
+          {fiscalYearShort(fiscalYear)}
           {category ? ` · ${category}` : ""}
         </h2>
         <div className="flex items-center gap-1">
@@ -610,6 +662,57 @@ export default function PrAuditPage() {
       </div>
       <p className="text-[11px] text-muted-foreground -mt-0.5 mb-3">{fiscalYearLabel(fiscalYear)}</p>
 
+      {/* Year / Month view toggle */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setMonthIdx(null)}
+            className={`px-3 py-1 rounded-md transition-colors ${
+              monthIdx === null
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Year
+          </button>
+          <button
+            type="button"
+            onClick={() => setMonthIdx((m) => (m == null ? currentMonthIdx : m))}
+            className={`px-3 py-1 rounded-md transition-colors ${
+              monthIdx !== null
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Month
+          </button>
+        </div>
+        {monthIdx !== null && (
+          <span className="text-[11px] text-muted-foreground">
+            Budget &amp; spend for {FISCAL_MONTH_LABELS[monthIdx]}
+          </span>
+        )}
+      </div>
+      {monthIdx !== null && (
+        <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1 mb-3">
+          {FISCAL_MONTH_LABELS.map((label, idx) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setMonthIdx(idx)}
+              className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                idx === monthIdx
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border hover:bg-muted/50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Totals */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="rounded-xl border border-border bg-card p-3">
@@ -631,9 +734,9 @@ export default function PrAuditPage() {
           </p>
         </div>
       </div>
-      {totals.pending > 0 && (
+      {totals.pipeline > 0 && (
         <p className="text-[11px] text-amber-600 -mt-2 mb-3">
-          + {formatMoney(totals.pending)} in pipeline (not yet ordered)
+          + {formatMoney(totals.pipeline)} in pipeline (not yet ordered)
         </p>
       )}
 
@@ -650,7 +753,7 @@ export default function PrAuditPage() {
       {/* Cost-center cards */}
       <div className="grid sm:grid-cols-2 gap-2">
         {rollup.map((row) => (
-          <CostCenterCard key={row.cost_ctr || "unassigned"} row={row} />
+          <CostCenterCard key={row.cost_ctr || "unassigned"} row={row} monthIdx={monthIdx} />
         ))}
       </div>
       <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">

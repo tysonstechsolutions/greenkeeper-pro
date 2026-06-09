@@ -9,6 +9,13 @@ import type { PrCategory, PrCode, PrCodeKind } from "@/types/database";
 /** Sentinel <option> value meaning "create a new category inline". */
 export const NEW_CATEGORY = "__new__";
 
+/** Human label per code kind — used by the add-code popups and headers. */
+export const KIND_LABEL: Record<PrCodeKind, string> = {
+  site: "Site",
+  cost_center: "Cost Center",
+  gl_account: "G/L Account",
+};
+
 export interface CodeDraft {
   code: string;
   label: string;

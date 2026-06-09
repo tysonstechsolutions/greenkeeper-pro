@@ -26,6 +26,9 @@ export function CodeForm({
 }) {
   const [draft, setDraft] = useState<CodeDraft>(initial ?? blankDraft());
   const isCostCenter = kind === "cost_center";
+  // Cost centers + G/L accounts get a description; only cost centers carry the
+  // example-items list (it feeds the AI cost-center fit-check).
+  const showDescription = kind === "cost_center" || kind === "gl_account";
   const addingCategory = draft.category_id === NEW_CATEGORY;
 
   return (
@@ -80,31 +83,38 @@ export function CodeForm({
         )}
       </div>
 
+      {showDescription && (
+        <div>
+          <label className="text-[10px] text-muted-foreground">
+            {isCostCenter
+              ? "Description (helps the AI catch wrong cost centers)"
+              : "Description (what this account is for)"}
+          </label>
+          <textarea
+            value={draft.description}
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            rows={2}
+            placeholder={
+              isCostCenter
+                ? "What this cost center is for…"
+                : "What this G/L account is for…"
+            }
+            className="w-full text-sm rounded-lg border border-border bg-background px-2 py-2 resize-none"
+          />
+        </div>
+      )}
+
       {isCostCenter && (
-        <>
-          <div>
-            <label className="text-[10px] text-muted-foreground">
-              Description (helps the AI catch wrong cost centers)
-            </label>
-            <textarea
-              value={draft.description}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-              rows={2}
-              placeholder="What this cost center is for…"
-              className="w-full text-sm rounded-lg border border-border bg-background px-2 py-2 resize-none"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] text-muted-foreground">Example items</label>
-            <textarea
-              value={draft.examples}
-              onChange={(e) => setDraft({ ...draft, examples: e.target.value })}
-              rows={2}
-              placeholder="e.g. fertilizer, mower parts, irrigation fittings, fuel"
-              className="w-full text-sm rounded-lg border border-border bg-background px-2 py-2 resize-none"
-            />
-          </div>
-        </>
+        <div>
+          <label className="text-[10px] text-muted-foreground">Example items</label>
+          <textarea
+            value={draft.examples}
+            onChange={(e) => setDraft({ ...draft, examples: e.target.value })}
+            rows={2}
+            placeholder="e.g. fertilizer, mower parts, irrigation fittings, fuel"
+            className="w-full text-sm rounded-lg border border-border bg-background px-2 py-2 resize-none"
+          />
+        </div>
       )}
 
       <label className="flex items-center gap-2 text-sm">

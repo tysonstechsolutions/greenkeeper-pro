@@ -46,14 +46,8 @@ import {
 } from "@/components/pr-audit/download-checklist";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
 import { REVIEW_META, REVIEW_ORDER } from "@/lib/pr-audit/lifecycle";
-import { CodeForm } from "@/components/pr-audit/code-form";
-import { createPrCode, blankDraft, type CodeDraft } from "@/lib/pr-audit/codes-crud";
-
-const KIND_LABEL: Record<PrCodeKind, string> = {
-  site: "Site",
-  cost_center: "Cost Center",
-  gl_account: "G/L Account",
-};
+import { createPrCode, KIND_LABEL, type CodeDraft } from "@/lib/pr-audit/codes-crud";
+import { AddCodeModal } from "@/components/pr-audit/add-code-modal";
 
 const STORAGE_BUCKET = "vendor-files";
 
@@ -848,29 +842,13 @@ function ViewPrAuditInner() {
       />
 
       {/* Add-missing-code popup */}
-      {addingCode && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-3"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => !savingNewCode && setAddingCode(null)}
-        >
-          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-semibold text-white mb-2">
-              Add {KIND_LABEL[addingCode.kind]} {addingCode.code}
-            </p>
-            <CodeForm
-              kind={addingCode.kind}
-              initial={blankDraft({ code: addingCode.code })}
-              categories={codes.categories}
-              saving={savingNewCode}
-              lockCode
-              onCancel={() => setAddingCode(null)}
-              onSave={saveNewCode}
-            />
-          </div>
-        </div>
-      )}
+      <AddCodeModal
+        target={addingCode}
+        categories={codes.categories}
+        saving={savingNewCode}
+        onCancel={() => setAddingCode(null)}
+        onSave={saveNewCode}
+      />
     </div>
   );
 }

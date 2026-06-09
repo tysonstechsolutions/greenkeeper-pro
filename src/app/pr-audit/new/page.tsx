@@ -37,7 +37,9 @@ import {
 import { FindingsSummary, FindingsList } from "@/components/pr-audit/findings";
 import { emptyItem } from "@/components/pr-audit/pr-editor";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
-import type { PrAudit } from "@/types/database";
+import { createPrCode, KIND_LABEL, type CodeDraft } from "@/lib/pr-audit/codes-crud";
+import { AddCodeModal } from "@/components/pr-audit/add-code-modal";
+import type { PrAudit, PrCodeKind } from "@/types/database";
 
 const STORAGE_BUCKET = "vendor-files";
 
@@ -178,8 +180,11 @@ export default function NewPrAuditPage() {
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
   const [creatingManual, setCreatingManual] = useState(false);
+  const [addingCode, setAddingCode] = useState<{ kind: PrCodeKind; code: string } | null>(null);
+  const [savingNewCode, setSavingNewCode] = useState(false);
 
-  const { validCodes } = usePrCodes();
+  const { validCodes, categories, sites, costCenters, glAccounts, refresh } =
+    usePrCodes();
 
   const isAllowed =
     profile?.role === "super" ||
@@ -202,6 +207,59 @@ export default function NewPrAuditPage() {
     }
     return { errors, withIssues, clean: rows.length - withIssues };
   }, [audits, rows.length]);
+
+  // Codes that appear on the uploaded PRs but aren't in the app's lists yet,
+  // de-duped across the whole batch so the same new code is added just once.
+  const unknownCodes = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ kind: PrCodeKind; code: string }> = [];
+    for (const row of rows) {
+      for (const it of row.extracted.items ?? []) {
+        const checks: Array<[PrCodeKind, string, Set<string>]> = [
+          ["site", (it.site ?? "").trim(), validCodes.sites],
+          ["cost_center", (it.cost_ctr ?? "").trim(), validCodes.costCenters],
+          ["gl_account", (it.gl_acct ?? "").trim(), validCodes.glAccounts],
+        ];
+        for (const [kind, code, set] of checks) {
+          if (code && !set.has(code)) {
+            const key = `${kind}:${code}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              out.push({ kind, code });
+            }
+          }
+        }
+      }
+    }
+    return out;
+  }, [rows, validCodes]);
+
+  const saveNewCode = useCallback(
+    async (draft: CodeDraft) => {
+      if (!addingCode) return;
+      setSavingNewCode(true);
+      setError(null);
+      try {
+        const countForKind =
+          addingCode.kind === "site"
+            ? sites.length
+            : addingCode.kind === "cost_center"
+              ? costCenters.length
+              : glAccounts.length;
+        await createPrCode(addingCode.kind, draft, categories.length, countForKind);
+        // Reloads validCodes → every PR in the batch re-audits live.
+        await refresh();
+        setAddingCode(null);
+      } catch (err) {
+        setError(
+          `Couldn't add the code: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        setSavingNewCode(false);
+      }
+    },
+    [addingCode, sites.length, costCenters.length, glAccounts.length, categories.length, refresh],
+  );
 
   const handleFiles = useCallback(async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -426,6 +484,34 @@ export default function NewPrAuditPage() {
         </button>
       )}
 
+      {/* New codes detected across the batch */}
+      {rows.length > 0 && unknownCodes.length > 0 && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/5 p-3">
+          <h3 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4" /> New codes on these PRs
+          </h3>
+          <p className="text-xs text-muted-foreground mb-2">
+            These aren&apos;t in your lists yet. Add them so the audit and budgets
+            recognize them — it updates every PR in this batch at once.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {unknownCodes.map((u) => (
+              <button
+                key={`${u.kind}:${u.code}`}
+                type="button"
+                onClick={() => setAddingCode(u)}
+                className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-card border border-red-500/30 text-red-700 dark:text-red-400 hover:bg-red-500/10"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add {u.code}
+                <span className="text-muted-foreground font-normal">
+                  ({KIND_LABEL[u.kind]})
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Confirm list */}
       {rows.length > 0 && (
         <div className="mt-5">
@@ -475,6 +561,15 @@ export default function NewPrAuditPage() {
           </button>
         </div>
       )}
+
+      {/* Add-missing-code popup */}
+      <AddCodeModal
+        target={addingCode}
+        categories={categories}
+        saving={savingNewCode}
+        onCancel={() => setAddingCode(null)}
+        onSave={saveNewCode}
+      />
     </div>
   );
 }
