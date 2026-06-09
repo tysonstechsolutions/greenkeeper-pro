@@ -45,6 +45,8 @@ const categoryLabels: Record<string, string> = {
   greens: "Greens",
   admin: "Admin",
   safety: "Safety",
+  grounds: "Grounds",
+  tees: "Tees",
 };
 
 export interface DailyAssignmentsReportOptions {

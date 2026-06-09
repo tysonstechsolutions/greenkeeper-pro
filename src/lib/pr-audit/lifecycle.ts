@@ -81,6 +81,23 @@ export const SPENT_STATUSES: ReadonlySet<PrAuditReviewStatus> = new Set([
   "receipt_signed",
 ]);
 
+/**
+ * Statuses where the reviewer has sent the PR up (or beyond). At that point any
+ * AI audit flags were accepted — they no longer matter — so the list + detail
+ * stop showing them as problems.
+ */
+export const FLAGS_ACCEPTED_STATUSES: ReadonlySet<PrAuditReviewStatus> = new Set([
+  "sent_up",
+  "ordered",
+  "received",
+  "receipt_signed",
+]);
+
+/** True once the PR is sent up or further along — hide the audit flags. */
+export function flagsAccepted(status: PrAuditReviewStatus): boolean {
+  return FLAGS_ACCEPTED_STATUSES.has(status);
+}
+
 /** Next status in the forward chain, or null at the end / off-chain. */
 export function nextStatus(s: PrAuditReviewStatus): PrAuditReviewStatus | null {
   if (s === "sent_back") return "pending"; // bring a bounced PR back into the flow

@@ -22,6 +22,8 @@ export const taskSchema = z.object({
     "pro_shop",
     "events",
     "customer_service",
+    "grounds",
+    "tees",
   ]),
   priority: z.enum(["critical", "high", "normal", "low"]),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format (YYYY-MM-DD)"),

@@ -32,12 +32,19 @@ export function guessExt(fileName: string | null, mime?: string): string {
   return "pdf";
 }
 
+/** Stable, readable base name (no extension): "PR Audit - {vendor} - {date}". */
+export function prAuditBaseName(
+  audit: Pick<PrAudit, "vendor_name" | "pr_date">,
+): string {
+  const vendor = sanitize(audit.vendor_name || "Vendor");
+  const date = (audit.pr_date || "").slice(0, 10) || "undated";
+  return `PR Audit - ${vendor} - ${date}`;
+}
+
 /** Stable, readable download name: "PR Audit - {vendor} - {date}.{ext}". */
 export function prAuditFilename(
   audit: Pick<PrAudit, "vendor_name" | "pr_date">,
   ext: string,
 ): string {
-  const vendor = sanitize(audit.vendor_name || "Vendor");
-  const date = (audit.pr_date || "").slice(0, 10) || "undated";
-  return `PR Audit - ${vendor} - ${date}.${ext}`;
+  return `${prAuditBaseName(audit)}.${ext}`;
 }

@@ -4,7 +4,7 @@ import { Layers, Clock } from "lucide-react";
 import type { TaskTemplate } from "@/types/database";
 import { cn } from "@/lib/utils";
 import {
-  classifyTemplateFrequency,
+  getTemplateFrequency,
   FREQUENCY_COLORS,
   FREQUENCY_LABELS,
 } from "@/lib/utils/template-frequency";
@@ -32,7 +32,7 @@ export function BoardTemplateChip({
   isDragging,
 }: BoardTemplateChipProps) {
   const interactive = !!onClick;
-  const freq = classifyTemplateFrequency(template);
+  const freq = getTemplateFrequency(template);
   const colors = FREQUENCY_COLORS[freq];
   return (
     <div

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Loader2, Save, ExternalLink } from "lucide-react";
+import { Loader2, Save, ExternalLink, Sparkles } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { callApi } from "@/lib/api/client";
 import {
   Select,
   SelectContent,
@@ -36,9 +38,11 @@ const PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
 const CATEGORIES: { value: TaskCategory; label: string }[] = [
   { value: "mowing", label: "Mowing" },
   { value: "greens", label: "Greens" },
+  { value: "tees", label: "Tees" },
   { value: "bunker", label: "Bunker" },
   { value: "mechanical", label: "Mechanical" },
   { value: "landscaping", label: "Landscaping" },
+  { value: "grounds", label: "Grounds" },
   { value: "construction", label: "Construction" },
   { value: "admin", label: "Admin" },
   { value: "safety", label: "Safety" },
@@ -53,6 +57,7 @@ export interface NewTaskSubmission {
   assigned_to: string;
   due_date: string;
   estimated_minutes: number | null;
+  equipment_needed: string[];
 }
 
 interface BoardNewTaskSheetProps {
@@ -140,8 +145,41 @@ function NewTaskForm({
   const [assignee, setAssignee] = useState<string>(initialUserId);
   const [date, setDate] = useState<string>(initialDate);
   const [estMinutes, setEstMinutes] = useState<string>("");
+  const [equipment, setEquipment] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    if (!title.trim()) {
+      setGenError("Enter a task title first");
+      return;
+    }
+    setGenError(null);
+    setGenerating(true);
+    try {
+      const res = await callApi<{ directions: string; equipment_used: string[] }>(
+        "task-directions",
+        {
+          method: "POST",
+          body: {
+            title: title.trim(),
+            category,
+            description: description.trim() || undefined,
+          },
+        },
+      );
+      if (res.directions) setDescription(res.directions);
+      if (Array.isArray(res.equipment_used)) setEquipment(res.equipment_used);
+    } catch (err) {
+      setGenError(
+        err instanceof Error ? err.message : "Failed to generate directions",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -172,6 +210,7 @@ function NewTaskForm({
         assigned_to: assignee,
         due_date: date,
         estimated_minutes: mins,
+        equipment_needed: equipment,
       });
     } finally {
       setSubmitting(false);
@@ -286,13 +325,49 @@ function NewTaskForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="new-task-desc">Description (optional)</Label>
-          <Input
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="new-task-desc">Directions (optional)</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleGenerate}
+              disabled={generating || !title.trim()}
+              className="h-7 px-2 text-xs gap-1"
+            >
+              {generating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              Generate with AI
+            </Button>
+          </div>
+          <Textarea
             id="new-task-desc"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Free text — instructions, hazards, gotchas"
+            placeholder="Free text — or type the job above and tap Generate with AI for step-by-step directions using your verified equipment."
+            rows={6}
           />
+          {genError && <div className="text-xs text-destructive">{genError}</div>}
+          {equipment.length > 0 && (
+            <div className="space-y-1 pt-0.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Equipment
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {equipment.map((e) => (
+                  <span
+                    key={e}
+                    className="px-1.5 py-0.5 rounded bg-accent/50 text-[10px] text-muted-foreground"
+                  >
+                    {e}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {error && <div className="text-xs text-destructive">{error}</div>}

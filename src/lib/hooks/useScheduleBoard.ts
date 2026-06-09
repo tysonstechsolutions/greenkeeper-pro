@@ -4,11 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { resolveAccessToken } from "@/lib/api/client";
 import {
+  directDeleteByFilter,
   directDeleteRow,
   directInsertRow,
+  directInsertRows,
+  directPatchByFilter,
   directPatchRow,
   directSelectList,
 } from "@/lib/supabase/rest";
+import {
+  occurrencesFor,
+  defaultHorizon,
+  weekdayOf,
+  weekOfMonthOf,
+} from "@/lib/utils/season";
+import { getTemplateFrequency } from "@/lib/utils/template-frequency";
 import { useAuth } from "./useAuth";
 import type {
   Profile,
@@ -110,6 +120,8 @@ interface UseScheduleBoardReturn {
   // Mutators — all optimistic with server-side rollback on failure.
   assignTask: (taskId: string, userId: string, date: string) => Promise<boolean>;
   unassignTask: (taskId: string) => Promise<boolean>;
+  /** Delete this occurrence + all future ones in its series, stopping it. */
+  deleteTaskSeriesFromDate: (taskId: string) => Promise<boolean>;
   /**
    * Create a new task from a template, assigned to the given crew member
    * and date. The template stays put for reuse. Returns the new task id
@@ -553,6 +565,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
           template_id: tpl.id,
           parent_task_id: null,
           plan_goal_id: null,
+          series_id: null,
           completed_by: null,
           completed_at: null,
           verified_by: null,
@@ -570,44 +583,170 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
         next.cells.set(key, { ...cell, tasks: [...cell.tasks, optimistic] });
       });
 
-      try {
+      // Decide the recurrence tier from the template's explicit frequency,
+      // falling back to the name heuristic for templates created before the
+      // `frequency` column existed.
+      const tier = getTemplateFrequency(tpl);
+
+      // Task fields copied off the template — written verbatim on each
+      // occurrence and snapshotted onto the series for the nightly top-up.
+      const taskPayload = {
+        title: tpl.name,
+        description: tpl.description ?? null,
+        category: tpl.category,
+        priority: tpl.default_priority,
+        estimated_minutes: tpl.estimated_minutes ?? null,
+        equipment_needed: tpl.equipment_needed ?? [],
+        materials_needed: tpl.materials_needed ?? [],
+        checklist: tpl.checklist ?? [],
+        requires_photo_before: !!tpl.requires_photo_before,
+        requires_photo_after: !!tpl.requires_photo_after,
+        weather_dependent: !!tpl.weather_dependent,
+        weather_conditions: tpl.weather_conditions ?? null,
+        template_id: tpl.id,
+        notes: tpl.instructions ?? null,
+      };
+
+      const insertSingleTask = async (): Promise<string | null> => {
         const inserted = await directInsertRow<Task>(
           "tasks",
           {
-            title: tpl.name,
-            description: tpl.description ?? null,
-            category: tpl.category,
-            priority: tpl.default_priority,
+            ...taskPayload,
             status: "pending",
             assigned_to: userId,
             assigned_by: profile.id,
             due_date: date,
-            estimated_minutes: tpl.estimated_minutes ?? null,
-            equipment_needed: tpl.equipment_needed ?? [],
-            materials_needed: tpl.materials_needed ?? [],
-            checklist: tpl.checklist ?? [],
-            requires_photo_before: !!tpl.requires_photo_before,
-            requires_photo_after: !!tpl.requires_photo_after,
-            weather_dependent: !!tpl.weather_dependent,
-            weather_conditions: tpl.weather_conditions ?? null,
-            template_id: tpl.id,
-            notes: tpl.instructions ?? null,
           },
           "scheduleBoard.createTaskFromTemplate",
         );
-        // Refresh so the optimistic placeholder gets replaced with the real
-        // joined row (with assigned_user / zone / etc.).
         await fetchBoard();
         return inserted?.id ?? null;
+      };
+
+      try {
+        // One-off tiers (seasonal / projects) never recur — a single task.
+        if (tier === "seasonal" || tier === "projects") {
+          return await insertSingleTask();
+        }
+
+        // Repeating tiers — create a series, then materialize every in-season
+        // occurrence through the horizon. The nightly job extends it each
+        // following season.
+        let seriesId: string;
+        try {
+          const series = await directInsertRow<{ id: string }>(
+            "task_series",
+            {
+              assigned_to: userId,
+              template_id: tpl.id,
+              tier,
+              weekday: weekdayOf(date),
+              week_of_month: tier === "monthly" ? weekOfMonthOf(date) : null,
+              task_payload: taskPayload,
+              created_by: profile.id,
+            },
+            "scheduleBoard.createSeries",
+          );
+          seriesId = series.id;
+        } catch (seriesErr) {
+          // Recurrence schema not applied yet (task_series missing) — degrade
+          // to a single task so dropping still works pre-migration.
+          const msg = seriesErr instanceof Error ? seriesErr.message : "";
+          if (/task_series|could not find|does not exist|PGRST205|schema cache/i.test(msg)) {
+            console.warn(
+              "[useScheduleBoard] task_series unavailable — creating a single task",
+              seriesErr,
+            );
+            return await insertSingleTask();
+          }
+          throw seriesErr;
+        }
+
+        const dates = occurrencesFor(date, tier, defaultHorizon(date));
+        const rows = dates.map((d) => ({
+          ...taskPayload,
+          status: "pending",
+          assigned_to: userId,
+          assigned_by: profile.id,
+          due_date: d,
+          series_id: seriesId,
+        }));
+        await directInsertRows("tasks", rows, "scheduleBoard.createSeriesTasks");
+        await fetchBoard();
+        return seriesId;
       } catch (err) {
         rollback();
-        setError(
-          err instanceof Error ? err.message : "Failed to create task",
-        );
+        setError(err instanceof Error ? err.message : "Failed to create task");
         return null;
       }
     },
     [profile, board, applyOptimistic, fetchBoard],
+  );
+
+  /**
+   * Delete a recurring task and every future occurrence in its series, and
+   * stop the series so the nightly top-up won't refill it. Completed and past
+   * occurrences are left untouched. Falls back to a single delete when the
+   * task isn't part of a series.
+   */
+  const deleteTaskSeriesFromDate = useCallback(
+    async (taskId: string): Promise<boolean> => {
+      // Find the task in the current board to read its series + date.
+      let target: TaskWithRelations | null = null;
+      if (board) {
+        for (const cell of board.cells.values()) {
+          const t = cell.tasks.find((x) => x.id === taskId);
+          if (t) {
+            target = t;
+            break;
+          }
+        }
+      }
+      if (!target || !target.series_id || !target.due_date) {
+        // Not a series occurrence — just remove this one.
+        return unassignTask(taskId);
+      }
+      const seriesId = target.series_id;
+      const fromDate = target.due_date;
+
+      const rollback = applyOptimistic((next) => {
+        for (const [key, cell] of next.cells) {
+          const remaining = cell.tasks.filter(
+            (t) => !(t.series_id === seriesId && (t.due_date ?? "") >= fromDate),
+          );
+          if (remaining.length !== cell.tasks.length) {
+            next.cells.set(key, { ...cell, tasks: remaining });
+          }
+        }
+      });
+
+      try {
+        // Stop the series so the nightly job won't regenerate it.
+        await directPatchByFilter(
+          "task_series",
+          [`id=eq.${encodeURIComponent(seriesId)}`],
+          { active: false },
+          "scheduleBoard.stopSeries",
+        );
+        // Delete this and every future not-yet-started occurrence.
+        await directDeleteByFilter(
+          "tasks",
+          [
+            `series_id=eq.${encodeURIComponent(seriesId)}`,
+            `due_date=gte.${encodeURIComponent(fromDate)}`,
+            `status=eq.pending`,
+          ],
+          "scheduleBoard.deleteSeriesFuture",
+        );
+        await fetchBoard();
+        return true;
+      } catch (err) {
+        rollback();
+        setError(err instanceof Error ? err.message : "Failed to delete series");
+        return false;
+      }
+    },
+    [board, applyOptimistic, unassignTask, fetchBoard],
   );
 
   const setShift: UseScheduleBoardReturn["setShift"] = useCallback(
@@ -797,6 +936,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
     refresh: fetchBoard,
     assignTask,
     unassignTask,
+    deleteTaskSeriesFromDate,
     createTaskFromTemplate,
     setShift,
     clearShift,

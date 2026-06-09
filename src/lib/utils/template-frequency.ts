@@ -13,7 +13,7 @@
  */
 import type { TaskTemplate } from "@/types/database";
 
-export type TemplateFrequency = "daily" | "weekly" | "monthly" | "seasonal";
+export type TemplateFrequency = "daily" | "weekly" | "monthly" | "seasonal" | "projects";
 
 const SEASONAL_PATTERNS = [
   /\bspring\b/i,
@@ -79,11 +79,24 @@ export function classifyTemplateFrequency(
   return "weekly";
 }
 
+/**
+ * Resolve a template's frequency tier. The explicit `frequency` column wins;
+ * templates created before that column existed (frequency = null) fall back
+ * to the name heuristic so their chips look unchanged.
+ */
+export function getTemplateFrequency(
+  template: Pick<TaskTemplate, "name" | "frequency">,
+): TemplateFrequency {
+  if (template.frequency) return template.frequency;
+  return classifyTemplateFrequency(template);
+}
+
 export const FREQUENCY_LABELS: Record<TemplateFrequency, string> = {
   daily: "Daily",
   weekly: "Weekly",
   monthly: "Monthly",
   seasonal: "Seasonal",
+  projects: "Projects",
 };
 
 /**
@@ -113,5 +126,10 @@ export const FREQUENCY_COLORS: Record<
     border: "border-l-purple-500",
     chip: "text-purple-700 dark:text-purple-300",
     pill: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30",
+  },
+  projects: {
+    border: "border-l-rose-500",
+    chip: "text-rose-700 dark:text-rose-300",
+    pill: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30",
   },
 };

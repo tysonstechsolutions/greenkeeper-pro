@@ -7,7 +7,7 @@ import type { TaskTemplate, TaskCategory } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { BoardTemplateChip } from "./board-template-chip";
 import {
-  classifyTemplateFrequency,
+  getTemplateFrequency,
   FREQUENCY_COLORS,
   FREQUENCY_LABELS,
   type TemplateFrequency,
@@ -18,6 +18,7 @@ const FREQUENCY_FILTERS: TemplateFrequency[] = [
   "weekly",
   "monthly",
   "seasonal",
+  "projects",
 ];
 
 // Display order for the per-category groups in the backlog. Mowing first
@@ -27,11 +28,13 @@ const FREQUENCY_FILTERS: TemplateFrequency[] = [
 const CATEGORY_DISPLAY_ORDER: TaskCategory[] = [
   "mowing",
   "greens",
+  "tees",
   "bunker",
   "irrigation",
   "chemical",
   "mechanical",
   "landscaping",
+  "grounds",
   "construction",
   "events",
   "pro_shop",
@@ -47,11 +50,13 @@ const CATEGORY_DISPLAY_ORDER: TaskCategory[] = [
 const CATEGORY_LABELS: Record<TaskCategory, string> = {
   mowing: "Mowing",
   greens: "Greens",
+  tees: "Tees",
   bunker: "Bunker",
   irrigation: "Irrigation",
   chemical: "Chemical",
   mechanical: "Mechanical",
   landscaping: "Landscaping",
+  grounds: "Grounds",
   construction: "Construction",
   events: "Events",
   pro_shop: "Pro Shop",
@@ -159,7 +164,7 @@ export function BoardBacklog({
   // cost again inside the filter loop and the chip render.
   const classified = useMemo(
     () =>
-      templates.map((t) => ({ template: t, frequency: classifyTemplateFrequency(t) })),
+      templates.map((t) => ({ template: t, frequency: getTemplateFrequency(t) })),
     [templates],
   );
 

@@ -29,6 +29,7 @@ export const mockTask: Task = {
   template_id: null,
   plan_goal_id: null,
   parent_task_id: null,
+  series_id: null,
   notes: null,
   completed_at: null,
   completed_by: null,

@@ -56,6 +56,8 @@ const categoryOptions: { value: TaskCategory; label: string }[] = [
   { value: "construction", label: "Construction" },
   { value: "bunker", label: "Bunker" },
   { value: "greens", label: "Greens" },
+  { value: "tees", label: "Tees" },
+  { value: "grounds", label: "Grounds" },
   { value: "admin", label: "Admin" },
   { value: "safety", label: "Safety" },
   { value: "other", label: "Other" },

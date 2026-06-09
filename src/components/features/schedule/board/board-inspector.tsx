@@ -46,6 +46,7 @@ interface BoardInspectorProps {
   onClearShift: (userId: string, date: string) => Promise<boolean>;
   onSetTaskStatus: (taskId: string, status: TaskStatus) => Promise<boolean>;
   onUnassignTask: (taskId: string) => Promise<boolean>;
+  onDeleteSeries: (taskId: string) => Promise<boolean>;
   onRescheduleTask: (
     taskId: string,
     userId: string,
@@ -62,6 +63,7 @@ export function BoardInspector({
   onClearShift,
   onSetTaskStatus,
   onUnassignTask,
+  onDeleteSeries,
   onRescheduleTask,
 }: BoardInspectorProps) {
   // Live lookup at render — board refreshes automatically reflect.
@@ -116,6 +118,7 @@ export function BoardInspector({
             task={taskLookup}
             onSetStatus={onSetTaskStatus}
             onUnassign={onUnassignTask}
+            onDeleteSeries={onDeleteSeries}
             onReschedule={onRescheduleTask}
             onClose={onClose}
           />

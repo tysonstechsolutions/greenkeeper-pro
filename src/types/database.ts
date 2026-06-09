@@ -6,6 +6,7 @@
 // as JSONB on pr_audits. Type-only imports (erased at compile) — no runtime cycle.
 import type { AuditFinding } from "@/lib/pr-audit/audit";
 import type { FitFinding } from "@/lib/pr-audit/fit";
+import type { BundleFinding } from "@/lib/pr-audit/bundle-check";
 
 export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director" | "gm";
 
@@ -51,7 +52,11 @@ export type TaskCategory =
   | "other"
   | "pro_shop"
   | "events"
-  | "customer_service";
+  | "customer_service"
+  | "grounds"
+  | "tees";
+
+export type TaskFrequency = "daily" | "weekly" | "monthly" | "seasonal" | "projects";
 
 export type TaskPriority = "critical" | "high" | "normal" | "low";
 
@@ -363,6 +368,7 @@ export interface Task {
   template_id: string | null;
   plan_goal_id: string | null;
   parent_task_id: string | null;
+  series_id: string | null;
   notes: string | null;
   completed_at: string | null;
   completed_by: string | null;
@@ -381,6 +387,7 @@ export interface TaskTemplate {
   name: string;
   description: string | null;
   category: TaskCategory;
+  frequency: TaskFrequency | null;
   default_priority: TaskPriority;
   estimated_minutes: number | null;
   equipment_needed: string[];
@@ -393,6 +400,19 @@ export interface TaskTemplate {
   instructions: string | null;
   created_by: string | null;
   is_active: boolean;
+  created_at: string;
+}
+
+export interface TaskSeries {
+  id: string;
+  assigned_to: string | null;
+  template_id: string | null;
+  tier: "daily" | "weekly" | "monthly";
+  weekday: number; // 0=Sun..6=Sat
+  week_of_month: number | null;
+  task_payload: Record<string, unknown>;
+  active: boolean;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -1721,6 +1741,23 @@ export interface PrAudit {
   fit_findings: FitFinding[];
   fit_suggestion_count: number;
   fit_checked_at: string | null;
+
+  // Bundle attachments + cross-check (quote vs PR, 889 validity). The quote and
+  // 889 files live alongside the PR in vendor-files under pr-audit/{id}/.
+  quote_path: string | null;
+  quote_filename: string | null;
+  quote_total: number | null;
+  section_889_path: string | null;
+  section_889_filename: string | null;
+  section_889_expiration_date: string | null;
+  section_889_compliant: boolean | null;
+  bundle_findings: BundleFinding[];
+  bundle_checked_at: string | null;
+  /** 1 on first upload; bumped when a corrected version is re-uploaded. */
+  revision: number;
+
+  /** Set when this audit was imported from a built Purchase Request. */
+  purchase_request_id: string | null;
 
   created_by: string | null;
   created_at: string;

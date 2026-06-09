@@ -104,6 +104,8 @@ const categoryLabels: Record<TaskCategory, string> = {
   construction: "Construction",
   bunker: "Bunker",
   greens: "Greens",
+  tees: "Tees",
+  grounds: "Grounds",
   admin: "Admin",
   safety: "Safety",
   other: "Other",

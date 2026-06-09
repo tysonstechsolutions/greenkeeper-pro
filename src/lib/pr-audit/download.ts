@@ -12,8 +12,9 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import JSZip from "jszip";
 import { createClient } from "@/lib/supabase/client";
-import type { PrAudit } from "@/types/database";
-import { guessExt, prAuditFilename } from "@/lib/pr-audit/filename";
+import { directSelectRow } from "@/lib/supabase/rest";
+import type { PrAudit, PurchaseRequest } from "@/types/database";
+import { guessExt, prAuditFilename, prAuditBaseName } from "@/lib/pr-audit/filename";
 
 const STORAGE_BUCKET = "vendor-files";
 
@@ -116,27 +117,134 @@ export function generateSummaryPdf(audit: PrAudit): Blob {
 
 // ── Downloads ─────────────────────────────────────────────────────────────────
 
+/** Fetch a single stored file from the vendor-files bucket. */
+async function fetchStored(path: string): Promise<Blob> {
+  const supabase = createClient();
+  const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(path);
+  if (error || !data) {
+    throw new Error(error?.message || "Couldn't fetch the file.");
+  }
+  return data;
+}
+
+/** Download one stored attachment (e.g. the quote or 889) by path. */
+export async function downloadStoredFile(path: string, filename: string): Promise<void> {
+  const blob = await fetchStored(path);
+  triggerBlobDownload(blob, filename);
+}
+
+export interface AuditPreview {
+  blob: Blob;
+  kind: "pdf" | "image";
+  filename: string;
+}
+
+function previewKind(name: string | null, mime?: string): "pdf" | "image" {
+  const ext = (name || "").toLowerCase().split(".").pop() || "";
+  if (["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"].includes(ext)) return "image";
+  if (ext === "pdf") return "pdf";
+  return (mime || "").toLowerCase().startsWith("image/") ? "image" : "pdf";
+}
+
+/**
+ * Resolve the document to PREVIEW for an audited PR:
+ *   • the uploaded file (PDF or photo),
+ *   • the regenerated PR PDF for an imported/built PR, or
+ *   • the generated summary PDF for a manual entry.
+ */
+export async function getAuditPreviewBlob(audit: PrAudit): Promise<AuditPreview> {
+  if (audit.file_path) {
+    const blob = await fetchStored(audit.file_path);
+    return {
+      blob,
+      kind: previewKind(audit.file_name, blob.type),
+      filename: prAuditFilename(audit, guessExt(audit.file_name, blob.type)),
+    };
+  }
+  if (audit.purchase_request_id) {
+    const pr = await directSelectRow<PurchaseRequest>(
+      "purchase_requests",
+      "id",
+      audit.purchase_request_id,
+      "*",
+      "pr-audit.preview.linkedPr",
+    );
+    if (pr) {
+      // Lazy-load the heavy PDF generator only when previewing a built PR.
+      const { generatePurchaseRequestReport } = await import(
+        "@/lib/reports/purchase-request-report"
+      );
+      const blob = await generatePurchaseRequestReport(pr);
+      return { blob, kind: "pdf", filename: prAuditFilename(audit, "pdf") };
+    }
+  }
+  return {
+    blob: generateSummaryPdf(audit),
+    kind: "pdf",
+    filename: prAuditFilename(audit, "pdf"),
+  };
+}
+
 /** Fetch the blob to sign for one PR: the original file, or a summary PDF. */
 async function blobForAudit(
   audit: PrAudit,
 ): Promise<{ blob: Blob; ext: string }> {
   if (audit.file_path) {
-    const supabase = createClient();
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .download(audit.file_path);
-    if (error || !data) {
-      throw new Error(error?.message || "Couldn't fetch the original file.");
-    }
-    return { blob: data, ext: guessExt(audit.file_name, data.type) };
+    return { blob: await fetchStored(audit.file_path), ext: guessExt(audit.file_name, "") };
   }
   return { blob: generateSummaryPdf(audit), ext: "pdf" };
 }
 
-/** Download a single PR (original file, or generated summary) to sign. */
-export async function downloadOriginalFile(audit: PrAudit): Promise<void> {
+/** True when this PR has a quote and/or 889 attached. */
+function hasAttachments(audit: PrAudit): boolean {
+  return !!audit.quote_path || !!audit.section_889_path;
+}
+
+/**
+ * Every file to send up for one PR: the PR (or summary), the vendor quote, and
+ * the Section 889 — named off the PR so they stay grouped.
+ */
+async function bundlePartsForAudit(
+  audit: PrAudit,
+): Promise<{ blob: Blob; name: string }[]> {
+  const base = prAuditBaseName(audit);
+  const parts: { blob: Blob; name: string }[] = [];
   const { blob, ext } = await blobForAudit(audit);
-  triggerBlobDownload(blob, prAuditFilename(audit, ext));
+  parts.push({ blob, name: `${base} - PR.${ext}` });
+  if (audit.quote_path) {
+    try {
+      const qb = await fetchStored(audit.quote_path);
+      parts.push({ blob: qb, name: `${base} - Quote.${guessExt(audit.quote_filename, qb.type)}` });
+    } catch {
+      /* skip a missing quote */
+    }
+  }
+  if (audit.section_889_path) {
+    try {
+      const sb = await fetchStored(audit.section_889_path);
+      parts.push({ blob: sb, name: `${base} - 889.${guessExt(audit.section_889_filename, sb.type)}` });
+    } catch {
+      /* skip a missing 889 */
+    }
+  }
+  return parts;
+}
+
+/**
+ * Download one PR to sign. With a quote/889 attached, all three come down as a
+ * zip; otherwise just the PR file (or generated summary).
+ */
+export async function downloadOriginalFile(audit: PrAudit): Promise<void> {
+  if (!hasAttachments(audit)) {
+    const { blob, ext } = await blobForAudit(audit);
+    triggerBlobDownload(blob, prAuditFilename(audit, ext));
+    return;
+  }
+  const parts = await bundlePartsForAudit(audit);
+  const zip = new JSZip();
+  for (const p of parts) zip.file(p.name, p.blob);
+  const blob = await zip.generateAsync({ type: "blob" });
+  triggerBlobDownload(blob, prAuditFilename(audit, "zip"));
 }
 
 export interface BundleResult {
@@ -160,18 +268,29 @@ export async function downloadBundle(
 
   const zip = new JSZip();
   const usedNames = new Set<string>();
+  const usedFolders = new Set<string>();
   let count = 0;
 
   for (const audit of audits) {
     try {
-      const { blob, ext } = await blobForAudit(audit);
-      let name = prAuditFilename(audit, ext);
-      // De-dup identical names (same vendor + date).
-      if (usedNames.has(name)) {
-        name = name.replace(new RegExp(`\\.${ext}$`), ` (${count + 1}).${ext}`);
+      const parts = await bundlePartsForAudit(audit);
+      if (parts.length === 1) {
+        // PR only — keep it flat, deduping the filename.
+        let name = parts[0].name;
+        if (usedNames.has(name)) {
+          const dot = name.lastIndexOf(".");
+          name = `${name.slice(0, dot)} (${count + 1})${name.slice(dot)}`;
+        }
+        usedNames.add(name);
+        zip.file(name, parts[0].blob);
+      } else {
+        // PR + quote/889 — group them in a per-PR subfolder.
+        let folder = prAuditBaseName(audit);
+        let n = 2;
+        while (usedFolders.has(folder)) folder = `${prAuditBaseName(audit)} (${n++})`;
+        usedFolders.add(folder);
+        for (const p of parts) zip.file(`${folder}/${p.name}`, p.blob);
       }
-      usedNames.add(name);
-      zip.file(name, blob);
       count++;
     } catch (err) {
       warnings.push(

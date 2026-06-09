@@ -21,16 +21,25 @@ import {
   Undo2,
   ArrowRight,
   SlidersHorizontal,
+  Loader2,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import {
   directSelectList,
+  directInsertRow,
   directPatchRow,
   directDeleteRow,
   directStorageDelete,
+  getCachedUserId,
 } from "@/lib/supabase/rest";
-import type { PrAudit, CostCenterBudget, PrAuditReviewStatus } from "@/types/database";
+import type {
+  PrAudit,
+  CostCenterBudget,
+  PrAuditReviewStatus,
+  PurchaseRequest,
+} from "@/types/database";
 import {
   buildCostCenterRollup,
   rollupTotals,
@@ -45,9 +54,17 @@ import {
   fiscalMonthIndex,
   FISCAL_MONTH_LABELS,
 } from "@/lib/pr-audit/fiscal-year";
-import { downloadBundle } from "@/lib/pr-audit/download";
+import {
+  downloadBundle,
+  getAuditPreviewBlob,
+  type AuditPreview,
+} from "@/lib/pr-audit/download";
+import { bundleIssueCounts } from "@/lib/pr-audit/bundle-check";
+import { FilePreviewOverlay } from "@/components/pr-audit/file-preview";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
-import { REVIEW_META, nextStatus, prevStatus } from "@/lib/pr-audit/lifecycle";
+import { REVIEW_META, nextStatus, prevStatus, flagsAccepted } from "@/lib/pr-audit/lifecycle";
+import { groupAuditsByStage } from "@/lib/pr-audit/stage-groups";
+import { purchaseRequestToAuditPayload, type Vendor889 } from "@/lib/pr-audit/pr-import";
 import { DownloadChecklist } from "@/components/pr-audit/download-checklist";
 
 function formatMoney(n: number): string {
@@ -73,6 +90,10 @@ function formatDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function shortCcLabel(label: string): string {
@@ -213,15 +234,27 @@ function AuditRow({
   onAdvance,
   onRevert,
   onDelete,
+  onOpen,
+  onPreview,
 }: {
   audit: PrAudit;
   busy: boolean;
   onAdvance: () => void;
   onRevert: () => void;
   onDelete: () => void;
+  onOpen?: () => void;
+  onPreview?: () => void;
 }) {
   const meta = REVIEW_META[audit.review_status] ?? REVIEW_META.pending;
-  const clean = audit.audit_error_count === 0 && audit.audit_warning_count === 0;
+  const bundle = bundleIssueCounts(audit.bundle_findings ?? []);
+  const clean =
+    audit.audit_error_count === 0 &&
+    audit.audit_warning_count === 0 &&
+    bundle.errors === 0 &&
+    bundle.warnings === 0;
+  // Once sent up (or beyond), the reviewer accepted any flags — show it clean.
+  const accepted = flagsAccepted(audit.review_status);
+  const showClean = clean || accepted;
   const next = nextStatus(audit.review_status);
   const prev = prevStatus(audit.review_status);
 
@@ -229,18 +262,19 @@ function AuditRow({
     <li className="flex items-stretch gap-2 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-colors">
       <Link
         href={`/pr-audit/view?id=${audit.id}`}
+        onClick={onOpen}
         className="flex items-center gap-3 p-3 flex-1 min-w-0 active:scale-[0.99]"
       >
         <div
           className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-            clean
+            showClean
               ? "bg-emerald-500/10 text-emerald-600"
-              : audit.audit_error_count > 0
+              : audit.audit_error_count > 0 || bundle.errors > 0
                 ? "bg-red-500/10 text-red-600"
                 : "bg-amber-500/10 text-amber-600"
           }`}
         >
-          {clean ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          {showClean ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -263,29 +297,44 @@ function AuditRow({
             {audit.requestor_name ? ` · ${audit.requestor_name}` : ""}
           </p>
           <p className="text-[11px] mt-0.5">
-            {clean ? (
-              <span className="text-emerald-600">Passed all checks</span>
-            ) : (
+            {accepted ? (
               <span className="text-muted-foreground">
-                {audit.audit_error_count > 0 && (
-                  <span className="text-red-600 font-medium">
-                    {audit.audit_error_count} error{audit.audit_error_count !== 1 ? "s" : ""}
+                {clean ? "Passed all checks" : "Flags accepted"}
+              </span>
+            ) : (
+              <>
+                {clean ? (
+                  <span className="text-emerald-600">Passed all checks</span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {audit.audit_error_count > 0 && (
+                      <span className="text-red-600 font-medium">
+                        {audit.audit_error_count} error{audit.audit_error_count !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {audit.audit_error_count > 0 && audit.audit_warning_count > 0 && " · "}
+                    {audit.audit_warning_count > 0 && (
+                      <span className="text-amber-600 font-medium">
+                        {audit.audit_warning_count} warning{audit.audit_warning_count !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {bundle.errors + bundle.warnings > 0 && (
+                      <span className="text-amber-600 font-medium">
+                        {audit.audit_error_count > 0 || audit.audit_warning_count > 0 ? " · " : ""}
+                        quote/889 {bundle.errors + bundle.warnings} issue
+                        {bundle.errors + bundle.warnings !== 1 ? "s" : ""}
+                      </span>
+                    )}
                   </span>
                 )}
-                {audit.audit_error_count > 0 && audit.audit_warning_count > 0 && " · "}
-                {audit.audit_warning_count > 0 && (
-                  <span className="text-amber-600 font-medium">
-                    {audit.audit_warning_count} warning{audit.audit_warning_count !== 1 ? "s" : ""}
+                {audit.fit_suggestion_count > 0 && (
+                  <span className="text-violet-600 font-medium">
+                    {" · "}
+                    {audit.fit_suggestion_count} cost-center tip
+                    {audit.fit_suggestion_count !== 1 ? "s" : ""}
                   </span>
                 )}
-              </span>
-            )}
-            {audit.fit_suggestion_count > 0 && (
-              <span className="text-violet-600 font-medium">
-                {audit.audit_error_count + audit.audit_warning_count > 0 ? " · " : ""}
-                {audit.fit_suggestion_count} cost-center tip
-                {audit.fit_suggestion_count !== 1 ? "s" : ""}
-              </span>
+              </>
             )}
           </p>
         </div>
@@ -312,6 +361,17 @@ function AuditRow({
           className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 active:scale-[0.97] transition-all disabled:opacity-50"
         >
           <ArrowRight className="w-4 h-4" />
+        </button>
+      )}
+      {onPreview && (
+        <button
+          type="button"
+          aria-label="Preview PR"
+          title="Preview the PR document"
+          onClick={onPreview}
+          className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-primary/10 hover:text-primary active:scale-[0.97] transition-all"
+        >
+          <Eye className="w-4 h-4" />
         </button>
       )}
       <button
@@ -344,6 +404,10 @@ export default function PrAuditPage() {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadMsg, setDownloadMsg] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [preview, setPreview] = useState<AuditPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const isAllowed =
     profile?.role === "super" ||
@@ -384,6 +448,36 @@ export default function PrAuditPage() {
   }, [isAllowed, fetchData]);
 
   useRefreshOnFocus(fetchData, isAllowed);
+
+  // Remember where the list was scrolled when opening a PR, and restore it on
+  // return so the reviewer doesn't have to scroll back down each time.
+  const saveScroll = useCallback(() => {
+    try {
+      sessionStorage.setItem("pr-audit-scroll", String(window.scrollY));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem("pr-audit-scroll");
+    } catch {
+      /* ignore */
+    }
+    if (raw == null) return;
+    try {
+      sessionStorage.removeItem("pr-audit-scroll");
+    } catch {
+      /* ignore */
+    }
+    const y = parseInt(raw, 10);
+    if (Number.isFinite(y) && y > 0) {
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+  }, [loading]);
 
   // Category list for the switch.
   const categoryNames = useMemo(() => {
@@ -435,8 +529,11 @@ export default function PrAuditPage() {
     () => (category ? audits.filter((a) => auditInCategory(a, category)) : audits),
     [audits, category, auditInCategory],
   );
-  const notLookedAt = useMemo(() => filteredAudits.filter((a) => !a.viewed_at), [filteredAudits]);
-  const lookedAt = useMemo(() => filteredAudits.filter((a) => !!a.viewed_at), [filteredAudits]);
+  const stageGroups = useMemo(() => groupAuditsByStage(filteredAudits), [filteredAudits]);
+  const notLookedAtCount = useMemo(
+    () => filteredAudits.filter((a) => !a.viewed_at).length,
+    [filteredAudits],
+  );
 
   // Bulk-downloadable = active PRs in view (everything except sent-back).
   const downloadable = useMemo(
@@ -522,6 +619,86 @@ export default function PrAuditPage() {
     }
   }, [downloadable]);
 
+  // One-time import of built PRs (purchase_requests) into the audit. Idempotent:
+  // already-linked PRs are skipped, so it never double-counts in the budget.
+  const runImport = useCallback(async () => {
+    if (
+      !confirm(
+        "Import your submitted / sent / approved / received Purchase Requests into the audit? Already-imported ones are skipped.",
+      )
+    ) {
+      return;
+    }
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const [prs, vendors] = await Promise.all([
+        directSelectList<PurchaseRequest>("purchase_requests", {
+          columns: "*",
+          filters: ["status=in.(submitted,sent,approved,received)"],
+          limit: 1000,
+          label: "pr-audit.import.prs",
+        }),
+        directSelectList<{ id: string } & Vendor889>("vendors", {
+          columns: "id,section_889_path,section_889_filename,section_889_expiration_date",
+          limit: 1000,
+          label: "pr-audit.import.vendors",
+        }),
+      ]);
+      const vendorById = new Map(vendors.map((v) => [v.id, v]));
+      const already = new Set(
+        audits.map((a) => a.purchase_request_id).filter((x): x is string => !!x),
+      );
+      const today = todayIso();
+      const userId = getCachedUserId();
+      let imported = 0;
+      const failures: string[] = [];
+      for (const pr of prs) {
+        if (already.has(pr.id)) continue;
+        try {
+          const vendor = pr.vendor_id ? vendorById.get(pr.vendor_id) ?? null : null;
+          const payload = purchaseRequestToAuditPayload(pr, vendor, today, codes.validCodes);
+          await directInsertRow(
+            "pr_audits",
+            { ...payload, created_by: userId },
+            "pr-audit.import.insert",
+          );
+          imported++;
+        } catch (err) {
+          failures.push(
+            `${pr.vendor1_name || "A PR"}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      await fetchData();
+      setImportMsg(
+        imported === 0 && failures.length === 0
+          ? "Nothing new — all your built PRs are already imported."
+          : `Imported ${imported} PR${imported !== 1 ? "s" : ""}.` +
+              (failures.length ? ` ${failures.length} couldn't be imported.` : ""),
+      );
+    } catch (err) {
+      setImportMsg(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setImporting(false);
+    }
+  }, [audits, codes.validCodes, fetchData]);
+
+  const openPreview = useCallback(
+    async (a: PrAudit) => {
+      if (previewLoading) return;
+      setPreviewLoading(true);
+      try {
+        setPreview(await getAuditPreviewBlob(a));
+      } catch (err) {
+        alert(`Couldn't open the preview: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setPreviewLoading(false);
+      }
+    },
+    [previewLoading],
+  );
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   if (authLoading) {
@@ -591,6 +768,25 @@ export default function PrAuditPage() {
         <Upload className="w-5 h-5" /> Upload &amp; Audit PRs
       </Link>
 
+      <button
+        type="button"
+        onClick={runImport}
+        disabled={importing}
+        className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card font-medium text-sm hover:bg-muted/40 transition-colors disabled:opacity-60"
+      >
+        {importing ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Download className="w-4 h-4" />
+        )}
+        Import built PRs from the builder
+      </button>
+      {importMsg && (
+        <div className="mt-2 text-xs text-muted-foreground bg-muted/40 rounded-xl px-3 py-2">
+          {importMsg}
+        </div>
+      )}
+
       {/* Category switch */}
       {categoryNames.length > 0 && (
         <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
@@ -622,10 +818,10 @@ export default function PrAuditPage() {
         </div>
       )}
 
-      {notLookedAt.length > 0 && (
+      {notLookedAtCount > 0 && (
         <div className="mt-2 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-xl px-3 py-2">
           <Inbox className="w-4 h-4 shrink-0" />
-          {notLookedAt.length} PR{notLookedAt.length !== 1 ? "s" : ""} you haven&apos;t looked at yet
+          {notLookedAtCount} PR{notLookedAtCount !== 1 ? "s" : ""} you haven&apos;t looked at yet
         </div>
       )}
 
@@ -810,57 +1006,39 @@ export default function PrAuditPage() {
           </div>
         ) : (
           <div className="space-y-5">
-            {notLookedAt.length > 0 && (
-              <div>
-                <h3 className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-primary" />
-                  Not looked at ({notLookedAt.length})
-                </h3>
-                <ul className="space-y-2">
-                  {notLookedAt.map((audit) => (
-                    <AuditRow
-                      key={audit.id}
-                      audit={audit}
-                      busy={busyId === audit.id}
-                      onAdvance={() => {
-                        const n = nextStatus(audit.review_status);
-                        if (n) changeStatus(audit, n);
-                      }}
-                      onRevert={() => {
-                        const p = prevStatus(audit.review_status);
-                        if (p) changeStatus(audit, p);
-                      }}
-                      onDelete={() => deleteAudit(audit)}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )}
-            {lookedAt.length > 0 && (
-              <div>
-                <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Looked at ({lookedAt.length})
-                </h3>
-                <ul className="space-y-2">
-                  {lookedAt.map((audit) => (
-                    <AuditRow
-                      key={audit.id}
-                      audit={audit}
-                      busy={busyId === audit.id}
-                      onAdvance={() => {
-                        const n = nextStatus(audit.review_status);
-                        if (n) changeStatus(audit, n);
-                      }}
-                      onRevert={() => {
-                        const p = prevStatus(audit.review_status);
-                        if (p) changeStatus(audit, p);
-                      }}
-                      onDelete={() => deleteAudit(audit)}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )}
+            {stageGroups.map((g) => {
+              const hasUnseen = g.audits.some((a) => !a.viewed_at);
+              return (
+                <div key={g.status}>
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5 text-muted-foreground">
+                    {g.status === "pending" && hasUnseen && (
+                      <span className="w-2 h-2 rounded-full bg-primary" />
+                    )}
+                    {REVIEW_META[g.status].label} ({g.audits.length})
+                  </h3>
+                  <ul className="space-y-2">
+                    {g.audits.map((audit) => (
+                      <AuditRow
+                        key={audit.id}
+                        audit={audit}
+                        busy={busyId === audit.id}
+                        onAdvance={() => {
+                          const n = nextStatus(audit.review_status);
+                          if (n) changeStatus(audit, n);
+                        }}
+                        onRevert={() => {
+                          const p = prevStatus(audit.review_status);
+                          if (p) changeStatus(audit, p);
+                        }}
+                        onDelete={() => deleteAudit(audit)}
+                        onOpen={saveScroll}
+                        onPreview={() => openPreview(audit)}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -877,6 +1055,8 @@ export default function PrAuditPage() {
         onConfirm={confirmBulkDownload}
         onCancel={() => setDownloadOpen(false)}
       />
+
+      <FilePreviewOverlay source={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

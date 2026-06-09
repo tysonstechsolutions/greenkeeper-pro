@@ -95,6 +95,7 @@ export default function SchedulePage() {
     refresh,
     assignTask,
     unassignTask,
+    deleteTaskSeriesFromDate,
     createTaskFromTemplate,
     setShift,
     clearShift,
@@ -192,7 +193,7 @@ export default function SchedulePage() {
             assigned_by: profile.id,
             due_date: data.due_date,
             estimated_minutes: data.estimated_minutes,
-            equipment_needed: [],
+            equipment_needed: data.equipment_needed ?? [],
             materials_needed: [],
             checklist: [],
             requires_photo_before: false,
@@ -546,6 +547,7 @@ export default function SchedulePage() {
         onClearShift={clearShift}
         onSetTaskStatus={setTaskStatus}
         onUnassignTask={unassignTask}
+        onDeleteSeries={deleteTaskSeriesFromDate}
         onRescheduleTask={assignTask}
       />
 

@@ -18,6 +18,11 @@ import {
   RefreshCw,
   Lightbulb,
   Plus,
+  FileCheck2,
+  Receipt,
+  ShieldCheck,
+  CheckCircle2,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
@@ -28,7 +33,12 @@ import {
   directStorageDelete,
   getCachedUserId,
 } from "@/lib/supabase/rest";
-import type { PrAudit, PrAuditReviewStatus, PrCodeKind } from "@/types/database";
+import type {
+  PrAudit,
+  PrAuditReviewStatus,
+  PrCodeKind,
+  PurchaseRequest,
+} from "@/types/database";
 import {
   auditPr,
   costCenterBreakdown,
@@ -37,7 +47,13 @@ import {
   type ExtractedPr,
 } from "@/lib/pr-audit/audit";
 import { runFitCheck, type FitFinding } from "@/lib/pr-audit/fit";
-import { downloadOriginalFile } from "@/lib/pr-audit/download";
+import {
+  downloadOriginalFile,
+  downloadStoredFile,
+  getAuditPreviewBlob,
+  type AuditPreview,
+} from "@/lib/pr-audit/download";
+import { FilePreviewOverlay } from "@/components/pr-audit/file-preview";
 import { FindingsList, FindingsSummary } from "@/components/pr-audit/findings";
 import { PrEditor } from "@/components/pr-audit/pr-editor";
 import {
@@ -45,7 +61,8 @@ import {
   type Section889Note,
 } from "@/components/pr-audit/download-checklist";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
-import { REVIEW_META, REVIEW_ORDER } from "@/lib/pr-audit/lifecycle";
+import { REVIEW_META, REVIEW_ORDER, flagsAccepted } from "@/lib/pr-audit/lifecycle";
+import { buildPrBundle } from "@/lib/reports/pr-bundle";
 import { createPrCode, KIND_LABEL, type CodeDraft } from "@/lib/pr-audit/codes-crud";
 import { AddCodeModal } from "@/components/pr-audit/add-code-modal";
 
@@ -58,6 +75,30 @@ function formatDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** One labelled line in the built-PR details card. Hidden when empty. */
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-2">
+      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-24 shrink-0 pt-0.5">
+        {label}
+      </span>
+      <span className="min-w-0 flex-1 break-words">{value}</span>
+    </div>
+  );
 }
 
 function rowToDraft(r: PrAudit): ExtractedPr {
@@ -109,6 +150,17 @@ function ViewPrAuditInner() {
   // Add-missing-code popup
   const [addingCode, setAddingCode] = useState<{ kind: PrCodeKind; code: string } | null>(null);
   const [savingNewCode, setSavingNewCode] = useState(false);
+
+  // Bundle attachment download (quote / 889)
+  const [dlAttachment, setDlAttachment] = useState<string | null>(null);
+
+  // Linked built PR (when imported from the PR builder) + accepted-flags toggle.
+  const [linkedPr, setLinkedPr] = useState<PurchaseRequest | null>(null);
+  const [showFlags, setShowFlags] = useState(false);
+
+  // In-app PR document preview.
+  const [preview, setPreview] = useState<AuditPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Download checklist
   const [checklistOpen, setChecklistOpen] = useState(false);
@@ -174,6 +226,33 @@ function ViewPrAuditInner() {
     };
   }, [isAllowed, id, startEditing]);
 
+  // Fetch the linked built PR (for the rich details section + zip regeneration).
+  useEffect(() => {
+    const pid = audit?.purchase_request_id;
+    if (!pid) {
+      setLinkedPr(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const pr = await directSelectRow<PurchaseRequest>(
+          "purchase_requests",
+          "id",
+          pid,
+          "*",
+          "pr-audit.view.linkedPr",
+        );
+        if (!cancelled) setLinkedPr(pr);
+      } catch {
+        if (!cancelled) setLinkedPr(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audit?.purchase_request_id]);
+
   const liveAudit = useMemo(
     () => (draft ? auditPr(draft, codes.validCodes) : null),
     [draft, codes.validCodes],
@@ -186,6 +265,19 @@ function ViewPrAuditInner() {
       label: b.cost_ctr ? codes.labelFor("cost_center", b.cost_ctr) || b.label : b.label,
     }));
   }, [audit, codes]);
+
+  const glBreakdown = useMemo(() => {
+    if (!audit) return [];
+    const map = new Map<string, number>();
+    for (const it of audit.items ?? []) {
+      const gl = (it.gl_acct ?? "").trim() || "Unassigned";
+      const amt = (Number(it.qty) || 0) * (Number(it.unit_price) || 0);
+      map.set(gl, (map.get(gl) ?? 0) + amt);
+    }
+    return Array.from(map.entries())
+      .map(([gl, amount]) => ({ gl, amount: Math.round(amount * 100) / 100 }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [audit]);
 
   // Codes on this PR that aren't in the app's lists yet (so he can add them).
   const unknownCodes = useMemo(() => {
@@ -257,6 +349,18 @@ function ViewPrAuditInner() {
     },
     [addingCode, audit, codes],
   );
+
+  const downloadAttachment = useCallback(async (path: string, filename: string) => {
+    setDlAttachment(path);
+    setError(null);
+    try {
+      await downloadStoredFile(path, filename);
+    } catch (err) {
+      setError(`Couldn't download: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDlAttachment(null);
+    }
+  }, []);
 
   // ── AI fit-check ─────────────────────────────────────────────────────────
 
@@ -443,12 +547,31 @@ function ViewPrAuditInner() {
     setDownloading(true);
     setError(null);
     try {
-      await downloadOriginalFile(audit);
+      if (linkedPr) {
+        // Imported from the builder — rebuild the real PR + quote + 889 zip.
+        const { blob, filename } = await buildPrBundle(linkedPr);
+        triggerDownload(blob, filename);
+      } else {
+        await downloadOriginalFile(audit);
+      }
       setChecklistOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't download the file.");
     } finally {
       setDownloading(false);
+    }
+  }, [audit, linkedPr]);
+
+  const openPreview = useCallback(async () => {
+    if (!audit) return;
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      setPreview(await getAuditPreviewBlob(audit));
+    } catch (err) {
+      setError(`Couldn't open the preview: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPreviewLoading(false);
     }
   }, [audit]);
 
@@ -517,6 +640,12 @@ function ViewPrAuditInner() {
   const warningCount = editing ? liveAudit.warningCount : audit.audit_warning_count;
   const total = editing ? liveAudit.computedTotal : audit.computed_total;
   const fitFindings = audit.fit_findings ?? [];
+  const bundleFindings = audit.bundle_findings ?? [];
+  const hasAttachments = !!audit.quote_path || !!audit.section_889_path;
+  const hasBundle = hasAttachments || bundleFindings.length > 0;
+  // Once sent up, the AI flags were accepted — collapse them out of the way.
+  const accepted = flagsAccepted(audit.review_status);
+  const hideFlags = accepted && !showFlags;
 
   return (
     <div className="p-3 pb-32 max-w-2xl mx-auto overflow-x-hidden">
@@ -532,6 +661,7 @@ function ViewPrAuditInner() {
           <p className="text-[11px] text-muted-foreground">
             {formatDate(audit.pr_date)}
             {audit.internal_order ? ` · ${audit.internal_order}` : ""}
+            {audit.revision > 1 ? ` · Rev ${audit.revision}` : ""}
           </p>
         </div>
         {!editing && (
@@ -565,21 +695,211 @@ function ViewPrAuditInner() {
       {/* Summary */}
       <div className="rounded-2xl border border-border bg-card p-4 mb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <FindingsSummary errorCount={errorCount} warningCount={warningCount} />
+          {hideFlags ? (
+            <button
+              type="button"
+              onClick={() => setShowFlags(true)}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              Flags accepted (sent up) · show
+            </button>
+          ) : (
+            <FindingsSummary errorCount={errorCount} warningCount={warningCount} />
+          )}
           <span className="text-lg font-bold shrink-0">{money(total)}</span>
         </div>
         {audit.requestor_name && (
           <p className="text-xs text-muted-foreground">Requested by {audit.requestor_name}</p>
         )}
-        <button
-          type="button"
-          onClick={openChecklist}
-          className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
-        >
-          <Download className="w-4 h-4" />
-          Download to sign{!audit.file_path && " (summary PDF)"}
-        </button>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <button
+            type="button"
+            onClick={openPreview}
+            disabled={previewLoading}
+            className="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline disabled:opacity-60"
+          >
+            {previewLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+            Preview
+          </button>
+          <button
+            type="button"
+            onClick={openChecklist}
+            className="inline-flex items-center gap-1.5 text-sm text-primary font-medium hover:underline"
+          >
+            <Download className="w-4 h-4" />
+            Download to sign
+            {linkedPr
+              ? " (rebuilds PR + quote + 889)"
+              : hasAttachments
+                ? " (zip: PR + quote + 889)"
+                : !audit.file_path
+                  ? " (summary PDF)"
+                  : ""}
+          </button>
+        </div>
       </div>
+
+      {/* Built-PR details (imported from the Purchase Request app) */}
+      {linkedPr && (
+        <div className="rounded-2xl border border-border bg-card p-4 mb-4">
+          <h2 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-primary" /> Built-PR details
+          </h2>
+          <div className="space-y-2 text-sm">
+            <DetailRow
+              label="Requestor"
+              value={[linkedPr.requestor_name, linkedPr.requestor_email, linkedPr.requestor_phone]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+            <DetailRow
+              label="Vendor"
+              value={[
+                linkedPr.vendor1_name,
+                linkedPr.vendor1_poc,
+                linkedPr.vendor1_email,
+                linkedPr.vendor1_phone,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+            <DetailRow
+              label="Invoice to"
+              value={[
+                linkedPr.invoice_address,
+                linkedPr.invoice_line2,
+                linkedPr.invoice_city_state_zip,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            />
+            <DetailRow
+              label="Deliver to"
+              value={[
+                linkedPr.delivery_address,
+                linkedPr.delivery_line2,
+                linkedPr.delivery_city_state_zip,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            />
+            <DetailRow label="Justification" value={linkedPr.justification} />
+            <DetailRow
+              label="IGE"
+              value={[
+                linkedPr.ige_amount != null ? money(linkedPr.ige_amount) : null,
+                linkedPr.ige_based_on ? `based on ${linkedPr.ige_based_on}` : null,
+                linkedPr.ige_excess_pct != null ? `${linkedPr.ige_excess_pct}% excess` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Quote & 889 cross-check */}
+      {hasBundle && (
+        <div className="rounded-2xl border border-border bg-card p-4 mb-4">
+          <h2 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+            <FileCheck2 className="w-4 h-4 text-primary" /> Quote &amp; 889 check
+          </h2>
+
+          {hideFlags ? (
+            <p className="text-xs text-muted-foreground mb-3">
+              Quote &amp; 889 reviewed — flags accepted when sent up.
+            </p>
+          ) : bundleFindings.length > 0 ? (
+            <ul className="space-y-2 mb-3">
+              {bundleFindings.map((f, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span
+                    className={`mt-0.5 shrink-0 ${
+                      f.severity === "error"
+                        ? "text-red-600"
+                        : f.severity === "warning"
+                          ? "text-amber-600"
+                          : "text-emerald-600"
+                    }`}
+                  >
+                    {f.severity === "info" ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4" />
+                    )}
+                  </span>
+                  <span>
+                    <span className="font-medium">{f.title}.</span> {f.detail}
+                    {f.suggestion ? ` ${f.suggestion}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground mb-3">
+              No quote/889 issues found.
+            </p>
+          )}
+
+          <div className="space-y-1.5">
+            {audit.quote_path && (
+              <button
+                type="button"
+                disabled={dlAttachment === audit.quote_path}
+                onClick={() =>
+                  downloadAttachment(
+                    audit.quote_path as string,
+                    audit.quote_filename || "quote",
+                  )
+                }
+                className="w-full flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-border hover:bg-muted/40 disabled:opacity-60"
+              >
+                <Receipt className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="min-w-0 flex-1 text-left truncate">
+                  Quote: {audit.quote_filename || "attached"}
+                  {audit.quote_total != null ? ` · ${money(audit.quote_total)}` : ""}
+                </span>
+                {dlAttachment === audit.quote_path ? (
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                ) : (
+                  <Download className="w-4 h-4 text-muted-foreground shrink-0" />
+                )}
+              </button>
+            )}
+            {audit.section_889_path && (
+              <button
+                type="button"
+                disabled={dlAttachment === audit.section_889_path}
+                onClick={() =>
+                  downloadAttachment(
+                    audit.section_889_path as string,
+                    audit.section_889_filename || "889",
+                  )
+                }
+                className="w-full flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-border hover:bg-muted/40 disabled:opacity-60"
+              >
+                <ShieldCheck className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="min-w-0 flex-1 text-left truncate">
+                  889: {audit.section_889_filename || "attached"}
+                  {audit.section_889_expiration_date
+                    ? ` · exp ${audit.section_889_expiration_date}`
+                    : ""}
+                </span>
+                {dlAttachment === audit.section_889_path ? (
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                ) : (
+                  <Download className="w-4 h-4 text-muted-foreground shrink-0" />
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Unknown codes on this PR */}
       {unknownCodes.length > 0 && (
@@ -755,7 +1075,18 @@ function ViewPrAuditInner() {
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
               Audit findings
             </h2>
-            <FindingsList findings={audit.audit_findings ?? []} />
+            {hideFlags ? (
+              <button
+                type="button"
+                onClick={() => setShowFlags(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Accepted when sent up — show flags anyway
+              </button>
+            ) : (
+              <FindingsList findings={audit.audit_findings ?? []} />
+            )}
           </div>
 
           {breakdown.length > 0 && (
@@ -772,6 +1103,28 @@ function ViewPrAuditInner() {
                       {b.cost_ctr && <p className="text-[11px] text-muted-foreground">{b.cost_ctr}</p>}
                     </div>
                     <span className="text-sm font-semibold shrink-0">{money(b.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {glBreakdown.length > 0 && (
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                By G/L account
+              </h2>
+              <div className="rounded-2xl border border-border bg-card divide-y divide-border">
+                {glBreakdown.map((g) => (
+                  <div key={g.gl} className="flex items-center gap-2 px-3 py-2.5">
+                    <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">
+                        {codes.labelFor("gl_account", g.gl) || g.gl}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{g.gl}</p>
+                    </div>
+                    <span className="text-sm font-semibold shrink-0">{money(g.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -849,6 +1202,8 @@ function ViewPrAuditInner() {
         onCancel={() => setAddingCode(null)}
         onSave={saveNewCode}
       />
+
+      <FilePreviewOverlay source={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

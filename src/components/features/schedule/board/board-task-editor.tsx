@@ -10,6 +10,8 @@ import {
   Trash2,
   ExternalLink,
   Calendar,
+  CalendarX,
+  Repeat,
   MapPin,
   Loader2,
 } from "lucide-react";
@@ -53,6 +55,8 @@ const CATEGORY_LABEL: Record<TaskCategory, string> = {
   construction: "Construction",
   bunker: "Bunker",
   greens: "Greens",
+  tees: "Tees",
+  grounds: "Grounds",
   admin: "Admin",
   safety: "Safety",
   other: "Other",
@@ -65,6 +69,8 @@ interface BoardTaskEditorProps {
   task: TaskWithRelations;
   onSetStatus: (taskId: string, status: TaskStatus) => Promise<boolean>;
   onUnassign: (taskId: string) => Promise<boolean>;
+  /** Delete this occurrence + all future ones in its series. */
+  onDeleteSeries: (taskId: string) => Promise<boolean>;
   // Reschedule == change due_date but keep assignee. We reuse assignTask
   // since that mutator already updates due_date.
   onReschedule: (taskId: string, userId: string, date: string) => Promise<boolean>;
@@ -75,6 +81,7 @@ export function BoardTaskEditor({
   task,
   onSetStatus,
   onUnassign,
+  onDeleteSeries,
   onReschedule,
   onClose,
 }: BoardTaskEditorProps) {
@@ -96,6 +103,13 @@ export function BoardTaskEditor({
   const handleUnassign = async () => {
     setBusyAction("unassign");
     const ok = await onUnassign(task.id);
+    setBusyAction(null);
+    if (ok) onClose();
+  };
+
+  const handleDeleteSeries = async () => {
+    setBusyAction("series");
+    const ok = await onDeleteSeries(task.id);
     setBusyAction(null);
     if (ok) onClose();
   };
@@ -236,11 +250,45 @@ export function BoardTaskEditor({
       </div>
 
       <div className="px-4 py-3 border-t border-border flex flex-col gap-2">
-        {task.assigned_to && (
+        {task.assigned_to && task.series_id && (
+          <>
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Repeat className="w-3 h-3" />
+              Repeating task — choose what to remove
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleUnassign}
+              disabled={!!busyAction}
+              className="w-full text-destructive hover:bg-destructive/10"
+            >
+              {busyAction === "unassign" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              Remove just this day
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDeleteSeries}
+              disabled={!!busyAction}
+              className="w-full text-destructive hover:bg-destructive/10"
+            >
+              {busyAction === "series" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CalendarX className="w-4 h-4" />
+              )}
+              Remove this &amp; all future
+            </Button>
+          </>
+        )}
+        {task.assigned_to && !task.series_id && (
           <Button
             variant="outline"
             onClick={handleUnassign}
-            disabled={busyAction === "unassign"}
+            disabled={!!busyAction}
             className="w-full text-destructive hover:bg-destructive/10"
           >
             {busyAction === "unassign" ? (
