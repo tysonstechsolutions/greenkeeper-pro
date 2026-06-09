@@ -79,6 +79,9 @@ export type AuditCode =
   | "invalid_cost_center"
   | "invalid_gl_account"
   | "line_math"
+  // Retired: a missing 3% credit-card fee is no longer flagged (a PR may
+  // legitimately have none). Kept in the union so the regression test can
+  // assert auditPr never emits it again.
   | "cc_fee_missing"
   | "cc_fee_duplicate"
   | "cc_fee_amount"
@@ -361,22 +364,12 @@ export function auditPr(
     }
   });
 
-  // 3. Credit-card fee.
+  // 3. Credit-card fee — only validated when a fee line is present. A PR may
+  //    legitimately have none (e.g. a contracting-office purchase), so a missing
+  //    fee is NOT flagged.
   const feeItems = items.filter(isCcFeeItem);
   if (items.length > 0) {
-    if (feeItems.length === 0) {
-      findings.push({
-        code: "cc_fee_missing",
-        severity: "error",
-        title: "Missing 3% credit-card fee",
-        detail: `Every PR needs a credit-card fee line equal to ${formatCcFeePct(
-          CC_FEE_RATE,
-        )}% of the pre-tax subtotal (${money(subtotalBase)}).`,
-        suggestion: `Add a "${ccFeeDescription()}" line for ${money(expectedCcFee)}.`,
-        itemIndex: null,
-        field: null,
-      });
-    } else if (feeItems.length > 1) {
+    if (feeItems.length > 1) {
       findings.push({
         code: "cc_fee_duplicate",
         severity: "error",
@@ -388,7 +381,7 @@ export function auditPr(
         itemIndex: items.indexOf(feeItems[1]),
         field: null,
       });
-    } else {
+    } else if (feeItems.length === 1) {
       const fee = feeItems[0];
       const feeIdx = items.indexOf(fee);
       const rate = parseCcFeeRate(fee.description);

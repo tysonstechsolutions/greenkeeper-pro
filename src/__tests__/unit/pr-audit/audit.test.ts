@@ -124,13 +124,12 @@ describe("auditPr — accounting codes", () => {
 // ── Credit-card fee ────────────────────────────────────────────────────────────
 
 describe("auditPr — credit-card fee", () => {
-  it("flags a missing fee and suggests the correct amount", () => {
+  it("does NOT flag a missing fee — a PR may legitimately have none", () => {
     const pr = validPr();
     pr.items = [pr.items[0]]; // drop the fee line; $200 product only
     pr.printed_total = 200;
     const f = auditPr(pr).findings.find((x) => x.code === "cc_fee_missing");
-    expect(f?.severity).toBe("error");
-    expect(f?.suggestion).toContain("$6.00");
+    expect(f).toBeUndefined();
   });
 
   it("flags a wrong fee amount with the right figure", () => {

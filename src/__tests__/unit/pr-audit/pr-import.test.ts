@@ -13,8 +13,10 @@ describe("mapPurchaseRequestStatus", () => {
   it("maps builder status → audit stage", () => {
     expect(mapPurchaseRequestStatus("submitted")).toBe("pending");
     expect(mapPurchaseRequestStatus("sent")).toBe("sent_up");
-    expect(mapPurchaseRequestStatus("approved")).toBe("ordered");
-    expect(mapPurchaseRequestStatus("received")).toBe("received");
+    expect(mapPurchaseRequestStatus("approved")).toBe("approved");
+    // The builder's final status is "Received & Signed" — that's done, so it
+    // maps to the audit's done stage, not the intermediate "received".
+    expect(mapPurchaseRequestStatus("received")).toBe("receipt_signed");
     expect(mapPurchaseRequestStatus("draft")).toBe("pending");
     expect(mapPurchaseRequestStatus("whatever")).toBe("pending");
   });

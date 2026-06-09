@@ -61,7 +61,14 @@ import {
   type Section889Note,
 } from "@/components/pr-audit/download-checklist";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
-import { REVIEW_META, REVIEW_ORDER, flagsAccepted } from "@/lib/pr-audit/lifecycle";
+import {
+  REVIEW_META,
+  REVIEW_ORDER,
+  flagsAccepted,
+  stageDatePatch,
+  type StageDateField,
+} from "@/lib/pr-audit/lifecycle";
+import { STAGE_ICON } from "@/components/pr-audit/stage-icon";
 import { buildPrBundle } from "@/lib/reports/pr-bundle";
 import { createPrCode, KIND_LABEL, type CodeDraft } from "@/lib/pr-audit/codes-crud";
 import { AddCodeModal } from "@/components/pr-audit/add-code-modal";
@@ -477,6 +484,8 @@ function ViewPrAuditInner() {
           review_note: note || null,
           reviewed_by: getCachedUserId(),
           reviewed_at: new Date().toISOString(),
+          // Stamp the stage's date (today) unless it's already set / back-dated.
+          ...stageDatePatch(audit, status, new Date().toISOString().slice(0, 10)),
         };
         await directPatchRow("pr_audits", "id", audit.id, patch, "pr-audit.view.setStatus");
         setAudit({ ...audit, ...(patch as Partial<PrAudit>) });
@@ -489,6 +498,47 @@ function ViewPrAuditInner() {
     },
     [audit, note, editing, draftPatch],
   );
+
+  /** Edit a single stage's date (e.g. back-date when it was actually ordered). */
+  const updateStageDate = useCallback(
+    async (field: StageDateField, value: string) => {
+      if (!audit) return;
+      const patch = { [field]: value || null };
+      setAudit((prev) => (prev ? { ...prev, ...patch } : prev));
+      try {
+        await directPatchRow("pr_audits", "id", audit.id, patch, "pr-audit.view.stageDate");
+      } catch (err) {
+        setError(`Couldn't save the date: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [audit],
+  );
+
+  /**
+   * Clear every flag off this PR — the reviewer judged the AI's findings fine.
+   * Wipes audit findings, bundle findings and fit suggestions so the PR reads
+   * clean everywhere (dashboard + detail). Non-destructive to the PR data; a
+   * later edit + save will re-run the audit and surface anything that's still
+   * actually wrong.
+   */
+  const clearFlags = useCallback(async () => {
+    if (!audit) return;
+    const patch = {
+      audit_findings: [],
+      audit_error_count: 0,
+      audit_warning_count: 0,
+      bundle_findings: [],
+      fit_findings: [],
+      fit_suggestion_count: 0,
+    };
+    setAudit((prev) => (prev ? { ...prev, ...patch } : prev));
+    setShowFlags(false);
+    try {
+      await directPatchRow("pr_audits", "id", audit.id, patch, "pr-audit.view.clearFlags");
+    } catch (err) {
+      setError(`Couldn't clear the flags: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [audit]);
 
   /** Compute the 889 note for the checklist, best-effort matching the vendor. */
   const openChecklist = useCallback(async () => {
@@ -646,6 +696,11 @@ function ViewPrAuditInner() {
   // Once sent up, the AI flags were accepted — collapse them out of the way.
   const accepted = flagsAccepted(audit.review_status);
   const hideFlags = accepted && !showFlags;
+  // How many flags the reviewer could clear (info notes don't count).
+  const clearableFlagCount =
+    (audit.audit_findings?.length ?? 0) +
+    bundleFindings.filter((f) => f.severity !== "info").length +
+    fitFindings.length;
 
   return (
     <div className="p-3 pb-32 max-w-2xl mx-auto overflow-x-hidden">
@@ -741,6 +796,17 @@ function ViewPrAuditInner() {
                   ? " (summary PDF)"
                   : ""}
           </button>
+          {!editing && clearableFlagCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFlags}
+              title="Remove the AI's flags from this PR"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground font-medium hover:text-foreground hover:underline"
+            >
+              <X className="w-4 h-4" />
+              Clear flags
+            </button>
+          )}
         </div>
       </div>
 
@@ -927,34 +993,10 @@ function ViewPrAuditInner() {
         </div>
       )}
 
-      {/* Review lifecycle */}
+      {/* Status & timeline */}
       <div className="rounded-2xl border border-border bg-card p-4 mb-4">
-        <h2 className="text-sm font-semibold mb-2">Status</h2>
-        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-          {REVIEW_ORDER.map((s) => {
-            const meta = REVIEW_META[s];
-            const active = audit.review_status === s;
-            return (
-              <button
-                key={s}
-                type="button"
-                disabled={savingStatus}
-                onClick={() => setStatus(s)}
-                className={`shrink-0 text-xs font-semibold px-2.5 py-2 rounded-xl border transition-all disabled:opacity-60 ${
-                  active
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted/50"
-                }`}
-              >
-                {meta.short}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center justify-between mt-2 gap-2">
-          <p className="text-[11px] text-muted-foreground">
-            {REVIEW_META[audit.review_status].hint}
-          </p>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold">Status &amp; timeline</h2>
           <button
             type="button"
             disabled={savingStatus}
@@ -968,6 +1010,70 @@ function ViewPrAuditInner() {
             Send Back
           </button>
         </div>
+
+        {audit.review_status === "sent_back" && (
+          <div className="mb-3 text-xs text-red-600 bg-red-500/10 rounded-lg px-3 py-2">
+            Sent back to the requester. Tap a stage to bring it back into the flow.
+          </div>
+        )}
+
+        <ol className="space-y-1.5">
+          {REVIEW_ORDER.map((s) => {
+            const m = REVIEW_META[s];
+            const Icon = STAGE_ICON[s];
+            const currentIdx =
+              audit.review_status === "sent_back"
+                ? -1
+                : REVIEW_ORDER.indexOf(audit.review_status);
+            const reached = currentIdx >= 0 && REVIEW_ORDER.indexOf(s) <= currentIdx;
+            const isCurrent = audit.review_status === s;
+            const field = m.dateField;
+            return (
+              <li key={s} className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={savingStatus}
+                  onClick={() => setStatus(s)}
+                  aria-label={`Set status to ${m.label}`}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all disabled:opacity-60 ${
+                    reached ? m.badge : "bg-muted text-muted-foreground/40"
+                  } ${isCurrent ? "ring-2 ring-primary" : ""}`}
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={savingStatus}
+                  onClick={() => setStatus(s)}
+                  className={`text-sm text-left flex-1 min-w-0 truncate ${
+                    isCurrent ? "font-semibold" : reached ? "" : "text-muted-foreground/50"
+                  }`}
+                >
+                  {m.label}
+                </button>
+                {field ? (
+                  reached ? (
+                    <input
+                      type="date"
+                      value={audit[field] ?? ""}
+                      onChange={(e) => updateStageDate(field, e.target.value)}
+                      className="shrink-0 text-xs rounded-md border border-border bg-background px-2 py-1 w-[8.5rem]"
+                    />
+                  ) : (
+                    <span className="shrink-0 w-[8.5rem] text-right pr-2 text-xs text-muted-foreground/40">
+                      —
+                    </span>
+                  )
+                ) : (
+                  <span className="shrink-0 w-[8.5rem] text-right pr-2 text-xs text-muted-foreground">
+                    {audit.created_at ? formatDate(audit.created_at.slice(0, 10)) : "—"}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -976,8 +1082,9 @@ function ViewPrAuditInner() {
           className="mt-3 w-full text-sm rounded-lg border border-border bg-background px-2 py-2 resize-none"
         />
         <p className="text-[11px] text-muted-foreground mt-1">
-          Committed/spent counts once it&apos;s <span className="font-medium">Ordered</span> or
-          beyond. Approve &amp; <span className="font-medium">Download to sign</span> when ready.
+          Tap a stage to set it (it stamps today&apos;s date). The budget counts spend from{" "}
+          <span className="font-medium">Ordered</span> on — edit any date to match when it really
+          happened.
         </p>
       </div>
 

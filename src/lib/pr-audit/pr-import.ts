@@ -37,9 +37,11 @@ export function mapPurchaseRequestStatus(prStatus: string): PrAuditReviewStatus 
     case "sent":
       return "sent_up";
     case "approved":
-      return "ordered";
+      return "approved";
     case "received":
-      return "received";
+      // The builder's "received" status is labeled "Received & Signed" — the PR
+      // is done, so it lands in the audit's done stage (not the intermediate one).
+      return "receipt_signed";
     case "submitted":
     case "draft":
     default:

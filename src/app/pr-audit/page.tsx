@@ -6,8 +6,6 @@ import {
   ArrowLeft,
   Upload,
   ShieldAlert,
-  AlertTriangle,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -62,8 +60,15 @@ import {
 import { bundleIssueCounts } from "@/lib/pr-audit/bundle-check";
 import { FilePreviewOverlay } from "@/components/pr-audit/file-preview";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
-import { REVIEW_META, nextStatus, prevStatus, flagsAccepted } from "@/lib/pr-audit/lifecycle";
-import { groupAuditsByStage } from "@/lib/pr-audit/stage-groups";
+import {
+  REVIEW_META,
+  nextStatus,
+  prevStatus,
+  flagsAccepted,
+  stageDatePatch,
+} from "@/lib/pr-audit/lifecycle";
+import { groupAuditsByMonth } from "@/lib/pr-audit/month-groups";
+import { STAGE_ICON } from "@/components/pr-audit/stage-icon";
 import { purchaseRequestToAuditPayload, type Vendor889 } from "@/lib/pr-audit/pr-import";
 import { DownloadChecklist } from "@/components/pr-audit/download-checklist";
 
@@ -246,6 +251,7 @@ function AuditRow({
   onPreview?: () => void;
 }) {
   const meta = REVIEW_META[audit.review_status] ?? REVIEW_META.pending;
+  const StageIcon = STAGE_ICON[audit.review_status] ?? STAGE_ICON.pending;
   const bundle = bundleIssueCounts(audit.bundle_findings ?? []);
   const clean =
     audit.audit_error_count === 0 &&
@@ -254,7 +260,6 @@ function AuditRow({
     bundle.warnings === 0;
   // Once sent up (or beyond), the reviewer accepted any flags — show it clean.
   const accepted = flagsAccepted(audit.review_status);
-  const showClean = clean || accepted;
   const next = nextStatus(audit.review_status);
   const prev = prevStatus(audit.review_status);
 
@@ -266,24 +271,21 @@ function AuditRow({
         className="flex items-center gap-3 p-3 flex-1 min-w-0 active:scale-[0.99]"
       >
         <div
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-            showClean
-              ? "bg-emerald-500/10 text-emerald-600"
-              : audit.audit_error_count > 0 || bundle.errors > 0
-                ? "bg-red-500/10 text-red-600"
-                : "bg-amber-500/10 text-amber-600"
-          }`}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.badge}`}
         >
-          {showClean ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          <StageIcon className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            {!audit.viewed_at && (
+            {audit.review_status === "pending" && !audit.viewed_at && (
               <span
-                className="w-2 h-2 rounded-full bg-primary shrink-0"
+                className="inline-flex items-center gap-1 shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400 bg-amber-500/15 rounded-full px-1.5 py-0.5"
                 title="Not looked at yet"
                 aria-label="Not looked at yet"
-              />
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                New
+              </span>
             )}
             <p className="font-semibold text-sm truncate">{audit.vendor_name || "Vendor TBD"}</p>
             <span
@@ -529,9 +531,11 @@ export default function PrAuditPage() {
     () => (category ? audits.filter((a) => auditInCategory(a, category)) : audits),
     [audits, category, auditInCategory],
   );
-  const stageGroups = useMemo(() => groupAuditsByStage(filteredAudits), [filteredAudits]);
+  const monthGroups = useMemo(() => groupAuditsByMonth(filteredAudits), [filteredAudits]);
   const notLookedAtCount = useMemo(
-    () => filteredAudits.filter((a) => !a.viewed_at).length,
+    () =>
+      filteredAudits.filter((a) => a.review_status === "pending" && !a.viewed_at)
+        .length,
     [filteredAudits],
   );
 
@@ -550,16 +554,12 @@ export default function PrAuditPage() {
     async (audit: PrAudit, status: PrAuditReviewStatus) => {
       setBusyId(audit.id);
       try {
-        await directPatchRow(
-          "pr_audits",
-          "id",
-          audit.id,
-          { review_status: status },
-          "pr-audit.list.status",
-        );
-        setAudits((prev) =>
-          prev.map((a) => (a.id === audit.id ? { ...a, review_status: status } : a)),
-        );
+        const patch = {
+          review_status: status,
+          ...stageDatePatch(audit, status, todayIso()),
+        };
+        await directPatchRow("pr_audits", "id", audit.id, patch, "pr-audit.list.status");
+        setAudits((prev) => prev.map((a) => (a.id === audit.id ? { ...a, ...patch } : a)));
       } catch (err) {
         alert(`Couldn't update status: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
@@ -671,11 +671,19 @@ export default function PrAuditPage() {
         }
       }
       await fetchData();
+      const firstErr = failures[0] ?? "";
+      // A missing-column error means the PR-audit migrations aren't applied yet.
+      const migrationMissing =
+        /could not find the .*column|schema cache|pgrst204|does not exist/i.test(firstErr);
       setImportMsg(
         imported === 0 && failures.length === 0
           ? "Nothing new — all your built PRs are already imported."
-          : `Imported ${imported} PR${imported !== 1 ? "s" : ""}.` +
-              (failures.length ? ` ${failures.length} couldn't be imported.` : ""),
+          : migrationMissing
+            ? "None imported — the PR-audit database migrations aren't applied yet. Paste 20260609_pr_audit_bundle.sql and 20260609_pr_audit_link.sql into the Supabase SQL editor, then try again."
+            : `Imported ${imported} PR${imported !== 1 ? "s" : ""}.` +
+                (failures.length
+                  ? ` ${failures.length} couldn't be imported — first error: ${firstErr}`
+                  : ""),
       );
     } catch (err) {
       setImportMsg(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1006,39 +1014,33 @@ export default function PrAuditPage() {
           </div>
         ) : (
           <div className="space-y-5">
-            {stageGroups.map((g) => {
-              const hasUnseen = g.audits.some((a) => !a.viewed_at);
-              return (
-                <div key={g.status}>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5 text-muted-foreground">
-                    {g.status === "pending" && hasUnseen && (
-                      <span className="w-2 h-2 rounded-full bg-primary" />
-                    )}
-                    {REVIEW_META[g.status].label} ({g.audits.length})
-                  </h3>
-                  <ul className="space-y-2">
-                    {g.audits.map((audit) => (
-                      <AuditRow
-                        key={audit.id}
-                        audit={audit}
-                        busy={busyId === audit.id}
-                        onAdvance={() => {
-                          const n = nextStatus(audit.review_status);
-                          if (n) changeStatus(audit, n);
-                        }}
-                        onRevert={() => {
-                          const p = prevStatus(audit.review_status);
-                          if (p) changeStatus(audit, p);
-                        }}
-                        onDelete={() => deleteAudit(audit)}
-                        onOpen={saveScroll}
-                        onPreview={() => openPreview(audit)}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
+            {monthGroups.map((g) => (
+              <div key={g.key}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 text-muted-foreground">
+                  {g.label} ({g.audits.length})
+                </h3>
+                <ul className="space-y-2">
+                  {g.audits.map((audit) => (
+                    <AuditRow
+                      key={audit.id}
+                      audit={audit}
+                      busy={busyId === audit.id}
+                      onAdvance={() => {
+                        const n = nextStatus(audit.review_status);
+                        if (n) changeStatus(audit, n);
+                      }}
+                      onRevert={() => {
+                        const p = prevStatus(audit.review_status);
+                        if (p) changeStatus(audit, p);
+                      }}
+                      onDelete={() => deleteAudit(audit)}
+                      onOpen={saveScroll}
+                      onPreview={() => openPreview(audit)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
       </div>

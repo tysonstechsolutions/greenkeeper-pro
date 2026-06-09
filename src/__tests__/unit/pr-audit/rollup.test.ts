@@ -35,6 +35,7 @@ function mkAudit(
   pr_date: string,
   review_status: PrAuditReviewStatus,
   items: PurchaseRequestItem[],
+  ordered_date: string | null = null,
 ): PrAudit {
   return {
     id: `id-${Math.abs(hash(pr_date + review_status + items.length))}`,
@@ -57,6 +58,12 @@ function mkAudit(
     reviewed_by: null,
     reviewed_at: null,
     viewed_at: null,
+    sent_up_date: null,
+    approved_date: null,
+    ordered_date,
+    received_date: null,
+    receipt_signed_date: null,
+    sent_back_date: null,
     fit_findings: [],
     fit_suggestion_count: 0,
     fit_checked_at: null,
@@ -131,6 +138,17 @@ describe("buildCostCenterRollup", () => {
     const r = row(buildCostCenterRollup(audits, [], 2026), "25581");
     expect(r?.spent).toBe(175); // 100 + 50 + 25
     expect(r?.pending).toBe(10); // 7 + 3
+  });
+
+  it("buckets a spent PR's amount by its ordered_date, not its pr_date", () => {
+    // Prepared in May (fiscal idx 7) but ordered in June (fiscal idx 8).
+    const audits = [
+      mkAudit("2026-05-15", "ordered", [mkItem({ unit_price: 100 })], "2026-06-10"),
+    ];
+    const r = row(buildCostCenterRollup(audits, [], 2026), "25581");
+    expect(r?.spent).toBe(100);
+    expect(r?.byMonth[7].spent).toBe(0); // May — empty
+    expect(r?.byMonth[8].spent).toBe(100); // June — the order month
   });
 
   it("computes remaining and percentUsed against the budget", () => {

@@ -1698,6 +1698,7 @@ export interface PurchaseRequest {
 export type PrAuditReviewStatus =
   | "pending"
   | "sent_up"
+  | "approved"
   | "ordered"
   | "received"
   | "receipt_signed"
@@ -1736,6 +1737,16 @@ export interface PrAudit {
 
   /** Set the first time the reviewer opens this PR. NULL = not looked at yet. */
   viewed_at: string | null;
+
+  // Per-stage dates (the lifecycle's timeline). Uploaded = created_at; the PR's
+  // own date = pr_date. Stamped on each transition, and editable (e.g. backdate
+  // when it was actually ordered). ISO "YYYY-MM-DD" or null.
+  sent_up_date: string | null;
+  approved_date: string | null;
+  ordered_date: string | null;
+  received_date: string | null;
+  receipt_signed_date: string | null;
+  sent_back_date: string | null;
 
   // AI cost-center fit-check (advisory). Refreshed on demand, not on every edit.
   fit_findings: FitFinding[];

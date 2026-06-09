@@ -144,11 +144,15 @@ export function buildCostCenterRollup(
 
   for (const audit of audits) {
     if (audit.review_status === "sent_back") continue;
-    if (!audit.pr_date) continue;
-    if (federalFiscalYearFromIso(audit.pr_date) !== fiscalYear) continue;
-
-    const monthIdx = fiscalMonthIndex(parseLocalDate(audit.pr_date));
     const isSpent = SPENT_STATUSES.has(audit.review_status);
+    // Spend lands in the month it was ORDERED (the card is charged at purchase),
+    // not when the PR was prepared — so a May PR purchased in June counts in June.
+    // Falls back to pr_date when the order date hasn't been recorded yet.
+    const effDate = isSpent && audit.ordered_date ? audit.ordered_date : audit.pr_date;
+    if (!effDate) continue;
+    if (federalFiscalYearFromIso(effDate) !== fiscalYear) continue;
+
+    const monthIdx = fiscalMonthIndex(parseLocalDate(effDate));
 
     for (const item of audit.items ?? []) {
       const code = (item.cost_ctr ?? "").trim() || "__unassigned__";
