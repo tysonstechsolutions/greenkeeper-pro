@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Save, ArrowUpRight, X } from "lucide-react";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
@@ -23,18 +23,16 @@ export function FilePreviewOverlay({
   source: PreviewSource | null;
   onClose: () => void;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const url = useMemo(
+    () => (source ? URL.createObjectURL(source.blob) : null),
+    [source],
+  );
   useBodyScrollLock(!!source);
 
   useEffect(() => {
-    if (!source) {
-      setUrl(null);
-      return;
-    }
-    const u = URL.createObjectURL(source.blob);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [source]);
+    if (!url) return;
+    return () => URL.revokeObjectURL(url);
+  }, [url]);
 
   if (!source) return null;
 

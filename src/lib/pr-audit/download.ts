@@ -185,12 +185,35 @@ export async function getAuditPreviewBlob(audit: PrAudit): Promise<AuditPreview>
   };
 }
 
-/** Fetch the blob to sign for one PR: the original file, or a summary PDF. */
+/**
+ * Fetch the blob to sign for one PR: the original file, the regenerated PR
+ * form for an imported/built PR, or a generated summary PDF.
+ */
 async function blobForAudit(
   audit: PrAudit,
 ): Promise<{ blob: Blob; ext: string }> {
   if (audit.file_path) {
     return { blob: await fetchStored(audit.file_path), ext: guessExt(audit.file_name, "") };
+  }
+  if (audit.purchase_request_id) {
+    try {
+      const pr = await directSelectRow<PurchaseRequest>(
+        "purchase_requests",
+        "id",
+        audit.purchase_request_id,
+        "*",
+        "pr-audit.download.linkedPr",
+      );
+      if (pr) {
+        // Lazy-load the heavy PDF generator only when a built PR needs it.
+        const { generatePurchaseRequestReport } = await import(
+          "@/lib/reports/purchase-request-report"
+        );
+        return { blob: await generatePurchaseRequestReport(pr), ext: "pdf" };
+      }
+    } catch {
+      /* linked PR unavailable — fall back to the summary PDF */
+    }
   }
   return { blob: generateSummaryPdf(audit), ext: "pdf" };
 }

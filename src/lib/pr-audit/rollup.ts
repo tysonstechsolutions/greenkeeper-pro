@@ -80,6 +80,36 @@ const SPENT_STATUSES = new Set<PrAudit["review_status"]>([
   "receipt_signed",
 ]);
 
+/**
+ * The date an audit's dollars land on for FY/month bucketing. Spend lands in
+ * the month it was ORDERED (the card is charged at purchase), not when the PR
+ * was prepared — so a May PR purchased in June counts in June. Falls back to
+ * pr_date when the order date hasn't been recorded yet.
+ */
+export function effectiveAuditDate(
+  audit: Pick<PrAudit, "review_status" | "ordered_date" | "pr_date">,
+): string | null {
+  const isSpent = SPENT_STATUSES.has(audit.review_status);
+  return (isSpent && audit.ordered_date ? audit.ordered_date : audit.pr_date) || null;
+}
+
+/**
+ * True when an audit's effective date falls in the given fiscal year + fiscal
+ * month (0 = Oct … 11 = Sep) — i.e. it's one of that month's purchases.
+ */
+export function auditInFiscalMonth(
+  audit: Pick<PrAudit, "review_status" | "ordered_date" | "pr_date">,
+  fiscalYear: number,
+  fiscalIdx: number,
+): boolean {
+  const eff = effectiveAuditDate(audit);
+  if (!eff) return false;
+  return (
+    federalFiscalYearFromIso(eff) === fiscalYear &&
+    fiscalMonthIndex(parseLocalDate(eff)) === fiscalIdx
+  );
+}
+
 /** Default seed list (built-in golf-course cost centers) — all "Golf Course". */
 const DEFAULT_COST_CENTERS: RollupCostCenter[] = PR_COST_CENTERS.map((c) => ({
   code: c.value,
@@ -145,10 +175,7 @@ export function buildCostCenterRollup(
   for (const audit of audits) {
     if (audit.review_status === "sent_back") continue;
     const isSpent = SPENT_STATUSES.has(audit.review_status);
-    // Spend lands in the month it was ORDERED (the card is charged at purchase),
-    // not when the PR was prepared — so a May PR purchased in June counts in June.
-    // Falls back to pr_date when the order date hasn't been recorded yet.
-    const effDate = isSpent && audit.ordered_date ? audit.ordered_date : audit.pr_date;
+    const effDate = effectiveAuditDate(audit);
     if (!effDate) continue;
     if (federalFiscalYearFromIso(effDate) !== fiscalYear) continue;
 

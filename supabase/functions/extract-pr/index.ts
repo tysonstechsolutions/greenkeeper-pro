@@ -35,6 +35,27 @@ const EXTRACTION_PROMPT = `You read a FILLED-OUT Non-Appropriated Fund (NAF) Pur
 Your ONLY job is to TRANSCRIBE what is on the form. Do NOT fix, correct, normalize, or "improve" any code or number. If a Cost Center is wrong or blank, report it wrong or blank — a separate auditor checks correctness. Copy codes digit-for-digit.
 
 ═══════════════════════════════════════════════════════════════════════════
+FIRST — CONFIRM THE DOCUMENT REALLY IS A PURCHASE REQUEST
+═══════════════════════════════════════════════════════════════════════════
+
+Sometimes the wrong file lands in the PR slot — most often a VENDOR document:
+a store quote, picking list, estimate, receipt, invoice, order confirmation,
+cart screenshot, or a Section 889 / SAM.gov certification. Those are NOT the
+NAF Purchase Request form (they have no Site / Cost Ctr / G/L code columns and
+no SSJ/BNJ/ITPR/889 attachment checkboxes).
+
+If the document is clearly NOT a NAF Purchase Request:
+  • Do NOT transcribe it as if it were one.
+  • Return all header fields null, items: [], attached_other: null,
+    printed_total: null.
+  • Return exactly one warning naming what it appears to be, e.g.
+    "This looks like a Menards quote / picking list, not a Purchase Request —
+    attach it as this PR's vendor quote instead."
+
+If you genuinely can't tell, transcribe best-effort and add a warning that the
+document may not be a Purchase Request.
+
+═══════════════════════════════════════════════════════════════════════════
 THE LINE-ITEM TABLE — the most important part
 ═══════════════════════════════════════════════════════════════════════════
 

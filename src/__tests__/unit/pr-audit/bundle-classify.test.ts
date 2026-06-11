@@ -39,6 +39,16 @@ describe("classifyFileRole", () => {
       "section_889",
     );
   });
+
+  it("classifies a quote named after its PR number as a quote, not the PR", () => {
+    // Real naming convention: every file in a bundle embeds the PR number
+    // (FY26-JY-001). The explicit document word must outrank that number.
+    expect(classifyFileRole("QUOTE 1-FY26-JY-001-Menards-June2026.pdf")).toBe(
+      "quote",
+    );
+    expect(classifyFileRole("Invoice FY26-GC-0007 SiteOne.pdf")).toBe("quote");
+    expect(classifyFileRole("amazon cart FY26-GC-0012.png")).toBe("quote");
+  });
 });
 
 describe("assignBundleRoles", () => {
@@ -76,5 +86,18 @@ describe("assignBundleRoles", () => {
     const roles = assignBundleRoles(["FY26-GC-0001.pdf", "FY26-GC-0002.pdf"]);
     // Both look like PRs; we don't force one into quote.
     expect(roles.every((r) => r.role === "pr")).toBe(true);
+  });
+
+  it("slots a real bundle where every filename embeds the PR number", () => {
+    const roles = assignBundleRoles([
+      "PR 1-FY26-JY-001-Menards-June2026.pdf",
+      "QUOTE 1-FY26-JY-001-Menards-June2026.pdf",
+      "889 1-FY26-JY-001-Menards-June2026.pdf",
+    ]);
+    expect(roles).toEqual([
+      { name: "PR 1-FY26-JY-001-Menards-June2026.pdf", role: "pr" },
+      { name: "QUOTE 1-FY26-JY-001-Menards-June2026.pdf", role: "quote" },
+      { name: "889 1-FY26-JY-001-Menards-June2026.pdf", role: "section_889" },
+    ]);
   });
 });

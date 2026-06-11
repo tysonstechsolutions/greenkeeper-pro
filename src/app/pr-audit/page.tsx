@@ -43,6 +43,7 @@ import {
   rollupTotals,
   rollupMonthTotals,
   monthFor,
+  auditInFiscalMonth,
   type CostCenterRollup,
 } from "@/lib/pr-audit/rollup";
 import {
@@ -54,6 +55,7 @@ import {
 } from "@/lib/pr-audit/fiscal-year";
 import {
   downloadBundle,
+  downloadOriginalFile,
   getAuditPreviewBlob,
   type AuditPreview,
 } from "@/lib/pr-audit/download";
@@ -70,7 +72,10 @@ import {
 import { groupAuditsByMonth } from "@/lib/pr-audit/month-groups";
 import { STAGE_ICON } from "@/components/pr-audit/stage-icon";
 import { purchaseRequestToAuditPayload, type Vendor889 } from "@/lib/pr-audit/pr-import";
-import { DownloadChecklist } from "@/components/pr-audit/download-checklist";
+import {
+  DownloadChecklist,
+  type Section889Note,
+} from "@/components/pr-audit/download-checklist";
 
 function formatMoney(n: number): string {
   return (Number(n) || 0).toLocaleString("en-US", {
@@ -104,6 +109,25 @@ function todayIso(): string {
 function shortCcLabel(label: string): string {
   const afterDash = label.includes("—") ? label.split("—")[1].trim() : label;
   return afterDash.replace(/^GLK VMGC\s*/i, "").trim() || label;
+}
+
+/** Section 889 note for one PR's download checklist, from its own 889 fields. */
+function auditSection889Note(audit: PrAudit): Section889Note {
+  const vendor = audit.vendor_name || "the vendor";
+  const exp = audit.section_889_expiration_date;
+  if (!exp) {
+    return {
+      tone: "muted",
+      text: audit.section_889_path
+        ? `${vendor}'s 889 is attached but has no expiration recorded — verify it's valid.`
+        : `Confirm ${vendor}'s Section 889 is on file and not expired.`,
+    };
+  }
+  const expired = new Date(exp + "T12:00:00").getTime() < Date.now();
+  const expStr = formatDate(exp);
+  return expired
+    ? { tone: "warn", text: `⚠ ${vendor}'s 889 EXPIRED ${expStr} — update it before sending up.` }
+    : { tone: "ok", text: `${vendor}'s 889 is valid (expires ${expStr}).` };
 }
 
 // ── Monthly bars ──────────────────────────────────────────────────────────────
@@ -241,6 +265,7 @@ function AuditRow({
   onDelete,
   onOpen,
   onPreview,
+  onDownload,
 }: {
   audit: PrAudit;
   busy: boolean;
@@ -249,6 +274,7 @@ function AuditRow({
   onDelete: () => void;
   onOpen?: () => void;
   onPreview?: () => void;
+  onDownload?: () => void;
 }) {
   const meta = REVIEW_META[audit.review_status] ?? REVIEW_META.pending;
   const StageIcon = STAGE_ICON[audit.review_status] ?? STAGE_ICON.pending;
@@ -376,6 +402,17 @@ function AuditRow({
           <Eye className="w-4 h-4" />
         </button>
       )}
+      {onDownload && (
+        <button
+          type="button"
+          aria-label="Download to sign"
+          title="Download this PR to sign"
+          onClick={onDownload}
+          className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 active:scale-[0.97] transition-all"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+      )}
       <button
         type="button"
         aria-label="Delete"
@@ -400,12 +437,18 @@ export default function PrAuditPage() {
   const [loading, setLoading] = useState(true);
   const [fiscalYear, setFiscalYear] = useState(() => currentFederalFiscalYear());
   const [category, setCategory] = useState<string | null>(null);
-  const [monthIdx, setMonthIdx] = useState<number | null>(null);
+  // Default to the month view, on the current fiscal month.
+  const [monthIdx, setMonthIdx] = useState<number | null>(() =>
+    fiscalMonthIndex(new Date()),
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadMsg, setDownloadMsg] = useState<string | null>(null);
+  // Single-PR download (per-row button): the PR awaiting checklist confirm.
+  const [rowDownload, setRowDownload] = useState<PrAudit | null>(null);
+  const [rowDownloading, setRowDownloading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [preview, setPreview] = useState<AuditPreview | null>(null);
@@ -531,7 +574,19 @@ export default function PrAuditPage() {
     () => (category ? audits.filter((a) => auditInCategory(a, category)) : audits),
     [audits, category, auditInCategory],
   );
-  const monthGroups = useMemo(() => groupAuditsByMonth(filteredAudits), [filteredAudits]);
+  // In month view, the list shows only that month's purchases — bucketed by the
+  // same effective date the budget uses (ordered date once purchased, else the
+  // PR date), so the list always matches the figures above it.
+  const visibleAudits = useMemo(
+    () =>
+      monthIdx == null
+        ? filteredAudits
+        : filteredAudits.filter((a) => auditInFiscalMonth(a, fiscalYear, monthIdx)),
+    [filteredAudits, monthIdx, fiscalYear],
+  );
+  const monthGroups = useMemo(() => groupAuditsByMonth(visibleAudits), [visibleAudits]);
+  // The new-PR banner counts across ALL months (category-filtered), so a fresh
+  // upload dated outside the selected month still gets flagged.
   const notLookedAtCount = useMemo(
     () =>
       filteredAudits.filter((a) => a.review_status === "pending" && !a.viewed_at)
@@ -541,8 +596,8 @@ export default function PrAuditPage() {
 
   // Bulk-downloadable = active PRs in view (everything except sent-back).
   const downloadable = useMemo(
-    () => filteredAudits.filter((a) => a.review_status !== "sent_back"),
-    [filteredAudits],
+    () => visibleAudits.filter((a) => a.review_status !== "sent_back"),
+    [visibleAudits],
   );
 
   const currentFy = currentFederalFiscalYear();
@@ -618,6 +673,20 @@ export default function PrAuditPage() {
       setDownloading(false);
     }
   }, [downloadable]);
+
+  const confirmRowDownload = useCallback(async () => {
+    if (!rowDownload) return;
+    setRowDownloading(true);
+    setDownloadMsg(null);
+    try {
+      await downloadOriginalFile(rowDownload);
+    } catch (err) {
+      setDownloadMsg(err instanceof Error ? err.message : "Couldn't download the file.");
+    } finally {
+      setRowDownloading(false);
+      setRowDownload(null);
+    }
+  }, [rowDownload]);
 
   // One-time import of built PRs (purchase_requests) into the audit. Idempotent:
   // already-linked PRs are skipped, so it never double-counts in the budget.
@@ -705,6 +774,28 @@ export default function PrAuditPage() {
       }
     },
     [previewLoading],
+  );
+
+  const renderRow = (audit: PrAudit) => (
+    <AuditRow
+      key={audit.id}
+      audit={audit}
+      busy={busyId === audit.id}
+      onAdvance={() => {
+        const n = nextStatus(audit.review_status);
+        if (n) changeStatus(audit, n);
+      }}
+      onRevert={() => {
+        const p = prevStatus(audit.review_status);
+        if (p) changeStatus(audit, p);
+      }}
+      onDelete={() => deleteAudit(audit)}
+      onOpen={saveScroll}
+      onPreview={() => openPreview(audit)}
+      onDownload={
+        audit.review_status !== "sent_back" ? () => setRowDownload(audit) : undefined
+      }
+    />
   );
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -975,6 +1066,7 @@ export default function PrAuditPage() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
             <FileText className="w-4 h-4" />
             Audited PRs
+            {monthIdx != null ? ` — ${FISCAL_MONTH_LABELS[monthIdx]}` : ""}
           </h2>
           {downloadable.length > 0 && (
             <button
@@ -1000,18 +1092,27 @@ export default function PrAuditPage() {
               <div key={i} className="h-20 rounded-xl bg-muted/50 animate-pulse" />
             ))}
           </div>
-        ) : filteredAudits.length === 0 ? (
+        ) : visibleAudits.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-6 text-center">
             <Inbox className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-40" />
             <p className="text-sm font-medium">
-              {audits.length === 0 ? "No PRs audited yet" : "Nothing in this category"}
+              {audits.length === 0
+                ? "No PRs audited yet"
+                : monthIdx != null
+                  ? `No PRs purchased in ${FISCAL_MONTH_LABELS[monthIdx]} ${fiscalYearShort(fiscalYear)}`
+                  : "Nothing in this category"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               {audits.length === 0
                 ? "Upload the PRs your team sent you to check them and track their cost."
-                : "Try a different category or 'All'."}
+                : monthIdx != null
+                  ? "Try another month, or switch to Year to see everything."
+                  : "Try a different category or 'All'."}
             </p>
           </div>
+        ) : monthIdx != null ? (
+          // Month view — already one month's purchases, so no group headers.
+          <ul className="space-y-2">{visibleAudits.map(renderRow)}</ul>
         ) : (
           <div className="space-y-5">
             {monthGroups.map((g) => (
@@ -1019,26 +1120,7 @@ export default function PrAuditPage() {
                 <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2 text-muted-foreground">
                   {g.label} ({g.audits.length})
                 </h3>
-                <ul className="space-y-2">
-                  {g.audits.map((audit) => (
-                    <AuditRow
-                      key={audit.id}
-                      audit={audit}
-                      busy={busyId === audit.id}
-                      onAdvance={() => {
-                        const n = nextStatus(audit.review_status);
-                        if (n) changeStatus(audit, n);
-                      }}
-                      onRevert={() => {
-                        const p = prevStatus(audit.review_status);
-                        if (p) changeStatus(audit, p);
-                      }}
-                      onDelete={() => deleteAudit(audit)}
-                      onOpen={saveScroll}
-                      onPreview={() => openPreview(audit)}
-                    />
-                  ))}
-                </ul>
+                <ul className="space-y-2">{g.audits.map(renderRow)}</ul>
               </div>
             ))}
           </div>
@@ -1056,6 +1138,20 @@ export default function PrAuditPage() {
         confirming={downloading}
         onConfirm={confirmBulkDownload}
         onCancel={() => setDownloadOpen(false)}
+      />
+
+      {/* Single-PR download (per-row button) */}
+      <DownloadChecklist
+        open={rowDownload !== null}
+        prTotalText={rowDownload ? formatMoney(rowDownload.computed_total) : null}
+        section889={
+          rowDownload
+            ? auditSection889Note(rowDownload)
+            : { tone: "muted", text: "" }
+        }
+        confirming={rowDownloading}
+        onConfirm={confirmRowDownload}
+        onCancel={() => setRowDownload(null)}
       />
 
       <FilePreviewOverlay source={preview} onClose={() => setPreview(null)} />

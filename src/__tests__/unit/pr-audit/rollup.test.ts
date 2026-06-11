@@ -7,6 +7,8 @@ import {
   rollupTotals,
   monthFor,
   rollupMonthTotals,
+  effectiveAuditDate,
+  auditInFiscalMonth,
   type RollupCostCenter,
 } from "@/lib/pr-audit/rollup";
 import type {
@@ -263,6 +265,49 @@ describe("monthly budgets", () => {
     const r = row(buildCostCenterRollup([], budgets, 2026), "25581");
     expect(r?.budget).toBe(1200);
     expect(r?.monthlyBudget.every((m) => m === 100)).toBe(true);
+  });
+});
+
+describe("effectiveAuditDate", () => {
+  it("uses ordered_date for purchased PRs (ordered and beyond)", () => {
+    const a = mkAudit("2026-05-15", "ordered", [mkItem()], "2026-06-10");
+    expect(effectiveAuditDate(a)).toBe("2026-06-10");
+  });
+
+  it("uses pr_date for pipeline PRs even when an ordered_date is set", () => {
+    const a = mkAudit("2026-05-15", "pending", [mkItem()], "2026-06-10");
+    expect(effectiveAuditDate(a)).toBe("2026-05-15");
+  });
+
+  it("falls back to pr_date when a purchased PR has no ordered_date", () => {
+    const a = mkAudit("2026-05-15", "received", [mkItem()]);
+    expect(effectiveAuditDate(a)).toBe("2026-05-15");
+  });
+});
+
+describe("auditInFiscalMonth", () => {
+  it("puts a May-prepared, June-ordered PR in June, not May", () => {
+    // May = fiscal idx 7, June = fiscal idx 8.
+    const a = mkAudit("2026-05-15", "ordered", [mkItem()], "2026-06-10");
+    expect(auditInFiscalMonth(a, 2026, 8)).toBe(true);
+    expect(auditInFiscalMonth(a, 2026, 7)).toBe(false);
+  });
+
+  it("matches a pipeline PR by its pr_date month", () => {
+    const a = mkAudit("2026-05-15", "sent_up", [mkItem()]);
+    expect(auditInFiscalMonth(a, 2026, 7)).toBe(true); // May
+    expect(auditInFiscalMonth(a, 2026, 8)).toBe(false);
+  });
+
+  it("respects the federal fiscal-year boundary (Oct → next FY)", () => {
+    const a = mkAudit("2025-10-05", "ordered", [mkItem()]);
+    expect(auditInFiscalMonth(a, 2026, 0)).toBe(true); // Oct of FY26
+    expect(auditInFiscalMonth(a, 2025, 0)).toBe(false);
+  });
+
+  it("never matches an undated audit", () => {
+    const a = mkAudit("", "pending", [mkItem()]);
+    expect(auditInFiscalMonth(a, 2026, 0)).toBe(false);
   });
 });
 

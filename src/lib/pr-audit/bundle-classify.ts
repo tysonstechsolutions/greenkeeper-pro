@@ -13,19 +13,24 @@ export interface RoledFile {
 }
 
 // Most specific first. 889 reps are unmistakable; quotes and PRs have their own
-// vocabulary. Checked in order: 889 → PR → quote.
+// vocabulary. Checked in order: 889 → PR words → quote words → bare PR number.
 const RE_889 =
   /\b889\b|section[\s_-]?889|sam[\s.]?gov|representation|certification/i;
-const RE_PR = /purchase[\s_-]?request|\bnaf\b|\bp\.?\s?r\.?\b|fy\d{2}[-_\s]/i;
+const RE_PR_WORDS = /purchase[\s_-]?request|\bnaf\b|\bp\.?\s?r\.?\b/i;
 const RE_QUOTE =
   /\bquote\b|\binvoice\b|\bcart\b|\bpro[\s-]?forma\b|\bestimate\b|order[\s_-]?confirm|receipt/i;
+// The bare PR number (FY26-GC-0001) is a WEAK signal: the team names quote and
+// 889 files after the PR they support ("QUOTE 1-FY26-JY-001-Menards.pdf"), so
+// the number only wins when no explicit document word matched.
+const RE_PR_NUMBER = /fy\d{2}[-_\s]/i;
 
 /** Guess one file's role from its name. */
 export function classifyFileRole(filename: string): FileRole {
   const n = (filename || "").trim();
   if (RE_889.test(n)) return "section_889";
-  if (RE_PR.test(n)) return "pr";
+  if (RE_PR_WORDS.test(n)) return "pr";
   if (RE_QUOTE.test(n)) return "quote";
+  if (RE_PR_NUMBER.test(n)) return "pr";
   return "unknown";
 }
 
