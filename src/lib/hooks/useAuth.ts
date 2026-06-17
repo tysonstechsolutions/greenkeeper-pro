@@ -251,6 +251,28 @@ export function useAuthInternal(): UseAuthReturn {
           }
         }
 
+        // No existing session → auto-sign-in with the shared "open app"
+        // account. This replaces the PIN login: access is fully open, so the
+        // app silently authenticates as the shared super account on first
+        // load and every page's data loads with no login UI.
+        if (!initialSession?.user) {
+          const email = process.env.NEXT_PUBLIC_APP_EMAIL;
+          const password = process.env.NEXT_PUBLIC_APP_PASSWORD;
+          if (email && password) {
+            try {
+              const { data: signInData, error: signInErr } =
+                await supabase.auth.signInWithPassword({ email, password });
+              if (signInErr) {
+                console.error("[useAuth] auto sign-in failed:", signInErr.message);
+              } else if (signInData?.session) {
+                initialSession = signInData.session;
+              }
+            } catch (e) {
+              console.error("[useAuth] auto sign-in threw:", e);
+            }
+          }
+        }
+
         if (!mountedRef.current) return;
 
         if (initialSession?.user) {

@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   Bell,
-  LogOut,
   Settings,
   ChevronDown,
   ChevronLeft,
@@ -19,11 +18,13 @@ import {
   Wrench,
   Clock,
   Wind,
-  Leaf,
 } from "lucide-react";
-import { getPageTitle, isTopLevelRoute } from "@/lib/utils/page-title";
+import { getPageTitle } from "@/lib/utils/page-title";
 import { Button } from "@/components/ui/button";
 import { WeatherIcon } from "@/components/ui/weather-icon";
+import { ViewSwitch } from "./view-switch";
+import { useView } from "@/lib/providers/view-provider";
+import { isViewTopLevel } from "@/lib/layout/nav-config";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { roleLabels, getInitials } from "@/lib/hooks/useProfiles";
@@ -57,7 +58,8 @@ const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { profile, signOut, loading, refreshProfile } = useAuth();
+  const { view } = useView();
+  const { profile, loading, refreshProfile } = useAuth();
   const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
   const {
@@ -108,12 +110,6 @@ export function Header() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSignOut = async () => {
-    await signOut();
-    router.push("/pin-login");
-    router.refresh();
-  };
-
   const handleMarkAllAsRead = async () => {
     setMarkingAll(true);
     try {
@@ -155,7 +151,7 @@ export function Header() {
   // Keep dropdowns open override: don't hide header when dropdown is open.
   // Only auto-hide on top-level routes — deep pages need the back button visible.
   const isDropdownOpen = menuOpen || notificationsOpen;
-  const onTopLevel = isTopLevelRoute(pathname);
+  const onTopLevel = isViewTopLevel(view, pathname);
   const shouldHide = onTopLevel && scrollDirection === "down" && !isDropdownOpen;
   const pageTitle = getPageTitle(pathname);
 
@@ -171,18 +167,11 @@ export function Header() {
         shouldHide ? "-translate-y-full md:translate-y-0" : "translate-y-0"
       )}
     >
-      {/* Left: Back button + page title on deep pages, VMGC logo on top-level */}
+      {/* Left: view switch on top-level pages, back + title on deep pages */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <div className="flex items-center gap-1.5 md:hidden min-w-0">
           {onTopLevel ? (
-            <>
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-sm shrink-0">
-                <Leaf className="w-3.5 h-3.5 text-[#1B4332]" />
-              </div>
-              <span className="font-bold text-foreground text-[13px] tracking-tight truncate">
-                {pageTitle === "Dashboard" ? "VMGC" : pageTitle}
-              </span>
-            </>
+            <ViewSwitch />
           ) : (
             <>
               <button
@@ -197,6 +186,10 @@ export function Header() {
               </span>
             </>
           )}
+        </div>
+        {/* Desktop — view switch is always available in the header */}
+        <div className="hidden md:flex">
+          <ViewSwitch />
         </div>
       </div>
 
@@ -435,15 +428,6 @@ export function Header() {
                 <span className="text-xs font-medium text-muted-foreground uppercase">{currentLang}</span>
               </button>
 
-              <div className="border-t border-border my-1" />
-
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-3 px-4 py-3 text-sm text-destructive hover:bg-destructive/10 active:bg-destructive/15 transition-colors w-full text-left"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign Out
-              </button>
             </div>
           )}
         </div>

@@ -26,7 +26,7 @@ import { handleCors, jsonError, jsonResponse } from "../_shared/cors.ts";
 import { getUser } from "../_shared/supabase.ts";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = 60_000;

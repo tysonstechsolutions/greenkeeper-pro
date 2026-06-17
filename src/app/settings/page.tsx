@@ -10,13 +10,16 @@ import {
   Shield,
   ChevronRight,
   Leaf,
+  Briefcase,
   HelpCircle,
   FileText,
   Smartphone,
-  LogOut,
+  Lock,
   Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { useView } from "@/lib/providers/view-provider";
+import { cn } from "@/lib/utils";
 import { RoleVisible } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePwaInstall } from "@/lib/hooks/usePwaInstall";
@@ -76,17 +79,11 @@ const adminSections = [
     href: "/settings/briefing",
     color: "from-sky-500 to-cyan-600",
   },
-  {
-    title: "PIN Login",
-    description: "Quick-access PIN for staff devices",
-    icon: Smartphone,
-    href: "/settings/pins",
-    color: "from-teal-500 to-teal-600",
-  },
 ];
 
 export default function SettingsPage() {
-  const { profile, loading, signOut } = useAuth();
+  const { profile, loading } = useAuth();
+  const { view, setView } = useView();
   const { isInstalled } = usePwaInstall();
 
   // Hide the "Install App" row once running as an installed standalone app.
@@ -150,6 +147,42 @@ export default function SettingsPage() {
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
         </Link>
+      </div>
+
+      {/* App view switch */}
+      <div className="gk-animate-in gk-animate-in-1 mb-6">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+          App view
+        </h2>
+        <div className="bg-card rounded-xl border border-border p-2 flex gap-2">
+          <button
+            onClick={() => setView("super")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
+              view === "super"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted/50",
+            )}
+          >
+            <Leaf className="w-4 h-4" />
+            Superintendent
+          </button>
+          <button
+            onClick={() => setView("gm")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
+              view === "gm"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted/50",
+            )}
+          >
+            <Briefcase className="w-4 h-4" />
+            General Manager
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2 px-1">
+          Switch between turf operations and business/admin. Same data either way.
+        </p>
       </div>
 
       {/* General Settings */}
@@ -225,15 +258,24 @@ export default function SettingsPage() {
           </Link>
 
           <button
-            onClick={() => signOut()}
-            className="w-full flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-red-500/20 active:bg-red-50 dark:active:bg-red-950/20 transition-all group text-left"
+            onClick={() => {
+              try {
+                localStorage.removeItem("gk_unlocked");
+              } catch {
+                // ignore
+              }
+              window.location.reload();
+            }}
+            className="w-full flex items-center gap-4 p-4 bg-card rounded-xl border border-border hover:border-primary/20 active:bg-muted/30 transition-all group text-left"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-400 to-red-500 flex items-center justify-center shadow-sm shrink-0">
-              <LogOut className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center shadow-sm shrink-0">
+              <Lock className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-sm text-red-600 dark:text-red-400">Sign Out</h3>
-              <p className="text-xs text-muted-foreground">Log out of your account</p>
+              <h3 className="font-medium text-sm">Lock app</h3>
+              <p className="text-xs text-muted-foreground">
+                Require the PIN again on this device
+              </p>
             </div>
           </button>
         </div>

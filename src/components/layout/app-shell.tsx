@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { Sidebar } from "./sidebar";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
+import { ViewPicker } from "./view-picker";
+import { useView } from "@/lib/providers/view-provider";
 import { OnlineStatus } from "@/components/ui/online-status";
 import { PwaInstallCapture } from "@/lib/hooks/usePwaInstall";
 import { ChatBubble } from "@/components/features/ai/chat-bubble";
@@ -32,6 +34,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const { ready, chosen } = useView();
   const isPublic = isPublicRoute(pathname);
 
   // Auto-scroll focused inputs above the virtual keyboard on mobile
@@ -66,6 +69,11 @@ export function AppShell({ children }: AppShellProps) {
         <DebugOverlay />
       </div>
     );
+  }
+
+  // First launch (no view chosen yet) → force the Superintendent/GM picker.
+  if (ready && !chosen) {
+    return <ViewPicker />;
   }
 
   return (

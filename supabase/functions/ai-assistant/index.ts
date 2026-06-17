@@ -16,7 +16,7 @@ import { getUser, getUserClient } from "../_shared/supabase.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TOKENS = 2048;
 const TIMEOUT_MS = 45_000;

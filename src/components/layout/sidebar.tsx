@@ -34,8 +34,16 @@ import {
   ShieldCheck,
   Flame,
   Droplets,
+  Wallet,
+  BarChart3,
+  Trophy,
+  Landmark,
+  HardHat,
+  Vote,
+  GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useView } from "@/lib/providers/view-provider";
 import { useState, useEffect } from "react";
 import { useChannels } from "@/lib/hooks/useChannels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
@@ -173,6 +181,33 @@ const proApps: SidebarItem[] = [
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
 ];
 
+// General Manager view — business / admin catalog.
+const gmPinned: SidebarItem[] = [
+  { href: "/gm", label: "Dashboard", icon: LayoutDashboard, pinned: true },
+  { href: "/budget", label: "Budget", icon: Wallet, pinned: true },
+  { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, pinned: true },
+  { href: "/reports", label: "Reports", icon: BarChart3, pinned: true },
+  { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, pinned: true },
+];
+
+const gmApps: SidebarItem[] = [
+  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck },
+  { href: "/reports/monthly-board", label: "Board Report", icon: BarChart3 },
+  { href: "/revenue", label: "Revenue", icon: Landmark },
+  { href: "/vendors", label: "Vendors", icon: Phone },
+  { href: "/tournaments", label: "Tournaments", icon: Trophy },
+  { href: "/clubhouse", label: "Clubhouse", icon: Building },
+  { href: "/capital-projects", label: "Capital Projects", icon: HardHat },
+  { href: "/sole-source", label: "Sole Source", icon: Scale },
+  { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
+  { href: "/staff", label: "Staff", icon: Users },
+  { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap },
+  { href: "/polls", label: "Polls", icon: Vote },
+  { href: "/order-list", label: "Order List", icon: ShoppingCart },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
+  { href: "/report-issue", label: "Report Issue", icon: Flag },
+];
+
 // ──────────────────────────────────────────────────────────────────────────
 // Components
 // ──────────────────────────────────────────────────────────────────────────
@@ -242,6 +277,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
+  const { view } = useView();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
@@ -266,7 +302,10 @@ export function Sidebar() {
   // Pick role-appropriate catalog
   let pinned: SidebarItem[];
   let apps: SidebarItem[];
-  if (isPro) {
+  if (view === "gm") {
+    pinned = gmPinned;
+    apps = gmApps;
+  } else if (isPro) {
     pinned = proPinned;
     apps = proApps;
   } else if (isLaborer) {
