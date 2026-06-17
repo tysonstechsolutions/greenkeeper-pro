@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { callApi, resolveAccessToken } from "@/lib/api/client";
+import { markOrderItemsOrderedFromPR } from "@/lib/order-list/mark-ordered";
 import {
   PR_INVOICE_DEFAULTS,
   PR_DELIVERY_DEFAULTS,
@@ -675,6 +676,40 @@ async function stitchImagesToQuotePdf(files: File[]): Promise<File> {
     doc.addImage(dataUrl, f.type.includes("png") ? "PNG" : "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h);
   }
   return new File([doc.output("blob")], "quote.pdf", { type: "application/pdf" });
+}
+
+/**
+ * Upload one or more quote files for a PR and return their storage paths.
+ * Multiple PHOTOS are stitched into a single PDF (nice for a multi-page paper
+ * quote), but ONLY when every file is an image — if any PDF is mixed in we
+ * upload each file as-is so nothing is silently dropped (a PDF can't be
+ * embedded as an image, which previously broke the entire quote upload).
+ */
+async function uploadQuoteFiles(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  prId: string,
+  files: File[],
+): Promise<{ path: string; filename: string }[]> {
+  const toUpload: File[] =
+    files.length > 1 && files.every((f) => f.type.startsWith("image/"))
+      ? [await stitchImagesToQuotePdf(files)]
+      : files;
+  const uploads: { path: string; filename: string }[] = [];
+  for (let i = 0; i < toUpload.length; i++) {
+    const f = toUpload[i];
+    const ext = f.name.split(".").pop() || "bin";
+    const path = `quotes/${prId}/quote-${Date.now()}-${i}.${ext}`;
+    const { error } = await supabase.storage
+      .from("vendor-files")
+      .upload(path, f, {
+        upsert: true,
+        contentType: f.type || "application/octet-stream",
+      });
+    if (error) throw error;
+    uploads.push({ path, filename: f.name });
+  }
+  return uploads;
 }
 
 /**
@@ -1867,6 +1902,7 @@ function NewPurchaseRequestPageInner() {
     let quoteStoragePath: string | null = null;
     let quoteFilenameSaved: string | null = existingQuoteName;
     let quoteUploadedAt: string | null = null;
+    let quotePathsSaved: { path: string; filename: string }[] | null = null;
 
     // Upload SOW PDF if one was generated/attached during form fill (edit only;
     // new PRs defer until after insert so we have an id to namespace the path).
@@ -1897,34 +1933,13 @@ function NewPurchaseRequestPageInner() {
     // For new PRs, defer the upload until after insert and do a follow-up update.
     if (quoteFiles.length > 0 && editId) {
       try {
-        const fileToUpload = quoteFiles.length > 1
-          ? await stitchImagesToQuotePdf(quoteFiles)
-          : quoteFiles[0];
-        const ext = fileToUpload.name.split(".").pop() || "bin";
-        quoteStoragePath = `quotes/${editId}/quote-${Date.now()}.${ext}`;
-        // Race the upload against a 30s timeout so a stuck connection
-        // doesn't lock the form forever.
-        const upPromise = supabase.storage
-          .from("vendor-files")
-          .upload(quoteStoragePath, fileToUpload, {
-            upsert: true,
-            contentType: fileToUpload.type || "application/octet-stream",
-          });
-        const result = (await Promise.race([
-          upPromise,
-          new Promise((resolve) =>
-            setTimeout(
-              () =>
-                resolve({
-                  error: { message: "Quote upload timed out after 30s" },
-                }),
-              30_000,
-            ),
-          ),
-        ])) as { error: { message: string } | null };
-        if (result.error) throw result.error;
-        quoteFilenameSaved = fileToUpload.name;
-        quoteUploadedAt = new Date().toISOString();
+        const uploads = await uploadQuoteFiles(supabase, editId, quoteFiles);
+        if (uploads.length > 0) {
+          quotePathsSaved = uploads;
+          quoteStoragePath = uploads[0].path;
+          quoteFilenameSaved = uploads[0].filename;
+          quoteUploadedAt = new Date().toISOString();
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`Quote upload failed: ${msg}`);
@@ -1944,6 +1959,7 @@ function NewPurchaseRequestPageInner() {
             quote_storage_path: quoteStoragePath,
             quote_filename: quoteFilenameSaved,
             quote_uploaded_at: quoteUploadedAt,
+            quote_paths: quotePathsSaved,
           }
         : {}),
       requestor_name: requestorName.trim(),
@@ -2028,6 +2044,9 @@ function NewPurchaseRequestPageInner() {
           setError(updateErr.message);
           return;
         }
+        if (!asDraft) {
+          await markOrderItemsOrderedFromPR(payload.items);
+        }
         router.push(`/purchase-requests/view?id=${editId}`);
       } else {
         const { data, error: insertErr } = await timedStep(
@@ -2051,56 +2070,35 @@ function NewPurchaseRequestPageInner() {
         const newId = data.id;
         recordBreadcrumb("click", `[pr-save] inserted id=${newId.slice(-8)}`);
 
-        // Now that we have an id, upload the quote (if any) and link it.
+        // If this PR was submitted (not a draft), flip matching order-list
+        // items to "ordered". Best-effort — never blocks the save.
+        if (!asDraft) {
+          await markOrderItemsOrderedFromPR(payload.items);
+        }
+
+        // Now that we have an id, upload the quote(s) and link them.
         if (quoteFiles.length > 0) {
           try {
-            const fileToUpload = quoteFiles.length > 1
-              ? await stitchImagesToQuotePdf(quoteFiles)
-              : quoteFiles[0];
-            const ext = fileToUpload.name.split(".").pop() || "bin";
-            const path = `quotes/${newId}/quote-${Date.now()}.${ext}`;
-            // 30s timeout — large quote PDFs on slow networks otherwise
-            // freeze the navigation to the view page.
-            const upPromise = supabase.storage
-              .from("vendor-files")
-              .upload(path, fileToUpload, {
-                upsert: true,
-                contentType: fileToUpload.type || "application/octet-stream",
-              });
-            recordBreadcrumb(
-              "click",
-              `[pr-save] quote upload start (${fileToUpload.size}B, ${quoteFiles.length} page(s))`,
-            );
-            const result = (await Promise.race([
-              upPromise,
-              new Promise((resolve) =>
-                setTimeout(
-                  () =>
-                    resolve({
-                      error: { message: "Quote upload timed out after 30s" },
-                    }),
-                  30_000,
+            const uploads = await uploadQuoteFiles(supabase, newId, quoteFiles);
+            if (cancel.cancelled) return;
+            recordBreadcrumb("click", `[pr-save] quote upload done (${uploads.length} file(s))`);
+            if (uploads.length > 0) {
+              await timedStep(
+                "link quote to PR",
+                restFetch(
+                  "PATCH",
+                  `purchase_requests?id=eq.${encodeURIComponent(newId)}`,
+                  {
+                    quote_storage_path: uploads[0].path,
+                    quote_filename: uploads[0].filename,
+                    quote_uploaded_at: new Date().toISOString(),
+                    quote_paths: uploads,
+                  },
+                  false,
                 ),
-              ),
-            ])) as { error: { message: string } | null };
-            if (cancel.cancelled) return;
-            if (result.error) throw result.error;
-            recordBreadcrumb("click", `[pr-save] quote upload done`);
-
-            await timedStep(
-              "link quote to PR",
-              restFetch(
-                "PATCH",
-                `purchase_requests?id=eq.${encodeURIComponent(newId)}`,
-                {
-                  quote_storage_path: path,
-                  quote_filename: fileToUpload.name,
-                  quote_uploaded_at: new Date().toISOString(),
-                },
-                false,
-              ),
-            );
-            if (cancel.cancelled) return;
+              );
+              if (cancel.cancelled) return;
+            }
           } catch (err) {
             // Non-fatal — the PR is saved, quote upload can be retried via Edit.
             console.warn("[PR] quote upload failed:", err);

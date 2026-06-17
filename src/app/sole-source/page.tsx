@@ -21,8 +21,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { RoleGuard, MANAGEMENT_ROLES } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { callApi } from "@/lib/api/client";
+import { useAiGenerate, type AiSource, type AiResult } from "@/lib/ai/use-ai-generate";
+import { AiSourceBadge } from "@/components/ai/ai-source-badge";
+import { saveBlobToDevice } from "@/lib/utils/download-blob";
+import { saveCreatedDocument } from "@/lib/documents/saved-documents";
 import {
-  downloadSoleSourceReport,
+  generateSoleSourceReport,
   type SoleSourceData,
 } from "@/lib/reports/sole-source-report";
 import { directSelectList } from "@/lib/supabase/rest";
@@ -71,6 +75,10 @@ interface SsForm {
   marketResearch: string; // section 5
   hasProprietary: "Yes" | "No";
   proprietaryData: string; // section 7
+  hasCompatibility: "Yes" | "No"; // section 6
+  compatibility: string; // section 6
+  hasDirectReplacement: "Yes" | "No"; // section 8
+  directReplacement: string; // section 8
   // Header (editable)
   date: string;
   requestingInstallation: string;
@@ -97,6 +105,10 @@ function emptyForm(): SsForm {
     marketResearch: "",
     hasProprietary: "No",
     proprietaryData: "",
+    hasCompatibility: "No",
+    compatibility: "",
+    hasDirectReplacement: "No",
+    directReplacement: "",
     date: todayCentralMmDdYyyy(),
     requestingInstallation: REQUESTING_INSTALLATION,
     requiringActivity: REQUIRING_ACTIVITY,
@@ -164,7 +176,14 @@ async function generateSoleSourceSections(
   business: string,
   description: string,
   equipmentId: string,
-): Promise<{ description: string; characteristics: string; marketResearch: string }> {
+): Promise<{
+  description: string;
+  characteristics: string;
+  marketResearch: string;
+  compatibility: string;
+  proprietaryData: string;
+  directReplacement: string;
+}> {
   // The ai-assistant endpoint is a scoped GreenKeeper Pro helper — it refuses
   // "you are a Navy contracting specialist" personas. Framing the task as
   // "help me draft justification text for the golf course" keeps it in-scope
@@ -175,9 +194,11 @@ WHAT WE NEED: ${description}
 EQUIPMENT / ITEM ID: ${equipmentId || "N/A"}
 SOLE SOURCE BUSINESS: ${business || "the named vendor"}
 
-Write three sections of formal government purchasing justification, specific to the equipment and business named. Do not invent part numbers or prices. Where appropriate, reference authorized dealer/distributor status, factory-trained technicians, proprietary diagnostic software or tooling, genuine OEM parts, warranty preservation, prior service history, and that a market survey found no other capable source.
+Write the justification sections below, specific to the equipment and business named. Do not invent part numbers or prices. Where appropriate, reference authorized dealer/distributor status, factory-trained technicians, proprietary diagnostic software or tooling, genuine OEM parts, warranty preservation, prior service history, and that a market survey found no other capable source.
 
-Output ONLY the three sections below, each starting with its exact label on its own line. Do not add any preamble, closing, markdown, or asterisks.
+Sections 6, 7 and 8 are "if applicable" — write a usable draft for each anyway; I'll choose Yes/No for each and only include the ones that truly apply.
+
+Output ONLY the labelled sections below, each label on its own line. Do not add any preamble, closing, markdown, or asterisks.
 
 SECTION_3:
 <2-4 sentences: a factual scope statement of what is being purchased or serviced; name the equipment, model, and serial/ID when provided>
@@ -186,7 +207,16 @@ SECTION_4:
 <2-4 sentences: the specific characteristics that limit availability to a sole source>
 
 SECTION_5:
-<3-5 sentences: why only this business can furnish the requirement to the exclusion of other sources; state that a market survey was conducted and found no other capable source>`;
+<3-5 sentences: why only this business can furnish the requirement to the exclusion of other sources; state that a market survey was conducted and found no other capable source>
+
+SECTION_6:
+<1-2 sentences: if this must be compatible with existing equipment or systems, identify that equipment and why compatibility requires this source>
+
+SECTION_7:
+<1-2 sentences: if this involves patent or proprietary data, tooling, or software, describe it factually>
+
+SECTION_8:
+<1-2 sentences: if this is a direct replacement for, or standardization with, equipment already in use, identify it>`;
 
   const reply = await callApi<{ reply?: string; error?: string }>("ai-assistant", {
     method: "POST",
@@ -204,12 +234,18 @@ SECTION_5:
     ).trim();
   const s3 = grab(3, "SECTION[\\s_]*4\\s*:?");
   const s4 = grab(4, "SECTION[\\s_]*5\\s*:?");
-  const s5 = (norm.match(/SECTION[\s_]*5\s*:?\s*([\s\S]*?)$/i)?.[1] ?? "").trim();
+  const s5 = grab(5, "SECTION[\\s_]*6\\s*:?");
+  const s6 = grab(6, "SECTION[\\s_]*7\\s*:?");
+  const s7 = grab(7, "SECTION[\\s_]*8\\s*:?");
+  const s8 = (norm.match(/SECTION[\s_]*8\s*:?\s*([\s\S]*?)$/i)?.[1] ?? "").trim();
 
   return {
     description: s3 || description,
     characteristics: s4,
     marketResearch: s5,
+    compatibility: s6,
+    proprietaryData: s7,
+    directReplacement: s8,
   };
 }
 
@@ -270,32 +306,88 @@ export default function SoleSourcePage() {
   const canGenerate =
     form.plainDescription.trim().length >= 10 && businessName.length > 0;
 
-  // ── Generate (AI) then advance to review ──
-  const handleGenerate = useCallback(async () => {
+  // ── AI learning library — reuse a past justification for the same
+  // business + request (free) before paying; user can still regenerate/edit. ──
+  const ai = useAiGenerate("sole_source");
+  const [aiSource, setAiSource] = useState<AiSource | null>(null);
+  const [servedSections, setServedSections] = useState<{
+    description: string;
+    characteristics: string;
+    marketResearch: string;
+  } | null>(null);
+
+  const msStr = (v: unknown): string => (typeof v === "string" ? v : "");
+  const composeSsInput = () =>
+    [businessName, form.equipmentId.trim(), form.plainDescription.trim()]
+      .filter(Boolean)
+      .join(" | ");
+  const ssSectionsToText = (s: {
+    description: string;
+    characteristics: string;
+    marketResearch: string;
+  }) =>
+    `SECTION 3:\n${s.description}\n\nSECTION 4:\n${s.characteristics}\n\nSECTION 5:\n${s.marketResearch}`;
+  const ssCallAi = async () => {
+    const r = await generateSoleSourceSections(
+      businessName,
+      form.plainDescription.trim(),
+      form.equipmentId.trim(),
+    );
+    return {
+      text: ssSectionsToText(r),
+      meta: {
+        description: r.description,
+        characteristics: r.characteristics,
+        marketResearch: r.marketResearch,
+        compatibility: r.compatibility,
+        proprietaryData: r.proprietaryData,
+        directReplacement: r.directReplacement,
+      },
+      model: "claude-sonnet-4-6",
+    };
+  };
+  const applySsResult = (res: AiResult) => {
+    const desc = msStr(res.meta.description) || msStr(res.text) || form.plainDescription.trim();
+    const chars = msStr(res.meta.characteristics);
+    const market = msStr(res.meta.marketResearch);
+    const compat = msStr(res.meta.compatibility);
+    const prop = msStr(res.meta.proprietaryData);
+    const directRep = msStr(res.meta.directReplacement);
+    setForm((prev) => ({
+      ...prev,
+      description: desc,
+      characteristics: chars,
+      marketResearch: market,
+      // Pre-fill the "if applicable" drafts; the Yes/No toggles stay at the
+      // user's choice — they flip to Yes to include the drafted text.
+      compatibility: compat || prev.compatibility,
+      proprietaryData: prop || prev.proprietaryData,
+      directReplacement: directRep || prev.directReplacement,
+    }));
+    setServedSections({ description: desc, characteristics: chars, marketResearch: market });
+    setAiSource(res.source);
+    if (!chars || !market) {
+      setWarning(
+        "The AI returned partial text. Review sections 4 and 5 below and edit as needed before downloading.",
+      );
+    }
+    setStep(2);
+  };
+
+  // ── Generate (library-first) then advance to review ──
+  const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
     setWarning(null);
     try {
-      const result = await generateSoleSourceSections(
-        businessName,
-        form.plainDescription.trim(),
-        form.equipmentId.trim(),
+      applySsResult(
+        await ai.run({
+          input: composeSsInput(),
+          inputMeta: { business: businessName, equipmentId: form.equipmentId.trim() },
+          callAi: ssCallAi,
+        }),
       );
-      setForm((prev) => ({
-        ...prev,
-        description: result.description,
-        characteristics: result.characteristics,
-        marketResearch: result.marketResearch,
-      }));
-      if (!result.characteristics || !result.marketResearch) {
-        setWarning(
-          "The AI returned partial text. Review sections 4 and 5 below and edit as needed before downloading.",
-        );
-      }
-      setStep(2);
     } catch {
-      // Resilient fallback: seed section 3 with the plain description so the
-      // user can always proceed and fill the rest manually.
       setForm((prev) => ({
         ...prev,
         description: prev.description || form.plainDescription.trim(),
@@ -307,13 +399,52 @@ export default function SoleSourcePage() {
     } finally {
       setGenerating(false);
     }
-  }, [businessName, form.plainDescription, form.equipmentId]);
+  };
+
+  // ── Regenerate — force a fresh paid AI version ("I don't like it"). ──
+  const handleRegenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    setWarning(null);
+    try {
+      applySsResult(
+        await ai.regenerate({
+          input: composeSsInput(),
+          inputMeta: { business: businessName, equipmentId: form.equipmentId.trim() },
+          callAi: ssCallAi,
+        }),
+      );
+    } catch {
+      setWarning(
+        "Couldn't reach the AI writer. Edit the sections by hand and download the form.",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   // ── Download ──
-  const handleDownload = useCallback(async () => {
+  const handleDownload = async () => {
     setDownloading(true);
     setError(null);
     try {
+      // Teach the library the final, edited justification text.
+      await ai.saveFinal({
+        input: composeSsInput(),
+        inputMeta: { business: businessName, equipmentId: form.equipmentId.trim() },
+        text: ssSectionsToText({
+          description: form.description,
+          characteristics: form.characteristics,
+          marketResearch: form.marketResearch,
+        }),
+        meta: {
+          description: form.description,
+          characteristics: form.characteristics,
+          marketResearch: form.marketResearch,
+        },
+        servedText: servedSections ? ssSectionsToText(servedSections) : undefined,
+      });
+
       const c = resolveContractor(form, vendors);
       const data: SoleSourceData = {
         date: form.date,
@@ -327,8 +458,8 @@ export default function SoleSourcePage() {
         marketResearch: form.marketResearch,
         hasProprietary: form.hasProprietary,
         proprietaryData: form.hasProprietary === "Yes" ? form.proprietaryData : "",
-        compatibilityNotes: "",
-        directReplacement: "N/A",
+        compatibilityNotes: form.hasCompatibility === "Yes" ? form.compatibility : "",
+        directReplacement: form.hasDirectReplacement === "Yes" ? form.directReplacement : "N/A",
         contractorName: c.name,
         contractorAddress: c.address,
         contractorCityStateZip: c.cityStateZip,
@@ -337,7 +468,16 @@ export default function SoleSourcePage() {
         contractorEmail: c.email,
         requestorName: form.requestorName,
       };
-      await downloadSoleSourceReport(data);
+      const { blob, filename } = await generateSoleSourceReport(data);
+      await saveBlobToDevice({ blob, filename, shareTitle: "Sole Source Justification" });
+      // Save a copy to the Documents library so it can be retrieved later.
+      await saveCreatedDocument({
+        docType: "sole_source",
+        title: `Sole Source — ${c.name || businessName || "Vendor"}`,
+        blob,
+        filename,
+        meta: { vendor: c.name, estimatedCost: form.estimatedCost, date: form.date },
+      });
       setDone(true);
     } catch (err) {
       setError(
@@ -346,7 +486,7 @@ export default function SoleSourcePage() {
     } finally {
       setDownloading(false);
     }
-  }, [form, vendors]);
+  };
 
   const handleReset = () => {
     setForm(emptyForm());
@@ -632,27 +772,30 @@ export default function SoleSourcePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <p className="text-sm font-medium text-muted-foreground">
                   Business: <span className="text-foreground">{businessName || "—"}</span>
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={handleGenerate}
-                  disabled={generating}
-                >
-                  {generating ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Rewriting…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5" /> Regenerate
-                    </>
-                  )}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <AiSourceBadge source={aiSource} />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleRegenerate}
+                    disabled={generating}
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Rewriting…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" /> Regenerate with AI
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -702,12 +845,62 @@ export default function SoleSourcePage() {
                 {form.hasProprietary === "Yes" && (
                   <div className="space-y-1.5">
                     <Label htmlFor="propData">List the proprietary data</Label>
-                    <Input
+                    <Textarea
                       id="propData"
+                      rows={3}
                       value={form.proprietaryData}
                       onChange={(e) => set("proprietaryData", e.target.value)}
+                      placeholder="The AI pre-fills this when you generate — edit as needed."
                     />
                   </div>
+                )}
+              </div>
+
+              {/* Section 6 — compatibility with existing equipment */}
+              <div className="space-y-1.5">
+                <Label htmlFor="hasCompat">
+                  6. Required for compatibility with existing equipment?
+                </Label>
+                <select
+                  id="hasCompat"
+                  value={form.hasCompatibility}
+                  onChange={(e) => set("hasCompatibility", e.target.value as "Yes" | "No")}
+                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base sm:max-w-[220px]"
+                >
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
+                {form.hasCompatibility === "Yes" && (
+                  <Textarea
+                    rows={3}
+                    value={form.compatibility}
+                    onChange={(e) => set("compatibility", e.target.value)}
+                    placeholder="Describe the equipment it must be compatible with (the AI pre-fills this — edit as needed)."
+                  />
+                )}
+              </div>
+
+              {/* Section 8 — direct replacement / standardization */}
+              <div className="space-y-1.5">
+                <Label htmlFor="hasDirect">
+                  8. Direct replacement for / standardization with existing equipment?
+                </Label>
+                <select
+                  id="hasDirect"
+                  value={form.hasDirectReplacement}
+                  onChange={(e) => set("hasDirectReplacement", e.target.value as "Yes" | "No")}
+                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base sm:max-w-[220px]"
+                >
+                  <option value="No">No (mark N/A)</option>
+                  <option value="Yes">Yes</option>
+                </select>
+                {form.hasDirectReplacement === "Yes" && (
+                  <Textarea
+                    rows={3}
+                    value={form.directReplacement}
+                    onChange={(e) => set("directReplacement", e.target.value)}
+                    placeholder="Identify the equipment this replaces / standardizes with (the AI pre-fills this — edit as needed)."
+                  />
                 )}
               </div>
 

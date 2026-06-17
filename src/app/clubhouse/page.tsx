@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { createClient } from '@/lib/supabase/client';
 import { directSelectList } from '@/lib/supabase/rest';
+import { createWorkOrderFromIssue, buildingLabel } from '@/lib/work-orders/clubhouse-sync';
 
 type Category = 'damage' | 'cleaning' | 'order' | 'maintenance';
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
@@ -221,6 +222,34 @@ export default function ClubhousePage() {
     } catch (error) {
       console.error('Error updating status:', error);
       showToast('error', 'Failed to update status');
+    }
+  };
+
+  const [escalatingId, setEscalatingId] = useState<string | null>(null);
+  const handleEscalate = async (issue: ClubhouseIssue) => {
+    setEscalatingId(issue.id);
+    try {
+      const wo = await createWorkOrderFromIssue({
+        id: issue.id,
+        title: issue.title,
+        description: issue.description,
+        location: issue.location,
+        building: issue.building,
+      });
+      if (wo) {
+        await updateIssue(issue.id, {
+          work_order_id: wo.id,
+          status: 'in_progress',
+          building: issue.building ?? '8400',
+        });
+        showToast('success', `Work order #${String(wo.wo_sequence_number).padStart(3, '0')} created from this issue.`);
+      } else {
+        showToast('error', 'Could not create the work order.');
+      }
+    } catch {
+      showToast('error', 'Could not create the work order.');
+    } finally {
+      setEscalatingId(null);
     }
   };
 
@@ -509,6 +538,17 @@ export default function ClubhousePage() {
                       <Clock className="w-4 h-4" />
                       {new Date(issue.created_at).toLocaleDateString()}
                     </div>
+                    {issue.building && (
+                      <div className="flex items-center gap-2">
+                        <Building className="w-4 h-4" />
+                        {buildingLabel(issue.building)}
+                      </div>
+                    )}
+                    {issue.work_order_id && (
+                      <div className="flex items-center gap-1.5 text-indigo-700">
+                        <Wrench className="w-4 h-4" /> Linked to a work order
+                      </div>
+                    )}
                     {issue.assigned_to && (
                       <div className="text-gray-700">
                         <span className="font-semibold">Assigned to:</span> {issue.assigned_to}
@@ -617,6 +657,32 @@ export default function ClubhousePage() {
                             </Button>
                           )}
                         </div>
+
+                        {/* Escalate to a work order */}
+                        {!issue.work_order_id && issue.status !== 'completed' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                            disabled={escalatingId === issue.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEscalate(issue);
+                            }}
+                          >
+                            {escalatingId === issue.id ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Wrench className="w-4 h-4 mr-2" />
+                            )}
+                            Send to Work Orders
+                          </Button>
+                        )}
+                        {issue.work_order_id && (
+                          <p className="text-xs text-indigo-700 text-center">
+                            Linked to a work order — its status follows the work order.
+                          </p>
+                        )}
 
                         {/* Delete Button */}
                         <Button

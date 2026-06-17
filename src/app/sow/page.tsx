@@ -31,7 +31,11 @@ import { RoleGuard, MANAGEMENT_ROLES } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import { callApi } from "@/lib/api/client";
-import { downloadSowReport, type SowFormData } from "@/lib/reports/sow-report";
+import { useAiGenerate, type AiSource, type AiResult } from "@/lib/ai/use-ai-generate";
+import { AiSourceBadge } from "@/components/ai/ai-source-badge";
+import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
+import { saveBlobToDevice } from "@/lib/utils/download-blob";
+import { saveCreatedDocument } from "@/lib/documents/saved-documents";
 import { PR_DELIVERY_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
 import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 
@@ -190,66 +194,138 @@ export default function SowPage() {
     return true;
   };
 
+  // ── AI learning library — reuse a past SOW for the same work (free) before
+  // paying; the user can force a fresh paid version from the done state. ──
+  const ai = useAiGenerate("sow");
+  const [aiSource, setAiSource] = useState<AiSource | null>(null);
+  const msStr = (v: unknown): string => (typeof v === "string" ? v : "");
+
+  const sowCompose = () =>
+    [form.requisitionType, form.workDescription.trim()].filter(Boolean).join(" | ");
+
+  const sowCallAi = async () => {
+    const r = await generateSowContent(
+      form.workDescription,
+      form.activityName,
+      form.from,
+      form.projectedStartDate,
+      form.desiredCompletionDate,
+      `${form.buildingNameNumber}${form.roomNumber ? `, Room ${form.roomNumber}` : ""}`,
+      form.requisitionType,
+      form.requisitionReason || "New requirement",
+    );
+    return {
+      text: `EXPECTATION:\n${r.expectation}\n\nDESCRIPTION_OF_GOODS:\n${r.goods}\n\nCERTIFICATIONS:\n${r.certifications}`,
+      meta: { expectation: r.expectation, goods: r.goods, certifications: r.certifications },
+      model: "claude-sonnet-4-6",
+    };
+  };
+
+  const sowSectionsFrom = (res: AiResult) => ({
+    expectation: msStr(res.meta.expectation) || form.workDescription,
+    goods:
+      msStr(res.meta.goods) ||
+      `${form.requisitionType} for ${form.activityName}: ${form.workDescription}`,
+    certifications:
+      msStr(res.meta.certifications) ||
+      "Contractor shall possess all applicable federal, state, and local licenses and certifications required for this type of work.",
+  });
+
+  const buildSowData = (sections: {
+    expectation: string;
+    goods: string;
+    certifications: string;
+  }): SowFormData => ({
+    date: form.date,
+    from: form.from,
+    activityName: form.activityName,
+    requisitionType: form.requisitionType,
+    requisitionReason: form.requisitionReason,
+    hasReferences: form.hasReferences,
+    referencesText: form.referencesText,
+    projectedStartDate: form.projectedStartDate,
+    desiredCompletionDate: form.desiredCompletionDate,
+    facilityHours: form.facilityHours,
+    appointmentTime: form.appointmentTime,
+    servicesInterrupted: form.servicesInterrupted,
+    patronsInDanger: form.patronsInDanger,
+    personnelCertifications: sections.certifications,
+    specificPersonnelRequired: form.specificPersonnelRequired,
+    personnelCount: form.personnelCount,
+    lodgingRequired: form.lodgingRequired,
+    individualLodging: form.individualLodging,
+    groupLodging: form.groupLodging,
+    vehicleStorage: form.vehicleStorage,
+    equipmentStorage: form.equipmentStorage,
+    baseAccess: form.baseAccess,
+    escort: form.escort,
+    expectationText: sections.expectation,
+    weatherInterrupt: form.weatherInterrupt,
+    rescheduleIfWeather: form.rescheduleIfWeather,
+    rescheduleDate: form.rescheduleDate,
+    baseEntryAmendments: form.baseEntryAmendments,
+    buildingNameNumber: form.buildingNameNumber,
+    roomNumber: form.roomNumber,
+    accessDirections: form.accessDirections || "N/A",
+    descriptionOfGoods: sections.goods,
+    requestorName: form.requestorName,
+    requestorTitle: form.requestorTitle,
+    directPhone: form.directPhone,
+    cellPhone: form.cellPhone,
+    email: form.email,
+    supervisorName: form.supervisorName,
+    supervisorPhone: form.supervisorPhone,
+  });
+
+  const generateAndDownload = async (res: AiResult) => {
+    setAiSource(res.source);
+    setDownloading(true);
+    const sowData = buildSowData(sowSectionsFrom(res));
+    const { blob, filename } = await generateSowReport(sowData);
+    await saveBlobToDevice({ blob, filename, shareTitle: "Statement of Work" });
+    // Save a copy to the Documents library so it can be retrieved later.
+    await saveCreatedDocument({
+      docType: "sow",
+      title: `SOW — ${form.activityName || form.from || "VMGC"}`,
+      blob,
+      filename,
+      meta: { activity: form.activityName, requisitionType: form.requisitionType },
+    });
+    setDone(true);
+  };
+
+  // Library-first: reuse a past SOW for the same work (free) before paying.
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
     try {
-      const { expectation, goods, certifications } = await generateSowContent(
-        form.workDescription,
-        form.activityName,
-        form.from,
-        form.projectedStartDate,
-        form.desiredCompletionDate,
-        `${form.buildingNameNumber}${form.roomNumber ? `, Room ${form.roomNumber}` : ""}`,
-        form.requisitionType,
-        form.requisitionReason || "New requirement",
+      await generateAndDownload(
+        await ai.run({
+          input: sowCompose(),
+          inputMeta: { requisitionType: form.requisitionType, activity: form.activityName },
+          callAi: sowCallAi,
+        }),
       );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate SOW. Please try again.");
+    } finally {
+      setGenerating(false);
+      setDownloading(false);
+    }
+  };
 
-      setDownloading(true);
-      const sowData: SowFormData = {
-        date: form.date,
-        from: form.from,
-        activityName: form.activityName,
-        requisitionType: form.requisitionType,
-        requisitionReason: form.requisitionReason,
-        hasReferences: form.hasReferences,
-        referencesText: form.referencesText,
-        projectedStartDate: form.projectedStartDate,
-        desiredCompletionDate: form.desiredCompletionDate,
-        facilityHours: form.facilityHours,
-        appointmentTime: form.appointmentTime,
-        servicesInterrupted: form.servicesInterrupted,
-        patronsInDanger: form.patronsInDanger,
-        personnelCertifications: certifications,
-        specificPersonnelRequired: form.specificPersonnelRequired,
-        personnelCount: form.personnelCount,
-        lodgingRequired: form.lodgingRequired,
-        individualLodging: form.individualLodging,
-        groupLodging: form.groupLodging,
-        vehicleStorage: form.vehicleStorage,
-        equipmentStorage: form.equipmentStorage,
-        baseAccess: form.baseAccess,
-        escort: form.escort,
-        expectationText: expectation,
-        weatherInterrupt: form.weatherInterrupt,
-        rescheduleIfWeather: form.rescheduleIfWeather,
-        rescheduleDate: form.rescheduleDate,
-        baseEntryAmendments: form.baseEntryAmendments,
-        buildingNameNumber: form.buildingNameNumber,
-        roomNumber: form.roomNumber,
-        accessDirections: form.accessDirections || "N/A",
-        descriptionOfGoods: goods,
-        requestorName: form.requestorName,
-        requestorTitle: form.requestorTitle,
-        directPhone: form.directPhone,
-        cellPhone: form.cellPhone,
-        email: form.email,
-        supervisorName: form.supervisorName,
-        supervisorPhone: form.supervisorPhone,
-      };
-
-      await downloadSowReport(sowData);
-      setDone(true);
+  // Paid regenerate ("I don't like it") — used from the done state.
+  const handleRegenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      await generateAndDownload(
+        await ai.regenerate({
+          input: sowCompose(),
+          inputMeta: { requisitionType: form.requisitionType, activity: form.activityName },
+          callAi: sowCallAi,
+        }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate SOW. Please try again.");
     } finally {
@@ -321,12 +397,22 @@ export default function SowPage() {
                   Your Statement of Work PDF has been downloaded. Review it and submit to FRSC Contracting.
                 </p>
               </div>
-              <div className="flex gap-3 justify-center pt-2">
-                <Button onClick={handleGenerate} variant="outline" disabled={downloading}>
+              <div className="flex justify-center">
+                <AiSourceBadge source={aiSource} />
+              </div>
+              <div className="flex flex-wrap gap-3 justify-center pt-2">
+                <Button onClick={handleGenerate} variant="outline" disabled={generating || downloading}>
                   {downloading ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Downloading...</>
                   ) : (
                     <><Download className="w-4 h-4 mr-2" />Download Again</>
+                  )}
+                </Button>
+                <Button onClick={handleRegenerate} variant="outline" disabled={generating || downloading}>
+                  {generating ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Rewriting…</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" />Regenerate with AI</>
                   )}
                 </Button>
                 <Button onClick={handleReset} className="bg-[#1B4332] hover:bg-[#2D6A4F]">

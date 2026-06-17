@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Leaf, Briefcase, ChevronRight } from "lucide-react";
+import { Leaf, Briefcase, Landmark, ChevronRight } from "lucide-react";
 import { useView, type AppView } from "@/lib/providers/view-provider";
 
 /**
@@ -56,6 +56,20 @@ export function ViewPicker() {
           <div className="flex-1 min-w-0">
             <p className="font-semibold">General Manager</p>
             <p className="text-sm text-muted-foreground">Budget, PRs &amp; admin</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+        </button>
+
+        <button
+          onClick={() => choose("bdh")}
+          className="w-full gk-card p-4 flex items-center gap-4 mt-3 text-left active:scale-[0.99] transition"
+        >
+          <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center shrink-0">
+            <Landmark className="w-6 h-6 text-foreground/70" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold">Business Division Head</p>
+            <p className="text-sm text-muted-foreground">PR audit, budget &amp; reports</p>
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
         </button>

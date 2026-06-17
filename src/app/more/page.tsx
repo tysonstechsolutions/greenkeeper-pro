@@ -26,8 +26,14 @@ import {
   Wrench,
   Droplets,
   ClipboardCheck,
+  Wallet,
+  BarChart3,
+  Landmark,
+  HardHat,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useView } from "@/lib/providers/view-provider";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
 
 // ── Types ──
@@ -130,6 +136,16 @@ const proApps: AppItem[] = [
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
 ];
 
+const bdhApps: AppItem[] = [
+  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-cyan-600 to-blue-700" },
+  { href: "/budget", label: "Budget", icon: Wallet, color: "from-emerald-600 to-green-700" },
+  { href: "/reports", label: "Reports", icon: BarChart3, color: "from-blue-600 to-indigo-700" },
+  { href: "/revenue", label: "Revenue", icon: Landmark, color: "from-amber-600 to-yellow-700" },
+  { href: "/capital-projects", label: "Capital Projects", icon: HardHat, color: "from-orange-600 to-amber-700" },
+  { href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-yellow-500 to-amber-600" },
+  { href: "/work-orders", label: "Work Orders", icon: Wrench, color: "from-orange-600 to-amber-700" },
+];
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // COMPONENTS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -197,11 +213,13 @@ function BottomLinks({ showSettings = true }: { showSettings?: boolean }) {
 
 export default function MorePage() {
   const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
+  const { view } = useView();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
   let apps: AppItem[];
-  if (isPro) apps = proApps;
+  if (view === "bdh") apps = bdhApps;
+  else if (isPro) apps = proApps;
   else if (isLaborer) apps = crewApps;
   else if (isMechanic) apps = mechanicApps;
   else if (isForeman) apps = foremanApps;

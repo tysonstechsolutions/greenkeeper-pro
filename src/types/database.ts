@@ -608,6 +608,8 @@ export interface ClubhouseIssue {
   estimated_cost: number | null;
   assigned_to: string | null;
   completed_at: string | null;
+  work_order_id: string | null;
+  building: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1609,6 +1611,7 @@ export interface PurchaseRequest {
   quote_storage_path: string | null;
   quote_filename: string | null;
   quote_uploaded_at: string | null;
+  quote_paths?: { path: string; filename: string }[] | null;
 
   // Auto-assigned monotonic sequence (added in 20260504 migration). The
   // PDF's "Internal Order" field is rendered as `FY{YY}-FM-{NNNN}` from

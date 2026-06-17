@@ -13,8 +13,9 @@ import {
  * the view you pick, not by who you are. Both views read/write the same data.
  *   - "super" → Superintendent: turf & crew operations (the original app)
  *   - "gm"    → General Manager: budget, purchase requests, reports, admin
+ *   - "bdh"   → Business Division Head: PR audit + budget/reports/revenue/etc.
  */
-export type AppView = "super" | "gm";
+export type AppView = "super" | "gm" | "bdh";
 
 const STORAGE_KEY = "gk_view";
 
@@ -37,7 +38,9 @@ interface ViewState {
 }
 
 function homeFor(v: AppView): string {
-  return v === "gm" ? "/gm" : "/dashboard";
+  if (v === "gm") return "/gm";
+  if (v === "bdh") return "/pr-audit";
+  return "/dashboard";
 }
 
 const ViewContext = createContext<ViewContextValue>({
@@ -61,7 +64,7 @@ export function ViewProvider({ children }: { children: React.ReactNode }) {
     let next: ViewState = { view: "super", chosen: false, ready: true };
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "super" || stored === "gm") {
+      if (stored === "super" || stored === "gm" || stored === "bdh") {
         next = { view: stored, chosen: true, ready: true };
       }
     } catch {

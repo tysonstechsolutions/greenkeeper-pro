@@ -41,6 +41,8 @@ import {
   HardHat,
   Vote,
   GraduationCap,
+  Library,
+  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useView } from "@/lib/providers/view-provider";
@@ -98,6 +100,8 @@ const leadershipApps: SidebarItem[] = [
   { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
   { href: "/sole-source", label: "Sole Source", icon: Scale },
   { href: "/work-orders", label: "Work Orders", icon: Wrench },
+  { href: "/documents", label: "Documents", icon: FolderOpen },
+  { href: "/ai-library", label: "AI Library", icon: Library },
   { href: "/priority", label: "Priority Queue", icon: Flame },
   { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
@@ -198,14 +202,31 @@ const gmApps: SidebarItem[] = [
   { href: "/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/clubhouse", label: "Clubhouse", icon: Building },
   { href: "/capital-projects", label: "Capital Projects", icon: HardHat },
+  { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
   { href: "/sole-source", label: "Sole Source", icon: Scale },
   { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
+  { href: "/documents", label: "Documents", icon: FolderOpen },
+  { href: "/ai-library", label: "AI Library", icon: Library },
   { href: "/staff", label: "Staff", icon: Users },
   { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap },
   { href: "/polls", label: "Polls", icon: Vote },
   { href: "/order-list", label: "Order List", icon: ShoppingCart },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/report-issue", label: "Report Issue", icon: Flag },
+];
+
+// Business Division Head view — PR audit + cross-business finances.
+const bdhPinned: SidebarItem[] = [
+  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, pinned: true },
+  { href: "/budget", label: "Budget", icon: Wallet, pinned: true },
+  { href: "/reports", label: "Reports", icon: BarChart3, pinned: true },
+];
+
+const bdhApps: SidebarItem[] = [
+  { href: "/revenue", label: "Revenue", icon: Landmark },
+  { href: "/capital-projects", label: "Capital Projects", icon: HardHat },
+  { href: "/tournaments", label: "Tournaments", icon: Trophy },
+  { href: "/work-orders", label: "Work Orders", icon: Wrench },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -305,6 +326,9 @@ export function Sidebar() {
   if (view === "gm") {
     pinned = gmPinned;
     apps = gmApps;
+  } else if (view === "bdh") {
+    pinned = bdhPinned;
+    apps = bdhApps;
   } else if (isPro) {
     pinned = proPinned;
     apps = proApps;

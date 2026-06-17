@@ -7,6 +7,7 @@ import {
   directInsertRow,
   directPatchRowReturning,
   directDeleteRow,
+  directDeleteByFilter,
 } from "@/lib/supabase/rest";
 import type { OrderItem, OrderItemStatus } from "@/types/database";
 
@@ -321,6 +322,19 @@ export function useOrderItems() {
     }
   }, []);
 
+  const clearAll = useCallback(async () => {
+    try {
+      // Remove all manually-added order items. Equipment-part rows live in
+      // equipment_parts (managed on the equipment page) and are untouched.
+      await directDeleteByFilter("order_items", ["id=not.is.null"], "useOrderItems.clearAll");
+      setItems((prev) => prev.filter((i) => i.source !== "order_item"));
+      return true;
+    } catch (err) {
+      console.error("Error clearing order items:", err);
+      return false;
+    }
+  }, []);
+
   const stats = {
     total: items.length,
     needed: items.filter((i) => i.status === "needed").length,
@@ -334,5 +348,5 @@ export function useOrderItems() {
     },
   };
 
-  return { items, loading, stats, fetchItems, createItem, updateItem, deleteItem };
+  return { items, loading, stats, fetchItems, createItem, updateItem, deleteItem, clearAll };
 }

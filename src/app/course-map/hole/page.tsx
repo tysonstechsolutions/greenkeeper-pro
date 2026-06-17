@@ -77,6 +77,8 @@ import { createClient } from "@/lib/supabase/client";
 import { directInsertRow } from "@/lib/supabase/rest";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
+import { useAiGenerate, type AiSource } from "@/lib/ai/use-ai-generate";
+import { AiSourceBadge } from "@/components/ai/ai-source-badge";
 import TreatmentPlanView from "@/components/treatment-plan-view";
 import { todayLocal } from "@/lib/utils/date";
 import type {
@@ -402,32 +404,71 @@ function PageContent() {
     if (file) handlePhotoCaptured(file);
   }, [handlePhotoCaptured]);
 
-  // ── AI Generate Fix Instructions ──
+  // ── AI learning library — reuse past fix write-ups (free) before paying. ──
+  const { run: runFixAi, regenerate: regenFixAi, saveFinal: saveFixAi } =
+    useAiGenerate("fix_instructions");
+  const [fixSource, setFixSource] = useState<AiSource | null>(null);
+  const [fixEditSource, setFixEditSource] = useState<AiSource | null>(null);
+
+  const fixCallApiCreate = useCallback(async () => {
+    const title = issueTypeLabels[formData.issue_type] || formData.issue_type;
+    const data = await callApi<{ fix_instructions?: string }>("fix-instructions", {
+      method: "POST",
+      body: {
+        title,
+        issue_type: formData.issue_type,
+        priority: formData.priority,
+        description: formData.description || undefined,
+        hole_number: holeNumber,
+      },
+    });
+    return { text: data.fix_instructions ?? "", model: "claude-sonnet-4-6" };
+  }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
+
+  const fixCreateInput = useCallback(() => {
+    const title = issueTypeLabels[formData.issue_type] || formData.issue_type;
+    return [title, formData.description.trim()].filter(Boolean).join(" | ");
+  }, [formData.issue_type, formData.description]);
+
+  // ── AI Generate Fix Instructions (library-first) ──
   const handleGenerateFix = useCallback(async () => {
     if (formData.issue_type === "other") return;
     setGeneratingFix(true);
-    const title = issueTypeLabels[formData.issue_type] || formData.issue_type;
     try {
-      const data = await callApi<{ fix_instructions?: string }>("fix-instructions", {
-        method: "POST",
-        body: {
-          title,
-          issue_type: formData.issue_type,
-          priority: formData.priority,
-          description: formData.description || undefined,
-          hole_number: holeNumber,
-        },
+      const res = await runFixAi({
+        input: fixCreateInput(),
+        inputMeta: { issue_type: formData.issue_type, priority: formData.priority },
+        callAi: fixCallApiCreate,
       });
-      if (data.fix_instructions) {
-        setFormData((p) => ({ ...p, fix_instructions: data.fix_instructions! }));
-      }
+      if (res.text) setFormData((p) => ({ ...p, fix_instructions: res.text }));
+      setFixSource(res.source);
     } catch (err) {
       console.error("Failed to generate fix instructions:", err);
       setFeedbackMsg({ type: "error", text: "Failed to generate fix instructions." });
     } finally {
       setGeneratingFix(false);
     }
-  }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
+  }, [formData.issue_type, formData.priority, runFixAi, fixCreateInput, fixCallApiCreate]);
+
+  // Force a fresh paid version ("I don't like it").
+  const handleRegenerateFix = useCallback(async () => {
+    if (formData.issue_type === "other") return;
+    setGeneratingFix(true);
+    try {
+      const res = await regenFixAi({
+        input: fixCreateInput(),
+        inputMeta: { issue_type: formData.issue_type, priority: formData.priority },
+        callAi: fixCallApiCreate,
+      });
+      if (res.text) setFormData((p) => ({ ...p, fix_instructions: res.text }));
+      setFixSource(res.source);
+    } catch (err) {
+      console.error("Failed to regenerate fix:", err);
+      setFeedbackMsg({ type: "error", text: "Failed to generate fix instructions." });
+    } finally {
+      setGeneratingFix(false);
+    }
+  }, [formData.issue_type, formData.priority, regenFixAi, fixCreateInput, fixCallApiCreate]);
 
   // ── Submit Observation ──
   const handleSubmit = useCallback(async () => {
@@ -456,6 +497,16 @@ function PageContent() {
     });
 
     if (result) {
+      // Teach the library the final fix text the user kept.
+      const finalFix = formData.fix_instructions.trim();
+      if (finalFix) {
+        const fixTitle = issueTypeLabels[formData.issue_type] || formData.issue_type;
+        void saveFixAi({
+          input: [fixTitle, formData.description.trim()].filter(Boolean).join(" | "),
+          inputMeta: { issue_type: formData.issue_type, priority: formData.priority },
+          text: finalFix,
+        });
+      }
       setShowForm(false);
       setPendingPin(null);
       setFormData({ description: "", fix_instructions: "", issue_type: "other", priority: "normal" });
@@ -468,7 +519,7 @@ function PageContent() {
       setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
     }
     setSubmitting(false);
-  }, [pendingPin, formData, photoFile, holeNumber, uploadPhoto, createObservation, diagnosisResult]);
+  }, [pendingPin, formData, photoFile, holeNumber, uploadPhoto, createObservation, diagnosisResult, saveFixAi]);
 
   // ── Edit saved observation ──
   const handleStartEdit = useCallback((obs: HoleObservation) => {
@@ -529,38 +580,83 @@ function PageContent() {
     };
     const result = await updateObservation(selectedObs.id, updates);
     if (result) {
+      // Teach the library the final fix text the user kept.
+      const finalFix = editFormData.fix_instructions.trim();
+      if (finalFix) {
+        const fixTitle = issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type;
+        void saveFixAi({
+          input: [fixTitle, editFormData.description.trim()].filter(Boolean).join(" | "),
+          inputMeta: { issue_type: editFormData.issue_type, priority: editFormData.priority },
+          text: finalFix,
+        });
+      }
       setSelectedObs({ ...selectedObs, ...updates });
       setEditingObs(false);
       setFeedbackMsg({ type: "success", text: "Observation updated." });
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to update observation." });
     }
-  }, [selectedObs, editFormData, updateObservation]);
+  }, [selectedObs, editFormData, updateObservation, saveFixAi]);
+
+  const fixCallApiEdit = useCallback(async () => {
+    const title = issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type;
+    const data = await callApi<{ fix_instructions?: string }>("fix-instructions", {
+      method: "POST",
+      body: {
+        title,
+        issue_type: editFormData.issue_type,
+        priority: editFormData.priority,
+        description: editFormData.description || undefined,
+        hole_number: holeNumber,
+      },
+    });
+    return { text: data.fix_instructions ?? "", model: "claude-sonnet-4-6" };
+  }, [editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber]);
+
+  const fixEditInput = useCallback(() => {
+    const title = issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type;
+    return [title, editFormData.description.trim()].filter(Boolean).join(" | ");
+  }, [editFormData.issue_type, editFormData.description]);
 
   const handleGenerateFixForEdit = useCallback(async () => {
     setGeneratingFixForObs(true);
-    const title = issueTypeLabels[editFormData.issue_type as HoleIssueType] || editFormData.issue_type;
     try {
-      const data = await callApi<{ fix_instructions?: string }>("fix-instructions", {
-        method: "POST",
-        body: {
-          title,
-          issue_type: editFormData.issue_type,
-          priority: editFormData.priority,
-          description: editFormData.description || undefined,
-          hole_number: holeNumber,
-        },
+      const res = await runFixAi({
+        input: fixEditInput(),
+        inputMeta: { issue_type: editFormData.issue_type, priority: editFormData.priority },
+        callAi: fixCallApiEdit,
       });
-      if (data.fix_instructions) {
-        setEditFormData((p) => ({ ...p, fix_instructions: data.fix_instructions! }));
-        triggerAutoSave({ fix_instructions: data.fix_instructions });
+      if (res.text) {
+        setEditFormData((p) => ({ ...p, fix_instructions: res.text }));
+        triggerAutoSave({ fix_instructions: res.text });
       }
+      setFixEditSource(res.source);
     } catch (err) {
       console.error("Failed to generate fix:", err);
     } finally {
       setGeneratingFixForObs(false);
     }
-  }, [editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber]);
+  }, [editFormData.issue_type, editFormData.priority, runFixAi, fixEditInput, fixCallApiEdit, triggerAutoSave]);
+
+  const handleRegenerateFixForEdit = useCallback(async () => {
+    setGeneratingFixForObs(true);
+    try {
+      const res = await regenFixAi({
+        input: fixEditInput(),
+        inputMeta: { issue_type: editFormData.issue_type, priority: editFormData.priority },
+        callAi: fixCallApiEdit,
+      });
+      if (res.text) {
+        setEditFormData((p) => ({ ...p, fix_instructions: res.text }));
+        triggerAutoSave({ fix_instructions: res.text });
+      }
+      setFixEditSource(res.source);
+    } catch (err) {
+      console.error("Failed to regenerate fix:", err);
+    } finally {
+      setGeneratingFixForObs(false);
+    }
+  }, [editFormData.issue_type, editFormData.priority, regenFixAi, fixEditInput, fixCallApiEdit, triggerAutoSave]);
 
   // ── Create Task from Observation ──
   const handleCreateTask = useCallback(async (obs: HoleObservation) => {
@@ -1304,27 +1400,43 @@ function PageContent() {
                 {/* Fix Instructions (super/foreman only) */}
                 {(isSuper || isForeman) && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <Label htmlFor="obs-fix" className="flex items-center gap-1.5">
                         <Wrench className="w-3.5 h-3.5" />
                         How to Fix
                       </Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1.5"
-                        disabled={formData.issue_type === "other" || generatingFix}
-                        onClick={handleGenerateFix}
-                      >
-                        {generatingFix ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-3 h-3" />
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          disabled={formData.issue_type === "other" || generatingFix}
+                          onClick={handleGenerateFix}
+                        >
+                          {generatingFix ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          {generatingFix ? "Generating..." : "AI Generate"}
+                        </Button>
+                        {fixSource && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1.5"
+                            disabled={formData.issue_type === "other" || generatingFix}
+                            onClick={handleRegenerateFix}
+                            title="Generate a fresh version with the AI (uses a paid request)"
+                          >
+                            <Sparkles className="w-3 h-3" /> Fresh
+                          </Button>
                         )}
-                        {generatingFix ? "Generating..." : "AI Generate"}
-                      </Button>
+                      </div>
                     </div>
+                    {fixSource && <AiSourceBadge source={fixSource} className="self-start" />}
                     <Textarea
                       id="obs-fix"
                       placeholder="Step-by-step instructions for the crew..."
@@ -1771,27 +1883,43 @@ function PageContent() {
 
                 {/* Fix Instructions */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <Label className="flex items-center gap-1.5">
                       <Wrench className="w-3.5 h-3.5" />
                       How to Fix
                     </Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5"
-                      disabled={editFormData.issue_type === "other" || generatingFixForObs}
-                      onClick={handleGenerateFixForEdit}
-                    >
-                      {generatingFixForObs ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3 h-3" />
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={editFormData.issue_type === "other" || generatingFixForObs}
+                        onClick={handleGenerateFixForEdit}
+                      >
+                        {generatingFixForObs ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        {generatingFixForObs ? "Generating..." : "AI Generate"}
+                      </Button>
+                      {fixEditSource && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          disabled={editFormData.issue_type === "other" || generatingFixForObs}
+                          onClick={handleRegenerateFixForEdit}
+                          title="Generate a fresh version with the AI (uses a paid request)"
+                        >
+                          <Sparkles className="w-3 h-3" /> Fresh
+                        </Button>
                       )}
-                      {generatingFixForObs ? "Generating..." : "AI Generate"}
-                    </Button>
+                    </div>
                   </div>
+                  {fixEditSource && <AiSourceBadge source={fixEditSource} className="self-start" />}
                   <Textarea
                     rows={5}
                     value={editFormData.fix_instructions}

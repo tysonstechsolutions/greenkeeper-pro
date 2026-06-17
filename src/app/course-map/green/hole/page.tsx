@@ -76,6 +76,8 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { directInsertRow } from "@/lib/supabase/rest";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
+import { useAiGenerate, type AiSource } from "@/lib/ai/use-ai-generate";
+import { AiSourceBadge } from "@/components/ai/ai-source-badge";
 import GreenDrawingCanvas, { computeCentroid } from "@/components/green-drawing-canvas";
 import TreatmentPlanView from "@/components/treatment-plan-view";
 import { todayLocal } from "@/lib/utils/date";
@@ -241,32 +243,70 @@ function PageContent() {
     if (file) handlePhotoCaptured(file);
   }, [handlePhotoCaptured]);
 
-  // ── AI Generate Fix Instructions ──
+  // ── AI learning library — reuse past green fix write-ups (free) before paying. ──
+  const { run: runGreenFixAi, regenerate: regenGreenFixAi, saveFinal: saveGreenFixAi } =
+    useAiGenerate("green_fix_instructions");
+  const [fixSource, setFixSource] = useState<AiSource | null>(null);
+  const [fixEditSource, setFixEditSource] = useState<AiSource | null>(null);
+
+  const greenFixCallApiCreate = useCallback(async () => {
+    const title = greenIssueTypeLabels[formData.issue_type] || formData.issue_type;
+    const data = await callApi<{ fix_instructions?: string }>("green-fix-instructions", {
+      method: "POST",
+      body: {
+        title,
+        issue_type: formData.issue_type,
+        priority: formData.priority,
+        description: formData.description || undefined,
+        hole_number: holeNumber,
+      },
+    });
+    return { text: data.fix_instructions ?? "", model: "claude-sonnet-4-6" };
+  }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
+
+  const greenFixCreateInput = useCallback(() => {
+    const title = greenIssueTypeLabels[formData.issue_type] || formData.issue_type;
+    return [title, formData.description.trim()].filter(Boolean).join(" | ");
+  }, [formData.issue_type, formData.description]);
+
+  // ── AI Generate Fix Instructions (library-first) ──
   const handleGenerateFix = useCallback(async () => {
     if (formData.issue_type === "other") return;
     setGeneratingFix(true);
-    const title = greenIssueTypeLabels[formData.issue_type] || formData.issue_type;
     try {
-      const data = await callApi<{ fix_instructions?: string }>("green-fix-instructions", {
-        method: "POST",
-        body: {
-          title,
-          issue_type: formData.issue_type,
-          priority: formData.priority,
-          description: formData.description || undefined,
-          hole_number: holeNumber,
-        },
+      const res = await runGreenFixAi({
+        input: greenFixCreateInput(),
+        inputMeta: { issue_type: formData.issue_type, priority: formData.priority },
+        callAi: greenFixCallApiCreate,
       });
-      if (data.fix_instructions) {
-        setFormData((p) => ({ ...p, fix_instructions: data.fix_instructions! }));
-      }
+      if (res.text) setFormData((p) => ({ ...p, fix_instructions: res.text }));
+      setFixSource(res.source);
     } catch (err) {
       console.error("Failed to generate fix instructions:", err);
       setFeedbackMsg({ type: "error", text: "Failed to generate fix instructions." });
     } finally {
       setGeneratingFix(false);
     }
-  }, [formData.issue_type, formData.priority, formData.description, holeNumber]);
+  }, [formData.issue_type, formData.priority, runGreenFixAi, greenFixCreateInput, greenFixCallApiCreate]);
+
+  const handleRegenerateFix = useCallback(async () => {
+    if (formData.issue_type === "other") return;
+    setGeneratingFix(true);
+    try {
+      const res = await regenGreenFixAi({
+        input: greenFixCreateInput(),
+        inputMeta: { issue_type: formData.issue_type, priority: formData.priority },
+        callAi: greenFixCallApiCreate,
+      });
+      if (res.text) setFormData((p) => ({ ...p, fix_instructions: res.text }));
+      setFixSource(res.source);
+    } catch (err) {
+      console.error("Failed to regenerate fix:", err);
+      setFeedbackMsg({ type: "error", text: "Failed to generate fix instructions." });
+    } finally {
+      setGeneratingFix(false);
+    }
+  }, [formData.issue_type, formData.priority, regenGreenFixAi, greenFixCreateInput, greenFixCallApiCreate]);
 
   /**
    * Use the phone's GPS to drop a starting area at the user's current
@@ -382,6 +422,16 @@ function PageContent() {
     });
 
     if (result) {
+      // Teach the library the final fix text the user kept.
+      const finalFix = formData.fix_instructions.trim();
+      if (finalFix) {
+        const fixTitle = greenIssueTypeLabels[formData.issue_type] || formData.issue_type;
+        void saveGreenFixAi({
+          input: [fixTitle, formData.description.trim()].filter(Boolean).join(" | "),
+          inputMeta: { issue_type: formData.issue_type, priority: formData.priority },
+          text: finalFix,
+        });
+      }
       setShowForm(false);
       setDrawnPath(null);
       setDiagnosisResult(null);
@@ -394,7 +444,7 @@ function PageContent() {
       setFeedbackMsg({ type: "error", text: "Failed to save observation. Please try again." });
     }
     setSubmitting(false);
-  }, [drawnPath, formData, photoFile, holeNumber, uploadPhoto, createObservation, diagnosisResult]);
+  }, [drawnPath, formData, photoFile, holeNumber, uploadPhoto, createObservation, diagnosisResult, saveGreenFixAi]);
 
   // ── Edit saved observation ──
   const handleStartEdit = useCallback((obs: GreenObservation) => {
@@ -455,38 +505,83 @@ function PageContent() {
     };
     const result = await updateObservation(selectedObs.id, updates);
     if (result) {
+      // Teach the library the final fix text the user kept.
+      const finalFix = editFormData.fix_instructions.trim();
+      if (finalFix) {
+        const fixTitle = greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type;
+        void saveGreenFixAi({
+          input: [fixTitle, editFormData.description.trim()].filter(Boolean).join(" | "),
+          inputMeta: { issue_type: editFormData.issue_type, priority: editFormData.priority },
+          text: finalFix,
+        });
+      }
       setSelectedObs({ ...selectedObs, ...updates });
       setEditingObs(false);
       setFeedbackMsg({ type: "success", text: "Observation updated." });
     } else {
       setFeedbackMsg({ type: "error", text: "Failed to update observation." });
     }
-  }, [selectedObs, editFormData, updateObservation]);
+  }, [selectedObs, editFormData, updateObservation, saveGreenFixAi]);
+
+  const greenFixCallApiEdit = useCallback(async () => {
+    const title = greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type;
+    const data = await callApi<{ fix_instructions?: string }>("green-fix-instructions", {
+      method: "POST",
+      body: {
+        title,
+        issue_type: editFormData.issue_type,
+        priority: editFormData.priority,
+        description: editFormData.description || undefined,
+        hole_number: holeNumber,
+      },
+    });
+    return { text: data.fix_instructions ?? "", model: "claude-sonnet-4-6" };
+  }, [editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber]);
+
+  const greenFixEditInput = useCallback(() => {
+    const title = greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type;
+    return [title, editFormData.description.trim()].filter(Boolean).join(" | ");
+  }, [editFormData.issue_type, editFormData.description]);
 
   const handleGenerateFixForEdit = useCallback(async () => {
     setGeneratingFixForObs(true);
-    const title = greenIssueTypeLabels[editFormData.issue_type as GreenIssueType] || editFormData.issue_type;
     try {
-      const data = await callApi<{ fix_instructions?: string }>("green-fix-instructions", {
-        method: "POST",
-        body: {
-          title,
-          issue_type: editFormData.issue_type,
-          priority: editFormData.priority,
-          description: editFormData.description || undefined,
-          hole_number: holeNumber,
-        },
+      const res = await runGreenFixAi({
+        input: greenFixEditInput(),
+        inputMeta: { issue_type: editFormData.issue_type, priority: editFormData.priority },
+        callAi: greenFixCallApiEdit,
       });
-      if (data.fix_instructions) {
-        setEditFormData((p) => ({ ...p, fix_instructions: data.fix_instructions! }));
-        triggerAutoSave({ fix_instructions: data.fix_instructions });
+      if (res.text) {
+        setEditFormData((p) => ({ ...p, fix_instructions: res.text }));
+        triggerAutoSave({ fix_instructions: res.text });
       }
+      setFixEditSource(res.source);
     } catch (err) {
       console.error("Failed to generate fix:", err);
     } finally {
       setGeneratingFixForObs(false);
     }
-  }, [editFormData.issue_type, editFormData.priority, editFormData.description, holeNumber, triggerAutoSave]);
+  }, [editFormData.issue_type, editFormData.priority, runGreenFixAi, greenFixEditInput, greenFixCallApiEdit, triggerAutoSave]);
+
+  const handleRegenerateFixForEdit = useCallback(async () => {
+    setGeneratingFixForObs(true);
+    try {
+      const res = await regenGreenFixAi({
+        input: greenFixEditInput(),
+        inputMeta: { issue_type: editFormData.issue_type, priority: editFormData.priority },
+        callAi: greenFixCallApiEdit,
+      });
+      if (res.text) {
+        setEditFormData((p) => ({ ...p, fix_instructions: res.text }));
+        triggerAutoSave({ fix_instructions: res.text });
+      }
+      setFixEditSource(res.source);
+    } catch (err) {
+      console.error("Failed to regenerate fix:", err);
+    } finally {
+      setGeneratingFixForObs(false);
+    }
+  }, [editFormData.issue_type, editFormData.priority, regenGreenFixAi, greenFixEditInput, greenFixCallApiEdit, triggerAutoSave]);
 
   // ── Create Task from Observation (direct REST so the insert can't
   // wedge on a stalled supabase-js auth wrapper) ──
@@ -1118,27 +1213,43 @@ function PageContent() {
                 {/* Fix Instructions (super/foreman only) */}
                 {(isSuper || isForeman) && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <Label htmlFor="obs-fix" className="flex items-center gap-1.5">
                         <Wrench className="w-3.5 h-3.5" />
                         How to Fix
                       </Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1.5"
-                        disabled={formData.issue_type === "other" || generatingFix}
-                        onClick={handleGenerateFix}
-                      >
-                        {generatingFix ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-3 h-3" />
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          disabled={formData.issue_type === "other" || generatingFix}
+                          onClick={handleGenerateFix}
+                        >
+                          {generatingFix ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3 h-3" />
+                          )}
+                          {generatingFix ? "Generating..." : "AI Generate"}
+                        </Button>
+                        {fixSource && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1.5"
+                            disabled={formData.issue_type === "other" || generatingFix}
+                            onClick={handleRegenerateFix}
+                            title="Generate a fresh version with the AI (uses a paid request)"
+                          >
+                            <Sparkles className="w-3 h-3" /> Fresh
+                          </Button>
                         )}
-                        {generatingFix ? "Generating..." : "AI Generate"}
-                      </Button>
+                      </div>
                     </div>
+                    {fixSource && <AiSourceBadge source={fixSource} className="self-start" />}
                     <Textarea
                       id="obs-fix"
                       placeholder="Step-by-step instructions for the crew..."
@@ -1577,27 +1688,43 @@ function PageContent() {
 
                 {/* Fix Instructions */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <Label className="flex items-center gap-1.5">
                       <Wrench className="w-3.5 h-3.5" />
                       How to Fix
                     </Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5"
-                      disabled={editFormData.issue_type === "other" || generatingFixForObs}
-                      onClick={handleGenerateFixForEdit}
-                    >
-                      {generatingFixForObs ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3 h-3" />
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        disabled={editFormData.issue_type === "other" || generatingFixForObs}
+                        onClick={handleGenerateFixForEdit}
+                      >
+                        {generatingFixForObs ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        {generatingFixForObs ? "Generating..." : "AI Generate"}
+                      </Button>
+                      {fixEditSource && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          disabled={editFormData.issue_type === "other" || generatingFixForObs}
+                          onClick={handleRegenerateFixForEdit}
+                          title="Generate a fresh version with the AI (uses a paid request)"
+                        >
+                          <Sparkles className="w-3 h-3" /> Fresh
+                        </Button>
                       )}
-                      {generatingFixForObs ? "Generating..." : "AI Generate"}
-                    </Button>
+                    </div>
                   </div>
+                  {fixEditSource && <AiSourceBadge source={fixEditSource} className="self-start" />}
                   <Textarea
                     rows={5}
                     value={editFormData.fix_instructions}

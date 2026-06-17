@@ -817,6 +817,11 @@ export default function StaffPage() {
                         Admin Actions
                       </h3>
                       <div className="space-y-2">
+                        <Link href={`/staff/profile?id=${selectedStaff.id}`}>
+                          <Button size="sm" className="w-full bg-[#1B4332] hover:bg-[#2D6A4F]">
+                            Full Profile &amp; Records
+                          </Button>
+                        </Link>
                         <Link href={`/settings/staff/view?id=${selectedStaff.id}`}>
                           <Button variant="outline" size="sm" className="w-full">
                             Edit Profile

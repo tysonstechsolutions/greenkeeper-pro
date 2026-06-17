@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Leaf,
   Briefcase,
+  Landmark,
   HelpCircle,
   FileText,
   Smartphone,
@@ -154,11 +155,11 @@ export default function SettingsPage() {
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
           App view
         </h2>
-        <div className="bg-card rounded-xl border border-border p-2 flex gap-2">
+        <div className="bg-card rounded-xl border border-border p-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <button
             onClick={() => setView("super")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
+              "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
               view === "super"
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-muted/50",
@@ -170,7 +171,7 @@ export default function SettingsPage() {
           <button
             onClick={() => setView("gm")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
+              "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
               view === "gm"
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-muted/50",
@@ -178,6 +179,18 @@ export default function SettingsPage() {
           >
             <Briefcase className="w-4 h-4" />
             General Manager
+          </button>
+          <button
+            onClick={() => setView("bdh")}
+            className={cn(
+              "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
+              view === "bdh"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted/50",
+            )}
+          >
+            <Landmark className="w-4 h-4" />
+            Business Division Head
           </button>
         </div>
         <p className="text-xs text-muted-foreground mt-2 px-1">

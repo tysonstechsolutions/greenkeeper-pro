@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { callApi } from "@/lib/api/client";
+import { useAiGenerate, type AiSource } from "@/lib/ai/use-ai-generate";
 import {
   generateWorkOrderBlob,
   type WorkOrderData,
@@ -31,6 +32,7 @@ import { todayCentralMmDdYyyy } from "@/lib/utils/date";
 import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
 import { directInsertRow } from "@/lib/supabase/rest";
+import { createClubhouseIssueForWO } from "@/lib/work-orders/clubhouse-sync";
 import { PR_COST_CENTERS } from "@/lib/pr-accounting-codes";
 
 // ── Fixed SECTION 2 values ──────────────────────────────────────────────────────
@@ -51,6 +53,18 @@ const WO_POC = {
 } as const;
 
 const MAX_PHOTOS = 10;
+
+// Official SECTION 2 work-type options (the AI picks one; the user can change it).
+const WORK_TYPE_OPTIONS: string[] = [
+  "Emergency (Life/Safety)",
+  "Fire Deficiency",
+  "IH Deficiency",
+  "NAVOSH Deficiency",
+  "Revenue Impact",
+  "Routine",
+  "Safety",
+  "Urgent (Impact to Mission)",
+];
 
 // ── AI content generation (the ai-assistant accepts the "MWR coordinator"
 // framing — do NOT switch it to an outside persona, which it refuses). ──────────
@@ -119,6 +133,17 @@ export function NewWorkOrderForm({ onCreated }: Props) {
   const [lastData, setLastData] = useState<WorkOrderData | null>(null);
   const [lastFilename, setLastFilename] = useState<string | null>(null);
 
+  // AI learning library: reuse a past write-up for the same request (free)
+  // before paying for a new one; the user can regenerate or edit either way.
+  const ai = useAiGenerate("work_order");
+  const [preview, setPreview] = useState<{
+    desc: string;
+    workType: string;
+    source: AiSource;
+    degraded: boolean;
+    servedDesc: string;
+  } | null>(null);
+
   useEffect(() => {
     isNative().then(setOnNative);
   }, []);
@@ -163,15 +188,87 @@ export function NewWorkOrderForm({ onCreated }: Props) {
     facility.trim().length > 0 &&
     programAreaRoom.trim().length > 0;
 
+  const runArgs = () => ({
+    input: description,
+    inputMeta: { facility, programArea: programAreaRoom },
+    callAi: async () => {
+      const r = await generateWorkOrderContent(description, facility, programAreaRoom);
+      return {
+        text: r.formattedDescription,
+        meta: { workType: r.workType },
+        model: "claude-sonnet-4-6",
+      };
+    },
+  });
+
+  const showPreview = (res: {
+    text: string;
+    meta: Record<string, unknown>;
+    source: AiSource;
+    degraded: boolean;
+  }) => {
+    const wt =
+      typeof res.meta.workType === "string" && res.meta.workType.trim()
+        ? res.meta.workType.trim()
+        : "Routine";
+    setPreview({
+      desc: res.text,
+      workType: wt,
+      source: res.source,
+      degraded: res.degraded,
+      servedDesc: res.text,
+    });
+  };
+
+  // Step 1 — produce the write-up (library-first; only pays the AI on a miss).
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
     try {
-      const { formattedDescription, workType } = await generateWorkOrderContent(
-        description,
-        facility,
-        programAreaRoom,
+      showPreview(await ai.run(runArgs()));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to generate work order. Please try again.",
       );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // "I don't like it" — force a fresh paid AI version.
+  const handleRegenerate = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      showPreview(await ai.regenerate(runArgs()));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "The AI couldn't generate a new version. Please try again.",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Step 2 — commit the (possibly edited) write-up: learn it, save the WO, make the PDF.
+  const handleConfirmSave = async () => {
+    if (!preview) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const formattedDescription = preview.desc.trim() || description;
+      const workType = preview.workType.trim() || "Routine";
+
+      // Teach the library the final text we actually used.
+      await ai.saveFinal({
+        input: description,
+        inputMeta: { facility, programArea: programAreaRoom },
+        text: formattedDescription,
+        meta: { workType },
+        servedText: preview.servedDesc,
+      });
 
       const photoDataUrls = photos.map((p) => p.dataUrl);
       const enclosureCount = photos.length > 0 ? String(photos.length) : "0";
@@ -214,6 +311,15 @@ export function NewWorkOrderForm({ onCreated }: Props) {
         "work-orders.create",
       );
 
+      // Mirror this work order onto the clubhouse/facilities board (best-effort).
+      await createClubhouseIssueForWO({
+        id: row.id,
+        description_of_work: formattedDescription,
+        work_type: workType,
+        facility_bldg: facility,
+        program_area_room: programAreaRoom,
+      });
+
       const filename = workOrderPdfFilename(row.wo_sequence_number);
       setLastFilename(filename);
 
@@ -228,7 +334,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
       setDone(true);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to generate work order. Please try again.",
+        err instanceof Error ? err.message : "Failed to save work order. Please try again.",
       );
     } finally {
       setGenerating(false);
@@ -258,6 +364,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
     setProgramAreaRoom("");
     setCostCenter("");
     setPhotos([]);
+    setPreview(null);
     setDone(false);
     setError(null);
     setLastData(null);
@@ -462,21 +569,114 @@ export function NewWorkOrderForm({ onCreated }: Props) {
             </div>
           )}
 
-          <Button
-            onClick={handleGenerate}
-            disabled={!canGenerate || generating}
-            className="w-full gap-2 bg-[#1B4332] hover:bg-[#2D6A4F]"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Generating…
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" /> Generate Work Order
-              </>
-            )}
-          </Button>
+          {!preview ? (
+            <Button
+              onClick={handleGenerate}
+              disabled={!canGenerate || generating}
+              className="w-full gap-2 bg-[#1B4332] hover:bg-[#2D6A4F]"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Generating…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" /> Generate Work Order
+                </>
+              )}
+            </Button>
+          ) : (
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">Review the work order</p>
+                {preview.degraded ? (
+                  <span className="inline-flex items-center text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+                    Offline draft — review carefully
+                  </span>
+                ) : preview.source === "library" ? (
+                  <span className="inline-flex items-center text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-800">
+                    Reused from your library · free
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                    Generated with AI
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="wo-preview-desc">Description of work</Label>
+                <Textarea
+                  id="wo-preview-desc"
+                  value={preview.desc}
+                  onChange={(e) =>
+                    setPreview((p) => (p ? { ...p, desc: e.target.value } : p))
+                  }
+                  rows={8}
+                  className="resize-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="wo-preview-type">Work Type</Label>
+                <select
+                  id="wo-preview-type"
+                  value={preview.workType}
+                  onChange={(e) =>
+                    setPreview((p) => (p ? { ...p, workType: e.target.value } : p))
+                  }
+                  className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
+                >
+                  {(WORK_TYPE_OPTIONS.includes(preview.workType)
+                    ? WORK_TYPE_OPTIONS
+                    : [preview.workType, ...WORK_TYPE_OPTIONS]
+                  ).map((wt) => (
+                    <option key={wt} value={wt}>
+                      {wt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleRegenerate}
+                  disabled={generating}
+                  className="gap-2"
+                >
+                  {generating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  Regenerate with AI
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmSave}
+                  disabled={generating}
+                  className="flex-1 gap-2 bg-[#1B4332] hover:bg-[#2D6A4F]"
+                >
+                  {generating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Save &amp; Download PDF
+                </Button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
+                disabled={generating}
+              >
+                ← Edit the request
+              </button>
+            </div>
+          )}
         </CardContent>
       )}
     </Card>

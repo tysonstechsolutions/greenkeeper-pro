@@ -24,6 +24,7 @@ import {
   directPatchRow,
   directSelectList,
 } from "@/lib/supabase/rest";
+import { syncClubhouseIssueForWO } from "@/lib/work-orders/clubhouse-sync";
 import { workOrderDisplayName } from "@/lib/reports/wo-naming";
 import { NewWorkOrderForm } from "./new-work-order-form";
 
@@ -320,6 +321,8 @@ export default function WorkOrdersListPage() {
           { status: next },
           "work-orders.advanceStatus",
         );
+        // Mirror the status onto any linked clubhouse/facilities issue.
+        await syncClubhouseIssueForWO(id, next);
         setOrders((prev) =>
           prev.map((o) => (o.id === id ? { ...o, status: next } : o)),
         );

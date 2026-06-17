@@ -7,6 +7,8 @@ import {
   Wallet,
   FileText,
   BarChart3,
+  ClipboardCheck,
+  Landmark,
   type LucideIcon,
 } from "lucide-react";
 import type { AppView } from "@/lib/providers/view-provider";
@@ -35,6 +37,13 @@ export const NAV_ITEMS: Record<AppView, NavItem[]> = {
     { href: "/budget", label: "Budget", icon: Wallet },
     { href: "/purchase-requests", label: "PRs", icon: FileText },
     { href: "/reports", label: "Reports", icon: BarChart3 },
+    { href: "/more", label: "More", icon: MoreHorizontal },
+  ],
+  bdh: [
+    { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck },
+    { href: "/budget", label: "Budget", icon: Wallet },
+    { href: "/reports", label: "Reports", icon: BarChart3 },
+    { href: "/revenue", label: "Revenue", icon: Landmark },
     { href: "/more", label: "More", icon: MoreHorizontal },
   ],
 };

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Check, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react';
+import { Download, Plus, Package, AlertTriangle, X, Search, Loader2, Check, ChevronDown, ChevronRight as ChevronRightIcon, Trash2 } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -280,7 +280,7 @@ interface FormData {
 }
 
 export default function OrderListPage() {
-  const { items, loading, stats, fetchItems, createItem, updateItem, deleteItem } = useOrderItems();
+  const { items, loading, stats, fetchItems, createItem, updateItem, deleteItem, clearAll } = useOrderItems();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | typeof CATEGORIES[number]>('all');
@@ -439,6 +439,23 @@ export default function OrderListPage() {
     }
   };
 
+  const handleClearAll = async () => {
+    const manualCount = items.filter((i) => i.source === 'order_item').length;
+    if (manualCount === 0) {
+      showToast('error', 'Nothing to clear.');
+      return;
+    }
+    if (!confirm(`Remove all ${manualCount} item(s) from the order list? This cannot be undone. (Equipment parts are managed on the equipment page and stay.)`)) {
+      return;
+    }
+    try {
+      const ok = await clearAll();
+      showToast(ok ? 'success' : 'error', ok ? 'Order list cleared.' : 'Failed to clear the list.');
+    } catch {
+      showToast('error', 'Failed to clear the list.');
+    }
+  };
+
   const handleDownloadReport = async () => {
     setIsDownloading(true);
     try {
@@ -517,6 +534,18 @@ export default function OrderListPage() {
                 </>
               )}
             </Button>
+
+            {items.some((i) => i.source === 'order_item') && (
+              <Button
+                onClick={handleClearAll}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 text-red-600 border-red-300 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Clear all</span>
+              </Button>
+            )}
 
             <Button
               onClick={() => setIsSheetOpen(true)}

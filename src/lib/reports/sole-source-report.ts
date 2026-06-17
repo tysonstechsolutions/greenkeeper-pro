@@ -32,6 +32,11 @@ const AUTOFIT_FIELDS: ReadonlySet<string> = new Set([
   "3 Description of the item or service required",
   "etc",
   "the results of any supporting market research as appropriate",
+  // Page-2 justification boxes also ship auto-size; without auto-fit the text
+  // renders oversized and bleeds out of the box. Fit them too.
+  "equipment", // Section 6 — compatibility
+  "equipment_2", // Section 8 — direct replacement
+  "If yes list the proprietary data", // Section 7
 ]);
 
 // ── Types ─────────────────────────────────────────────────────────────────────

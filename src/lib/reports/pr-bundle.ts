@@ -71,26 +71,38 @@ export async function buildPrBundle(
 
   const supabase = createClient();
 
-  // ── 2. Quote (if attached) ────────────────────────────────────────────
-  if (pr.quote_storage_path) {
-    try {
-      const { data, error } = await supabase.storage
-        .from("vendor-files")
-        .download(pr.quote_storage_path);
-      if (error || !data) throw error || new Error("No data");
-      const ext =
-        (pr.quote_filename || "").split(".").pop()?.toLowerCase() ||
-        guessExtFromMime(data.type) ||
-        "pdf";
-      zip.file(quoteFilename(pr, ext, now), data);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      warnings.push(`Couldn't fetch the quote file: ${msg}`);
-    }
-  } else {
+  // ── 2. Quote(s) (if attached) ─────────────────────────────────────────
+  // Prefer the multi-quote array; fall back to the legacy single path.
+  const quotePaths: { path: string; filename: string }[] =
+    Array.isArray(pr.quote_paths) && pr.quote_paths.length > 0
+      ? pr.quote_paths
+      : pr.quote_storage_path
+        ? [{ path: pr.quote_storage_path, filename: pr.quote_filename || "" }]
+        : [];
+  if (quotePaths.length === 0) {
     warnings.push(
       "No quote attached — upload one on the PR edit screen so it's included next time.",
     );
+  } else {
+    for (let i = 0; i < quotePaths.length; i++) {
+      const q = quotePaths[i];
+      try {
+        const { data, error } = await supabase.storage
+          .from("vendor-files")
+          .download(q.path);
+        if (error || !data) throw error || new Error("No data");
+        const ext =
+          (q.filename || "").split(".").pop()?.toLowerCase() ||
+          guessExtFromMime(data.type) ||
+          "pdf";
+        const base = quoteFilename(pr, ext, now);
+        const name = quotePaths.length > 1 ? base.replace(/(\.[^.]+)$/, ` ${i + 1}$1`) : base;
+        zip.file(name, data);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(`Couldn't fetch quote ${i + 1}: ${msg}`);
+      }
+    }
   }
 
   // ── 3. Section 889 (if vendor has one) ────────────────────────────────

@@ -15,6 +15,7 @@ import {
   RotateCcw,
   CheckSquare,
   Square,
+  Sparkles,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,8 @@ import {
   type OnboardingRole,
 } from "@/lib/onboarding/default-documents";
 import { buildPacketPdf } from "@/lib/onboarding/build-packet-pdf";
+import { callApi } from "@/lib/api/client";
+import { saveCreatedDocument } from "@/lib/documents/saved-documents";
 
 type RoleFilter = "everyone" | OnboardingRole;
 
@@ -101,6 +104,11 @@ export default function OnboardingPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiApplied, setAiApplied] = useState(false);
+  const [aiUndo, setAiUndo] = useState<string | null>(null);
 
   const matchesRole = (d: OnboardingDoc, f: RoleFilter) =>
     f === "everyone" ||
@@ -139,7 +147,7 @@ export default function OnboardingPage() {
     setSelected((prev) => new Set([...prev, ...visible.map((d) => d.id)]));
   const clearSel = () => setSelected(new Set());
 
-  const download = () => {
+  const download = async () => {
     const chosen = docs
       .filter((d) => selected.has(d.id))
       .sort((a, b) => a.sort_order - b.sort_order);
@@ -168,13 +176,36 @@ export default function OnboardingPage() {
       roleFilter === "everyone"
         ? "All-Staff"
         : ROLE_LABELS[roleFilter].replace(/[^a-z0-9]+/gi, "-");
-    pdf.save(`VMGC-${part}-Packet.pdf`);
+    const filename = `VMGC-${part}-Packet.pdf`;
+    pdf.save(filename);
+    // Save a copy to the Documents library so it can be retrieved later.
+    try {
+      await saveCreatedDocument({
+        docType: "onboarding_packet",
+        title: `Onboarding packet — ${roleLabel || "All staff"}`,
+        blob: pdf.output("blob"),
+        filename,
+        meta: { role: roleFilter, count: chosen.length },
+      });
+    } catch {
+      /* best-effort */
+    }
   };
 
-  const openNew = () =>
+  const resetAi = () => {
+    setAiInstruction("");
+    setAiError(null);
+    setAiApplied(false);
+    setAiUndo(null);
+  };
+  const openNew = () => {
+    resetAi();
     setDraft({ title: "", category: "sop", roles: ["all"], body: "# New document\n\n" });
-  const openEdit = (d: OnboardingDoc) =>
+  };
+  const openEdit = (d: OnboardingDoc) => {
+    resetAi();
     setDraft({ id: d.id, title: d.title, category: d.category, roles: [...d.roles], body: d.body });
+  };
 
   const saveDraft = async () => {
     if (!draft || !draft.title.trim()) return;
@@ -201,6 +232,56 @@ export default function OnboardingPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const applyAiEdit = async () => {
+    if (!draft || !aiInstruction.trim()) return;
+    const before = draft.body;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const prompt = `I maintain the written SOP and training documents for Veterans Memorial Golf Course. Update the document below to reflect my requested change, and return the COMPLETE updated document.
+
+Rules:
+- Keep the same Markdown structure and formatting (#/## headings, "- " bullets, "1." numbered steps, **bold**, tables).
+- Apply my change accurately and adjust any related wording so the document stays consistent (e.g. remove steps that no longer apply, update related sections).
+- Leave everything my change doesn't affect exactly as it is.
+- Output ONLY the updated document text — no preamble, no commentary, no code fences.
+
+DOCUMENT TITLE: ${draft.title || "(untitled)"}
+
+MY REQUESTED CHANGE:
+${aiInstruction.trim()}
+
+CURRENT DOCUMENT:
+${draft.body}`;
+      const reply = await callApi<{ reply?: string; error?: string }>("ai-assistant", {
+        method: "POST",
+        body: { message: prompt, history: [] },
+      });
+      let text = (reply?.reply ?? "").trim();
+      const fence = text.match(/^```(?:markdown)?\s*([\s\S]*?)\s*```$/);
+      if (fence) text = fence[1].trim();
+      if (!text) {
+        setAiError("The AI didn't return anything. Try rewording your request.");
+        return;
+      }
+      setDraft((prev) => (prev ? { ...prev, body: text } : prev));
+      setAiUndo(before);
+      setAiInstruction("");
+      setAiApplied(true);
+    } catch {
+      setAiError("Couldn't reach the AI. You can still edit the document by hand above.");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const undoAiEdit = () => {
+    if (aiUndo === null) return;
+    setDraft((prev) => (prev ? { ...prev, body: aiUndo } : prev));
+    setAiUndo(null);
+    setAiApplied(false);
   };
 
   const removeDraft = async () => {
@@ -383,6 +464,9 @@ export default function OnboardingPage() {
         </div>
       )}
 
+      {/* Spacer so the sticky download bar can't hide the last documents */}
+      {selected.size > 0 && <div aria-hidden className="h-24" />}
+
       {/* Sticky download bar */}
       {selected.size > 0 && (
         <div className="fixed inset-x-0 z-40 bottom-[calc(72px_+_env(safe-area-inset-bottom,0px))] md:bottom-0 bg-background/95 backdrop-blur-md border-t border-border">
@@ -462,7 +546,7 @@ export default function OnboardingPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="overflow-y-auto px-4 py-4 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Title</label>
                 <input
@@ -530,6 +614,49 @@ export default function OnboardingPage() {
                   rows={16}
                   className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono leading-relaxed"
                 />
+              </div>
+            </div>
+            {/* AI edit box — pinned below the scrolling document so you can read
+                the SOP and still type a change request at any time. */}
+            <div className="shrink-0 border-t border-border bg-primary/5 px-4 py-3 space-y-2">
+              <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                Ask AI to change this document
+              </label>
+              <textarea
+                value={aiInstruction}
+                onChange={(e) => {
+                  setAiInstruction(e.target.value);
+                  if (aiApplied) setAiApplied(false);
+                }}
+                rows={2}
+                placeholder="e.g. We pressure wash the carts after every round and wipe them dry — we don't clean them again at end of day."
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm resize-none"
+              />
+              {aiError && <p className="text-xs text-destructive">{aiError}</p>}
+              {aiApplied && !aiError && (
+                <p className="text-xs text-green-600">Updated — review the document above, then Save.</p>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                {aiUndo !== null ? (
+                  <button
+                    onClick={undoAiEdit}
+                    disabled={aiBusy}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground underline disabled:opacity-40"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Undo last AI change
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <button
+                  onClick={applyAiEdit}
+                  disabled={aiBusy || !aiInstruction.trim()}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-40"
+                >
+                  {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {aiBusy ? "Updating…" : "Update with AI"}
+                </button>
               </div>
             </div>
             <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border shrink-0">
