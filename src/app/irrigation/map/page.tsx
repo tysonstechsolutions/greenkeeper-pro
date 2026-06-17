@@ -3982,6 +3982,7 @@ function SatelliteView({
                   onJumpToPin={onJumpToPin}
                   onSetStationStatus={onSetStationStatus}
                 />
+                <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-muted-foreground">
@@ -4060,6 +4061,7 @@ function SatelliteView({
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </Card>

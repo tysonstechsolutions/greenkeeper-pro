@@ -240,7 +240,7 @@ export default function WateringSchedulePage() {
         </div>
 
         {/* Window + cap */}
-        <div className="grid grid-cols-3 gap-3 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
           <label className="text-xs text-muted-foreground">
             Start
             <input

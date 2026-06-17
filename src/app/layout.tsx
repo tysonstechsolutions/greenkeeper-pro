@@ -93,15 +93,17 @@ export default function RootLayout({
               3. This env() padding catches the gap if the plugin call
                  hasn't run yet (first paint) or is ignored on the device.
 
-            Floor is generous (80px) because devices with cutouts/punch
-            holes can report a 48-56dp safe area, and Pixel/Samsung hidden
-            status bars (call-active green pill) extend further. Devices
-            that report a real env(safe-area-inset-top) get the larger of
-            the two values, so this only adds padding on devices that
-            don't report insets — never visible on iOS or modern Android
-            Chrome where insets ARE reported.
+            The 80px floor is the FIRST-PAINT DEFAULT only. It protects the
+            header before JS runs (when we can't yet tell native from web).
+            Once CapacitorInit determines the platform it lowers
+            --min-safe-top to 0px, collapsing this to the real
+            env(safe-area-inset-top): 0 on web/PWA and on overlay:false
+            Android (no dead gap), or the true cutout height if edge-to-edge
+            ever slips through. If StatusBar setup throws, the var is left at
+            80px so the protective floor remains. This removes the ~80px of
+            empty space that used to sit above the header on every page.
           */
-          paddingTop: "max(env(safe-area-inset-top, 0px), 80px)",
+          paddingTop: "max(env(safe-area-inset-top, 0px), var(--min-safe-top, 80px))",
           /* Bottom padding handled by bottom-nav safe-area-bottom class */
           paddingLeft: "env(safe-area-inset-left)",
           paddingRight: "env(safe-area-inset-right)",
