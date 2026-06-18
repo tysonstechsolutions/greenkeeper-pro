@@ -22,6 +22,7 @@ import {
   section889Filename,
   sowFilename,
 } from "@/lib/reports/pr-naming";
+import { mergeQuotesToPdf, type QuoteSource } from "@/lib/reports/quotes-to-pdf";
 import type { PurchaseRequest, VendorWith889 } from "@/types/database";
 
 interface BundleResult {
@@ -84,6 +85,9 @@ export async function buildPrBundle(
       "No quote attached — upload one on the PR edit screen so it's included next time.",
     );
   } else {
+    // Download every quote first, then merge them into ONE PDF. Photos/PNGs
+    // become PDF pages; existing PDF quotes are copied in as-is.
+    const fetched: { source: QuoteSource; index: number }[] = [];
     for (let i = 0; i < quotePaths.length; i++) {
       const q = quotePaths[i];
       try {
@@ -91,16 +95,45 @@ export async function buildPrBundle(
           .from("vendor-files")
           .download(q.path);
         if (error || !data) throw error || new Error("No data");
-        const ext =
-          (q.filename || "").split(".").pop()?.toLowerCase() ||
-          guessExtFromMime(data.type) ||
-          "pdf";
-        const base = quoteFilename(pr, ext, now);
-        const name = quotePaths.length > 1 ? base.replace(/(\.[^.]+)$/, ` ${i + 1}$1`) : base;
-        zip.file(name, data);
+        const bytes = new Uint8Array(await data.arrayBuffer());
+        fetched.push({
+          source: { bytes, filename: q.filename || "", mime: data.type },
+          index: i + 1,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         warnings.push(`Couldn't fetch quote ${i + 1}: ${msg}`);
+      }
+    }
+
+    if (fetched.length > 0) {
+      try {
+        const { pdfBytes, pageCount, failures } = await mergeQuotesToPdf(
+          fetched.map((f) => f.source),
+        );
+        if (pageCount > 0) {
+          zip.file(quoteFilename(pr, "pdf", now), pdfBytes);
+        }
+        // Anything that wouldn't convert gets attached in its original
+        // format so a submission never silently loses a quote.
+        for (const fail of failures) {
+          const orig = fetched.find((f) => f.source === fail.source);
+          const idx = orig ? orig.index : 0;
+          addRawQuote(zip, pr, fail.source, idx, now);
+          warnings.push(
+            `Quote ${idx} couldn't be converted to PDF (${fail.reason}) — added it in its original format instead.`,
+          );
+        }
+      } catch (err) {
+        // The whole merge step failed — fall back to the raw originals so the
+        // user still gets every quote, just unmerged.
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(
+          `Couldn't build the combined quote PDF (${msg}) — added the original quote files instead.`,
+        );
+        for (const f of fetched) {
+          addRawQuote(zip, pr, f.source, f.index, now, fetched.length > 1);
+        }
       }
     }
   }
@@ -172,6 +205,30 @@ export async function buildPrBundle(
     filename: prBundleZipFilename(pr, now),
     warnings,
   };
+}
+
+/**
+ * Attach a quote to the zip in its original (un-merged) format. Used only as
+ * a fallback when a quote can't be converted to PDF, so the file is never
+ * lost. `suffixAlways` appends the quote index to keep names unique.
+ */
+function addRawQuote(
+  zip: JSZip,
+  pr: PurchaseRequest,
+  source: QuoteSource,
+  index: number,
+  now: Date,
+  suffixAlways = true,
+): void {
+  const ext =
+    (source.filename || "").split(".").pop()?.toLowerCase() ||
+    guessExtFromMime(source.mime || "") ||
+    "bin";
+  const base = quoteFilename(pr, ext, now);
+  const name = suffixAlways
+    ? base.replace(/(\.[^.]+)$/, ` ${index}$1`)
+    : base;
+  zip.file(name, source.bytes);
 }
 
 function guessExtFromMime(mime: string): string | null {
