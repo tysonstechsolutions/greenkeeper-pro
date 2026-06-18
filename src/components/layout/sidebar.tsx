@@ -215,9 +215,10 @@ const gmApps: SidebarItem[] = [
   { href: "/report-issue", label: "Report Issue", icon: Flag },
 ];
 
-// Business Division Head view — PR audit + cross-business finances.
+// Business Division Head view — purchase requests, PR audit + cross-business finances.
 const bdhPinned: SidebarItem[] = [
   { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, pinned: true },
+  { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, pinned: true },
   { href: "/budget", label: "Budget", icon: Wallet, pinned: true },
   { href: "/reports", label: "Reports", icon: BarChart3, pinned: true },
 ];
