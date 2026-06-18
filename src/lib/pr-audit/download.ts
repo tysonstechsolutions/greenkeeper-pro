@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { directSelectRow } from "@/lib/supabase/rest";
 import type { PrAudit, PurchaseRequest } from "@/types/database";
 import { guessExt, prAuditFilename, prAuditBaseName } from "@/lib/pr-audit/filename";
+import { mergeQuotesToPdf } from "@/lib/reports/quotes-to-pdf";
 
 const STORAGE_BUCKET = "vendor-files";
 
@@ -224,6 +225,43 @@ function hasAttachments(audit: PrAudit): boolean {
 }
 
 /**
+ * The vendor quote for one audited PR as a single PDF — a photo/PNG quote is
+ * turned into a PDF page so the package sent up is a clean PDF (matching the
+ * requestor-side bundle). Falls back to the original file if it can't be
+ * converted, so a quote is never dropped. The 889 and PR are left as-is.
+ */
+async function quotePart(
+  audit: PrAudit,
+  base: string,
+): Promise<{ blob: Blob; name: string } | null> {
+  if (!audit.quote_path) return null;
+  let qb: Blob;
+  try {
+    qb = await fetchStored(audit.quote_path);
+  } catch {
+    return null; // missing quote — skip it
+  }
+  try {
+    const bytes = new Uint8Array(await qb.arrayBuffer());
+    const { pdfBytes, pageCount, failures } = await mergeQuotesToPdf([
+      { bytes, filename: audit.quote_filename || "", mime: qb.type },
+    ]);
+    if (pageCount > 0 && failures.length === 0) {
+      return {
+        blob: new Blob([pdfBytes as BlobPart], { type: "application/pdf" }),
+        name: `${base} - Quote.pdf`,
+      };
+    }
+  } catch {
+    /* couldn't convert — fall back to the original below */
+  }
+  return {
+    blob: qb,
+    name: `${base} - Quote.${guessExt(audit.quote_filename, qb.type)}`,
+  };
+}
+
+/**
  * Every file to send up for one PR: the PR (or summary), the vendor quote, and
  * the Section 889 — named off the PR so they stay grouped.
  */
@@ -234,14 +272,8 @@ async function bundlePartsForAudit(
   const parts: { blob: Blob; name: string }[] = [];
   const { blob, ext } = await blobForAudit(audit);
   parts.push({ blob, name: `${base} - PR.${ext}` });
-  if (audit.quote_path) {
-    try {
-      const qb = await fetchStored(audit.quote_path);
-      parts.push({ blob: qb, name: `${base} - Quote.${guessExt(audit.quote_filename, qb.type)}` });
-    } catch {
-      /* skip a missing quote */
-    }
-  }
+  const qp = await quotePart(audit, base);
+  if (qp) parts.push(qp);
   if (audit.section_889_path) {
     try {
       const sb = await fetchStored(audit.section_889_path);
