@@ -11,6 +11,7 @@ import {
   Sparkles,
   ClipboardList,
   AlertTriangle,
+  FileText,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,7 +25,12 @@ import { callApi } from "@/lib/api/client";
 import { useAiGenerate, type AiSource, type AiResult } from "@/lib/ai/use-ai-generate";
 import { AiSourceBadge } from "@/components/ai/ai-source-badge";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
-import { saveCreatedDocument } from "@/lib/documents/saved-documents";
+import {
+  saveCreatedDocument,
+  listCreatedDocuments,
+  createdDocUrl,
+  type CreatedDocument,
+} from "@/lib/documents/saved-documents";
 import {
   generateSoleSourceReport,
   type SoleSourceData,
@@ -69,6 +75,10 @@ interface SsForm {
   newPoc: string;
   newPhone: string;
   newEmail: string;
+  // Dealer/Rep address (saved vendor) — editable, auto-filled from the vendor
+  // record or, when that's blank, the vendor's most recent purchase request.
+  dealerAddress: string;
+  dealerCityStateZip: string;
   // Step 2 — AI sections (editable)
   description: string; // section 3
   characteristics: string; // section 4
@@ -100,6 +110,8 @@ function emptyForm(): SsForm {
     newPoc: "",
     newPhone: "",
     newEmail: "",
+    dealerAddress: "",
+    dealerCityStateZip: "",
     description: "",
     characteristics: "",
     marketResearch: "",
@@ -162,8 +174,8 @@ function resolveContractor(form: SsForm, vendors: Vendor[]): Contractor {
   }
   return {
     name: v.name ?? "",
-    address: v.address ?? "",
-    cityStateZip: vendorCityStateZip(v),
+    address: form.dealerAddress.trim() || v.address || "",
+    cityStateZip: form.dealerCityStateZip.trim() || vendorCityStateZip(v),
     poc: v.poc ?? "",
     phone: v.phone ?? "",
     email: v.email ?? "",
@@ -261,6 +273,7 @@ export default function SoleSourcePage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [history, setHistory] = useState<CreatedDocument[]>([]);
 
   // Load saved vendors (any business the user has on file).
   const loadVendors = useCallback(async () => {
@@ -281,6 +294,21 @@ export default function SoleSourcePage() {
     loadVendors();
   }, [loadVendors]);
 
+  // Past sole source forms (from the Documents store) so the user can find +
+  // re-download them right here, not just on the global /documents page.
+  const loadHistory = useCallback(async () => {
+    try {
+      const all = await listCreatedDocuments();
+      setHistory(all.filter((d) => d.doc_type === "sole_source"));
+    } catch {
+      // non-fatal — history just won't show
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
   // Auto-fill requestor name from profile.
   useEffect(() => {
     if (!profile) return;
@@ -291,6 +319,51 @@ export default function SoleSourcePage() {
 
   const set = <K extends keyof SsForm>(key: K, value: SsForm[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  // When a saved vendor is picked, auto-fill the dealer/rep address + city/state/
+  // zip. Vendor records often lack an address (it lives on past PRs), so fall
+  // back to the vendor's most recent purchase request — same place the PR pulls it.
+  const handleVendorChange = async (id: string) => {
+    setForm((prev) => ({ ...prev, vendorId: id, dealerAddress: "", dealerCityStateZip: "" }));
+    if (!id || id === NEW_BUSINESS) return;
+    const v = vendors.find((vv) => vv.id === id);
+    if (!v) return;
+    let addr = v.address || "";
+    let csz = vendorCityStateZip(v);
+    if (!addr || !csz) {
+      type PrRow = {
+        vendor1_address: string | null;
+        vendor1_line2: string | null;
+        vendor1_city_state_zip: string | null;
+      };
+      try {
+        let rows = await directSelectList<PrRow>("purchase_requests", {
+          columns: "vendor1_address,vendor1_line2,vendor1_city_state_zip,created_at",
+          filters: [`vendor_id=eq.${id}`],
+          orderBy: [{ column: "created_at", ascending: false }],
+          limit: 1,
+          label: "sole-source dealer prefill (by id)",
+        });
+        if (rows.length === 0 && v.name) {
+          rows = await directSelectList<PrRow>("purchase_requests", {
+            columns: "vendor1_address,vendor1_line2,vendor1_city_state_zip,created_at",
+            filters: [`vendor1_name=eq.${encodeURIComponent(v.name)}`],
+            orderBy: [{ column: "created_at", ascending: false }],
+            limit: 1,
+            label: "sole-source dealer prefill (by name)",
+          });
+        }
+        const pr = rows[0];
+        if (pr) {
+          if (!addr) addr = pr.vendor1_address || "";
+          if (!csz) csz = [pr.vendor1_line2, pr.vendor1_city_state_zip].filter(Boolean).join(", ");
+        }
+      } catch {
+        // best-effort — the user can still type the address
+      }
+    }
+    setForm((prev) => ({ ...prev, dealerAddress: addr, dealerCityStateZip: csz }));
+  };
 
   const selectedVendor =
     form.vendorId && form.vendorId !== NEW_BUSINESS
@@ -479,6 +552,7 @@ export default function SoleSourcePage() {
         meta: { vendor: c.name, estimatedCost: form.estimatedCost, date: form.date },
       });
       setDone(true);
+      loadHistory();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Couldn't generate the PDF. Please try again.",
@@ -610,7 +684,7 @@ export default function SoleSourcePage() {
                 <select
                   id="vendor"
                   value={form.vendorId}
-                  onChange={(e) => set("vendorId", e.target.value)}
+                  onChange={(e) => handleVendorChange(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
                 >
                   <option value="">Select a business…</option>
@@ -636,12 +710,24 @@ export default function SoleSourcePage() {
                       </span>
                     </div>
                   )}
-                  {selectedVendor.address && (
-                    <p className="text-muted-foreground">{selectedVendor.address}</p>
-                  )}
-                  {vendorCityStateZip(selectedVendor) && (
-                    <p className="text-muted-foreground">{vendorCityStateZip(selectedVendor)}</p>
-                  )}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dealerAddr" className="text-xs">Dealer / Rep Address</Label>
+                    <Input
+                      id="dealerAddr"
+                      placeholder="Street address"
+                      value={form.dealerAddress}
+                      onChange={(e) => set("dealerAddress", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dealerCsz" className="text-xs">City, State, Zip</Label>
+                    <Input
+                      id="dealerCsz"
+                      placeholder="City, ST 00000"
+                      value={form.dealerCityStateZip}
+                      onChange={(e) => set("dealerCityStateZip", e.target.value)}
+                    />
+                  </div>
                   {selectedVendor.poc && (
                     <p>
                       <span className="font-medium">POC:</span> {selectedVendor.poc}
@@ -757,6 +843,47 @@ export default function SoleSourcePage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Recent sole source forms (history) */}
+        {step === 1 && history.length > 0 && (
+          <div className="mt-4">
+            <h2 className="text-sm font-semibold text-muted-foreground mb-2">
+              Recent sole source forms
+            </h2>
+            <div className="space-y-2">
+              {history.slice(0, 8).map((d) => {
+                const url = createdDocUrl(d.storage_path);
+                return (
+                  <div
+                    key={d.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card"
+                  >
+                    <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{d.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(d.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {url && (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-medium text-primary hover:underline shrink-0"
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Every generated document is also kept under <span className="font-medium">Documents</span>.
+            </p>
+          </div>
         )}
 
         {/* ── STEP 2: Review ── */}
