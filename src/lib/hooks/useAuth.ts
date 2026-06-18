@@ -362,8 +362,29 @@ export function useAuthInternal(): UseAuthReturn {
     profileFetchedRef.current = false;
   };
 
-  // Role checks
-  const role = profile?.role as UserRole | undefined;
+  // Role checks. Roles are disabled for now (single shared account). When no
+  // profile row resolves — e.g. a fresh computer where the profile fetch is
+  // slow, blocked, or the row is missing — fall back to a permissive "super"
+  // profile so nobody is locked out of role-gated pages ("Access Restricted").
+  // A real profile (the shared account is "super") is used as-is.
+  const effectiveProfile: Profile =
+    profile ?? {
+      id: user?.id ?? "shared-account",
+      email: user?.email ?? "",
+      full_name: user?.email ?? "Team Member",
+      display_name: null,
+      role: "super",
+      phone: null,
+      avatar_url: null,
+      hire_date: null,
+      certifications: [],
+      emergency_contact: null,
+      user_preferences: null,
+      is_active: true,
+      created_at: new Date(0).toISOString(),
+      updated_at: new Date(0).toISOString(),
+    };
+  const role = effectiveProfile.role as UserRole | undefined;
   const isSuper = role === "super";
   const isAsstSuper = role === "asst_super";
   const isForeman = role === "foreman";
@@ -385,7 +406,7 @@ export function useAuthInternal(): UseAuthReturn {
   return {
     user,
     session,
-    profile,
+    profile: effectiveProfile,
     loading,
     error,
     signOut,
