@@ -20,9 +20,7 @@ import {
   FileSignature,
   ChevronDown,
   ChevronUp,
-  DollarSign,
   Clock,
-  TrendingUp,
   Building2,
   X,
   Undo2,
@@ -35,6 +33,7 @@ import {
   directSelectList,
 } from "@/lib/supabase/rest";
 import type { PurchaseRequest } from "@/types/database";
+import { PrStageTracker } from "@/components/features/purchase-requests/pr-stage-tracker";
 
 function formatDate(iso: string): string {
   const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
@@ -674,138 +673,135 @@ export default function PurchaseRequestsListPage() {
               return (
                 <li
                   key={pr.id}
-                  className="flex items-stretch gap-2 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-muted/30 transition-colors"
+                  className="rounded-xl border border-border bg-card overflow-hidden hover:border-primary/40 transition-colors"
                 >
                   <Link
                     href={`/purchase-requests/view?id=${pr.id}`}
-                    className="flex items-center gap-3 p-3 flex-1 min-w-0 active:scale-[0.99]"
+                    className="block p-3 active:bg-muted/30 transition-colors"
                   >
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.iconBg}`}
-                    >
-                      <StatusIcon className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-sm">
-                          {formatDate(pr.date_prepared)}
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.iconBg}`}
+                      >
+                        <StatusIcon className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-sm">
+                            {formatDate(pr.date_prepared)}
+                          </p>
+                          {Number(pr.ige_amount) > 0 && (
+                            <span className="text-sm font-medium shrink-0">
+                              {formatMoney(Number(pr.ige_amount))}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {pr.vendor1_name || "Vendor TBD"}
                         </p>
-                        <span
-                          className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${meta.badge}`}
-                        >
-                          {meta.label}
-                        </span>
-                        {sowMeta && (
-                          <span
-                            className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${sowMeta.badge}`}
-                            title={`SOW: ${sowMeta.label}`}
-                          >
-                            <FileSignature className="w-2.5 h-2.5" />
-                            SOW · {sowMeta.label}
-                          </span>
+                        {pr.justification && (
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {pr.justification}
+                          </p>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {pr.vendor1_name || "Vendor TBD"}
-                        {Number(pr.ige_amount) > 0 && (
-                          <> &middot; {formatMoney(Number(pr.ige_amount))}</>
-                        )}
-                      </p>
-                      {pr.justification && (
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                          {pr.justification}
-                        </p>
+                      {showDownloadHint && (
+                        <Download className="w-4 h-4 text-muted-foreground shrink-0" />
                       )}
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                     </div>
-                    {showDownloadHint && (
-                      <Download className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <PrStageTracker status={pr.status} className="mt-3" />
+                    {sowMeta && (
+                      <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
+                        <FileSignature className="w-3 h-3" />
+                        SOW · {sowMeta.label}
+                      </p>
                     )}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </Link>
-                  <Link
-                    href={`/purchase-requests/new?from=${pr.id}`}
-                    aria-label="Order again"
-                    title="Order again"
-                    className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-muted hover:text-foreground active:scale-[0.97] transition-all"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Link>
-                  {meta.prev && meta.prevLabel && (
-                    <button
-                      type="button"
-                      aria-label={`Revert PR — Back to ${meta.prevLabel}`}
-                      title={`Revert PR — Back to ${meta.prevLabel}`}
-                      disabled={advancingId === `${pr.id}:status`}
-                      onClick={() =>
-                        handleAdvanceStatus(
-                          pr.id,
-                          label,
-                          meta.prev!,
-                          meta.prevLabel!,
-                          "status",
-                          "PR",
-                        )
-                      }
-                      className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 active:scale-[0.97] transition-all disabled:opacity-50"
-                    >
-                      <Undo2 className="w-4 h-4" />
-                    </button>
-                  )}
-                  {meta.next && NextIcon && meta.nextLabel && (
-                    <button
-                      type="button"
-                      aria-label={`Advance PR — Mark as ${meta.nextLabel}`}
-                      title={`Advance PR — Mark as ${meta.nextLabel}`}
-                      disabled={advancingId === `${pr.id}:status`}
-                      onClick={() =>
-                        handleAdvanceStatus(
-                          pr.id,
-                          label,
-                          meta.next!,
-                          meta.nextLabel!,
-                          "status",
-                          "PR",
-                        )
-                      }
-                      className={`flex items-center justify-center px-3 border-l border-border text-muted-foreground active:scale-[0.97] transition-all disabled:opacity-50 ${meta.nextHover}`}
-                    >
-                      <NextIcon className="w-4 h-4" />
-                    </button>
-                  )}
-                  {sowMeta?.next && SowNextIcon && sowMeta.nextLabel && (
-                    <button
-                      type="button"
-                      aria-label={`Advance SOW — Mark as ${sowMeta.nextLabel}`}
-                      title={`Advance SOW — Mark as ${sowMeta.nextLabel}`}
-                      disabled={advancingId === `${pr.id}:sow_status`}
-                      onClick={() =>
-                        handleAdvanceStatus(
-                          pr.id,
-                          label,
-                          sowMeta.next!,
-                          sowMeta.nextLabel!,
-                          "sow_status",
-                          "SOW",
-                        )
-                      }
-                      className={`relative flex items-center justify-center px-3 border-l border-border text-muted-foreground active:scale-[0.97] transition-all disabled:opacity-50 ${sowMeta.nextHover}`}
-                    >
-                      <SowNextIcon className="w-4 h-4" />
-                      <span className="absolute -top-0.5 -right-0.5 text-[7px] font-bold tracking-tight px-1 leading-3 rounded bg-violet-500 text-white">
+                  <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
+                    {meta.next && NextIcon && meta.nextLabel && (
+                      <button
+                        type="button"
+                        aria-label={`Advance PR — Mark as ${meta.nextLabel}`}
+                        disabled={advancingId === `${pr.id}:status`}
+                        onClick={() =>
+                          handleAdvanceStatus(
+                            pr.id,
+                            label,
+                            meta.next!,
+                            meta.nextLabel!,
+                            "status",
+                            "PR",
+                          )
+                        }
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.97] transition-all disabled:opacity-50"
+                      >
+                        <NextIcon className="w-3.5 h-3.5" />
+                        Mark {meta.nextLabel}
+                      </button>
+                    )}
+                    {sowMeta?.next && SowNextIcon && sowMeta.nextLabel && (
+                      <button
+                        type="button"
+                        aria-label={`Advance SOW — Mark as ${sowMeta.nextLabel}`}
+                        disabled={advancingId === `${pr.id}:sow_status`}
+                        onClick={() =>
+                          handleAdvanceStatus(
+                            pr.id,
+                            label,
+                            sowMeta.next!,
+                            sowMeta.nextLabel!,
+                            "sow_status",
+                            "SOW",
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-xs font-semibold rounded-lg px-2 py-1.5 text-violet-700 dark:text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 active:scale-[0.97] transition-all disabled:opacity-50"
+                      >
+                        <SowNextIcon className="w-3.5 h-3.5" />
                         SOW
-                      </span>
+                      </button>
+                    )}
+                    <div className="flex-1" />
+                    {meta.prev && meta.prevLabel && (
+                      <button
+                        type="button"
+                        aria-label={`Revert PR — Back to ${meta.prevLabel}`}
+                        title={`Back to ${meta.prevLabel}`}
+                        disabled={advancingId === `${pr.id}:status`}
+                        onClick={() =>
+                          handleAdvanceStatus(
+                            pr.id,
+                            label,
+                            meta.prev!,
+                            meta.prevLabel!,
+                            "status",
+                            "PR",
+                          )
+                        }
+                        className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                      >
+                        <Undo2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <Link
+                      href={`/purchase-requests/new?from=${pr.id}`}
+                      aria-label="Order again"
+                      title="Order again"
+                      className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground active:scale-[0.97] transition-all"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Link>
+                    <button
+                      type="button"
+                      aria-label="Delete"
+                      title="Delete"
+                      disabled={deletingId === pr.id}
+                      onClick={() => handleDelete(pr.id, label)}
+                      className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Delete"
-                    title="Delete"
-                    disabled={deletingId === pr.id}
-                    onClick={() => handleDelete(pr.id, label)}
-                    className="flex items-center justify-center px-3 border-l border-border text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  </div>
                 </li>
               );
             })}
