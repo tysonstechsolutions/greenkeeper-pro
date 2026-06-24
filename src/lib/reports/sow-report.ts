@@ -1,9 +1,13 @@
 /**
  * Statement of Work (SOW) PDF generator.
  *
- * Recreates the 5-page Navy FRSC SOW request form to match the original
- * template exactly. Uses jsPDF with Courier monospace font throughout to
- * match the typewriter-style government form layout.
+ * Reproduces the Navy FRSC SOW request form (same sections, labels, order,
+ * and Courier typewriter look as the official template), but lays it out as a
+ * single flowing document: content runs top-to-bottom and a page break is
+ * inserted only when the next block won't fit. Fill-in boxes for the
+ * AI-generated long-text sections size to their content. This avoids the
+ * half-empty pages and separate "(continued)" overflow pages the old
+ * one-section-per-fixed-page layout produced.
  */
 import { jsPDF } from "jspdf";
 import { formatLocalDate } from "@/lib/utils/date";
@@ -211,101 +215,6 @@ function drawRichText(
   return curY;
 }
 
-/**
- * Same as drawBox, but returns the text that didn't fit (or null if it
- * all fit). Used for the AI-generated long-text sections so we can spill
- * the remainder onto a continuation page instead of silently dropping it.
- */
-function drawBoxOverflow(
-  doc: jsPDF,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  text: string,
-  fontSize = 8,
-): string | null {
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.3);
-  doc.rect(x, y, w, h, "FD");
-
-  if (!text.trim()) return null;
-
-  doc.setFont("courier", "normal");
-  doc.setFontSize(fontSize);
-  doc.setTextColor(0, 0, 0);
-
-  const lines = doc.splitTextToSize(text, w - 4) as string[];
-  const lineStep = fontSize * 0.35 + 1.5;
-  let ty = y + lineStep;
-  let drawn = 0;
-  for (const line of lines) {
-    if (ty + lineStep > y + h - 1) break;
-    doc.text(line, x + 2, ty);
-    ty += lineStep;
-    drawn++;
-  }
-  if (drawn >= lines.length) return null;
-
-  // Mark the box visibly so the reader knows there's more on a continuation page.
-  doc.setFont("courier", "italic");
-  doc.setFontSize(Math.max(7, fontSize - 1));
-  doc.text("(continued on next page)", x + w - 2, y + h - 1.5, { align: "right" });
-  doc.setFont("courier", "normal");
-  doc.setFontSize(fontSize);
-
-  return lines.slice(drawn).join("\n");
-}
-
-/**
- * Append a continuation page (or pages) at the end of the doc for a section
- * whose box ran out of room. Returns the page number for the LAST page it
- * emitted, so the caller can keep sequencing footers correctly.
- */
-function addContinuationPage(
-  doc: jsPDF,
-  startPageNum: number,
-  sectionTitle: string,
-  text: string,
-): number {
-  const cw = contentWidth(doc);
-  const ph = doc.internal.pageSize.getHeight();
-  const pw = doc.internal.pageSize.getWidth();
-  const fontSize = 9;
-  const lineStep = fontSize * 0.35 + 1.5;
-  const bottomLimit = ph - 18;
-
-  let pageNum = startPageNum;
-  const newPage = () => {
-    doc.addPage();
-    let y = MT;
-    doc.setFont("times", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`${sectionTitle} (continued)`, pw / 2, y + 4, { align: "center" });
-    y += 12;
-    doc.setFont("courier", "normal");
-    doc.setFontSize(fontSize);
-    return y;
-  };
-
-  let y = newPage();
-  const allLines = doc.splitTextToSize(text, cw) as string[];
-
-  for (const line of allLines) {
-    if (y + lineStep > bottomLimit) {
-      addFooter(doc, pageNum);
-      pageNum++;
-      y = newPage();
-    }
-    doc.text(line, ML, y);
-    y += lineStep;
-  }
-  addFooter(doc, pageNum);
-  return pageNum;
-}
-
 /** Add page number and revision footer. */
 function addFooter(doc: jsPDF, pageNum: number): void {
   const pw = doc.internal.pageSize.getWidth();
@@ -329,26 +238,68 @@ function body(doc: jsPDF, bold = false): void {
 export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
   const cw = contentWidth(doc);
+  const bottomLimit = ph - 16; // stay clear of the footer at ph-8
 
-  // Long-text sections that may not fit their fixed boxes. We collect any
-  // overflow here and append a "(continued)" page per section at the end
-  // so AI-generated paragraphs are never silently truncated.
-  const overflows: Array<{ section: string; text: string }> = [];
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 1
-  // ═══════════════════════════════════════════════════════════════════════════
   let y = MT;
+  let pageNum = 1;
 
-  // Title
+  // Flow layout: close the current page (stamping its footer), then start the
+  // next one. Called only when something won't fit — never on a fixed cadence.
+  const newPage = () => {
+    addFooter(doc, pageNum);
+    pageNum++;
+    doc.addPage();
+    y = MT;
+    body(doc);
+  };
+  const ensureSpace = (needed: number) => {
+    if (y + needed > bottomLimit) newPage();
+  };
+
+  // Height a bordered box needs to show all of `text` at `fontSize`, floored
+  // at `minH` so a short/empty field still reads as a fillable box. Mirrors
+  // drawBox's own line stepping so nothing is clipped.
+  const boxHeightFor = (text: string, fontSize: number, minH: number): number => {
+    const step = fontSize * 0.35 + 1.5;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(fontSize);
+    const lines = text.trim() ? (doc.splitTextToSize(text, cw - 4) as string[]) : [];
+    return Math.max(minH, lines.length * step + 3);
+  };
+  // Draw a content box sized to its text (breaking to a new page first if it
+  // wouldn't fit), then advance past it plus a trailing gap.
+  const drawContentBox = (text: string, fontSize: number, minH: number, gap = LH) => {
+    const h = boxHeightFor(text, fontSize, minH);
+    ensureSpace(h);
+    drawBox(doc, ML, y, cw, h, text, fontSize);
+    y += h + gap;
+  };
+  // Bold section heading kept with the start of what follows (no orphans).
+  const heading = (text: string, keepWith = 14) => {
+    ensureSpace(LH * 1.5 + keepWith);
+    body(doc, true);
+    doc.text(text, ML, y);
+    body(doc);
+    y += LH * 1.5;
+  };
+  // Normal paragraph block, kept together on one page.
+  const paragraph = (text: string) => {
+    body(doc);
+    const lines = doc.splitTextToSize(text, cw) as string[];
+    ensureSpace(lines.length * LH + LH);
+    doc.text(lines, ML, y);
+    y += lines.length * LH + LH;
+  };
+
+  // ── Title + header ──────────────────────────────────────────────────────
   doc.setFont("times", "normal");
   doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
   doc.text("Statement of Work (SOW) Request", pw / 2, y + 4, { align: "center" });
   y += 14;
 
-  // Header fields
   body(doc);
   const labelGap = 30;
 
@@ -380,49 +331,31 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 1. BACKGROUND
-  body(doc, true);
-  doc.text("1.  BACKGROUND", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
-  const bgText =
+  heading("1.  BACKGROUND");
+  paragraph(
     "The mission of the N9 Fleet & Family Readiness is to provide a varied program of\n" +
     "wholesome and constructive off-duty recreation activities for Navy personnel and\n" +
     "their family members which will effectively contribute to the mental, physical,\n" +
-    "social and educational enrichment of participants.";
-  const bgLines = doc.splitTextToSize(bgText, cw);
-  doc.text(bgLines, ML, y);
-  y += bgLines.length * LH + LH;
+    "social and educational enrichment of participants.",
+  );
 
   // 2. SCOPE
-  body(doc, true);
-  doc.text("2.  SCOPE", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
-  const scopeText =
+  heading("2.  SCOPE");
+  paragraph(
     "The contractor requested shall provide all services required to perform the\n" +
     "work described in this SOW. The contractor shall provide these services according\n" +
     "to the specifications contained herein and in accordance with the publications\n" +
-    "listed below.";
-  const scopeLines = doc.splitTextToSize(scopeText, cw);
-  doc.text(scopeLines, ML, y);
-  y += scopeLines.length * LH + LH;
+    "listed below.",
+  );
 
   // 3. APPLICABLE DOCUMENTS
-  body(doc, true);
-  doc.text("3.  APPLICABLE DOCUMENTS", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
-  const appDocText =
+  heading("3.  APPLICABLE DOCUMENTS");
+  paragraph(
     "The following documents are instrumental to performing this contract. This list is not\n" +
     "all inclusive. The most recent version of these documents in effect as of the time\n" +
-    "of contract award will apply.";
-  const appDocLines = doc.splitTextToSize(appDocText, cw);
-  doc.text(appDocLines, ML, y);
-  y += appDocLines.length * LH + LH;
-
+    "of contract award will apply.",
+  );
+  ensureSpace(LH * 2 + LH);
   body(doc, true);
   doc.text("3.1  CNICINST 1710.3", ML, y);
   y += LH;
@@ -431,20 +364,10 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 4. REQUIREMENTS
-  body(doc, true);
-  doc.text("4.  REQUIREMENTS", ML, y);
-  body(doc);
-  y += LH * 1.5;
+  heading("4.  REQUIREMENTS");
 
-  // 4.1 REQUISITION TYPE — matches the FRSC blank form layout. The original
-  // has an invisible dropdown widget between the heading and the "if other"
-  // instruction; when filled, the selected value appears there. The "if
-  // other" box at the bottom is for the Other override.
-  body(doc, true);
-  doc.text("4.1  REQUISITION TYPE", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
+  // 4.1 REQUISITION TYPE — the selected value prints under the heading; the
+  // box below is only for an "Other" override.
   const REQ_TYPE_STANDARD = [
     "New Procurement",
     "Re-order",
@@ -453,26 +376,14 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   ];
   const typeIsOther = !!data.requisitionType && !REQ_TYPE_STANDARD.includes(data.requisitionType);
   const typeDisplay = typeIsOther ? "Other" : data.requisitionType;
-  if (typeDisplay) {
-    doc.text(typeDisplay, ML, y);
-  }
-  // Reserve vertical space whether or not the field is filled so the layout
-  // matches the blank original.
+  heading("4.1  REQUISITION TYPE", 24);
+  if (typeDisplay) doc.text(typeDisplay, ML, y);
   y += LH * 1.5;
-
   doc.text("If other is chosen, list type below:", ML, y);
   y += LH;
-
-  const typeBoxH = 12;
-  drawBox(doc, ML, y, cw, typeBoxH, typeIsOther ? data.requisitionType : "");
-  y += typeBoxH + LH;
+  drawContentBox(typeIsOther ? data.requisitionType : "", 8, 12);
 
   // 4.2 REASON FOR REQUISITION — same pattern as 4.1.
-  body(doc, true);
-  doc.text("4.2  REASON FOR REQUISITION", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
   const REQ_REASON_STANDARD = [
     "New Requirement",
     "Replacement",
@@ -482,26 +393,15 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   const reasonIsOther =
     !!data.requisitionReason && !REQ_REASON_STANDARD.includes(data.requisitionReason);
   const reasonDisplay = reasonIsOther ? "Other" : data.requisitionReason;
-  if (reasonDisplay) {
-    doc.text(reasonDisplay, ML, y);
-  }
+  heading("4.2  REASON FOR REQUISITION", 24);
+  if (reasonDisplay) doc.text(reasonDisplay, ML, y);
   y += LH * 1.5;
-
   doc.text(" If other is chosen, list the reason below:", ML, y);
   y += LH;
+  drawContentBox(reasonIsOther ? data.requisitionReason : "", 8, 12);
 
-  const reasonBoxH = 12;
-  drawBox(doc, ML, y, cw, reasonBoxH, reasonIsOther ? data.requisitionReason : "");
-
-  addFooter(doc, 1);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 2
-  // ═══════════════════════════════════════════════════════════════════════════
-  doc.addPage();
-  y = MT;
-  body(doc);
-
+  // References / instructions
+  ensureSpace(LH * 2.5);
   doc.text("Are there applicable references or instructions substantiating this request?", ML, y);
   y += LH;
   drawCb(doc, ML, y, data.hasReferences);
@@ -512,35 +412,22 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
 
   doc.text("If Yes, what are the references or instructions?", ML, y);
   y += LH;
+  drawContentBox(data.hasReferences ? data.referencesText : "", 8, 14);
 
-  const refBoxH = 18;
-  {
-    const refText = data.hasReferences ? data.referencesText : "";
-    const refOver = drawBoxOverflow(doc, ML, y, cw, refBoxH, refText);
-    if (refOver) overflows.push({ section: "References / Instructions", text: refOver });
-  }
-  y += refBoxH + LH;
-
+  // Scheduling
+  ensureSpace(LH * 3);
   doc.text(`Projected Start Date:  ${data.projectedStartDate}`, ML, y);
   y += LH * 1.5;
-
   doc.text(`Desired Completion Date:  ${data.desiredCompletionDate}`, ML, y);
   y += LH * 1.5;
 
   doc.text("Facility or Program Hours of Operation:", ML, y);
   y += LH;
-
-  const hoursBoxH = 12;
-  drawBox(doc, ML, y, cw, hoursBoxH, data.facilityHours);
-  y += hoursBoxH + LH;
+  drawContentBox(data.facilityHours, 8, 12);
 
   doc.text("Requested Appointment and Suggested Time of Service or Delivery:", ML, y);
   y += LH * 1.5;
 
-  // The original has an invisible dropdown widget here for predefined
-  // service-time options (Standard hours / Before opening / After closing /
-  // etc). We don't know the exact option set, so show the user's value
-  // here as plain text when present — matches the filled-form look.
   const apptStandard = [
     "Standard hours",
     "Before opening",
@@ -550,19 +437,15 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   ];
   const apptIsOther = !!data.appointmentTime && !apptStandard.includes(data.appointmentTime);
   const apptDisplay = apptIsOther ? "Other" : data.appointmentTime;
-  if (apptDisplay) {
-    doc.text(apptDisplay, ML, y);
-  }
+  if (apptDisplay) doc.text(apptDisplay, ML, y);
   y += LH * 1.5;
 
   doc.text("If other is chosen, list suggested time of service or delivery below:", ML, y);
   y += LH;
-
-  const apptBoxH = 12;
-  drawBox(doc, ML, y, cw, apptBoxH, apptIsOther ? data.appointmentTime : "");
-  y += apptBoxH + LH * 1.5;
+  drawContentBox(apptIsOther ? data.appointmentTime : "", 8, 12, LH * 1.5);
 
   // Services interrupted
+  ensureSpace(LH * 4.5);
   const siLabelW = 115;
   doc.text("Will the facility or program services be interrupted?", ML, y);
   drawCb(doc, ML + siLabelW, y, data.servicesInterrupted);
@@ -582,26 +465,15 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 4.4 MINIMUM PERSONNEL REQUIREMENTS
-  body(doc, true);
-  doc.text("4.4  MINIMUM PERSONNEL REQUIREMENTS", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
-  const mpText =
+  heading("4.4  MINIMUM PERSONNEL REQUIREMENTS", 28);
+  paragraph(
     "Please list below the minimum certifications, licenses or special skills the\n" +
     "contractor(s) should have prior to a contract being awarded. If these are a requirement\n" +
-    "per official program requirements, disclose the referenced material.";
-  const mpLines = doc.splitTextToSize(mpText, cw);
-  doc.text(mpLines, ML, y);
-  y += mpLines.length * LH + LH;
+    "per official program requirements, disclose the referenced material.",
+  );
+  drawContentBox(data.personnelCertifications, 8, 14, LH * 1.5);
 
-  const personnelBoxH = 22;
-  {
-    const certOver = drawBoxOverflow(doc, ML, y, cw, personnelBoxH, data.personnelCertifications);
-    if (certOver) overflows.push({ section: "4.4 Minimum Personnel Requirements", text: certOver });
-  }
-  y += personnelBoxH + LH * 1.5;
-
+  ensureSpace(LH * 3.5);
   const spLabelW = 118;
   doc.text("Are a specific number of personnel being requested?", ML, y);
   drawCb(doc, ML + spLabelW, y, data.specificPersonnelRequired);
@@ -615,36 +487,22 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 4.5 LODGING REQUIREMENT
-  body(doc, true);
-  doc.text("4.5  LODGING REQUIREMENT", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
+  heading("4.5  LODGING REQUIREMENT", 28);
   doc.text("Will the contractor require lodging as part of the contract?", ML, y);
   y += LH;
   drawCb(doc, ML, y, data.lodgingRequired);
   doc.text("Yes", ML + 4.5, y);
   drawCb(doc, ML + 18, y, !data.lodgingRequired);
   doc.text("No", ML + 22.5, y);
+  y += LH * 2;
 
-  addFooter(doc, 2);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 3
-  // ═══════════════════════════════════════════════════════════════════════════
-  doc.addPage();
-  y = MT;
-  body(doc);
-
-  const lodgIntroText =
+  paragraph(
     "Please select all that will apply to this contract. If special requests are made after\n" +
-    "the award of the contract, contact the FRSC for approval.";
-  const lodgIntroLines = doc.splitTextToSize(lodgIntroText, cw);
-  doc.text(lodgIntroLines, ML, y);
-  y += lodgIntroLines.length * LH + LH;
+    "the award of the contract, contact the FRSC for approval.",
+  );
 
+  ensureSpace(LH * 3.5);
   const col2X = ML + cw / 2;
-
   drawCb(doc, ML, y, data.individualLodging);
   doc.text("Individual Lodging", ML + 4.5, y);
   drawCb(doc, col2X, y, data.groupLodging);
@@ -664,13 +522,10 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 4.6 EXPECTATION
-  body(doc, true);
-  doc.text("4.6  EXPECTATION", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
+  heading("4.6  EXPECTATION", 30);
   // 4.6 intro paragraph with the same inline bold runs as the FRSC form:
   // "specific duties", "i.e.", and "Be detailed and specific." are bold.
+  ensureSpace(LH * 7);
   const expIntroEndY = drawRichText(
     doc,
     [
@@ -690,28 +545,17 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
     LH,
   );
   y = expIntroEndY + LH * 2;
-
-  const expectBoxH = 52;
-  {
-    const expOver = drawBoxOverflow(doc, ML, y, cw, expectBoxH, data.expectationText, 8);
-    if (expOver) overflows.push({ section: "4.6 Expectation", text: expOver });
-  }
-  y += expectBoxH + LH;
+  drawContentBox(data.expectationText, 8, 18);
 
   // 5. CONTINGENCY PLAN
-  body(doc, true);
-  doc.text("5.  CONTINGENCY PLAN", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
-  const contText =
+  heading("5.  CONTINGENCY PLAN", 26);
+  paragraph(
     "In the event of inclement weather or unforeseen circumstances that affect or interrupt\n" +
     "services requested or event dates, the program or facility will have a contingency plan\n" +
-    "in place to be agreed upon with the contractor.";
-  const contLines = doc.splitTextToSize(contText, cw);
-  doc.text(contLines, ML, y);
-  y += contLines.length * LH + LH;
+    "in place to be agreed upon with the contractor.",
+  );
 
+  ensureSpace(LH * 2.5);
   doc.text("Could inclement weather interrupt services to be provided? If no, skip to Section 6.", ML, y);
   y += LH;
   drawCb(doc, ML, y, data.weatherInterrupt);
@@ -723,7 +567,8 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   const reschedText =
     "If lodging will be awarded or arranged within the contract, will the date of service\n" +
     "or event be rescheduled in the event of inclement weather?";
-  const reschedLines = doc.splitTextToSize(reschedText, cw);
+  const reschedLines = doc.splitTextToSize(reschedText, cw) as string[];
+  ensureSpace(reschedLines.length * LH + LH * 2);
   doc.text(reschedLines, ML, y);
   y += reschedLines.length * LH;
   drawCb(doc, ML, y, data.rescheduleIfWeather);
@@ -734,10 +579,9 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
 
   doc.text("What is/are the proposed reschedule date(s)?", ML, y);
   y += LH;
-  const reschedBoxH = 10;
-  drawBox(doc, ML, y, cw, reschedBoxH, data.rescheduleDate);
-  y += reschedBoxH + LH;
+  drawContentBox(data.rescheduleDate, 8, 10);
 
+  ensureSpace(LH * 2.5);
   doc.text("Will the contractor need amendments to base entry documents?", ML, y);
   y += LH;
   drawCb(doc, ML, y, data.baseEntryAmendments);
@@ -747,84 +591,48 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   y += LH * 2;
 
   // 6. LOCATION OF SERVICE
-  body(doc, true);
-  doc.text("6.  LOCATION OF SERVICE", ML, y);
-  body(doc);
-  y += LH * 1.5;
-
+  heading("6.  LOCATION OF SERVICE", 16);
   doc.text(`What is the building name and number?  ${data.buildingNameNumber}`, ML, y);
   y += LH * 2;
-
   doc.text(`Room Number?  ${data.roomNumber}`, ML, y);
+  y += LH * 2;
 
-  addFooter(doc, 3);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 4
-  // ═══════════════════════════════════════════════════════════════════════════
-  doc.addPage();
-  y = MT;
-  body(doc);
-
-  const accessText =
+  // Access directions
+  paragraph(
     "Specific directions for initial contact. (i.e. who should the contractor ask for upon\n" +
     "arrival to the site, will the contractor have to utilize a specific gate, will the\n" +
     "contractor need an escort to the area requesting services?) If no specific instructions,\n" +
-    "write N/A.";
-  const accessLines = doc.splitTextToSize(accessText, cw);
-  doc.text(accessLines, ML, y);
-  y += accessLines.length * LH + LH;
+    "write N/A.",
+  );
+  drawContentBox(data.accessDirections, 8, 14, LH * 2);
 
-  const accessBoxH = 25;
-  {
-    const accessOver = drawBoxOverflow(doc, ML, y, cw, accessBoxH, data.accessDirections);
-    if (accessOver) overflows.push({ section: "Section 6 Access Directions", text: accessOver });
-  }
-  y += accessBoxH + LH * 2;
-
+  // Description of Goods
+  ensureSpace(LH * 3 + 20);
   body(doc, true);
   doc.text("Description of Goods Requested (Ref 4.1):", ML, y);
-  // Italic helper line, matching the original form.
   doc.setFont("courier", "italic");
   doc.setFontSize(8);
   doc.text("(attach additional pages if needed)", ML, y + LH);
   body(doc);
   y += LH * 2.5;
+  drawContentBox(data.descriptionOfGoods, 8, 18);
 
-  const ph = doc.internal.pageSize.getHeight();
-  const goodsBoxH = ph - y - 20;
-  {
-    const goodsOver = drawBoxOverflow(doc, ML, y, cw, goodsBoxH, data.descriptionOfGoods, 8);
-    if (goodsOver) overflows.push({ section: "Description of Goods Requested", text: goodsOver });
-  }
-
-  addFooter(doc, 4);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PAGE 5
-  // ═══════════════════════════════════════════════════════════════════════════
-  doc.addPage();
-  y = MT;
-  body(doc);
-
-  body(doc, true);
-  doc.text("7.  REQUESTOR INFORMATION", ML, y);
-  body(doc);
-  y += LH * 3;
+  // 7. REQUESTOR INFORMATION — keep the whole block (through the signature)
+  // together on one page.
+  ensureSpace(78);
+  heading("7.  REQUESTOR INFORMATION", 60);
+  y += LH * 1.5;
 
   const fieldBoxW = cw * 0.58;
 
-  // Name of Requestor
   doc.text("Name of Requestor:", ML, y);
   drawBox(doc, ML + 52, y - 4, fieldBoxW, 7, data.requestorName, 9);
   y += LH * 2.5;
 
-  // Position or Title
   doc.text("Position or Title:", ML, y);
   drawBox(doc, ML + 52, y - 4, fieldBoxW, 7, data.requestorTitle, 9);
   y += LH * 2.5;
 
-  // Phone numbers
   doc.text(`Direct Phone Number:  ${data.directPhone}`, ML, y);
   doc.text(`Cell Phone Number:  ${data.cellPhone}`, ML + 90, y);
   y += LH * 2;
@@ -832,17 +640,14 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   doc.text(`Email:  ${data.email}`, ML, y);
   y += LH * 2;
 
-  // Supervisor Name
   doc.text("Supervisor Name:", ML, y);
   drawBox(doc, ML + 47, y - 4, fieldBoxW, 7, data.supervisorName, 9);
   y += LH * 2.5;
 
-  // Supervisor Phone
   doc.text("Supervisor Direct Phone Number:", ML, y);
   drawBox(doc, ML + 82, y - 4, 50, 7, data.supervisorPhone, 9);
   y += LH * 2.5;
 
-  // Signature
   doc.text("Signature of Requestor:", ML, y);
   drawBox(doc, ML + 62, y - 4, cw - 62, 7, "", 9);
 
@@ -876,7 +681,6 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   }
   y += LH * 2.5;
 
-  // Date Signed
   doc.text("Date Signed: ", ML, y);
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.3);
@@ -884,13 +688,8 @@ export async function generateSowReport(data: SowFormData): Promise<{ blob: Blob
   // Stamp today's date next to the line so the form is fully complete.
   doc.text(data.date, ML + 34, y - 1);
 
-  addFooter(doc, 5);
-
-  // ── Continuation pages for sections whose AI/user content didn't fit ────────
-  let pageNum = 6;
-  for (const over of overflows) {
-    pageNum = addContinuationPage(doc, pageNum, over.section, over.text) + 1;
-  }
+  // Footer for the final page.
+  addFooter(doc, pageNum);
 
   // ── Output ──────────────────────────────────────────────────────────────────
   const blob = doc.output("blob") as Blob;
