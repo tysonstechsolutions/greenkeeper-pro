@@ -65,6 +65,7 @@ import { History as HistoryIcon } from "lucide-react";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { generateSowContent } from "@/lib/reports/sow-content";
 import { uploadSowFormData } from "@/lib/reports/sow-persistence";
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type {
   PurchaseRequest,
@@ -372,12 +373,11 @@ function SowAttachModal({
                   <label className={labelCls}>
                     What work needs to be done? <span className="text-red-500">*</span>
                   </label>
-                  <textarea
+                  <AutoResizeTextarea
                     value={form.workDescription}
                     onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
-                    rows={4}
                     placeholder="e.g. Replace 4 rooftop HVAC units on the pro shop; OR re-roof maintenance shed; OR tree removal & stump grinding near hole 12 — any trade works"
-                    className={`${inputCls} resize-none`}
+                    className={`${inputCls} min-h-24`}
                   />
                   {autoDescription && (
                     <p className="text-xs text-muted-foreground mt-1">
@@ -515,31 +515,28 @@ function SowAttachModal({
 
             <div>
               <label className={labelCls}>4.6 Expectation (contractor duties)</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.expectationText}
                 onChange={(e) => setDraft({ ...draft, expectationText: e.target.value })}
-                rows={10}
-                className={`${inputCls} resize-y font-mono text-xs leading-relaxed`}
+                className={`${inputCls} font-mono text-xs leading-relaxed min-h-32`}
               />
             </div>
 
             <div>
               <label className={labelCls}>Description of Goods Requested</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.descriptionOfGoods}
                 onChange={(e) => setDraft({ ...draft, descriptionOfGoods: e.target.value })}
-                rows={4}
-                className={`${inputCls} resize-y`}
+                className={`${inputCls} min-h-24`}
               />
             </div>
 
             <div>
               <label className={labelCls}>Minimum Personnel Certifications</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.personnelCertifications}
                 onChange={(e) => setDraft({ ...draft, personnelCertifications: e.target.value })}
-                rows={3}
-                className={`${inputCls} resize-y`}
+                className={`${inputCls} min-h-16`}
               />
             </div>
 
@@ -555,11 +552,10 @@ function SowAttachModal({
 
             <div>
               <label className={labelCls}>Access Directions / Reporting Structure</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.accessDirections}
                 onChange={(e) => setDraft({ ...draft, accessDirections: e.target.value })}
-                rows={4}
-                className={`${inputCls} resize-y`}
+                className={`${inputCls} min-h-24`}
               />
             </div>
 

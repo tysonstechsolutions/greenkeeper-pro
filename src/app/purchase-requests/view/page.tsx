@@ -43,6 +43,7 @@ import {
   uploadSowFormData,
   loadSavedSowData,
 } from "@/lib/reports/sow-persistence";
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type { UserRole } from "@/types/database";
 import {
@@ -301,12 +302,11 @@ function SowWizardModal({
               <label className={labelCls}>
                 What work needs to be done? <span className="text-red-500">*</span>
               </label>
-              <textarea
+              <AutoResizeTextarea
                 value={form.workDescription}
                 onChange={(e) => setForm({ ...form, workDescription: e.target.value })}
-                rows={4}
                 placeholder="e.g. Asphalt patch & seal cart paths from tee 3 to 5; OR install new pump-house electrical panel; OR fence repair on perimeter — any trade works"
-                className={`${inputCls} resize-none`}
+                className={`${inputCls} min-h-24`}
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Pre-filled from your PR line items. Edit as needed.
@@ -424,31 +424,28 @@ function SowWizardModal({
 
             <div>
               <label className={labelCls}>4.6 Expectation (contractor duties)</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.expectationText}
                 onChange={(e) => setDraft({ ...draft, expectationText: e.target.value })}
-                rows={10}
-                className={`${inputCls} resize-y font-mono text-xs leading-relaxed`}
+                className={`${inputCls} font-mono text-xs leading-relaxed min-h-32`}
               />
             </div>
 
             <div>
               <label className={labelCls}>Description of Goods Requested</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.descriptionOfGoods}
                 onChange={(e) => setDraft({ ...draft, descriptionOfGoods: e.target.value })}
-                rows={4}
-                className={`${inputCls} resize-y`}
+                className={`${inputCls} min-h-24`}
               />
             </div>
 
             <div>
               <label className={labelCls}>Minimum Personnel Certifications</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.personnelCertifications}
                 onChange={(e) => setDraft({ ...draft, personnelCertifications: e.target.value })}
-                rows={3}
-                className={`${inputCls} resize-y`}
+                className={`${inputCls} min-h-16`}
               />
             </div>
 
@@ -464,11 +461,10 @@ function SowWizardModal({
 
             <div>
               <label className={labelCls}>Access Directions / Reporting Structure</label>
-              <textarea
+              <AutoResizeTextarea
                 value={draft.accessDirections}
                 onChange={(e) => setDraft({ ...draft, accessDirections: e.target.value })}
-                rows={4}
-                className={`${inputCls} resize-y`}
+                className={`${inputCls} min-h-24`}
               />
             </div>
 
