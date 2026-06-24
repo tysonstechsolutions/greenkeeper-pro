@@ -70,16 +70,16 @@ WORK DESCRIPTION: ${ctx.workDescription}
 PERIOD: ${ctx.startDate} through ${ctx.endDate}
 REQUISITION TYPE: ${ctx.requisitionType}${vendorBlock}${contactBlock}${justificationBlock}${totalBlock}${itemsBlock}
 
-Output three sections, formatted EXACTLY as shown, with complete sentences (no ellipses or truncation):
+Keep it concise and defensible — no filler, no repetition, and no restating the same duty in different words. Output three sections, formatted EXACTLY as shown, with complete sentences (no ellipses or truncation):
 
 EXPECTATION:
-[8-14 numbered items listing specific contractor duties as full sentences in formal government contracting language. Cover mobilization/site prep, specific work tasks (cite quote items and quantities), OSHA/Navy safety compliance, cleanup and disposal of debris and packaging, documentation/reporting, and coordination with the COR.]
+[4-6 numbered items covering only the essential contractor duties, written as full sentences in formal government contracting language. Across those items cover mobilization and coordination with the COR, the specific work task(s) (cite quote items and quantities when given), OSHA/Navy safety compliance, debris cleanup and disposal, and completion documentation. Combine related duties into one item instead of splitting them apart, and do not pad the list to hit a number.]
 
 DESCRIPTION_OF_GOODS:
-[3-5 sentences describing what is being procured. Reference specific quantities, part numbers, and the vendor when given; tie back to the justification if provided.]
+[2-3 sentences describing what is being procured. Reference specific quantities, part numbers, and the vendor when given; tie back to the justification if provided.]
 
 CERTIFICATIONS:
-[2-3 sentences listing the minimum certifications, licenses, insurance, and skills required for the trade implied by the line items.]`;
+[1-2 sentences listing the minimum certifications, licenses, insurance, and skills required for the trade implied by the line items.]`;
 
   const reply = await callApi<{ reply?: string; error?: string }>("ai-assistant", {
     method: "POST",

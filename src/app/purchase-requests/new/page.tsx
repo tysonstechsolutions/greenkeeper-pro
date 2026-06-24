@@ -64,6 +64,7 @@ import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistor
 import { History as HistoryIcon } from "lucide-react";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { generateSowContent } from "@/lib/reports/sow-content";
+import { uploadSowFormData } from "@/lib/reports/sow-persistence";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type {
   PurchaseRequest,
@@ -171,7 +172,7 @@ function SowAttachModal({
   justification?: string | null;
   totalAmount?: number | null;
   profile: { full_name?: string | null; role?: string; phone?: string | null; email?: string | null } | null;
-  onComplete: (blob: Blob) => void;
+  onComplete: (blob: Blob, draft: SowFormData | null) => void;
   onSkip: () => void;
   onCancel: () => void;
 }) {
@@ -295,7 +296,7 @@ function SowAttachModal({
     setSowError(null);
     try {
       const { blob } = await generateSowReport(draft);
-      onComplete(blob);
+      onComplete(blob, draft);
     } catch (err) {
       setSowError(err instanceof Error ? err.message : "Failed to build SOW PDF. Try again.");
     } finally {
@@ -469,7 +470,7 @@ function SowAttachModal({
                     className="sr-only"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) onComplete(f);
+                      if (f) onComplete(f, null);
                       e.target.value = "";
                     }}
                   />
@@ -816,8 +817,11 @@ function NewPurchaseRequestPageInner() {
   const [quoteFiles, setQuoteFiles] = useState<File[]>([]);
   const [existingQuoteName, setExistingQuoteName] = useState<string | null>(null);
 
-  // SOW: blob generated/attached in the modal, uploaded on save
+  // SOW: blob generated/attached in the modal, uploaded on save. sowData is
+  // the editable form data (when the SOW was filled with AI, not attached as
+  // a finished PDF) — saved alongside so it can be re-edited later.
   const [sowBlob, setSowBlob] = useState<Blob | null>(null);
+  const [sowData, setSowData] = useState<SowFormData | null>(null);
   const [showSowModal, setShowSowModal] = useState(false);
 
   // Invoice — pre-filled with facility defaults on new PRs.
@@ -1921,6 +1925,15 @@ function NewPurchaseRequestPageInner() {
         ])) as { error: { message: string } | null };
         if (sowResult.error) throw sowResult.error;
         sowStoragePath = sowPath;
+        // Save the editable form data too so the SOW can be re-edited later
+        // from the PR view page (best-effort — never blocks the save).
+        if (sowData) {
+          try {
+            await uploadSowFormData(supabase, editId, sowData);
+          } catch (e) {
+            console.warn("[PR] SOW form-data save failed:", e);
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(`SOW upload failed: ${msg}`);
@@ -2134,6 +2147,15 @@ function NewPurchaseRequestPageInner() {
               ),
             );
             if (cancel.cancelled) return;
+            // Save the editable form data too so the SOW can be re-edited
+            // later from the PR view page (best-effort).
+            if (sowData) {
+              try {
+                await uploadSowFormData(supabase, newId, sowData);
+              } catch (e) {
+                console.warn("[PR] SOW form-data save failed:", e);
+              }
+            }
           } catch (err) {
             console.warn("[PR] SOW upload failed:", err);
             recordBreadcrumb(
@@ -2197,8 +2219,9 @@ function NewPurchaseRequestPageInner() {
         justification={justification || null}
         totalAmount={igeAmount}
         profile={profile}
-        onComplete={(blob) => {
+        onComplete={(blob, draft) => {
           setSowBlob(blob);
+          setSowData(draft);
           setShowSowModal(false);
         }}
         onSkip={() => setShowSowModal(false)}
@@ -2206,6 +2229,7 @@ function NewPurchaseRequestPageInner() {
           setShowSowModal(false);
           setAttached((prev) => ({ ...prev, sow: false }));
           setSowBlob(null);
+          setSowData(null);
         }}
       />
     )}
@@ -3307,6 +3331,7 @@ function NewPurchaseRequestPageInner() {
                 setShowSowModal(true);
               } else {
                 setSowBlob(null);
+                setSowData(null);
               }
             }}
           />

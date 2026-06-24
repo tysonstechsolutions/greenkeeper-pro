@@ -38,6 +38,11 @@ import {
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { generateSowContent } from "@/lib/reports/sow-content";
+import {
+  uploadSowPdf,
+  uploadSowFormData,
+  loadSavedSowData,
+} from "@/lib/reports/sow-persistence";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type { UserRole } from "@/types/database";
 import {
@@ -104,12 +109,14 @@ function formatMoney(n: number): string {
 function SowWizardModal({
   pr,
   profile,
+  initialDraft,
   onComplete,
   onCancel,
 }: {
   pr: PurchaseRequest;
   profile: { full_name?: string | null; role?: string; phone?: string | null; email?: string | null } | null;
-  onComplete: (blob: Blob) => void;
+  initialDraft?: SowFormData | null;
+  onComplete: (blob: Blob, draft: SowFormData) => void;
   onCancel: () => void;
 }) {
   const roleLabel = profile?.role ? (roleLabels[profile.role as UserRole] ?? "") : "";
@@ -125,16 +132,18 @@ function SowWizardModal({
     .filter(Boolean)
     .join("; ");
 
-  const [step, setStep] = useState<"form" | "review">("form");
+  // When re-opening to edit a saved SOW, jump straight to the review step
+  // pre-filled with the user's last version instead of regenerating.
+  const [step, setStep] = useState<"form" | "review">(initialDraft ? "review" : "form");
   useBodyScrollLock();
   const [form, setForm] = useState<SowQuickForm>({
     workDescription: autoDescription,
-    requisitionType: "",
-    requisitionReason: "New Requirement",
-    projectedStartDate: "",
-    desiredCompletionDate: "",
+    requisitionType: initialDraft?.requisitionType ?? "",
+    requisitionReason: initialDraft?.requisitionReason ?? "New Requirement",
+    projectedStartDate: initialDraft?.projectedStartDate ?? "",
+    desiredCompletionDate: initialDraft?.desiredCompletionDate ?? "",
   });
-  const [draft, setDraft] = useState<SowFormData | null>(null);
+  const [draft, setDraft] = useState<SowFormData | null>(initialDraft ?? null);
 
   const [generating, setGenerating] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -238,7 +247,7 @@ function SowWizardModal({
     setError(null);
     try {
       const { blob } = await generateSowReport(draft);
-      onComplete(blob);
+      onComplete(blob, draft);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to build SOW PDF. Please try again.");
     } finally {
@@ -556,6 +565,11 @@ function ViewPurchaseRequestInner() {
 
   // SOW wizard state — shown before bundling when attached_sow is true
   const [showSowModal, setShowSowModal] = useState(false);
+  // Saved editable SOW form data (loaded from storage) so "Edit SOW" can
+  // re-open the wizard pre-filled with the last version. `sowModalInitial`
+  // is what we hand the wizard for the current open (null = fresh).
+  const [savedSowData, setSavedSowData] = useState<SowFormData | null>(null);
+  const [sowModalInitial, setSowModalInitial] = useState<SowFormData | null>(null);
 
   useEffect(() => {
     if (!id) {
@@ -574,7 +588,16 @@ function ViewPurchaseRequestInner() {
       if (cancelled) return;
       if (fetchErr) setError(fetchErr.message);
       else if (!data) setError("Not found");
-      else setPr(data as unknown as PurchaseRequest);
+      else {
+        const loaded = data as unknown as PurchaseRequest;
+        setPr(loaded);
+        // Pre-load any saved SOW edits so "Edit SOW" opens pre-filled.
+        if (loaded.attached_sow) {
+          loadSavedSowData(supabase, loaded.id).then((saved) => {
+            if (!cancelled && saved) setSavedSowData(saved);
+          });
+        }
+      }
       setLoading(false);
     }
     load();
@@ -623,19 +646,62 @@ function ViewPurchaseRequestInner() {
   function handleDownloadBundle() {
     if (!pr) return;
     if (pr.attached_sow && !pr.sow_storage_path) {
-      // No pre-generated SOW on file — open the wizard
+      // No saved SOW yet — open the wizard fresh to fill it out.
+      setSowModalInitial(null);
       setShowSowModal(true);
       return;
     }
-    // Either no SOW required, or SOW was pre-generated at create time
-    // (pr-bundle.ts will pull it from storage automatically)
+    // Either no SOW required, or a SOW is already saved (pr-bundle.ts pulls
+    // it from storage automatically, so re-downloads reuse the edited one).
     doBundleDownload();
   }
 
-  /** Called by the SOW wizard after PDF generation. */
-  async function handleSowComplete(sowBlob: Blob) {
+  /** Re-open the SOW wizard to change a saved SOW, pre-filled with its last
+   *  version (falls back to the fresh form if the saved data is unavailable). */
+  function handleEditSow() {
+    setSowModalInitial(savedSowData);
+    setShowSowModal(true);
+  }
+
+  /** Called by the SOW wizard after PDF generation. Saves the SOW (PDF +
+   *  editable form data) to the request so every later download reuses this
+   *  exact version, then builds the bundle. */
+  async function handleSowComplete(sowBlob: Blob, draft: SowFormData) {
+    if (!pr) return;
     setShowSowModal(false);
+    setSowModalInitial(null);
+    // Keep the download button busy through the save + bundle so the UI
+    // doesn't look idle while the SOW uploads.
+    setDownloading(true);
+
+    let saveWarning: string | null = null;
+    try {
+      const supabase = createClient();
+      const path = await uploadSowPdf(supabase, pr.id, sowBlob);
+      // Form data is a convenience for re-editing — don't fail the save if it
+      // can't be written; the PDF (what the bundle uses) is what matters.
+      try {
+        await uploadSowFormData(supabase, pr.id, draft);
+        setSavedSowData(draft);
+      } catch {
+        /* ignore — re-edit will fall back to a fresh wizard */
+      }
+      const { error: upErr } = await supabase
+        .from("purchase_requests")
+        .update({
+          sow_storage_path: path,
+          ...(pr.sow_status ? {} : { sow_status: "submitted" }),
+        })
+        .eq("id", pr.id);
+      if (upErr) throw new Error(upErr.message);
+      setPr({ ...pr, sow_storage_path: path, sow_status: pr.sow_status ?? "submitted" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      saveWarning = `Your SOW downloaded, but saving it for next time failed (${msg}). You may be asked to fill it out again on the next download.`;
+    }
+
     await doBundleDownload(sowBlob);
+    if (saveWarning) setBundleWarnings((prev) => [...prev, saveWarning!]);
   }
 
   /** Single PDF download — when the user only wants the PR itself. */
@@ -716,8 +782,12 @@ function ViewPurchaseRequestInner() {
         <SowWizardModal
           pr={pr}
           profile={profile}
+          initialDraft={sowModalInitial}
           onComplete={handleSowComplete}
-          onCancel={() => setShowSowModal(false)}
+          onCancel={() => {
+            setShowSowModal(false);
+            setSowModalInitial(null);
+          }}
         />
       )}
 
@@ -777,9 +847,21 @@ function ViewPurchaseRequestInner() {
             {downloading
               ? "Building bundle..."
               : pr.attached_sow
-                ? "Fill SOW & Download Bundle (zip)"
+                ? pr.sow_storage_path
+                  ? "Download PR + SOW Bundle (zip)"
+                  : "Fill SOW & Download Bundle (zip)"
                 : "Download PR + Quote + 889 (zip)"}
           </button>
+          {pr.attached_sow && pr.sow_storage_path && (
+            <button
+              onClick={handleEditSow}
+              disabled={downloading || downloadingPdfOnly}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 active:scale-[0.98] transition-all"
+            >
+              <FileText className="w-4 h-4" />
+              Edit SOW
+            </button>
+          )}
           <button
             onClick={handleDownloadPdfOnly}
             disabled={downloading || downloadingPdfOnly}

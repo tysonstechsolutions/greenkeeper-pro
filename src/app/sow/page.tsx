@@ -127,10 +127,10 @@ LOCATION: ${location}
 REQUISITION TYPE: ${requisitionType}
 REASON: ${requisitionReason}
 
-Provide three sections formatted EXACTLY as shown:
+Keep it concise — no filler or repetition. Provide three sections formatted EXACTLY as shown:
 
 EXPECTATION:
-[Write 8-12 numbered items listing specific contractor duties. Use formal government contracting language. Cover: mobilization/site preparation, specific work tasks, safety/compliance, cleanup/disposal, documentation requirements, and coordination with the COR. Be specific and detailed.]
+[Write 4-6 numbered items covering only the essential contractor duties. Use formal government contracting language. Across those items cover mobilization/site preparation, the specific work task(s), safety/compliance, cleanup/disposal, documentation, and coordination with the COR. Combine related duties rather than padding the list, and be specific but brief.]
 
 DESCRIPTION_OF_GOODS:
 [Write 2-3 professional sentences describing the goods/services being procured for this contract.]
