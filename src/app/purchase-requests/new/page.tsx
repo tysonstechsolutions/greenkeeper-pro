@@ -65,6 +65,7 @@ import { History as HistoryIcon } from "lucide-react";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { generateSowContent } from "@/lib/reports/sow-content";
 import { uploadSowFormData } from "@/lib/reports/sow-persistence";
+import { withSowSuffix } from "@/lib/pr-attachments";
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type {
@@ -1198,7 +1199,9 @@ function NewPurchaseRequestPageInner() {
         section_889: row.attached_section_889,
         sow: row.attached_sow ?? false,
       });
-      setAttachedOther(row.attached_other || "");
+      setAttachedOther(
+        withSowSuffix(row.attached_other || "", row.attached_sow ?? false),
+      );
       setLoadingExisting(false);
     }
     load();
@@ -1224,7 +1227,10 @@ function NewPurchaseRequestPageInner() {
     if (!quoteSource) return;
     const label = QUOTE_SOURCE_LABELS[quoteSource];
     setIgeBasedOn(label);
-    setAttachedOther(label);
+    // Keep the SOW mention if one is attached (the form has no SOW checkbox,
+    // so it rides along in the "Other" box: "Vendor Quote and SOW").
+    setAttachedOther(withSowSuffix(label, attached.sow));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fill only on quote-source change; the SOW checkbox keeps its own suffix in sync
   }, [quoteSource]);
 
   // ── Item helpers ─────────────────────────────────────────────────────────
@@ -1728,7 +1734,7 @@ function NewPurchaseRequestPageInner() {
         attached_bnj: attached.bnj,
         attached_pws: attached.pws,
         attached_itpr: attached.itpr,
-        attached_other: attachedOther.trim() || null,
+        attached_other: withSowSuffix(attachedOther.trim(), attached.sow) || null,
         attached_section_889: attached.section_889,
         attached_sow: attached.sow,
         sow_storage_path: null,
@@ -2021,7 +2027,7 @@ function NewPurchaseRequestPageInner() {
       attached_bnj: attached.bnj,
       attached_pws: attached.pws,
       attached_itpr: attached.itpr,
-      attached_other: attachedOther.trim() || null,
+      attached_other: withSowSuffix(attachedOther.trim(), attached.sow) || null,
       attached_section_889: attached.section_889,
       attached_sow: attached.sow,
       ...(sowStoragePath ? { sow_storage_path: sowStoragePath } : {}),
@@ -3323,6 +3329,8 @@ function NewPurchaseRequestPageInner() {
             checked={attached.sow}
             onChange={(v) => {
               setAttached({ ...attached, sow: v });
+              // No SOW checkbox on the form — fold it into the "Other" box.
+              setAttachedOther((prev) => withSowSuffix(prev, v));
               if (v) {
                 setShowSowModal(true);
               } else {
