@@ -282,6 +282,28 @@ export interface ActivityLog {
   created_at: string;
 }
 
+/**
+ * Employment details used to fill the SF-52 (Request for Personnel Action).
+ * Stored as JSONB on `profiles`. No sensitive PII (SSN / DOB) — the requesting
+ * office never fills those boxes on the form.
+ */
+export interface PersonnelDetails {
+  name_last?: string | null;
+  name_first?: string | null;
+  name_middle?: string | null;
+  position_title?: string | null;
+  position_number?: string | null;
+  pay_plan?: string | null; // "NF" (payband) | "NA" | "NL" (crafts/trades)
+  occ_series?: string | null; // 4-digit occupational series, e.g. "0189"
+  pay_band?: string | null; // 2-digit pay band / grade, e.g. "02"
+  step?: string | null; // crafts/trades only
+  hourly_rate?: string | null;
+  work_schedule?: string | null; // "RFT" | "RPT" | "FLEX"
+  avg_hours?: string | null; // average hours for a flex employee
+  flsa?: string | null; // "E" (exempt) | "N" (nonexempt)
+  cost_center?: string | null; // 5-digit home cost center
+}
+
 // Table row types
 export interface Profile {
   id: string;
@@ -294,6 +316,8 @@ export interface Profile {
   hire_date: string | null;
   certifications: Certification[];
   emergency_contact: EmergencyContact | null;
+  /** Employment details for filling the SF-52 personnel-action form. */
+  personnel_details?: PersonnelDetails | null;
   user_preferences: UserPreferences | null;
   is_active: boolean;
   /** Preferred display locale for bilingual content. Defaults to 'en'. */

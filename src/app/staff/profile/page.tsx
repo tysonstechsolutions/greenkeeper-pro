@@ -38,7 +38,7 @@ import {
   DOC_CATEGORY_ORDER,
   type StaffRecordType,
 } from "@/lib/staff/types";
-import type { UserRole, Certification as Cert } from "@/types/database";
+import type { UserRole, Certification as Cert, PersonnelDetails } from "@/types/database";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "super", label: "Superintendent" },
@@ -91,6 +91,16 @@ function fmtDate(d: string | null | undefined): string {
   return Number.isNaN(dt.getTime()) ? d : dt.toLocaleDateString();
 }
 
+/** Drop blank fields; return null if nothing was entered. */
+function cleanPd(pd: PersonnelDetails): PersonnelDetails | null {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(pd)) {
+    const t = (v ?? "").toString().trim();
+    if (t) out[k] = t;
+  }
+  return Object.keys(out).length ? (out as PersonnelDetails) : null;
+}
+
 function ProfileContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -127,6 +137,9 @@ function ProfileContent() {
   const [ecPhone, setEcPhone] = useState("");
   const [ecRel, setEcRel] = useState("");
   const [certs, setCerts] = useState<Cert[]>([]);
+  const [pd, setPd] = useState<PersonnelDetails>({});
+  const setPdField = (k: keyof PersonnelDetails, v: string) =>
+    setPd((p) => ({ ...p, [k]: v }));
   const [savingInfo, setSavingInfo] = useState(false);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
@@ -145,6 +158,7 @@ function ProfileContent() {
     setEcPhone(profile.emergency_contact?.phone || "");
     setEcRel(profile.emergency_contact?.relationship || "");
     setCerts(Array.isArray(profile.certifications) ? profile.certifications : []);
+    setPd(profile.personnel_details || {});
   }, [profile]);
 
   const supervisorOptions = useMemo(
@@ -171,6 +185,7 @@ function ProfileContent() {
         supervisor_id: supervisorId || null,
         emergency_contact: emergency,
         certifications: certs,
+        personnel_details: cleanPd(pd),
       });
       setInfoMsg("Saved.");
       setTimeout(() => setInfoMsg(null), 2500);
@@ -455,6 +470,59 @@ function ProfileContent() {
                 <Button type="button" variant="outline" size="icon" className="text-red-600" onClick={() => setCerts((arr) => arr.filter((_, ix) => ix !== i))}><Trash2 className="w-4 h-4" /></Button>
               </div>
             ))}
+          </div>
+
+          {/* Personnel / SF-52 details */}
+          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+            <p className="text-sm font-medium flex items-center gap-1.5"><FileText className="w-4 h-4" /> Personnel details (for SF-52)</p>
+            <p className="text-xs text-muted-foreground">Auto-fills the SF-52 personnel-action form. No SSN or date of birth is stored.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Last name</Label><Input value={pd.name_last || ""} onChange={(e) => setPdField("name_last", e.target.value)} /></div>
+              <div className="space-y-1"><Label className="text-xs">First name</Label><Input value={pd.name_first || ""} onChange={(e) => setPdField("name_first", e.target.value)} /></div>
+              <div className="space-y-1"><Label className="text-xs">Middle</Label><Input value={pd.name_middle || ""} onChange={(e) => setPdField("name_middle", e.target.value)} /></div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Position title</Label><Input value={pd.position_title || ""} onChange={(e) => setPdField("position_title", e.target.value)} placeholder="e.g. Recreation Aide" /></div>
+              <div className="space-y-1"><Label className="text-xs">Position number (PD#)</Label><Input value={pd.position_number || ""} onChange={(e) => setPdField("position_number", e.target.value)} /></div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Pay plan</Label>
+                <select value={pd.pay_plan || ""} onChange={(e) => setPdField("pay_plan", e.target.value)} className="w-full px-2 py-2.5 rounded-lg border border-input bg-background text-sm">
+                  <option value="">—</option>
+                  <option value="NF">NF</option>
+                  <option value="NA">NA</option>
+                  <option value="NL">NL</option>
+                </select>
+              </div>
+              <div className="space-y-1"><Label className="text-xs">Occ. series</Label><Input value={pd.occ_series || ""} onChange={(e) => setPdField("occ_series", e.target.value)} placeholder="0189" /></div>
+              <div className="space-y-1"><Label className="text-xs">Pay band</Label><Input value={pd.pay_band || ""} onChange={(e) => setPdField("pay_band", e.target.value)} placeholder="02" /></div>
+              <div className="space-y-1"><Label className="text-xs">Step</Label><Input value={pd.step || ""} onChange={(e) => setPdField("step", e.target.value)} placeholder="NA/NL only" /></div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Hourly rate</Label><Input value={pd.hourly_rate || ""} onChange={(e) => setPdField("hourly_rate", e.target.value)} placeholder="17.25" /></div>
+              <div className="space-y-1">
+                <Label className="text-xs">Work schedule</Label>
+                <select value={pd.work_schedule || ""} onChange={(e) => setPdField("work_schedule", e.target.value)} className="w-full px-2 py-2.5 rounded-lg border border-input bg-background text-sm">
+                  <option value="">—</option>
+                  <option value="RFT">RFT</option>
+                  <option value="RPT">RPT</option>
+                  <option value="FLEX">FLEX</option>
+                </select>
+              </div>
+              <div className="space-y-1"><Label className="text-xs">Avg hrs (flex)</Label><Input value={pd.avg_hours || ""} onChange={(e) => setPdField("avg_hours", e.target.value)} placeholder="20" /></div>
+              <div className="space-y-1">
+                <Label className="text-xs">FLSA</Label>
+                <select value={pd.flsa || ""} onChange={(e) => setPdField("flsa", e.target.value)} className="w-full px-2 py-2.5 rounded-lg border border-input bg-background text-sm">
+                  <option value="">—</option>
+                  <option value="E">E (Exempt)</option>
+                  <option value="N">N (Nonexempt)</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Home cost center</Label><Input value={pd.cost_center || ""} onChange={(e) => setPdField("cost_center", e.target.value)} placeholder="5-digit" /></div>
+            </div>
           </div>
 
           {/* Active + direct reports */}
