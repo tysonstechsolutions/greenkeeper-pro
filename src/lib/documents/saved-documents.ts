@@ -32,6 +32,7 @@ export interface CreatedDocument {
 export const DOC_TYPE_LABELS: Record<string, string> = {
   sole_source: "Sole Source",
   sow: "Statement of Work",
+  sf52: "SF-52 (Personnel Action)",
   onboarding_packet: "Onboarding Packet",
   work_order: "Work Order",
   other: "Document",

@@ -371,12 +371,20 @@ function ProfileContent() {
         <div className="w-11 h-11 rounded-full bg-[#1B4332]/10 text-[#1B4332] flex items-center justify-center font-semibold">
           {getInitials(profile?.full_name)}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold truncate">{profile?.full_name || "Employee"}</h1>
           <p className="text-sm text-muted-foreground">
             {roleLabels[role]} {supervisor ? `· reports to ${supervisor.full_name}` : ""}
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 shrink-0"
+          onClick={() => router.push(`/staff/sf52?employee=${id}`)}
+        >
+          <FileText className="w-4 h-4" /> SF-52
+        </Button>
       </div>
 
       {/* Tabs */}
