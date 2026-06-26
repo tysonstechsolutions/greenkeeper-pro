@@ -18,6 +18,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { cn } from "@/lib/utils";
 import { useOnboardingDocs, type OnboardingDoc } from "@/lib/onboarding/use-onboarding-docs";
 import {
@@ -608,11 +609,10 @@ ${draft.body}`;
                 <label className="text-xs font-medium text-muted-foreground">
                   Content <span className="text-muted-foreground/60">(Markdown — #, ##, -, 1., **bold**)</span>
                 </label>
-                <textarea
+                <AutoResizeTextarea
                   value={draft.body}
                   onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-                  rows={16}
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono leading-relaxed"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-input bg-background text-sm font-mono leading-relaxed min-h-[22rem]"
                 />
               </div>
             </div>
