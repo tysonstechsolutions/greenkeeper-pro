@@ -34,6 +34,7 @@ import { withTimeout, isOnline } from "@/lib/utils/resilient-fetch";
 import type { Profile, UserRole, Task, TimeOffRequest, Schedule } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 import { AddStaffSheet } from "@/components/features/staff/add-staff-sheet";
+import { ProShopRosterCard } from "@/components/features/pro-shop/roster-card";
 
 // Extended profile with additional details for staff page
 interface StaffProfile extends Profile {
@@ -377,6 +378,9 @@ export default function StaffPage() {
           </Button>
         </div>
       </div>
+
+      {/* Pro shop & golf ops (separate lightweight roster) */}
+      <ProShopRosterCard />
 
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">

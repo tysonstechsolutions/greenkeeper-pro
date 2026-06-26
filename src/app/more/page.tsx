@@ -31,6 +31,7 @@ import {
   Landmark,
   HardHat,
   Trophy,
+  CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useView } from "@/lib/providers/view-provider";
@@ -70,6 +71,7 @@ const leadershipApps: AppItem[] = [
   // removed when these were merged.
   { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
   { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
+  { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-sky-600 to-indigo-600" },
   { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
   { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
   { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
@@ -143,6 +145,7 @@ const bdhApps: AppItem[] = [
   { href: "/revenue", label: "Revenue", icon: Landmark, color: "from-amber-600 to-yellow-700" },
   { href: "/capital-projects", label: "Capital Projects", icon: HardHat, color: "from-orange-600 to-amber-700" },
   { href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-yellow-500 to-amber-600" },
+  { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-sky-600 to-indigo-600" },
   { href: "/work-orders", label: "Work Orders", icon: Wrench, color: "from-orange-600 to-amber-700" },
 ];
 
