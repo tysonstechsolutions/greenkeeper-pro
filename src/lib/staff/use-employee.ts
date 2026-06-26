@@ -12,7 +12,7 @@ import {
   publicStorageUrl,
   getCachedUserId,
 } from "@/lib/supabase/rest";
-import type { FullProfile, StaffRecord, StaffRecordType, StaffDocument } from "./types";
+import type { FullProfile, StaffRecord, StaffRecordType, StaffDocument, StaffConcern } from "./types";
 
 const BUCKET = "staff-documents";
 
@@ -22,6 +22,7 @@ export function useEmployee(employeeId: string) {
   const [reports, setReports] = useState<{ id: string; full_name: string }[]>([]);
   const [records, setRecords] = useState<StaffRecord[]>([]);
   const [documents, setDocuments] = useState<StaffDocument[]>([]);
+  const [concerns, setConcerns] = useState<StaffConcern[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,7 +53,7 @@ export function useEmployee(employeeId: string) {
         setSupervisor(null);
       }
 
-      const [recs, docs, directReports] = await Promise.all([
+      const [recs, docs, directReports, cons] = await Promise.all([
         directSelectList<StaffRecord>("staff_records", {
           filters: [`employee_id=eq.${employeeId}`],
           orderBy: [
@@ -72,10 +73,16 @@ export function useEmployee(employeeId: string) {
           orderBy: [{ column: "full_name", ascending: true }],
           label: "staff.directReports",
         }),
+        directSelectList<StaffConcern>("staff_concerns", {
+          filters: [`employee_id=eq.${employeeId}`],
+          orderBy: [{ column: "opened_on", ascending: true }],
+          label: "staff.concerns",
+        }),
       ]);
       setRecords(recs);
       setDocuments(docs);
       setReports(directReports);
+      setConcerns(cons);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load employee.");
     } finally {
@@ -170,6 +177,76 @@ export function useEmployee(employeeId: string) {
     [load],
   );
 
+  // ── 1:1 concerns ──────────────────────────────────────────────────────────
+  const addConcern = useCallback(
+    async (title: string, firstNote?: string) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const updates =
+        firstNote && firstNote.trim() ? [{ date: today, note: firstNote.trim() }] : [];
+      await directInsertRow(
+        "staff_concerns",
+        {
+          employee_id: employeeId,
+          title: title.trim(),
+          opened_on: today,
+          status: "open",
+          updates,
+          created_by: getCachedUserId(),
+        },
+        "staff.concerns.add",
+      );
+      await load();
+    },
+    [employeeId, load],
+  );
+
+  const addConcernUpdate = useCallback(
+    async (concern: StaffConcern, note: string) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const updates = [...(concern.updates || []), { date: today, note: note.trim() }];
+      await directPatchRow("staff_concerns", "id", concern.id, { updates }, "staff.concerns.note");
+      await load();
+    },
+    [load],
+  );
+
+  const reconcileConcern = useCallback(
+    async (concernId: string) => {
+      const today = new Date().toISOString().slice(0, 10);
+      await directPatchRow(
+        "staff_concerns",
+        "id",
+        concernId,
+        { status: "reconciled", reconciled_on: today },
+        "staff.concerns.reconcile",
+      );
+      await load();
+    },
+    [load],
+  );
+
+  const reopenConcern = useCallback(
+    async (concernId: string) => {
+      await directPatchRow(
+        "staff_concerns",
+        "id",
+        concernId,
+        { status: "open", reconciled_on: null },
+        "staff.concerns.reopen",
+      );
+      await load();
+    },
+    [load],
+  );
+
+  const deleteConcern = useCallback(
+    async (concernId: string) => {
+      await directDeleteRow("staff_concerns", "id", concernId, "staff.concerns.delete");
+      await load();
+    },
+    [load],
+  );
+
   return {
     profile,
     supervisor,
@@ -185,5 +262,11 @@ export function useEmployee(employeeId: string) {
     deleteRecord,
     addDocument,
     deleteDocument,
+    concerns,
+    addConcern,
+    addConcernUpdate,
+    reconcileConcern,
+    reopenConcern,
+    deleteConcern,
   };
 }

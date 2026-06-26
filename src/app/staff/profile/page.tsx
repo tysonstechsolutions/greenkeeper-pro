@@ -18,6 +18,8 @@ import {
   Plus,
   Sparkles,
   Award,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   CheckCircle,
 } from "lucide-react";
@@ -37,6 +39,7 @@ import {
   DOC_CATEGORY_LABELS,
   DOC_CATEGORY_ORDER,
   type StaffRecordType,
+  type StaffConcern,
 } from "@/lib/staff/types";
 import type { UserRole, Certification as Cert, PersonnelDetails } from "@/types/database";
 
@@ -119,6 +122,11 @@ function ProfileContent() {
     deleteRecord,
     addDocument,
     deleteDocument,
+    concerns,
+    addConcern,
+    addConcernUpdate,
+    reconcileConcern,
+    reopenConcern,
   } = useEmployee(id);
   const { profiles } = useProfiles();
 
@@ -328,6 +336,39 @@ function ProfileContent() {
   };
 
   const oneOnOnes = useMemo(() => records.filter((r) => r.type === "one_on_one"), [records]);
+
+  // ── Concerns ──
+  const openConcerns = useMemo(() => concerns.filter((c) => c.status === "open"), [concerns]);
+  const resolvedConcerns = useMemo(() => concerns.filter((c) => c.status === "reconciled"), [concerns]);
+  const [newConcernTitle, setNewConcernTitle] = useState("");
+  const [newConcernNote, setNewConcernNote] = useState("");
+  const [concernNotes, setConcernNotes] = useState<Record<string, string>>({});
+  const [showResolved, setShowResolved] = useState(false);
+  const [concernBusy, setConcernBusy] = useState(false);
+
+  const handleAddConcern = async () => {
+    if (!newConcernTitle.trim()) return;
+    setConcernBusy(true);
+    try {
+      await addConcern(newConcernTitle, newConcernNote);
+      setNewConcernTitle("");
+      setNewConcernNote("");
+    } finally {
+      setConcernBusy(false);
+    }
+  };
+
+  const handleAddConcernNote = async (concern: StaffConcern) => {
+    const note = concernNotes[concern.id];
+    if (!note || !note.trim()) return;
+    setConcernBusy(true);
+    try {
+      await addConcernUpdate(concern, note);
+      setConcernNotes((m) => ({ ...m, [concern.id]: "" }));
+    } finally {
+      setConcernBusy(false);
+    }
+  };
 
   if (!id) {
     return (
@@ -699,6 +740,75 @@ function ProfileContent() {
       {/* ── 1:1s ── */}
       {tab === "oneonone" && (
         <div className="space-y-5 max-w-xl">
+          {/* Open concerns — raised in a 1:1, tracked across meetings */}
+          <div className="rounded-lg border border-border p-3 space-y-3">
+            <p className="text-sm font-medium">Open concerns</p>
+            <p className="text-xs text-muted-foreground">
+              Raised in a 1:1 and tracked until reconciled. Each carries its history so you can follow up next time.
+            </p>
+            {openConcerns.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No open concerns.</p>
+            ) : (
+              openConcerns.map((c) => (
+                <div key={c.id} className="rounded-lg border border-amber-300/70 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">{c.title}</p>
+                    <button
+                      onClick={() => reconcileConcern(c.id)}
+                      className="text-xs text-green-700 dark:text-green-400 hover:underline shrink-0 flex items-center gap-1"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Reconcile
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Raised {fmtDate(c.opened_on)}</p>
+                  {c.updates.length > 0 && (
+                    <div className="space-y-1 border-l-2 border-amber-300/70 pl-2">
+                      {c.updates.map((u, i) => (
+                        <p key={i} className="text-sm">
+                          <span className="text-[11px] text-muted-foreground">{fmtDate(u.date)}: </span>
+                          {u.note}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-end gap-2">
+                    <Textarea
+                      rows={2}
+                      value={concernNotes[c.id] || ""}
+                      onChange={(e) => setConcernNotes((m) => ({ ...m, [c.id]: e.target.value }))}
+                      placeholder="How's it going? Still a concern, or a new approach they want?"
+                      className="flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={concernBusy || !(concernNotes[c.id] || "").trim()}
+                      onClick={() => handleAddConcernNote(c)}
+                    >
+                      Add note
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+            <div className="border-t border-border pt-3 space-y-2">
+              <Label className="text-xs">Raise a new concern</Label>
+              <Input
+                value={newConcernTitle}
+                onChange={(e) => setNewConcernTitle(e.target.value)}
+                placeholder="The concern, in their words"
+              />
+              <Textarea
+                rows={2}
+                value={newConcernNote}
+                onChange={(e) => setNewConcernNote(e.target.value)}
+                placeholder="Optional first note"
+              />
+              <Button size="sm" className="gap-2" disabled={concernBusy || !newConcernTitle.trim()} onClick={handleAddConcern}>
+                <Plus className="w-4 h-4" /> Add concern
+              </Button>
+            </div>
+          </div>
+
           <div className="rounded-lg border border-border p-3 space-y-3">
             <p className="text-sm font-medium flex items-center gap-1.5"><Plus className="w-4 h-4" /> Log a 1:1</p>
             <div className="space-y-1.5"><Label htmlFor="ooDate">Date</Label><Input id="ooDate" type="date" value={ooDate} onChange={(e) => setOoDate(e.target.value)} /></div>
@@ -725,6 +835,45 @@ function ProfileContent() {
               ))
             )}
           </div>
+
+          {resolvedConcerns.length > 0 && (
+            <div className="rounded-lg border border-border p-3 space-y-2">
+              <button
+                onClick={() => setShowResolved((s) => !s)}
+                className="text-sm font-medium flex items-center gap-1.5"
+              >
+                {showResolved ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                Reconciled concerns ({resolvedConcerns.length})
+              </button>
+              {showResolved && (
+                <div className="space-y-2">
+                  {resolvedConcerns.map((c) => (
+                    <div key={c.id} className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium">{c.title}</p>
+                        <button onClick={() => reopenConcern(c.id)} className="text-xs text-muted-foreground hover:underline shrink-0">
+                          Reopen
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Raised {fmtDate(c.opened_on)} · Reconciled {fmtDate(c.reconciled_on)}
+                      </p>
+                      {c.updates.length > 0 && (
+                        <div className="space-y-1 border-l-2 border-border pl-2">
+                          {c.updates.map((u, i) => (
+                            <p key={i} className="text-sm">
+                              <span className="text-[11px] text-muted-foreground">{fmtDate(u.date)}: </span>
+                              {u.note}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -39,6 +39,30 @@ export interface StaffDocument {
   created_at: string;
 }
 
+/** One dated note in a concern's running thread. */
+export interface ConcernUpdate {
+  date: string;
+  note: string;
+}
+
+/**
+ * An employee concern raised in a 1:1. It lives across later 1:1s — gathering
+ * a thread of dated notes — until it's reconciled (archived but kept as
+ * history). See [[staff-management-system]].
+ */
+export interface StaffConcern {
+  id: string;
+  employee_id: string;
+  title: string;
+  opened_on: string;
+  status: "open" | "reconciled";
+  reconciled_on: string | null;
+  updates: ConcernUpdate[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const RECORD_TYPE_LABELS: Record<StaffRecordType, string> = {
   holiday_pay: "Holiday Pay",
   call_out: "Call-Out",
