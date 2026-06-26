@@ -93,7 +93,7 @@ Rules:
 
 const COVER_SYSTEM = `You help a golf course manager re-cover the pro-shop schedule when an employee drops a shift. This is internal scheduling — always help.
 
-You are given a date, the person dropping out, the shifts already on that day, and the roster (each with their usual availability and whether they're already working that day). Propose who should cover the dropped shift's hours.
+You are given a date, the person dropping out, the shifts already on that day, and the roster. Each roster entry has: homeArea (inside/outside), flex (true = can cover ANY area, not just their home area), usualAvailability, and whether they're already working that day. Propose who should cover the dropped shift's hours.
 
 Return ONLY a JSON object, no prose:
 {
@@ -104,9 +104,11 @@ Return ONLY a JSON object, no prose:
 }
 
 Rules:
-- Prefer people in the SAME group (inside/outside) as the dropped shift.
+- The dropped shift's area (group) must stay covered. First look for someone whose homeArea matches that group.
+- If no good match in that area, a FLEX employee (flex:true) can cover it even if it's not their home area — flex staff cross-cover between inside and outside. Set the addition's "group" to the area being covered (the dropped shift's area), not their home area.
 - Prefer people whose usual pattern shows they work near those hours / that day.
-- Don't double-book someone who is already working overlapping hours that day; instead pick someone else or extend a same-group person's existing shift via a new addition that doesn't overlap.
+- Don't double-book someone already working overlapping hours that day; pick someone else, or add a non-overlapping shift for a flex person.
+- Non-flex employees should only cover their home area.
 - Use exact names from the roster. Times are 24-hour "HH:MM".
 - If nobody is a good fit, return an empty additions array and say so in the explanation.`;
 

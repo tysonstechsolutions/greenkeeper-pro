@@ -282,12 +282,18 @@ export default function ProShopSchedulePage() {
                   {positionGroup(s.position) === "inside" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">
+                  <p className="text-sm font-medium truncate flex items-center gap-1.5">
                     {s.full_name}
-                    {!s.is_active && <span className="text-xs text-muted-foreground"> · inactive</span>}
+                    {s.flex && (
+                      <span className="text-[10px] px-1.5 py-px rounded-full bg-sky-100 text-sky-700 border border-sky-300 font-normal">
+                        Flex
+                      </span>
+                    )}
+                    {!s.is_active && <span className="text-xs text-muted-foreground font-normal"> · inactive</span>}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     {s.position === "golf_ops_assistant" ? "Golf Ops Assistant" : "Rec Aid"}
+                    {s.flex ? " · covers any area" : ""}
                   </p>
                   <p className="text-[11px] text-muted-foreground truncate mt-0.5">{summarizeWeekly(s)}</p>
                 </div>
@@ -346,7 +352,10 @@ export default function ProShopSchedulePage() {
         <AvailabilitySheet
           staff={availabilityStaff}
           onClose={() => setAvailabilityStaff(null)}
-          onSave={(availability, text) => ps.saveAvailability(availabilityStaff.id, availability, text)}
+          onSave={async (availability, text, flex) => {
+            await ps.saveAvailability(availabilityStaff.id, availability, text);
+            if (flex !== availabilityStaff.flex) await ps.updateStaff(availabilityStaff.id, { flex });
+          }}
         />
       )}
 
@@ -595,13 +604,20 @@ function AddStaffSheet({
     full_name: string;
     position: "rec_aid" | "golf_ops_assistant";
     default_group: ShiftGroup;
+    flex: boolean;
     phone?: string | null;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [position, setPosition] = useState<"rec_aid" | "golf_ops_assistant">("rec_aid");
+  const [flex, setFlex] = useState(true);
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function onPickPosition(p: "rec_aid" | "golf_ops_assistant") {
+    setPosition(p);
+    setFlex(p === "rec_aid"); // sensible default; user can override
+  }
 
   async function save() {
     if (!name.trim()) return;
@@ -611,6 +627,7 @@ function AddStaffSheet({
         full_name: name.trim(),
         position,
         default_group: positionGroup(position),
+        flex,
         phone: phone.trim() || null,
       });
       onClose();
@@ -630,13 +647,20 @@ function AddStaffSheet({
           <Label className="text-xs">Position</Label>
           <select
             value={position}
-            onChange={(e) => setPosition(e.target.value as "rec_aid" | "golf_ops_assistant")}
+            onChange={(e) => onPickPosition(e.target.value as "rec_aid" | "golf_ops_assistant")}
             className={selectCls}
           >
             <option value="rec_aid">Rec Aid (outside)</option>
             <option value="golf_ops_assistant">Golf Ops Assistant (inside)</option>
           </select>
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={flex} onChange={(e) => setFlex(e.target.checked)} className="w-4 h-4 mt-0.5" />
+          <span>
+            Flex employee
+            <span className="block text-xs text-muted-foreground">Can cover any area (inside or outside) when needed.</span>
+          </span>
+        </label>
         <div className="space-y-1.5">
           <Label className="text-xs">Phone (optional)</Label>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />

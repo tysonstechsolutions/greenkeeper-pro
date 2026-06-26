@@ -37,6 +37,9 @@ select * from (values
 ) as v(full_name, position, default_group, sort_order, availability_text, availability)
 where not exists (select 1 from public.pro_shop_staff);
 
+-- Rec aids are flex (can cover any area); golf ops assistants stay inside.
+update public.pro_shop_staff set flex = (position = 'rec_aid');
+
 -- ── 2. June 2026 schedule container ──────────────────────────────────────────
 insert into public.pro_shop_schedules (month, title, status)
 values ('2026-06-01', 'June 2026 Pro Shop Schedule', 'published')

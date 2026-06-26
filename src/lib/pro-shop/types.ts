@@ -29,6 +29,8 @@ export interface ProShopStaff {
   availability_text: string | null;
   /** Standing weekly pattern. May be `{}` for a brand-new hire. */
   availability: Partial<WeeklyAvailability>;
+  /** Flex employees can be pulled to cover any area (inside or outside). */
+  flex: boolean;
   phone: string | null;
   is_active: boolean;
   sort_order: number;

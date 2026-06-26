@@ -81,7 +81,9 @@ export function CoverSheet({
           const theirShift = dayShifts.find((sh) => sh.staff_id === s.id);
           return {
             name: s.full_name,
-            group: s.default_group,
+            homeArea: s.default_group,
+            flex: s.flex,
+            canCoverAnyArea: s.flex,
             usualAvailability: summarizeWeekly(s),
             alreadyWorkingToday: theirShift
               ? `${hhmm(theirShift.start_time)}-${hhmm(theirShift.end_time)} ${theirShift.group}`

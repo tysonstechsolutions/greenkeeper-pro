@@ -140,6 +140,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       full_name: string;
       position: "rec_aid" | "golf_ops_assistant";
       default_group: ShiftGroup;
+      flex?: boolean;
       phone?: string | null;
     }) => {
       const maxSort = staff.reduce((m, s) => Math.max(m, s.sort_order), 0);
@@ -149,6 +150,8 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           full_name: payload.full_name,
           position: payload.position,
           default_group: payload.default_group,
+          // Rec aids default to flex (cover any area); golf ops do not.
+          flex: payload.flex ?? payload.position === "rec_aid",
           phone: payload.phone ?? null,
           sort_order: maxSort + 1,
           availability: { weekly: {}, notes: "" },
