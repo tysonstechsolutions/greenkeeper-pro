@@ -17,6 +17,7 @@ import {
   CheckSquare,
   Clock,
   Award,
+  FileText,
   CalendarOff,
   Shield,
   WifiOff,
@@ -358,6 +359,12 @@ export default function StaffPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/staff/sf52">
+            <Button variant="outline" className="gap-2">
+              <FileText className="w-4 h-4" />
+              New SF-52
+            </Button>
+          </Link>
           <Link href="/staff/crews">
             <Button variant="outline" className="gap-2">
               <Users className="w-4 h-4" />
