@@ -127,6 +127,7 @@ function ProfileContent() {
     addConcernUpdate,
     reconcileConcern,
     reopenConcern,
+    scheduleOneOnOne,
   } = useEmployee(id);
   const { profiles } = useProfiles();
 
@@ -367,6 +368,29 @@ function ProfileContent() {
       setConcernNotes((m) => ({ ...m, [concern.id]: "" }));
     } finally {
       setConcernBusy(false);
+    }
+  };
+
+  // ── Schedule a 1:1 (→ calendar) ──
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("");
+  const [schedBusy, setSchedBusy] = useState(false);
+  const [schedMsg, setSchedMsg] = useState<string | null>(null);
+
+  const handleSchedule = async () => {
+    if (!schedDate) return;
+    setSchedBusy(true);
+    setSchedMsg(null);
+    try {
+      await scheduleOneOnOne(schedDate, schedTime || null);
+      setSchedDate("");
+      setSchedTime("");
+      setSchedMsg("Scheduled — it's on the Calendar.");
+      setTimeout(() => setSchedMsg(null), 3000);
+    } catch (e) {
+      setSchedMsg(e instanceof Error ? e.message : "Couldn't schedule.");
+    } finally {
+      setSchedBusy(false);
     }
   };
 
@@ -740,6 +764,20 @@ function ProfileContent() {
       {/* ── 1:1s ── */}
       {tab === "oneonone" && (
         <div className="space-y-5 max-w-xl">
+          {/* Schedule a 1:1 → calendar */}
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <p className="text-sm font-medium flex items-center gap-1.5"><Calendar className="w-4 h-4" /> Schedule a 1:1</p>
+            <p className="text-xs text-muted-foreground">Puts it on the <a href="/calendar" className="underline">Calendar</a>, where you can move it if a day gets busy.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} /></div>
+              <div className="space-y-1"><Label className="text-xs">Time (optional)</Label><Input type="time" value={schedTime} onChange={(e) => setSchedTime(e.target.value)} /></div>
+            </div>
+            {schedMsg && <p className="text-xs text-green-700 dark:text-green-400">{schedMsg}</p>}
+            <Button size="sm" className="gap-2" disabled={schedBusy || !schedDate} onClick={handleSchedule}>
+              {schedBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />} Schedule
+            </Button>
+          </div>
+
           {/* Open concerns — raised in a 1:1, tracked across meetings */}
           <div className="rounded-lg border border-border p-3 space-y-3">
             <p className="text-sm font-medium">Open concerns</p>

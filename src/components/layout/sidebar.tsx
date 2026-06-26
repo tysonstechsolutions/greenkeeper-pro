@@ -37,6 +37,7 @@ import {
   Wallet,
   BarChart3,
   Trophy,
+  CalendarDays,
   Landmark,
   HardHat,
   Vote,
@@ -77,6 +78,7 @@ const leadershipPinned: SidebarItem[] = [
 ];
 
 const leadershipApps: SidebarItem[] = [
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   // Assets is the unified entry point — operational data (photos, parts,
   // service, inspections) is shown inline on /assets/view alongside the
   // FY26 inventory tracking. The standalone "Equipment" item was removed
@@ -195,6 +197,7 @@ const gmPinned: SidebarItem[] = [
 ];
 
 const gmApps: SidebarItem[] = [
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck },
   { href: "/reports/monthly-board", label: "Board Report", icon: BarChart3 },
   { href: "/revenue", label: "Revenue", icon: Landmark },

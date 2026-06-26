@@ -247,6 +247,26 @@ export function useEmployee(employeeId: string) {
     [load],
   );
 
+  /** Schedule a 1:1 for this employee — appears on the calendar, movable there. */
+  const scheduleOneOnOne = useCallback(
+    async (scheduledOn: string, scheduledTime?: string | null, notes?: string | null) => {
+      await directInsertRow(
+        "staff_one_on_ones",
+        {
+          employee_id: employeeId,
+          scheduled_on: scheduledOn,
+          scheduled_time: scheduledTime || null,
+          notes: notes || null,
+          status: "scheduled",
+          created_by: getCachedUserId(),
+        },
+        "staff.oneonone.schedule",
+      );
+      await load();
+    },
+    [employeeId, load],
+  );
+
   return {
     profile,
     supervisor,
@@ -268,5 +288,6 @@ export function useEmployee(employeeId: string) {
     reconcileConcern,
     reopenConcern,
     deleteConcern,
+    scheduleOneOnOne,
   };
 }
