@@ -1,159 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Camera,
-  Map,
-  BookOpen,
-  Settings,
-  Users,
-  Cloud,
-  Bell,
-  Flag,
-  Coffee,
-  Smartphone,
-  Car,
-  Building,
-  ShoppingCart,
-  FileText,
-  Leaf,
-  Bot,
-  Archive,
-  Mic,
-  Phone,
-  ClipboardSignature,
-  Scale,
-  Wrench,
-  Droplets,
-  ClipboardCheck,
-  Wallet,
-  BarChart3,
-  Landmark,
-  HardHat,
-  Trophy,
-  CalendarClock,
-} from "lucide-react";
+import { Settings, Bell, Smartphone } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useView } from "@/lib/providers/view-provider";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
+import { getCatalog, type AppEntry } from "@/lib/layout/app-catalog";
 
-// ── Types ──
-interface AppItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  /** Tailwind gradient classes for the icon tile. */
-  color: string;
-}
+// ──────────────────────────────────────────────────────────────────────────
+// Mobile "More" grid. Reads the same shared catalog as the desktop sidebar
+// (src/lib/layout/app-catalog.ts) so the two never drift. Every entry for
+// the role is shown as a tile, most-used first.
+// ──────────────────────────────────────────────────────────────────────────
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// APP CATALOGS BY ROLE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//
-// Hidden per request: Maint Calendar, Annual Plan, Irrigation, Pin Sheet,
-// Board Report, Drone Flights, Water Usage, Tournaments, Revenue, Capital
-// Projects, Budget, Reports, IL RUP Records.
-//
-// Combined: Environmental + Inspections → "Environmental & Inspections"
-// (entry routes to /environmental which now hosts the AST inspection
-// monthly checklist alongside the existing log + buffer-zone tabs).
-
-const leadershipApps: AppItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: Coffee, color: "from-amber-500 to-yellow-600" },
-  { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
-  { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
-  // Assets is the unified entry — operational data (photos, parts,
-  // service) is surfaced inline on /assets/view, and the FY26 inventory
-  // workflow lives there too. The standalone "Equipment" entry was
-  // removed when these were merged.
-  { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
-  { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
-  { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-sky-600 to-indigo-600" },
-  { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
-  { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
-  { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/assistant", label: "AI Assistant", icon: Bot, color: "from-violet-500 to-fuchsia-600" },
-  { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-blue-600 to-indigo-700" },
-  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-cyan-600 to-blue-700" },
-  { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-green-600 to-emerald-700" },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
-  { href: "/vendors", label: "Vendors", icon: Phone, color: "from-purple-500 to-fuchsia-700" },
-  { href: "/sow", label: "Statement of Work", icon: ClipboardSignature, color: "from-cyan-600 to-teal-700" },
-  { href: "/sole-source", label: "Sole Source", icon: Scale, color: "from-indigo-500 to-violet-600" },
-  { href: "/work-orders", label: "Work Orders", icon: Wrench, color: "from-orange-600 to-amber-700" },
-  { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
-];
-
-const foremanApps: AppItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: Coffee, color: "from-amber-500 to-yellow-600" },
-  { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
-  { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
-  { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
-  { href: "/staff", label: "Staff", icon: Users, color: "from-blue-500 to-indigo-600" },
-  { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
-  { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-violet-500 to-purple-600" },
-  { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/assistant", label: "AI Assistant", icon: Bot, color: "from-violet-500 to-fuchsia-600" },
-  { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-green-600 to-emerald-700" },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
-  { href: "/work-orders", label: "Work Orders", icon: Wrench, color: "from-orange-600 to-amber-700" },
-  { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
-];
-
-const mechanicApps: AppItem[] = [
-  { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-600 to-yellow-700" },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
-  { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
-  { href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-gray-600" },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
-  { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
-  { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
-];
-
-const crewApps: AppItem[] = [
-  { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
-  { href: "/course-map", label: "Map", icon: Map, color: "from-teal-500 to-cyan-600" },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
-  { href: "/parking-lot", label: "Parking", icon: Car, color: "from-slate-500 to-gray-600" },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-500 to-orange-600" },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-500 to-green-600" },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
-];
-
-const proApps: AppItem[] = [
-  { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700" },
-  { href: "/course-map", label: "Course Map", icon: Map, color: "from-teal-500 to-cyan-600" },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-cyan-500 to-blue-600" },
-  { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600" },
-  { href: "/photos", label: "Photos", icon: Camera, color: "from-pink-500 to-rose-600" },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-orange-500 to-amber-700" },
-];
-
-const bdhApps: AppItem[] = [
-  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-cyan-600 to-blue-700" },
-  { href: "/budget", label: "Budget", icon: Wallet, color: "from-emerald-600 to-green-700" },
-  { href: "/reports", label: "Reports", icon: BarChart3, color: "from-blue-600 to-indigo-700" },
-  { href: "/revenue", label: "Revenue", icon: Landmark, color: "from-amber-600 to-yellow-700" },
-  { href: "/capital-projects", label: "Capital Projects", icon: HardHat, color: "from-orange-600 to-amber-700" },
-  { href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-yellow-500 to-amber-600" },
-  { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-sky-600 to-indigo-600" },
-  { href: "/work-orders", label: "Work Orders", icon: Wrench, color: "from-orange-600 to-amber-700" },
-];
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// COMPONENTS
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-function AppGrid({ items }: { items: AppItem[] }) {
+function AppGrid({ items }: { items: AppEntry[] }) {
   const { record, sortByUsage } = useAppUsage();
   const sorted = sortByUsage(items);
 
@@ -210,23 +70,13 @@ function BottomLinks({ showSettings = true }: { showSettings?: boolean }) {
   );
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PAGE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 export default function MorePage() {
   const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
   const { view } = useView();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
-  let apps: AppItem[];
-  if (view === "bdh") apps = bdhApps;
-  else if (isPro) apps = proApps;
-  else if (isLaborer) apps = crewApps;
-  else if (isMechanic) apps = mechanicApps;
-  else if (isForeman) apps = foremanApps;
-  else apps = leadershipApps;
+  const apps = getCatalog({ view, isPro, isForeman, isMechanic, isLaborer });
 
   return (
     <div className="p-4 pb-24 max-w-2xl mx-auto">

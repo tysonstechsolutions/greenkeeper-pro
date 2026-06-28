@@ -44,11 +44,6 @@ import { Settings2 } from "lucide-react";
 import { parseAppDate } from "@/lib/utils/date-format";
 import { useWeather } from "@/lib/hooks/useWeather";
 import type { WeatherAlert } from "@/lib/hooks/useWeather";
-import {
-  usePlanGoals,
-  goalCategoryColors,
-  type PlanOverview,
-} from "@/lib/hooks/usePlanGoals";
 import { Badge } from "@/components/ui/badge";
 import { useTasks, type TaskWithRelations } from "@/lib/hooks/useTasks";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -614,17 +609,13 @@ function LeadershipDashboardView() {
   const { profile } = useAuth();
   const { getAlerts } = useWeather();
   const alerts = getAlerts();
-  const { goals, fetchGoals, fetchPlanOverview } = usePlanGoals();
   const { fetchMyTasks } = useTasks();
   const { activities, loading: activitiesLoading } = useRecentActivity();
 
   const [todayTasks, setTodayTasks] = useState<TaskWithRelations[]>([]);
-  const [planOverview, setPlanOverview] = useState<PlanOverview | null>(null);
   const [staffCount, setStaffCount] = useState<number | null>(null);
   const [briefingData, setBriefingData] = useState<BriefingData | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
   const hasFetchedRef = useRef(false);
 
   const greeting = useMemo(() => getGreeting(), []);
@@ -869,42 +860,17 @@ function LeadershipDashboardView() {
     const secondaryTimer = setTimeout(async () => {
       try {
         const supabase = createClient();
-        const [overview, staffResult] = await Promise.all([
-          fetchPlanOverview(currentYear),
-          supabase
-            .from("profiles")
-            .select("id", { count: "exact", head: true }),
-        ]);
-        setPlanOverview(overview);
+        const staffResult = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true });
         if (staffResult.count !== null) setStaffCount(staffResult.count);
-
-        await fetchGoals({
-          planLevel: "monthly",
-          year: currentYear,
-          month: currentMonth,
-        });
       } catch (err) {
         console.error("Failed to load secondary data:", err);
       }
     }, 300);
 
     return () => clearTimeout(secondaryTimer);
-  }, [
-    fetchMyTasks,
-    fetchGoals,
-    fetchPlanOverview,
-    fetchBriefing,
-    currentYear,
-    currentMonth,
-  ]);
-
-  const focusGoals = useMemo(
-    () =>
-      goals
-        .filter((g) => g.status === "in_progress" || g.status === "planned")
-        .slice(0, 3),
-    [goals]
-  );
+  }, [fetchMyTasks, fetchBriefing]);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8 max-w-[1400px] mx-auto overflow-x-hidden">
@@ -1170,104 +1136,6 @@ function LeadershipDashboardView() {
             </div>
           </div>
         </Link>
-
-        {/* Plan Progress Widget */}
-        <div className="gk-animate-in gk-animate-in-6 gk-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                <Target className="w-5 h-5 text-primary" />
-              </div>
-              <h2 className="font-semibold text-sm">Plan Progress</h2>
-            </div>
-            <Link
-              href="/plan"
-              className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
-            >
-              View all
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          {planOverview ? (
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground font-medium">
-                  {currentYear} Goals
-                </span>
-                <span className="text-xs font-bold text-foreground">
-                  {planOverview.completion_percent}%
-                </span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full gk-progress-animated"
-                  style={{ width: `${planOverview.completion_percent}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between mt-2 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  {planOverview.by_status.find((s) => s.status === "completed")
-                    ?.count || 0}{" "}
-                  completed
-                </span>
-                <span>{planOverview.total_goals} total</span>
-              </div>
-            </div>
-          ) : (
-            <div className="h-16 bg-muted/50 rounded-lg animate-pulse mb-4" />
-          )}
-
-          <div>
-            <div className="flex items-center gap-2 mb-2.5">
-              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground font-medium">
-                This Month&apos;s Focus
-              </span>
-            </div>
-            {focusGoals.length > 0 ? (
-              <div className="space-y-1.5">
-                {focusGoals.map((goal) => (
-                  <Link
-                    key={goal.id}
-                    href={`/plan/view?id=${goal.id}`}
-                    className="flex items-center justify-between p-2.5 bg-muted/40 rounded-lg hover:bg-muted/70 transition-colors group"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{
-                          backgroundColor: goalCategoryColors[goal.category],
-                        }}
-                      />
-                      <span className="text-sm truncate" title={goal.title}>{goal.title}</span>
-                    </div>
-                    {goal.progress_percent !== undefined && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] ml-2 font-bold"
-                      >
-                        {goal.progress_percent}%
-                      </Badge>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-4 text-muted-foreground">
-                <Target className="w-7 h-7 mx-auto mb-2 opacity-30" />
-                <p className="text-xs">No goals for this month</p>
-                <Link
-                  href="/plan/new?level=monthly"
-                  className="text-xs text-primary hover:underline font-medium"
-                >
-                  Create a monthly goal
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Priority Tasks */}
         <div className="gk-animate-in gk-animate-in-7 gk-card p-5">

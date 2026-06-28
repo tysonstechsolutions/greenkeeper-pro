@@ -1,6 +1,6 @@
 import {
   LayoutDashboard,
-  ClipboardList,
+  CalendarDays,
   Map,
   Archive,
   MoreHorizontal,
@@ -27,7 +27,7 @@ export interface NavItem {
 export const NAV_ITEMS: Record<AppView, NavItem[]> = {
   super: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/tasks", label: "Tasks", icon: ClipboardList },
+    { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/course-map", label: "Map", icon: Map },
     { href: "/assets", label: "Assets", icon: Archive },
     { href: "/more", label: "More", icon: MoreHorizontal },

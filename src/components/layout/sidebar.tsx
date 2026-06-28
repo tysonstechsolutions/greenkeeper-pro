@@ -3,47 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  ClipboardList,
-  Calendar,
-  MessageSquare,
-  Camera,
-  Map,
+  Leaf,
   Settings,
   ChevronLeft,
   ChevronRight,
-  BookOpen,
-  Users,
-  Cloud,
-  Leaf,
-  Car,
-  Building,
-  ShoppingCart,
-  Bot,
-  FilePlus,
-  Phone,
-  Archive,
-  FileText,
-  Mic,
   Bell,
-  Flag,
-  ClipboardSignature,
-  ClipboardCheck,
-  Scale,
-  Wrench,
-  ShieldCheck,
-  Flame,
-  Droplets,
-  Wallet,
-  BarChart3,
-  Trophy,
-  CalendarDays,
-  Landmark,
-  HardHat,
-  Vote,
-  GraduationCap,
-  Library,
-  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useView } from "@/lib/providers/view-provider";
@@ -52,189 +16,13 @@ import { useChannels } from "@/lib/hooks/useChannels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
+import { getCatalog, type AppEntry } from "@/lib/layout/app-catalog";
 
 // ──────────────────────────────────────────────────────────────────────────
-// App catalog — mirrors src/app/more/page.tsx so the sidebar and the
-// mobile More grid stay in sync. Hidden routes per user request: Maint
-// Calendar, Annual Plan, Irrigation, Pin Sheet, Board Report, Drone
-// Flights, Water Usage, Tournaments, Revenue, Capital Projects, Budget,
-// Reports, IL RUP Records. Inspections + Environmental are merged.
-// ──────────────────────────────────────────────────────────────────────────
-
-interface SidebarItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  /** Route is shown as a "primary" pinned item, never re-ordered. */
-  pinned?: boolean;
-}
-
-const leadershipPinned: SidebarItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, pinned: true },
-  { href: "/tasks", label: "Tasks", icon: ClipboardList, pinned: true },
-  { href: "/schedule", label: "Schedule", icon: Calendar, pinned: true },
-  { href: "/messages", label: "Messages", icon: MessageSquare, pinned: true },
-  { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, pinned: true },
-];
-
-const leadershipApps: SidebarItem[] = [
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  // Assets is the unified entry point — operational data (photos, parts,
-  // service, inspections) is shown inline on /assets/view alongside the
-  // FY26 inventory tracking. The standalone "Equipment" item was removed
-  // when the two views were merged.
-  { href: "/assets", label: "Assets", icon: Archive },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart },
-  { href: "/course-map", label: "Course Map", icon: Map },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
-  { href: "/parking-lot", label: "Parking & Paths", icon: Car },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building },
-  { href: "/staff", label: "Staff", icon: Users },
-  { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/voice-log", label: "Voice Log", icon: Mic },
-  { href: "/weather", label: "Weather", icon: Cloud },
-  { href: "/assistant", label: "AI Assistant", icon: Bot },
-  { href: "/purchase-requests", label: "Purchase Requests", icon: FileText },
-  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck },
-  { href: "/environmental", label: "Environmental & Inspections", icon: Leaf },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-  { href: "/vendors", label: "Vendors", icon: Phone },
-  { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
-  { href: "/sole-source", label: "Sole Source", icon: Scale },
-  { href: "/work-orders", label: "Work Orders", icon: Wrench },
-  { href: "/documents", label: "Documents", icon: FolderOpen },
-  { href: "/ai-library", label: "AI Library", icon: Library },
-  { href: "/priority", label: "Priority Queue", icon: Flame },
-  { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
-  { href: "/report-issue", label: "Report Issue", icon: Flag },
-];
-
-const foremanPinned: SidebarItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, pinned: true },
-  { href: "/tasks", label: "Tasks", icon: ClipboardList, pinned: true },
-  { href: "/schedule", label: "Schedule", icon: Calendar, pinned: true },
-  { href: "/messages", label: "Messages", icon: MessageSquare, pinned: true },
-];
-
-const foremanApps: SidebarItem[] = [
-  { href: "/assets", label: "Assets", icon: Archive },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart },
-  { href: "/course-map", label: "Course Map", icon: Map },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
-  { href: "/parking-lot", label: "Parking & Paths", icon: Car },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building },
-  { href: "/staff", label: "Staff", icon: Users },
-  { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/voice-log", label: "Voice Log", icon: Mic },
-  { href: "/weather", label: "Weather", icon: Cloud },
-  { href: "/assistant", label: "AI Assistant", icon: Bot },
-  { href: "/environmental", label: "Environmental & Inspections", icon: Leaf },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-  { href: "/work-orders", label: "Work Orders", icon: Wrench },
-  { href: "/priority", label: "Priority Queue", icon: Flame },
-  { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
-  { href: "/report-issue", label: "Report Issue", icon: Flag },
-];
-
-const mechanicPinned: SidebarItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, pinned: true },
-  { href: "/tasks", label: "Tasks", icon: ClipboardList, pinned: true },
-  { href: "/schedule", label: "Schedule", icon: Calendar, pinned: true },
-  { href: "/messages", label: "Messages", icon: MessageSquare, pinned: true },
-];
-
-const mechanicApps: SidebarItem[] = [
-  { href: "/assets", label: "Assets", icon: Archive },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart },
-  { href: "/course-map", label: "Course Map", icon: Map },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
-  { href: "/parking-lot", label: "Parking & Paths", icon: Car },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building },
-  { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/weather", label: "Weather", icon: Cloud },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-];
-
-const crewPinned: SidebarItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, pinned: true },
-  { href: "/tasks", label: "Tasks", icon: ClipboardList, pinned: true },
-  { href: "/schedule", label: "Schedule", icon: Calendar, pinned: true },
-  { href: "/messages", label: "Messages", icon: MessageSquare, pinned: true },
-];
-
-const crewApps: SidebarItem[] = [
-  { href: "/weather", label: "Weather", icon: Cloud },
-  { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/course-map", label: "Course Map", icon: Map },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
-  { href: "/parking-lot", label: "Parking", icon: Car },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-];
-
-const proPinned: SidebarItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, pinned: true },
-  { href: "/messages", label: "Messages", icon: MessageSquare, pinned: true },
-  { href: "/report-issue", label: "Report Issue", icon: Flag, pinned: true },
-];
-
-const proApps: SidebarItem[] = [
-  { href: "/course-map", label: "Course Map", icon: Map },
-  { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets },
-  { href: "/weather", label: "Weather", icon: Cloud },
-  { href: "/photos", label: "Photos", icon: Camera },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
-];
-
-// General Manager view — business / admin catalog.
-const gmPinned: SidebarItem[] = [
-  { href: "/gm", label: "Dashboard", icon: LayoutDashboard, pinned: true },
-  { href: "/budget", label: "Budget", icon: Wallet, pinned: true },
-  { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, pinned: true },
-  { href: "/reports", label: "Reports", icon: BarChart3, pinned: true },
-  { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, pinned: true },
-];
-
-const gmApps: SidebarItem[] = [
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck },
-  { href: "/reports/monthly-board", label: "Board Report", icon: BarChart3 },
-  { href: "/revenue", label: "Revenue", icon: Landmark },
-  { href: "/vendors", label: "Vendors", icon: Phone },
-  { href: "/tournaments", label: "Tournaments", icon: Trophy },
-  { href: "/clubhouse", label: "Clubhouse", icon: Building },
-  { href: "/capital-projects", label: "Capital Projects", icon: HardHat },
-  { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck },
-  { href: "/sole-source", label: "Sole Source", icon: Scale },
-  { href: "/sow", label: "Statement of Work", icon: ClipboardSignature },
-  { href: "/documents", label: "Documents", icon: FolderOpen },
-  { href: "/ai-library", label: "AI Library", icon: Library },
-  { href: "/staff", label: "Staff", icon: Users },
-  { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap },
-  { href: "/polls", label: "Polls", icon: Vote },
-  { href: "/order-list", label: "Order List", icon: ShoppingCart },
-  { href: "/messages", label: "Messages", icon: MessageSquare },
-  { href: "/report-issue", label: "Report Issue", icon: Flag },
-];
-
-// Business Division Head view — purchase requests, PR audit + cross-business finances.
-const bdhPinned: SidebarItem[] = [
-  { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, pinned: true },
-  { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, pinned: true },
-  { href: "/budget", label: "Budget", icon: Wallet, pinned: true },
-  { href: "/reports", label: "Reports", icon: BarChart3, pinned: true },
-];
-
-const bdhApps: SidebarItem[] = [
-  { href: "/revenue", label: "Revenue", icon: Landmark },
-  { href: "/capital-projects", label: "Capital Projects", icon: HardHat },
-  { href: "/tournaments", label: "Tournaments", icon: Trophy },
-  { href: "/work-orders", label: "Work Orders", icon: Wrench },
-];
-
-// ──────────────────────────────────────────────────────────────────────────
-// Components
+// Desktop sidebar. The role/view → app lists live in the shared catalog
+// (src/lib/layout/app-catalog.ts) so this stays in sync with the mobile
+// "More" grid automatically. Pinned entries render in the top section; the
+// rest are sorted by usage.
 // ──────────────────────────────────────────────────────────────────────────
 
 function NavItem({
@@ -244,7 +32,7 @@ function NavItem({
   badgeCount = 0,
   onClick,
 }: {
-  item: SidebarItem;
+  item: AppEntry;
   isActive: boolean;
   isCollapsed: boolean;
   badgeCount?: number;
@@ -324,33 +112,10 @@ export function Sidebar() {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
-  // Pick role-appropriate catalog
-  let pinned: SidebarItem[];
-  let apps: SidebarItem[];
-  if (view === "gm") {
-    pinned = gmPinned;
-    apps = gmApps;
-  } else if (view === "bdh") {
-    pinned = bdhPinned;
-    apps = bdhApps;
-  } else if (isPro) {
-    pinned = proPinned;
-    apps = proApps;
-  } else if (isLaborer) {
-    pinned = crewPinned;
-    apps = crewApps;
-  } else if (isMechanic) {
-    pinned = mechanicPinned;
-    apps = mechanicApps;
-  } else if (isForeman) {
-    pinned = foremanPinned;
-    apps = foremanApps;
-  } else {
-    pinned = leadershipPinned;
-    apps = leadershipApps;
-  }
-
-  const sortedApps = sortByUsage(apps);
+  // Role/view-appropriate catalog → split into pinned + usage-sorted apps.
+  const catalog = getCatalog({ view, isPro, isForeman, isMechanic, isLaborer });
+  const pinned = catalog.filter((item) => item.pinned);
+  const apps = sortByUsage(catalog.filter((item) => !item.pinned));
 
   return (
     <aside
@@ -399,7 +164,7 @@ export function Sidebar() {
         </div>
 
         {/* Divider + label */}
-        {sortedApps.length > 0 && (
+        {apps.length > 0 && (
           <>
             <div className="my-3 mx-1 border-t border-white/[0.08]" />
             {!isCollapsed && (
@@ -412,7 +177,7 @@ export function Sidebar() {
 
         {/* Apps (sorted by usage) */}
         <div className="space-y-0.5">
-          {sortedApps.map((item) => (
+          {apps.map((item) => (
             <NavItem
               key={item.href}
               item={item}
@@ -428,7 +193,12 @@ export function Sidebar() {
       {/* Footer: Notifications + Settings */}
       <div className="relative px-2.5 py-2 border-t border-white/[0.08] space-y-0.5">
         <NavItem
-          item={{ href: "/notifications", label: "Notifications", icon: Bell }}
+          item={{
+            href: "/notifications",
+            label: "Notifications",
+            icon: Bell,
+            color: "",
+          }}
           isActive={isActive("/notifications")}
           isCollapsed={isCollapsed}
           badgeCount={notificationsUnread}
@@ -436,7 +206,12 @@ export function Sidebar() {
         />
         {!isPro && !isLaborer && (
           <NavItem
-            item={{ href: "/settings", label: "Settings", icon: Settings }}
+            item={{
+              href: "/settings",
+              label: "Settings",
+              icon: Settings,
+              color: "",
+            }}
             isActive={isActive("/settings")}
             isCollapsed={isCollapsed}
             onClick={() => record("/settings")}
