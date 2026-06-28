@@ -63,6 +63,13 @@ export interface AppEntry {
   color: string;
   /** Pinned items sit in the sidebar's top section and are never reordered. */
   pinned?: boolean;
+  /**
+   * When set, this entry is a HUB: in the menus it renders as a single link
+   * to `href` (a landing page), and that page renders these children as a
+   * card grid. The member tools keep their own routes — the hub just groups
+   * them so the menu has fewer top-level entries.
+   */
+  children?: AppEntry[];
 }
 
 export type CatalogKey =
@@ -114,6 +121,43 @@ const REVENUE: AppEntry = { href: "/revenue", label: "Revenue", icon: Landmark, 
 const TOURNAMENTS: AppEntry = { href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-yellow-500 to-amber-600" };
 const CAPITAL_PROJECTS: AppEntry = { href: "/capital-projects", label: "Capital Projects", icon: HardHat, color: "from-orange-600 to-amber-700" };
 const ONBOARDING: AppEntry = { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap, color: "from-teal-500 to-emerald-600" };
+const SF52: AppEntry = { href: "/staff/sf52", label: "SF-52", icon: FileText, color: "from-slate-600 to-gray-700" };
+
+// ── Hubs ──────────────────────────────────────────────────────────────────
+// Each hub is one menu entry that opens a landing page (the matching route in
+// src/app/<hub>/page.tsx) showing its `children` as cards. Member tools keep
+// their own routes; the hub only collapses several menu entries into one.
+
+export const HUB_COURSE: AppEntry = {
+  href: "/grounds",
+  label: "Course & Grounds",
+  icon: Map,
+  color: "from-teal-500 to-cyan-600",
+  children: [COURSE_MAP, PARKING, SPRINKLER_MAP, CLUBHOUSE],
+};
+
+export const HUB_PAPERWORK: AppEntry = {
+  href: "/paperwork",
+  label: "Paperwork",
+  icon: ClipboardSignature,
+  color: "from-cyan-600 to-teal-700",
+  children: [SOW, SOLE_SOURCE, DOCUMENTS, WORK_ORDERS, SF52, ENVIRONMENTAL],
+};
+
+export const HUB_PROCUREMENT: AppEntry = {
+  href: "/procurement",
+  label: "Procurement",
+  icon: ShoppingCart,
+  color: "from-emerald-500 to-green-600",
+  children: [PURCHASE_REQUESTS, PR_AUDIT, VENDORS, ORDER_LIST],
+};
+
+/** Hub lookup by route, so the hub pages can render their own card grid. */
+export const HUBS: Record<string, AppEntry> = {
+  [HUB_COURSE.href]: HUB_COURSE,
+  [HUB_PAPERWORK.href]: HUB_PAPERWORK,
+  [HUB_PROCUREMENT.href]: HUB_PROCUREMENT,
+};
 
 export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   leadership: [
@@ -122,26 +166,16 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     CREATE_PR,
     CALENDAR,
     ASSETS,
-    ORDER_LIST,
-    COURSE_MAP,
-    SPRINKLER_MAP,
-    PARKING,
-    CLUBHOUSE,
+    HUB_COURSE,
+    HUB_PAPERWORK,
+    HUB_PROCUREMENT,
     STAFF,
     PRO_SHOP,
     PHOTOS,
     VOICE_LOG,
     WEATHER,
     ASSISTANT,
-    PURCHASE_REQUESTS,
-    PR_AUDIT,
-    ENVIRONMENTAL,
     KNOWLEDGE,
-    VENDORS,
-    SOW,
-    SOLE_SOURCE,
-    WORK_ORDERS,
-    DOCUMENTS,
     AI_LIBRARY,
     STANDARDS_PLAN,
     REPORT_ISSUE,
@@ -151,10 +185,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     SCHEDULE,
     ASSETS,
     ORDER_LIST,
-    COURSE_MAP,
-    SPRINKLER_MAP,
-    PARKING,
-    CLUBHOUSE,
+    HUB_COURSE,
     STAFF,
     PHOTOS,
     VOICE_LOG,
@@ -171,10 +202,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     SCHEDULE,
     ASSETS,
     ORDER_LIST,
-    COURSE_MAP,
-    SPRINKLER_MAP,
-    PARKING,
-    CLUBHOUSE,
+    HUB_COURSE,
     PHOTOS,
     WEATHER,
     KNOWLEDGE,
@@ -184,10 +212,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     SCHEDULE,
     WEATHER,
     PHOTOS,
-    COURSE_MAP,
-    SPRINKLER_MAP,
-    { ...PARKING, label: "Parking" },
-    CLUBHOUSE,
+    HUB_COURSE,
     ORDER_LIST,
     KNOWLEDGE,
   ],
@@ -207,21 +232,17 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     REPORTS,
     CREATE_PR,
     CALENDAR,
-    PR_AUDIT,
+    HUB_PROCUREMENT,
+    HUB_PAPERWORK,
     BOARD_REPORT,
     REVENUE,
-    VENDORS,
     TOURNAMENTS,
     CLUBHOUSE,
     CAPITAL_PROJECTS,
     STANDARDS_PLAN,
-    SOLE_SOURCE,
-    SOW,
-    DOCUMENTS,
     AI_LIBRARY,
     STAFF,
     ONBOARDING,
-    ORDER_LIST,
     REPORT_ISSUE,
   ],
   bdh: [
