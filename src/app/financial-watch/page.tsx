@@ -23,6 +23,7 @@ import { useFinancialWatch } from "@/lib/financial-watch/load";
 import { categoryLabel, revenueCategoryLabel } from "@/lib/financial-watch/labels";
 import type { LineStatus } from "@/lib/financial-watch/types";
 import { FlagList } from "@/components/features/financial-watch/flag-list";
+import { AdvisorChat } from "@/components/features/financial-watch/advisor-chat";
 import {
   STATUS_STYLE,
   formatMoney,
@@ -145,6 +146,9 @@ export default function FinancialWatchPage() {
 
           {/* Revenue */}
           <RevenueSection watch={watch} />
+
+          {/* Ask the analyst (Phase 2 — grounded in the snapshot above) */}
+          <AdvisorChat watch={watch} />
 
           <p className="text-[11px] text-muted-foreground text-center pt-2">
             Generated {new Date(watch.generatedAt).toLocaleString()}
