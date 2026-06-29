@@ -10,16 +10,16 @@ describe("notificationToUrl", () => {
     ).toBe("/tasks/view?id=abc-123");
   });
 
-  it("maps channel reference to /messages?channel=:id", () => {
-    expect(
-      notificationToUrl({ reference_type: "channel", reference_id: "chan-1" })
-    ).toBe("/messages?channel=chan-1");
-  });
-
   it("maps equipment reference to /equipment/view?id=:id", () => {
     expect(
       notificationToUrl({ reference_type: "equipment", reference_id: "eq-7" })
     ).toBe("/equipment/view?id=eq-7");
+  });
+
+  it("falls back to /assets when equipment has no reference_id", () => {
+    expect(
+      notificationToUrl({ reference_type: "equipment", reference_id: null })
+    ).toBe("/assets");
   });
 
   it("maps time_off_request to /schedule/time-off (ignores reference_id)", () => {

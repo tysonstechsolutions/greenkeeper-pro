@@ -17,7 +17,6 @@ import {
   Building,
   Car,
   Cloud,
-  MessageSquare,
   Bot,
   MapPin,
   Trophy,
@@ -56,7 +55,6 @@ export const QUICK_ACTION_CATALOGUE: QuickActionDef[] = [
   { id: "clubhouse", href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-600 to-orange-600" },
   { id: "parking-lot", href: "/parking-lot", label: "Parking & Paths", icon: Car, color: "from-slate-500 to-slate-600" },
   { id: "weather", href: "/weather", label: "Weather", icon: Cloud, color: "from-blue-500 to-sky-600" },
-  { id: "messages", href: "/messages", label: "Messages", icon: MessageSquare, color: "from-violet-500 to-purple-600" },
   { id: "assistant", href: "/assistant", label: "AI Assistant", icon: Bot, color: "from-violet-600 to-purple-700" },
   { id: "pin-sheet", href: "/settings/pin-sheet", label: "Pin Sheet", icon: MapPin, color: "from-red-600 to-rose-600" },
   { id: "tournaments", href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-amber-500 to-yellow-600" },
@@ -67,7 +65,7 @@ export const QUICK_ACTION_CATALOGUE: QuickActionDef[] = [
 
 const STORAGE_KEY = "vmgc:dashboard-quick-actions:v1";
 const EVENT_NAME = "vmgc:quick-actions-changed";
-const DEFAULT_IDS = ["new-task", "take-photo", "assets", "scan-asset", "course-map", "equipment"];
+const DEFAULT_IDS = ["new-task", "take-photo", "assets", "scan-asset", "course-map"];
 const MIN_ACTIONS = 2;
 const MAX_ACTIONS = 8;
 

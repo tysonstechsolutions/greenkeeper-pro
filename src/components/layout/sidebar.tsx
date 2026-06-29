@@ -12,7 +12,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useView } from "@/lib/providers/view-provider";
 import { useState, useEffect } from "react";
-import { useChannels } from "@/lib/hooks/useChannels";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
@@ -94,18 +93,15 @@ export function Sidebar() {
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
-  const { totalUnread: messagesUnread, fetchChannels } = useChannels();
   const { unreadCount: notificationsUnread, fetchUnreadCount } =
     useNotifications();
   const { record, sortByUsage } = useAppUsage();
 
   useEffect(() => {
-    fetchChannels();
     fetchUnreadCount();
-  }, [fetchChannels, fetchUnreadCount]);
+  }, [fetchUnreadCount]);
 
   const badgeCounts: Record<string, number> = {
-    "/messages": messagesUnread,
     "/notifications": notificationsUnread,
   };
 

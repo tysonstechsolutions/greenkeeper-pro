@@ -49,10 +49,12 @@ import type { AppView } from "@/lib/providers/view-provider";
 // shows every entry for the role.
 //
 // Routes intentionally NOT listed here (kept in code, hidden from menus):
-//   /tasks, /messages, /polls — still reachable via deep links.
+//   /tasks — still reachable via deep links.
 // Routes deleted entirely: /priority, /plan, /spray-window, /drone,
 //   /water-usage, /feedback, /compliance, /checklists, /inspections,
-//   /work-order (singular, superseded by /work-orders).
+//   /work-order (singular, superseded by /work-orders), /messages, /polls,
+//   /chemicals, /equipment-checkout, and /equipment (list — operational data
+//   now lives on /assets; the /equipment/view detail route remains).
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface AppEntry {

@@ -15,7 +15,6 @@ import {
   Landmark,
   ClipboardCheck,
   Users,
-  Vote,
   FilePlus,
   GraduationCap,
 } from "lucide-react";
@@ -63,7 +62,6 @@ export default function GmDashboardPage() {
     { href: "/sow", label: "SOW", icon: FileSpreadsheet },
     { href: "/staff", label: "Staff", icon: Users },
     { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap },
-    { href: "/polls", label: "Polls", icon: Vote },
   ];
 
   return (

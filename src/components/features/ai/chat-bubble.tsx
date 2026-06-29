@@ -17,11 +17,9 @@ const ROUTES_WITH_FAB = [
   "/tasks",
   "/schedule",
   "/equipment",
-  "/chemicals",
   "/photos",
   "/assets",
   "/parking-lot", // page-level FAB at bottom-24 right-4 — direct collision with bubble
-  "/polls/manage", // refresh FAB at bottom-8 right-8 collides with bubble on desktop
 ];
 
 /**

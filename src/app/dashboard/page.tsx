@@ -31,7 +31,6 @@ import {
   FileText,
   CalendarOff,
   Coffee,
-  MessageSquare,
   Flag,
   Printer,
 } from "lucide-react";
@@ -376,15 +375,6 @@ function ProDashboardView() {
           <span className="text-xs font-medium text-center">Report Issue</span>
         </Link>
         <Link
-          href="/messages"
-          className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
-        >
-          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-            <MessageSquare className="w-5 h-5 text-blue-500" />
-          </div>
-          <span className="text-xs font-medium text-center">Messages</span>
-        </Link>
-        <Link
           href="/course-map"
           className="flex flex-col items-center gap-2 p-4 bg-card rounded-lg border border-border hover:border-primary/50 transition-colors"
         >
@@ -551,44 +541,6 @@ function ProDashboardView() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Communication Card */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-primary" />
-            Quick Contact
-          </h2>
-          <div className="space-y-3">
-            <Link
-              href="/messages"
-              className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-primary" />
-                </div>
-                <span className="font-medium text-sm">
-                  Message Superintendent
-                </span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </Link>
-            <Link
-              href="/report-issue"
-              className="flex items-center justify-between p-3 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
-                  <Flag className="w-4 h-4 text-red-500" />
-                </div>
-                <span className="font-medium text-sm text-red-700 dark:text-red-400">
-                  Report an Issue
-                </span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-red-500" />
-            </Link>
-          </div>
         </div>
 
         {/* Course Map */}
