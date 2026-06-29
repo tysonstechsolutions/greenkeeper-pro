@@ -2,17 +2,22 @@
 
 import Link from "next/link";
 import { Activity, ChevronRight } from "lucide-react";
-import { useFinancialWatch } from "@/lib/financial-watch/load";
+import type { FinancialWatch } from "@/lib/financial-watch/types";
 import { SEVERITY_STYLE, STATUS_STYLE, formatMoney } from "./severity";
 
 /**
  * Compact Financial Watch summary for the GM dashboard: overall status, net
  * position, and the top few flags. Taps through to the full /financial-watch
- * view. Reads the same engine output as the page (recomputed on mount).
+ * view. The owning page passes the already-computed watch (and loading flag)
+ * so the dashboard fetches the analysis once and shares it.
  */
-export function FinancialWatchCard() {
-  const { watch, loading } = useFinancialWatch();
-
+export function FinancialWatchCard({
+  watch,
+  loading,
+}: {
+  watch: FinancialWatch | null;
+  loading: boolean;
+}) {
   return (
     <Link href="/financial-watch" className="gk-card p-4 block">
       <div className="flex items-center justify-between mb-2">

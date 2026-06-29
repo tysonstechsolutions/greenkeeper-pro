@@ -1,5 +1,5 @@
 import { AlertTriangle, AlertCircle, Info, type LucideIcon } from "lucide-react";
-import type { Severity, OverallStatus } from "@/lib/financial-watch/types";
+import type { Severity, OverallStatus, Flag } from "@/lib/financial-watch/types";
 
 export interface SeverityStyle {
   icon: LucideIcon;
@@ -62,6 +62,27 @@ export const STATUS_STYLE: Record<OverallStatus, StatusStyle> = {
     label: "On track",
   },
 };
+
+/**
+ * Where to go to fix a flag — turns each flag's suggestion into a one-tap link
+ * to the page that resolves it. Kept in the UI layer so the engine stays pure
+ * of routing. Returns undefined when there's no single obvious destination.
+ */
+export function flagHref(flag: Flag): string | undefined {
+  const id = flag.id;
+  if (id.startsWith("operating:no-budget")) return "/budget/setup";
+  if (
+    id.startsWith("operating:unbucketed") ||
+    id.startsWith("operating:duplicate") ||
+    id.startsWith("operating:negative-amount")
+  )
+    return "/budget/expenses";
+  if (flag.lens === "operating") return "/budget";
+  if (id.startsWith("procurement:no-budgets")) return "/pr-audit/budget";
+  if (flag.lens === "procurement") return "/pr-audit";
+  if (flag.lens === "revenue") return "/revenue";
+  return undefined;
+}
 
 /** Compact USD, no cents. */
 export function formatMoney(n: number): string {

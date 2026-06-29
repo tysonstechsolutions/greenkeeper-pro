@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useFinancialWatch } from "@/lib/financial-watch/load";
 import { FinancialWatchCard } from "@/components/features/financial-watch/financial-watch-card";
+import { FinancialAlertBanner } from "@/components/features/financial-watch/financial-alert-banner";
 import {
   FileText,
   Wallet,
@@ -28,6 +30,7 @@ import {
 export default function GmDashboardPage() {
   const [pending, setPending] = useState<number | null>(null);
   const [active, setActive] = useState<number | null>(null);
+  const { watch, loading: watchLoading } = useFinancialWatch();
 
   useEffect(() => {
     const supabase = createClient();
@@ -67,6 +70,9 @@ export default function GmDashboardPage() {
 
   return (
     <div className="gk-page mx-auto">
+      {/* Proactive alert — surfaces critical/warning finances before they're sought */}
+      <FinancialAlertBanner watch={watch} />
+
       <div className="mb-5">
         <p className="gk-section-label">General Manager</p>
         <h1 className="mt-1">Operations overview</h1>
@@ -77,7 +83,7 @@ export default function GmDashboardPage() {
 
       {/* Financial watchdog — trends, pace, and anything heading the wrong way */}
       <div className="mb-3">
-        <FinancialWatchCard />
+        <FinancialWatchCard watch={watch} loading={watchLoading} />
       </div>
 
       {/* Live purchase-request stats */}
