@@ -224,7 +224,9 @@ export function useBudget(): UseBudgetReturn {
             const remaining = item.budgeted_amount - spent;
             const percent_used = item.budgeted_amount > 0
               ? Math.round((spent / item.budgeted_amount) * 100)
-              : 0;
+              : spent > 0
+                ? 100
+                : 0;
 
             return {
               ...item,
@@ -359,7 +361,9 @@ export function useBudget(): UseBudgetReturn {
         const remaining = totalBudgeted - totalSpent;
         const percent_used = totalBudgeted > 0
           ? Math.round((totalSpent / totalBudgeted) * 100)
-          : 0;
+          : totalSpent > 0
+            ? 100
+            : 0;
 
         return {
           total_budgeted: totalBudgeted,
