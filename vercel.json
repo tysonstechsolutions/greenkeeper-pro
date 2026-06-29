@@ -76,11 +76,5 @@
         }
       ]
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/daily-briefing",
-      "schedule": "0 5 * * *"
-    }
   ]
 }
