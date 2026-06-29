@@ -33,6 +33,7 @@ import {
   HardHat,
   Trophy,
   GraduationCap,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 import type { AppView } from "@/lib/providers/view-provider";
@@ -116,6 +117,7 @@ const REPORT_ISSUE: AppEntry = { href: "/report-issue", label: "Report Issue", i
 
 // GM / BDH (business + admin) entries.
 const GM_DASHBOARD: AppEntry = { href: "/gm", label: "Dashboard", icon: LayoutDashboard, color: "from-amber-500 to-yellow-600", pinned: true };
+const FINANCIAL_WATCH: AppEntry = { href: "/financial-watch", label: "Financial Watch", icon: Activity, color: "from-emerald-600 to-teal-700", pinned: true };
 const BUDGET: AppEntry = { href: "/budget", label: "Budget", icon: Wallet, color: "from-emerald-600 to-green-700", pinned: true };
 const REPORTS: AppEntry = { href: "/reports", label: "Reports", icon: BarChart3, color: "from-blue-600 to-indigo-700", pinned: true };
 const BOARD_REPORT: AppEntry = { href: "/reports/monthly-board", label: "Board Report", icon: BarChart3, color: "from-blue-600 to-indigo-700" };
@@ -242,6 +244,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   ],
   gm: [
     GM_DASHBOARD,
+    FINANCIAL_WATCH,
     BUDGET,
     { ...PURCHASE_REQUESTS, pinned: true },
     REPORTS,
@@ -262,6 +265,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   bdh: [
     { ...PR_AUDIT, pinned: true },
     { ...PURCHASE_REQUESTS, pinned: true },
+    FINANCIAL_WATCH,
     BUDGET,
     REPORTS,
     REVENUE,

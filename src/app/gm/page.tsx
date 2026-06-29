@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { FinancialWatchCard } from "@/components/features/financial-watch/financial-watch-card";
 import {
   FileText,
   Wallet,
@@ -72,6 +73,11 @@ export default function GmDashboardPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Budget, purchasing, and reporting at a glance.
         </p>
+      </div>
+
+      {/* Financial watchdog — trends, pace, and anything heading the wrong way */}
+      <div className="mb-3">
+        <FinancialWatchCard />
       </div>
 
       {/* Live purchase-request stats */}
