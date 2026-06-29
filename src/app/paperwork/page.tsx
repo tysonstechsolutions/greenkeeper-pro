@@ -5,7 +5,7 @@ export default function PaperworkPage() {
   return (
     <HubPage
       title={HUB_PAPERWORK.label}
-      description="Forms, work orders, and saved documents in one place."
+      description="Forms, work orders, and compliance paperwork in one place."
       items={HUB_PAPERWORK.children ?? []}
     />
   );

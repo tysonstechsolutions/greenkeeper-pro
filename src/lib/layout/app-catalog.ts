@@ -143,7 +143,7 @@ export const HUB_PAPERWORK: AppEntry = {
   label: "Paperwork",
   icon: ClipboardSignature,
   color: "from-cyan-600 to-teal-700",
-  children: [SOW, SOLE_SOURCE, DOCUMENTS, WORK_ORDERS, SF52, ENVIRONMENTAL],
+  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, ENVIRONMENTAL],
 };
 
 export const HUB_PROCUREMENT: AppEntry = {
@@ -154,11 +154,25 @@ export const HUB_PROCUREMENT: AppEntry = {
   children: [PURCHASE_REQUESTS, PR_AUDIT, VENDORS, ORDER_LIST],
 };
 
+// Library = the "reference shelf": the knowledge base, every generated
+// document, the onboarding/SOP packet builder, and the reusable-AI-answer
+// store. Grouping them gives leadership/GM one menu entry instead of three or
+// four. Crew/foreman/mechanic/pro keep Knowledge Base as a direct top-level
+// entry (it's their primary field reference), so they don't get this hub.
+export const HUB_LIBRARY: AppEntry = {
+  href: "/library",
+  label: "Library",
+  icon: Library,
+  color: "from-orange-500 to-amber-700",
+  children: [KNOWLEDGE, DOCUMENTS, ONBOARDING, AI_LIBRARY],
+};
+
 /** Hub lookup by route, so the hub pages can render their own card grid. */
 export const HUBS: Record<string, AppEntry> = {
   [HUB_COURSE.href]: HUB_COURSE,
   [HUB_PAPERWORK.href]: HUB_PAPERWORK,
   [HUB_PROCUREMENT.href]: HUB_PROCUREMENT,
+  [HUB_LIBRARY.href]: HUB_LIBRARY,
 };
 
 export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
@@ -177,8 +191,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     VOICE_LOG,
     WEATHER,
     ASSISTANT,
-    KNOWLEDGE,
-    AI_LIBRARY,
+    HUB_LIBRARY,
     STANDARDS_PLAN,
     REPORT_ISSUE,
   ],
@@ -242,9 +255,8 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     CLUBHOUSE,
     CAPITAL_PROJECTS,
     STANDARDS_PLAN,
-    AI_LIBRARY,
+    HUB_LIBRARY,
     STAFF,
-    ONBOARDING,
     REPORT_ISSUE,
   ],
   bdh: [
