@@ -49,6 +49,29 @@ describe("analyzeRevenue — metrics", () => {
     expect(greens.share).toBeCloseTo(0.6, 5);
   });
 
+  it("uses the correct prior-year cutoff on Feb 29 (no leap-day rollover)", () => {
+    // now = Feb 29 2024. The comparable prior period ends Feb 28 2023 (2023 has
+    // no Feb 29) — Mar 1 2023 must NOT be counted.
+    const leapNow = new Date("2024-02-29T12:00:00");
+    const entries = [
+      rev({ amount: 100, entry_date: "2024-02-15" }),
+      rev({ amount: 200, entry_date: "2023-02-28" }),
+      rev({ amount: 300, entry_date: "2023-03-01" }),
+    ];
+    const a = analyzeRevenue(entries, 2024, leapNow);
+    expect(a.priorYtdTotal).toBe(200);
+  });
+
+  it("does not produce positive category shares when YTD revenue is negative", () => {
+    const entries = [
+      rev({ amount: -1_000, category: "greens_fees", entry_date: "2026-06-01" }),
+      rev({ amount: -500, category: "cart_rentals", entry_date: "2026-06-02" }),
+    ];
+    const a = analyzeRevenue(entries, YEAR, MID_YEAR);
+    expect(a.ytdTotal).toBe(-1_500);
+    for (const c of a.byCategory) expect(c.share).toBe(0);
+  });
+
   it("computes revenue per round from greens-fee rounds", () => {
     const entries = [
       rev({ amount: 5_000, category: "greens_fees", rounds_count: 100, entry_date: "2026-05-01" }),

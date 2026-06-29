@@ -76,6 +76,24 @@ describe("buildFinancialWatch", () => {
     expect(w.headline.netPositionYtd).toBe(-5_000);
   });
 
+  it("nulls net position when only prior-year revenue exists (no current-year data)", () => {
+    const w = buildFinancialWatch(
+      input({
+        budgetItems: [
+          { id: "labor", fiscal_year: 2026, category: "labor", budgeted_amount: 100_000, month: null },
+        ],
+        expenses: [
+          { amount: 10_000, expense_date: "2026-03-01", status: "approved", budget_item_id: "labor", vendor: null, description: "" },
+        ],
+        // Prior-year revenue only — nothing logged for the current year yet.
+        revenueEntries: [
+          { entry_date: "2025-06-10", category: "greens_fees", amount: 5_000, rounds_count: 80 },
+        ],
+      }),
+    );
+    expect(w.headline.netPositionYtd).toBeNull();
+  });
+
   it("reports an ok status and null net position when there's nothing to flag", () => {
     const w = buildFinancialWatch(
       input({

@@ -461,9 +461,14 @@ export function analyzeRevenue(
   const curYear = String(calendarYear);
   const priorYear = String(calendarYear - 1);
   // Same month/day one year ago, for an apples-to-apples prior-year period.
-  const priorCutoff = formatLocalDate(
-    new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()),
-  );
+  // On Feb 29, the prior (non-leap) year has no Feb 29 — `new Date` would roll
+  // it to Mar 1, pulling an extra day into the baseline. Detect that and back
+  // up to Feb 28.
+  const priorDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  if (priorDate.getMonth() !== now.getMonth()) {
+    priorDate.setDate(priorDate.getDate() - 1);
+  }
+  const priorCutoff = formatLocalDate(priorDate);
   const curMonthPrefix = `${calendarYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   const ytdEntries = entries.filter(
@@ -499,7 +504,9 @@ export function analyzeRevenue(
     .map(([category, amount]) => ({
       category,
       amount,
-      share: ytdTotal !== 0 ? amount / ytdTotal : 0,
+      // Only meaningful when there's positive revenue to distribute; an
+      // all-refund (negative) total would otherwise yield misleading shares.
+      share: ytdTotal > 0 ? amount / ytdTotal : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -840,10 +847,14 @@ export function buildFinancialWatch(input: FinancialWatchInput): FinancialWatch 
   const overallStatus: OverallStatus =
     criticalCount > 0 ? "alert" : warningCount > 0 ? "watch" : "ok";
 
-  const netPositionYtd =
-    input.revenueEntries.length > 0
-      ? round2(revenue.ytdTotal - operating.totalSpent)
-      : null;
+  // Net position compares CURRENT-year revenue to current-year spend, so it's
+  // null unless there's current-year revenue (prior-year-only data doesn't count).
+  const hasCurrentYearRevenue = input.revenueEntries.some(
+    (e) => e.entry_date.slice(0, 4) === String(input.calendarYear),
+  );
+  const netPositionYtd = hasCurrentYearRevenue
+    ? round2(revenue.ytdTotal - operating.totalSpent)
+    : null;
 
   const headline: FinancialHeadline = {
     netPositionYtd,

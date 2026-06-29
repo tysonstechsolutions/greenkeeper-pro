@@ -9,6 +9,7 @@
  * then runs buildFinancialWatch. The engine stays pure; all I/O lives here.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { directSelectList } from "@/lib/supabase/rest";
 import { buildCostCenterRollup } from "@/lib/pr-audit/rollup";
 import { currentFederalFiscalYear } from "@/lib/pr-audit/fiscal-year";
@@ -142,6 +143,12 @@ export interface UseFinancialWatch {
 
 /** React hook: load + recompute the Financial Watch on mount and on reload(). */
 export function useFinancialWatch(): UseFinancialWatch {
+  const { session } = useAuth();
+  // directFetch reads the session token from localStorage; firing before the
+  // session is restored (e.g. right after auto-sign-in) throws "not signed in".
+  // Wait for a token, like the other data pages do, so the first load succeeds.
+  const ready = !!session?.access_token;
+
   const [watch, setWatch] = useState<FinancialWatch | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +165,7 @@ export function useFinancialWatch(): UseFinancialWatch {
   // The effect itself never sets state synchronously (loading starts true) —
   // all writes happen in the async continuation, after the fetch resolves.
   useEffect(() => {
+    if (!ready) return; // hold until the auth session is available
     let cancelled = false;
     loadFinancialWatch(new Date())
       .then((result) => {
@@ -175,7 +183,7 @@ export function useFinancialWatch(): UseFinancialWatch {
     return () => {
       cancelled = true;
     };
-  }, [nonce]);
+  }, [ready, nonce]);
 
   return { watch, loading, error, reload };
 }
