@@ -19,6 +19,17 @@ function pctOf(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
 }
 
+/**
+ * Flatten free-text (vendor names, expense descriptions) before it enters the
+ * AI prompt: strip control chars / newlines and cap length so embedded text
+ * can't fake instructions or delimiters (prompt-injection guard).
+ */
+function clean(s: string): string {
+  // Collapse all whitespace (incl. newlines) to single spaces and cap length
+  // so embedded vendor/description text can't fake instructions or delimiters.
+  return s.replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
 export function serializeForAdvisor(watch: FinancialWatch): string {
   const lines: string[] = [];
   const date = watch.generatedAt.slice(0, 10);
@@ -54,10 +65,17 @@ export function serializeForAdvisor(watch: FinancialWatch): string {
     );
   }
   for (const c of o.byCategory.filter((c) => c.budgeted > 0 || c.spent > 0).slice(0, 12)) {
-    const pace = c.paceRatio != null ? `, pace ${c.paceRatio.toFixed(2)}×` : "";
-    lines.push(
-      `- ${categoryLabel(c.category)}: ${money(c.spent)} / ${money(c.budgeted)} (${c.percentUsed}%, ${c.status}${pace})`,
-    );
+    const name = clean(categoryLabel(c.category));
+    if (c.budgeted <= 0 && c.spent > 0) {
+      lines.push(
+        `- ${name}: ${money(c.spent)} spent, NO BUDGET SET (pace/remaining can't be tracked)`,
+      );
+    } else {
+      const pace = c.paceRatio != null ? `, pace ${c.paceRatio.toFixed(2)}×` : "";
+      lines.push(
+        `- ${name}: ${money(c.spent)} / ${money(c.budgeted)} (${c.percentUsed}%, ${c.status}${pace})`,
+      );
+    }
   }
   lines.push("");
 
@@ -74,9 +92,14 @@ export function serializeForAdvisor(watch: FinancialWatch): string {
     lines.push(`Unassigned (no cost center): ${money(p.unassignedSpent)}.`);
   }
   for (const c of p.byCostCenter.filter((c) => c.spent > 0 || c.budget > 0).slice(0, 12)) {
-    lines.push(
-      `- ${c.label}: committed ${money(c.spent)} / budget ${money(c.budget)} (${c.percentUsed}%, ${c.status})`,
-    );
+    const name = clean(c.label);
+    if (c.budget <= 0 && c.spent > 0) {
+      lines.push(`- ${name}: committed ${money(c.spent)}, NO BUDGET SET`);
+    } else {
+      lines.push(
+        `- ${name}: committed ${money(c.spent)} / budget ${money(c.budget)} (${c.percentUsed}%, ${c.status})`,
+      );
+    }
   }
   lines.push("");
 
@@ -99,7 +122,7 @@ export function serializeForAdvisor(watch: FinancialWatch): string {
       .slice(0, 8)
       .map(
         (c) =>
-          `${revenueCategoryLabel(c.category)} ${money(c.amount)} (${Math.round(c.share * 100)}%)`,
+          `${clean(revenueCategoryLabel(c.category))} ${money(c.amount)} (${Math.round(c.share * 100)}%)`,
       )
       .join(", ");
     lines.push(`By source: ${cats}.`);
@@ -107,16 +130,31 @@ export function serializeForAdvisor(watch: FinancialWatch): string {
   lines.push("");
 
   // Flags
+  const noData =
+    o.totalBudgeted === 0 &&
+    o.totalSpent === 0 &&
+    p.totalBudget === 0 &&
+    p.totalSpent === 0 &&
+    r.ytdTotal === 0;
+
   if (watch.flags.length === 0) {
     lines.push(
-      "FLAGS: No issues — budgets, pace, and revenue all look on track.",
+      noData
+        ? "FLAGS: No financial data yet — set up budgets, expense logging, and revenue entries to start monitoring."
+        : "FLAGS: No issues — budgets, pace, and revenue all look on track.",
     );
   } else {
     lines.push("FLAGS (issues the watchdog computed, most severe first):");
-    for (const f of watch.flags) {
+    const shown = watch.flags.slice(0, 12);
+    for (const f of shown) {
       lines.push(
-        `[${f.severity}] ${f.title} — ${f.detail}` +
-          (f.action ? ` (Suggested: ${f.action})` : ""),
+        `[${f.severity}] ${clean(f.title)} — ${clean(f.detail)}` +
+          (f.action ? ` (Suggested: ${clean(f.action)})` : ""),
+      );
+    }
+    if (watch.flags.length > shown.length) {
+      lines.push(
+        `…and ${watch.flags.length - shown.length} more flag(s) — see the dashboard for the full list.`,
       );
     }
   }
