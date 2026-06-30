@@ -34,6 +34,7 @@ import {
   Trophy,
   GraduationCap,
   Activity,
+  ListChecks,
   type LucideIcon,
 } from "lucide-react";
 import type { AppView } from "@/lib/providers/view-provider";
@@ -87,6 +88,7 @@ export type CatalogKey =
 // Reusable entries (same metadata everywhere they appear).
 const DASHBOARD: AppEntry = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "from-amber-500 to-yellow-600", pinned: true };
 const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-blue-500 to-indigo-600", pinned: true };
+const MY_DAY: AppEntry = { href: "/my-day", label: "My Day", icon: ListChecks, color: "from-violet-500 to-purple-600", pinned: true };
 const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, color: "from-amber-500 to-yellow-600", pinned: true };
 
 const CALENDAR: AppEntry = { href: "/calendar", label: "Calendar", icon: CalendarDays, color: "from-sky-500 to-indigo-600" };
@@ -180,6 +182,7 @@ export const HUBS: Record<string, AppEntry> = {
 export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   leadership: [
     DASHBOARD,
+    MY_DAY,
     SCHEDULE,
     CREATE_PR,
     CALENDAR,
@@ -244,6 +247,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   ],
   gm: [
     GM_DASHBOARD,
+    MY_DAY,
     FINANCIAL_WATCH,
     BUDGET,
     { ...PURCHASE_REQUESTS, pinned: true },

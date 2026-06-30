@@ -60,6 +60,7 @@ import {
   type AuditPreview,
 } from "@/lib/pr-audit/download";
 import { bundleIssueCounts } from "@/lib/pr-audit/bundle-check";
+import { syncPrReceivedTask } from "@/lib/my-day/pr-trigger";
 import { FilePreviewOverlay } from "@/components/pr-audit/file-preview";
 import { usePrCodes } from "@/lib/hooks/usePrCodes";
 import {
@@ -615,6 +616,8 @@ export default function PrAuditPage() {
         };
         await directPatchRow("pr_audits", "id", audit.id, patch, "pr-audit.list.status");
         setAudits((prev) => prev.map((a) => (a.id === audit.id ? { ...a, ...patch } : a)));
+        // Bridge to My Day: received -> 24h paperwork task; receipt_signed -> done.
+        void syncPrReceivedTask(audit, status);
       } catch (err) {
         alert(`Couldn't update status: ${err instanceof Error ? err.message : String(err)}`);
       } finally {

@@ -44,6 +44,7 @@ const SLOW_DIRECT_ROUTES: ReadonlySet<string> = new Set<string>([
   "drone/upload",
   "pro-shop-ai",
   "financial-advisor",
+  "task-breakdown",
 ]);
 const AUTH_TOKEN_TIMEOUT_MS = 5_000;
 
@@ -71,6 +72,7 @@ const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
   "translate",
   "pro-shop-ai",
   "financial-advisor",
+  "task-breakdown",
   // Auth functions (pin-login, pin-signup) have a special return shape
   // (session tokens) handled at their callsites, not via callApi.
 ]);

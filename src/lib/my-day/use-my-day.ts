@@ -1,0 +1,203 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/lib/hooks/useAuth";
+import {
+  directSelectList,
+  directInsertRows,
+  directPatchRow,
+  directDeleteRow,
+  getCachedUserId,
+} from "@/lib/supabase/rest";
+import { todayLocal } from "@/lib/utils/date";
+import { partitionDayView, scheduleSteps, type DayView } from "./schedule";
+import { breakdownTask } from "./breakdown";
+import type { DailyGoal, DailyStep } from "./types";
+
+const DEFAULT_BUFFER_DAYS = 2;
+
+export interface AddGoalResult {
+  /** Whether the AI breakdown produced more than the single fallback step. */
+  aiUsed: boolean;
+  stepCount: number;
+}
+
+export interface UseMyDay {
+  view: DayView<DailyStep>;
+  loading: boolean;
+  error: string | null;
+  reload: () => void;
+  toggleStep: (id: string, done: boolean) => Promise<void>;
+  addQuickStep: (title: string, targetDate?: string | null) => Promise<void>;
+  addGoal: (input: {
+    title: string;
+    detail?: string;
+    deadline?: string | null;
+    bufferDays?: number;
+  }) => Promise<AddGoalResult>;
+  deleteStep: (id: string) => Promise<void>;
+}
+
+export function useMyDay(): UseMyDay {
+  const { session } = useAuth();
+  const ready = !!session?.access_token;
+
+  const [steps, setSteps] = useState<DailyStep[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+
+  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  const today = todayLocal();
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    directSelectList<DailyStep>("daily_steps", {
+      columns: "*",
+      orderBy: [
+        { column: "target_date", ascending: true, nullsFirst: false },
+        { column: "sort_order", ascending: true },
+      ],
+      limit: 2000,
+      label: "my-day.steps",
+    })
+      .then((rows) => {
+        if (!cancelled) setSteps(rows);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[my-day] load failed:", err);
+        setError("Couldn't load your day.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, nonce]);
+
+  const view = useMemo(() => partitionDayView(steps, today), [steps, today]);
+
+  const toggleStep = useCallback(async (id: string, done: boolean) => {
+    const done_at = done ? new Date().toISOString() : null;
+    setSteps((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, done, done_at } : s)),
+    );
+    try {
+      await directPatchRow(
+        "daily_steps",
+        "id",
+        id,
+        { done, done_at, updated_at: new Date().toISOString() },
+        "my-day.toggle",
+      );
+    } catch (err) {
+      console.error("[my-day] toggle failed:", err);
+      reload();
+    }
+  }, [reload]);
+
+  const addQuickStep = useCallback(
+    async (title: string, targetDate: string | null = today) => {
+      const clean = title.trim();
+      if (!clean) return;
+      const rows = [
+        {
+          title: clean,
+          target_date: targetDate,
+          done: false,
+          sort_order: 0,
+          source: "manual",
+          created_by: getCachedUserId(),
+        },
+      ];
+      const inserted = await directInsertRows<DailyStep>(
+        "daily_steps",
+        rows,
+        "my-day.addStep",
+      );
+      setSteps((prev) => [...prev, ...inserted]);
+    },
+    [today],
+  );
+
+  const addGoal = useCallback(
+    async (input: {
+      title: string;
+      detail?: string;
+      deadline?: string | null;
+      bufferDays?: number;
+    }): Promise<AddGoalResult> => {
+      const uid = getCachedUserId();
+      const bufferDays = input.bufferDays ?? DEFAULT_BUFFER_DAYS;
+      const deadline = input.deadline ?? null;
+
+      const [goal] = await directInsertRows<DailyGoal>(
+        "daily_goals",
+        [
+          {
+            title: input.title.trim(),
+            detail: input.detail?.trim() || null,
+            deadline,
+            buffer_days: bufferDays,
+            status: "active",
+            created_by: uid,
+          },
+        ],
+        "my-day.addGoal",
+      );
+
+      // AI breakdown, with a graceful single-step fallback.
+      let titles: string[] = [];
+      try {
+        titles = await breakdownTask({ title: input.title, detail: input.detail, deadline });
+      } catch (err) {
+        console.error("[my-day] breakdown failed:", err);
+      }
+      const aiUsed = titles.length > 0;
+      if (!aiUsed) titles = [input.title.trim()];
+
+      const scheduled = scheduleSteps(titles, { today, deadline, bufferDays });
+      const rows = scheduled.map((s) => ({
+        goal_id: goal.id,
+        title: s.title,
+        target_date: s.target_date,
+        sort_order: s.sort_order,
+        done: false,
+        source: aiUsed ? "ai" : "manual",
+        created_by: uid,
+      }));
+      const inserted = await directInsertRows<DailyStep>(
+        "daily_steps",
+        rows,
+        "my-day.addGoalSteps",
+      );
+      setSteps((prev) => [...prev, ...inserted]);
+      return { aiUsed, stepCount: inserted.length };
+    },
+    [today],
+  );
+
+  const deleteStep = useCallback(async (id: string) => {
+    setSteps((prev) => prev.filter((s) => s.id !== id));
+    try {
+      await directDeleteRow("daily_steps", "id", id, "my-day.deleteStep");
+    } catch (err) {
+      console.error("[my-day] delete failed:", err);
+      reload();
+    }
+  }, [reload]);
+
+  return {
+    view,
+    loading,
+    error,
+    reload,
+    toggleStep,
+    addQuickStep,
+    addGoal,
+    deleteStep,
+  };
+}

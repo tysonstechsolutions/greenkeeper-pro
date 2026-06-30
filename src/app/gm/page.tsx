@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useFinancialWatch } from "@/lib/financial-watch/load";
 import { FinancialWatchCard } from "@/components/features/financial-watch/financial-watch-card";
 import { FinancialAlertBanner } from "@/components/features/financial-watch/financial-alert-banner";
+import { MyDayCard } from "@/components/features/my-day/my-day-card";
 import {
   FileText,
   Wallet,
@@ -82,8 +83,9 @@ export default function GmDashboardPage() {
       </div>
 
       {/* Financial watchdog — trends, pace, and anything heading the wrong way */}
-      <div className="mb-3">
+      <div className="grid grid-cols-1 gap-3 mb-3">
         <FinancialWatchCard watch={watch} loading={watchLoading} />
+        <MyDayCard />
       </div>
 
       {/* Live purchase-request stats */}

@@ -56,6 +56,7 @@ import {
 import { FilePreviewOverlay } from "@/components/pr-audit/file-preview";
 import { FindingsList, FindingsSummary } from "@/components/pr-audit/findings";
 import { SendUpReadinessCard } from "@/components/pr-audit/send-up-readiness-card";
+import { syncPrReceivedTask } from "@/lib/my-day/pr-trigger";
 import { PrEditor } from "@/components/pr-audit/pr-editor";
 import {
   DownloadChecklist,
@@ -491,6 +492,8 @@ function ViewPrAuditInner() {
         await directPatchRow("pr_audits", "id", audit.id, patch, "pr-audit.view.setStatus");
         setAudit({ ...audit, ...(patch as Partial<PrAudit>) });
         if (editing) setEditing(false);
+        // Bridge to My Day: received -> 24h paperwork task; receipt_signed -> done.
+        void syncPrReceivedTask(audit, status);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't update the status.");
       } finally {
