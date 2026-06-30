@@ -12,12 +12,21 @@ import {
 import { addDaysLocal, todayLocal } from "@/lib/utils/date";
 import { partitionDayView, scheduleSteps, type DayView } from "./schedule";
 import { breakdownTask } from "./breakdown";
+import { matchCapability, type Capability } from "./capabilities";
 import type { DailyGoal, DailyStep } from "./types";
 
 const DEFAULT_BUFFER_DAYS = 2;
 
 export interface AddGoalResult {
   /** Whether the AI breakdown produced more than the single fallback step. */
+  aiUsed: boolean;
+  stepCount: number;
+}
+
+export interface AddSmartResult {
+  /** Set when the task mapped to an app tool (added as one linked step). */
+  capability: Capability | null;
+  /** For non-capability tasks: whether the AI actually broke it down. */
   aiUsed: boolean;
   stepCount: number;
 }
@@ -29,6 +38,9 @@ export interface UseMyDay {
   reload: () => void;
   toggleStep: (id: string, done: boolean) => Promise<void>;
   addQuickStep: (title: string, targetDate?: string | null) => Promise<void>;
+  /** Smart entry: a capability task -> one tool-linked step; otherwise the AI
+   *  breaks it into scheduled steps. */
+  addSmart: (title: string, deadline?: string | null) => Promise<AddSmartResult>;
   addGoal: (input: {
     title: string;
     detail?: string;
@@ -183,6 +195,45 @@ export function useMyDay(): UseMyDay {
     [today],
   );
 
+  const addSmart = useCallback(
+    async (title: string, deadline: string | null = null): Promise<AddSmartResult> => {
+      const clean = title.trim();
+      if (!clean) return { capability: null, aiUsed: false, stepCount: 0 };
+
+      // A task the app can already do -> one step linked to that tool, no
+      // breakdown (the tool does the work).
+      const cap = matchCapability(clean);
+      if (cap && cap.available) {
+        let target_date: string | null = today;
+        if (deadline) {
+          const buffered = addDaysLocal(deadline, -DEFAULT_BUFFER_DAYS);
+          target_date = buffered < today ? today : buffered;
+        }
+        const inserted = await directInsertRows<DailyStep>(
+          "daily_steps",
+          [
+            {
+              title: clean,
+              target_date,
+              done: false,
+              sort_order: 0,
+              source: "capability",
+              created_by: getCachedUserId(),
+            },
+          ],
+          "my-day.addSmart.capability",
+        );
+        setSteps((prev) => [...prev, ...inserted]);
+        return { capability: cap, aiUsed: false, stepCount: inserted.length };
+      }
+
+      // Otherwise break it into scheduled steps (AI, with single-step fallback).
+      const r = await addGoal({ title: clean, deadline });
+      return { capability: null, aiUsed: r.aiUsed, stepCount: r.stepCount };
+    },
+    [today, addGoal],
+  );
+
   const bulkAdd = useCallback(
     async (items: { title: string; deadline?: string | null }[]): Promise<number> => {
       const uid = getCachedUserId();
@@ -234,6 +285,7 @@ export function useMyDay(): UseMyDay {
     reload,
     toggleStep,
     addQuickStep,
+    addSmart,
     addGoal,
     bulkAdd,
     deleteStep,
