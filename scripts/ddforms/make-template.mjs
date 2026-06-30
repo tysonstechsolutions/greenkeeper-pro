@@ -5,10 +5,13 @@ import { chromium } from "playwright";
 import { readFileSync, writeFileSync } from "fs";
 import sharp from "sharp";
 
-const [pdfPath, labelsPath, pageArg, scaleArg, outPath] = process.argv.slice(2);
+const [pdfPath, labelsPath, pageArg, scaleArg, outPath, extraRectsPath] = process.argv.slice(2);
 const pageNum = Number(pageArg || 1);
 const scale = Number(scaleArg || 4);
 const labels = new Set(JSON.parse(readFileSync(labelsPath, "utf8")));
+// Extra rectangles to also white out — non-text graphics (e.g. a digital
+// signature seal). pdf bottom-left space: { x, y (bottom edge), w, h }.
+const extraRects = extraRectsPath ? JSON.parse(readFileSync(extraRectsPath, "utf8")) : [];
 const b64 = readFileSync(pdfPath).toString("base64");
 
 const browser = await chromium.launch();
@@ -40,13 +43,22 @@ const PAGE_H = 792; // letter
 const rects = items
   .filter((it) => !labels.has(it.s.trim()))
   .map((it) => {
-    const padX = 1.5, padTop = 3, padBot = 2;
+    // Fit the mask to the glyph box, not a fixed pad: covers ascenders+caps
+    // (topF) and descenders (botF) without overrunning into an adjacent label.
+    const padX = 1.5, topF = 0.86, botF = 0.34;
     const xpx = Math.max(0, (it.x - padX) * scale);
-    const ytop = (PAGE_H - (it.y + it.h + padTop)) * scale;
+    const topPdf = it.y + it.h * topF;
+    const botPdf = it.y - it.h * botF;
+    const ytop = (PAGE_H - topPdf) * scale;
     const wpx = (it.w + padX * 2) * scale;
-    const hpx = (it.h + padTop + padBot) * scale;
+    const hpx = (topPdf - botPdf) * scale;
     return `<rect x="${xpx.toFixed(1)}" y="${ytop.toFixed(1)}" width="${wpx.toFixed(1)}" height="${hpx.toFixed(1)}" fill="white"/>`;
   });
+for (const r of extraRects) {
+  const xpx = Math.max(0, r.x * scale);
+  const ytop = (PAGE_H - (r.y + r.h)) * scale;
+  rects.push(`<rect x="${xpx.toFixed(1)}" y="${ytop.toFixed(1)}" width="${(r.w * scale).toFixed(1)}" height="${(r.h * scale).toFixed(1)}" fill="white"/>`);
+}
 const base = Buffer.from(png.split(",")[1], "base64");
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${pw}" height="${ph}">${rects.join("")}</svg>`;
 await sharp(base).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toFile(outPath);
