@@ -12,21 +12,32 @@ import {
   Sparkles,
   Loader2,
   ChevronDown,
+  Upload,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { useMyDay } from "@/lib/my-day/use-my-day";
 import { todayLocal } from "@/lib/utils/date";
 import type { DailyStep } from "@/lib/my-day/types";
+import { BulkImportPanel } from "@/components/features/my-day/bulk-import-panel";
 
 export default function MyDayPage() {
-  const { view, loading, error, toggleStep, addQuickStep, addGoal, deleteStep } =
-    useMyDay();
+  const {
+    view,
+    loading,
+    error,
+    toggleStep,
+    addQuickStep,
+    addGoal,
+    bulkAdd,
+    deleteStep,
+  } = useMyDay();
 
   const [quick, setQuick] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Breakdown form
   const [showBreak, setShowBreak] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [bTitle, setBTitle] = useState("");
   const [bDeadline, setBDeadline] = useState("");
   const [bBusy, setBBusy] = useState(false);
@@ -94,15 +105,28 @@ export default function MyDayPage() {
         </button>
       </form>
 
-      <button
-        type="button"
-        onClick={() => setShowBreak((s) => !s)}
-        className="inline-flex items-center gap-1.5 text-xs text-primary font-medium mb-3"
-      >
-        <Sparkles className="w-3.5 h-3.5" />
-        Break a bigger task into steps
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBreak ? "rotate-180" : ""}`} />
-      </button>
+      <div className="flex items-center gap-4 mb-3 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setShowBreak((s) => !s)}
+          className="inline-flex items-center gap-1.5 text-xs text-primary font-medium"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Break a bigger task into steps
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBreak ? "rotate-180" : ""}`} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowBulk((s) => !s)}
+          className="inline-flex items-center gap-1.5 text-xs text-primary font-medium"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          Bulk add a list (photo or paste)
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBulk ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+
+      {showBulk && <BulkImportPanel onAdd={bulkAdd} />}
 
       {showBreak && (
         <form onSubmit={submitBreakdown} className="gk-card p-3 mb-3 space-y-2">

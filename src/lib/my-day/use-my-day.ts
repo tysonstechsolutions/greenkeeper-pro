@@ -9,7 +9,7 @@ import {
   directDeleteRow,
   getCachedUserId,
 } from "@/lib/supabase/rest";
-import { todayLocal } from "@/lib/utils/date";
+import { addDaysLocal, todayLocal } from "@/lib/utils/date";
 import { partitionDayView, scheduleSteps, type DayView } from "./schedule";
 import { breakdownTask } from "./breakdown";
 import type { DailyGoal, DailyStep } from "./types";
@@ -35,6 +35,9 @@ export interface UseMyDay {
     deadline?: string | null;
     bufferDays?: number;
   }) => Promise<AddGoalResult>;
+  /** Bulk-add a parsed/imported list. No deadline -> backlog; deadline ->
+   *  scheduled to (deadline - buffer). Returns how many were added. */
+  bulkAdd: (items: { title: string; deadline?: string | null }[]) => Promise<number>;
   deleteStep: (id: string) => Promise<void>;
 }
 
@@ -180,6 +183,40 @@ export function useMyDay(): UseMyDay {
     [today],
   );
 
+  const bulkAdd = useCallback(
+    async (items: { title: string; deadline?: string | null }[]): Promise<number> => {
+      const uid = getCachedUserId();
+      const clean = items
+        .map((it) => ({ title: it.title.trim(), deadline: it.deadline ?? null }))
+        .filter((it) => it.title);
+      if (clean.length === 0) return 0;
+
+      const rows = clean.map((it, i) => {
+        let target_date: string | null = null;
+        if (it.deadline) {
+          const buffered = addDaysLocal(it.deadline, -DEFAULT_BUFFER_DAYS);
+          target_date = buffered < today ? today : buffered;
+        }
+        return {
+          title: it.title,
+          target_date,
+          done: false,
+          sort_order: i,
+          source: "bulk",
+          created_by: uid,
+        };
+      });
+      const inserted = await directInsertRows<DailyStep>(
+        "daily_steps",
+        rows,
+        "my-day.bulkAdd",
+      );
+      setSteps((prev) => [...prev, ...inserted]);
+      return inserted.length;
+    },
+    [today],
+  );
+
   const deleteStep = useCallback(async (id: string) => {
     setSteps((prev) => prev.filter((s) => s.id !== id));
     try {
@@ -198,6 +235,7 @@ export function useMyDay(): UseMyDay {
     toggleStep,
     addQuickStep,
     addGoal,
+    bulkAdd,
     deleteStep,
   };
 }
