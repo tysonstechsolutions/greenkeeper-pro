@@ -55,6 +55,7 @@ import {
 } from "@/lib/pr-audit/download";
 import { FilePreviewOverlay } from "@/components/pr-audit/file-preview";
 import { FindingsList, FindingsSummary } from "@/components/pr-audit/findings";
+import { SendUpReadinessCard } from "@/components/pr-audit/send-up-readiness-card";
 import { PrEditor } from "@/components/pr-audit/pr-editor";
 import {
   DownloadChecklist,
@@ -809,6 +810,15 @@ function ViewPrAuditInner() {
           )}
         </div>
       </div>
+
+      {/* Ready-to-send-up verdict (only while the PR still needs review) */}
+      {(audit.review_status === "pending" || audit.review_status === "sent_back") && (
+        <SendUpReadinessCard
+          audit={audit}
+          onSendUp={() => setStatus("sent_up")}
+          busy={savingStatus}
+        />
+      )}
 
       {/* Built-PR details (imported from the Purchase Request app) */}
       {linkedPr && (
