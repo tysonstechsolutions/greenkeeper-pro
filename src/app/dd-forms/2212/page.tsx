@@ -52,7 +52,9 @@ function Dd2212Content() {
         unitCost,
         totalValue,
         reason: params.get("reason") || "",
-        totalTouched: !!totalValue,
+        // The prefilled total is machine-computed from units × unitCost, so
+        // keep auto-recompute alive — only a hand-typed total freezes it.
+        totalTouched: false,
       },
     ];
   });

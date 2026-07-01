@@ -161,11 +161,17 @@ export default function ProShopSchedulePage() {
         unresolved?: string[];
       }>("pro-shop-ai", {
         method: "POST",
-        body: { action: "schedule_update", text, today: TODAY, roster },
+        // Fresh date, not the module-scope TODAY — this kiosk PWA stays open
+        // across midnight, and the AI resolves "out until the 25th" against it.
+        body: { action: "schedule_update", text, today: ymd(new Date()), roster },
       });
 
       const applied: string[] = [];
-      const unresolved: string[] = [...(res.unresolved ?? [])];
+      // The AI's arrays aren't element-validated by the edge function — keep
+      // only real strings so a malformed item can't crash the result render.
+      const unresolved: string[] = (res.unresolved ?? []).filter(
+        (u): u is string => typeof u === "string",
+      );
 
       // Lasting availability changes.
       for (const a of res.availability ?? []) {
@@ -179,8 +185,17 @@ export default function ProShopSchedulePage() {
           unresolved.push(`Skipped ${target.full_name}: the new pattern wasn't clear.`);
           continue;
         }
-        await ps.saveAvailability(target.id, { weekly, notes: a.note ?? "" }, a.note ?? text);
-        applied.push(`${target.full_name}: availability updated${a.note ? ` — ${a.note}` : ""}`);
+        // Append to the person's standing availability notes ("student — no
+        // Tuesdays") instead of overwriting them with this one change's note.
+        const note = typeof a.note === "string" ? a.note.trim() : "";
+        const existingNotes = target.availability?.notes?.trim() ?? "";
+        const notes = note
+          ? existingNotes
+            ? `${existingNotes}\n${note}`
+            : note
+          : existingNotes;
+        await ps.saveAvailability(target.id, { weekly, notes }, note || text);
+        applied.push(`${target.full_name}: availability updated${note ? ` — ${note}` : ""}`);
       }
 
       // Temporary time off.
@@ -202,16 +217,31 @@ export default function ProShopSchedulePage() {
         );
       }
 
-      // Rebuild the whole month from the updated patterns/time-off.
+      // Rebuild the whole month from the updated patterns/time-off. When a
+      // schedule already exists this replaces every shift — including manual
+      // edits and cover shifts — so ask first, same as the Regenerate button.
+      let rebuilt = false;
       if (applied.length > 0) {
-        await ps.generateMonth(!!ps.schedule);
-        setQuickText("");
+        const exists = !!ps.schedule;
+        const okToRebuild =
+          !exists ||
+          window.confirm(
+            "Rebuild this month's schedule from the updated availability/time-off? This replaces all shifts for the month, including manual edits.",
+          );
+        if (okToRebuild) {
+          await ps.generateMonth(exists);
+          rebuilt = true;
+          setQuickText("");
+        }
       }
 
+      const aiSummary = typeof res.summary === "string" ? res.summary.trim() : "";
       setQuickResult({
-        summary:
-          res.summary?.trim() ||
-          (applied.length ? "Applied and rebuilt the schedule." : "No changes were applied."),
+        summary: !applied.length
+          ? aiSummary || "No changes were applied."
+          : rebuilt
+            ? aiSummary || "Applied and rebuilt the schedule."
+            : "Changes saved, but the schedule was NOT rebuilt — hit Regenerate when you're ready.",
         applied,
         unresolved,
       });

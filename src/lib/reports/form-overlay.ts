@@ -133,7 +133,17 @@ export function drawWrapped(
     size -= 0.5;
     lines = wrapText(text, font, size, opts.maxW);
   }
-  if (lines.length > maxLines) lines = lines.slice(0, maxLines);
+  if (lines.length > maxLines) {
+    // Out of room even at the floor size. Truncate, but make the cut VISIBLE
+    // with an ellipsis — these are official forms, and silently dropped text
+    // is worse than an obvious "this didn't fit, shorten it".
+    lines = lines.slice(0, maxLines);
+    let last = lines[maxLines - 1] ?? "";
+    while (last && font.widthOfTextAtSize(`${last}…`, size) > opts.maxW) {
+      last = last.slice(0, -1).trimEnd();
+    }
+    lines[maxLines - 1] = `${last}…`;
+  }
 
   const lineGap = opts.lineGap ?? size + 1.5;
   const n = lines.length;
