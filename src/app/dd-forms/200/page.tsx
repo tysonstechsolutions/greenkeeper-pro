@@ -31,7 +31,10 @@ function Dd200Content() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const [site, setSite] = useState<DdSite>(DD_SITES[0]);
+  const qsSite = params.get("site") || "";
+  const [site, setSite] = useState<DdSite>(
+    (DD_SITES as readonly string[]).includes(qsSite) ? (qsSite as DdSite) : DD_SITES[0],
+  );
   const [assetName, setAssetName] = useState(params.get("asset") || "");
 
   const [dateInitiated, setDateInitiated] = useState(ymd());
@@ -39,15 +42,17 @@ function Dd200Content() {
   const [dateLossDiscovered, setDateLossDiscovered] = useState("");
   const [nsn, setNsn] = useState("");
   const [itemDescription, setItemDescription] = useState(params.get("item") || "");
-  const [quantity, setQuantity] = useState("1");
-  const [unitCost, setUnitCost] = useState("");
-  const [totalCost, setTotalCost] = useState("");
+  const [quantity, setQuantity] = useState(params.get("qty") || "1");
+  const [unitCost, setUnitCost] = useState(params.get("unitCost") || "");
+  const [totalCost, setTotalCost] = useState(() =>
+    money(params.get("qty") || "1", params.get("unitCost") || "", true),
+  );
   const [totalTouched, setTotalTouched] = useState(false);
 
   const [circumstance, setCircumstance] = useState<Circumstance | "">("");
   const [category, setCategory] = useState<Category | "">("");
 
-  const [circumstances, setCircumstances] = useState("");
+  const [circumstances, setCircumstances] = useState(params.get("reason") || "");
   const [actions, setActions] = useState("");
   const [whatHappened, setWhatHappened] = useState("");
   const [drafting, setDrafting] = useState(false);

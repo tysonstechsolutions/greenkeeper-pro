@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   PackageCheck,
   ExternalLink,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -522,6 +523,64 @@ function PageContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Disposition paperwork — for a needs-disposed / disposed asset, jump
+          straight to the real Certificate of Disposition (2212) or DD-200,
+          prefilled with this asset's site, description, value, and reason. */}
+      {(asset.status === "needs_disposed" || asset.status === "disposed") && (() => {
+        const dispReason = asset.notes?.trim() || "Beyond economical repair";
+        const dispItem = [
+          asset.description,
+          [asset.manufacturer, asset.model_text].filter(Boolean).join(" ").trim(),
+          asset.serial_number ? `SN ${asset.serial_number}` : "",
+          `Asset ${asset.asset_number}`,
+        ]
+          .filter(Boolean)
+          .join(" — ");
+        const base: Record<string, string> = {
+          site: asset.site,
+          asset: asset.description,
+          item: dispItem,
+          unitCost: asset.original_value != null ? String(asset.original_value) : "",
+          reason: dispReason,
+        };
+        const qty = String(asset.qty ?? 1);
+        const url2212 = `/dd-forms/2212?${new URLSearchParams({ ...base, units: qty }).toString()}`;
+        const url200 = `/dd-forms/200?${new URLSearchParams({ ...base, qty }).toString()}`;
+        return (
+          <Card className="mb-4 border-orange-300 dark:border-orange-800">
+            <CardContent className="p-4">
+              <p className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-orange-600" />
+                Disposition paperwork
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Generate the official form for this asset — prefilled with its
+                description, value, site, and reason. Review, then download.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full justify-start"
+                  style={{ borderColor: "#ea580c", color: "#ea580c" }}
+                >
+                  <Link href={url2212}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Certificate of Disposition (2212)
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="w-full justify-start">
+                  <Link href={url200}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Property Loss (DD-200)
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* ═══ Operational Information (linked equipment) ═══
           Shows the day-to-day operational data — condition, parts ordered,

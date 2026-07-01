@@ -31,15 +31,31 @@ function Dd2212Content() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const [site, setSite] = useState<DdSite>(DD_SITES[0]);
+  const qsSite = params.get("site") || "";
+  const [site, setSite] = useState<DdSite>(
+    (DD_SITES as readonly string[]).includes(qsSite) ? (qsSite as DdSite) : DD_SITES[0],
+  );
   const [assetName, setAssetName] = useState(params.get("asset") || "");
   const [activity, setActivity] = useState(DD_ACTIVITY_DEFAULT);
   const [date, setDate] = useState(ddMonYyyy());
   const [sheetNo, setSheetNo] = useState("1");
   const [sheetOf, setSheetOf] = useState("1");
-  const [rows, setRows] = useState<Row[]>([
-    { ...emptyRow(), description: params.get("item") || "" },
-  ]);
+  const [rows, setRows] = useState<Row[]>(() => {
+    const units = params.get("units") || "";
+    const unitCost = params.get("unitCost") || "";
+    const totalValue = money(units, unitCost, false) || "";
+    return [
+      {
+        ...emptyRow(),
+        description: params.get("item") || "",
+        units,
+        unitCost,
+        totalValue,
+        reason: params.get("reason") || "",
+        totalTouched: !!totalValue,
+      },
+    ];
+  });
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
