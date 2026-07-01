@@ -37,19 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { useReports, type DailyReportData, type WeeklyReportData, type EquipmentReportData, type ChemicalReportData } from "@/lib/hooks/useReports";
 import { exportElementToPDF, exportToCSV, generateReportFilename, printElement, formatReportDate, formatDateRange } from "@/lib/utils/pdf-export";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -61,6 +49,27 @@ import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { downloadFullReport } from "@/lib/reports/full-download";
 import { parseAppDate } from "@/lib/utils/date-format";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
+
+// Charts are code-split so recharts only loads when a report is viewed.
+const chartLoading = () => (
+  <div className="h-full w-full animate-pulse rounded-lg bg-muted" />
+);
+const TaskStatusPieChart = dynamic(
+  () => import("./reports-charts").then((m) => m.TaskStatusPieChart),
+  { ssr: false, loading: chartLoading }
+);
+const StaffCompletionChart = dynamic(
+  () => import("./reports-charts").then((m) => m.StaffCompletionChart),
+  { ssr: false, loading: chartLoading }
+);
+const EquipmentCostChart = dynamic(
+  () => import("./reports-charts").then((m) => m.EquipmentCostChart),
+  { ssr: false, loading: chartLoading }
+);
+const ChemicalProductsChart = dynamic(
+  () => import("./reports-charts").then((m) => m.ChemicalProductsChart),
+  { ssr: false, loading: chartLoading }
+);
 
 const REPORT_TYPES = [
   {
@@ -733,24 +742,7 @@ function DailyReportView({ report }: { report: DailyReportData }) {
           </CardHeader>
           <CardContent>
             <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={tasksByStatus}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={80}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {tasksByStatus.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              <TaskStatusPieChart data={tasksByStatus} />
             </div>
           </CardContent>
         </Card>
@@ -877,17 +869,7 @@ function WeeklyReportView({ report }: { report: WeeklyReportData }) {
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={completionByStaff}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="completed" fill="#40916C" name="Completed" />
-                <Bar dataKey="total" fill="#B7E4C7" name="Assigned" />
-              </BarChart>
-            </ResponsiveContainer>
+            <StaffCompletionChart data={completionByStaff} />
           </div>
         </CardContent>
       </Card>
@@ -984,15 +966,7 @@ function EquipmentReportView({ report }: { report: EquipmentReportData }) {
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={costsByType} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={(v) => `$${v}`} />
-                <YAxis type="category" dataKey="equipment_name" width={150} />
-                <Tooltip formatter={(value) => [`$${(typeof value === "number" ? value : 0).toLocaleString()}`, "Cost"]} />
-                <Bar dataKey="total_cost" fill="#1B4332" />
-              </BarChart>
-            </ResponsiveContainer>
+            <EquipmentCostChart data={costsByType} />
           </div>
         </CardContent>
       </Card>
@@ -1102,15 +1076,7 @@ function ChemicalReportView({ report }: { report: ChemicalReportData }) {
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={report.products_summary.slice(0, 10)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="product_name" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="total_applied" fill="#1B4332" name="Total Applied" />
-              </BarChart>
-            </ResponsiveContainer>
+            <ChemicalProductsChart data={report.products_summary.slice(0, 10)} />
           </div>
         </CardContent>
       </Card>

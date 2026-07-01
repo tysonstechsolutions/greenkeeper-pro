@@ -31,16 +31,16 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { WeatherLog } from "@/types/database";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
+import dynamic from "next/dynamic";
+
+// Chart is code-split so recharts only loads when it actually renders.
+const GddSeasonChart = dynamic(
+  () => import("./weather-charts").then((m) => m.GddSeasonChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-muted" />,
+  }
+);
 
 // Alert styles
 const alertStyles: Record<
@@ -535,67 +535,10 @@ export default function WeatherPage() {
               Cumulative GDD Over Season
             </p>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={gddData.dailyData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(date) =>
-                      new Date(date + "T12:00:00").toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })
-                    }
-                    tick={{ fontSize: 12 }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.[0]) return null;
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
-                          <p className="text-sm font-medium">
-                            {new Date(data.date + "T12:00:00").toLocaleDateString(
-                              "en-US",
-                              { month: "long", day: "numeric" }
-                            )}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Daily: {data.gdd} GDD
-                          </p>
-                          <p className="text-sm font-semibold text-primary">
-                            Cumulative: {data.cumulative} GDD
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="cumulative"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  {/* Milestone reference lines */}
-                  {GDD_MILESTONES.slice(0, 3).map((milestone) => (
-                    <ReferenceLine
-                      key={milestone.gdd}
-                      y={milestone.gdd}
-                      stroke={milestone.color}
-                      strokeDasharray="5 5"
-                      label={{
-                        value: `${milestone.gdd}`,
-                        position: "right",
-                        fontSize: 10,
-                        fill: milestone.color,
-                      }}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+              <GddSeasonChart
+                data={gddData.dailyData}
+                milestones={GDD_MILESTONES}
+              />
             </div>
           </div>
         )}

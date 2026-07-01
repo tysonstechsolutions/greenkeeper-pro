@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   DollarSign,
@@ -18,21 +19,6 @@ import {
   Loader2,
   Eye,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -55,6 +41,29 @@ import {
 import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard, MANAGEMENT_ROLES } from "@/components/auth/role-guard";
 import type { BudgetCategory } from "@/types/database";
+
+// Charts are code-split so recharts only loads when a chart renders.
+const BudgetVsActualChart = dynamic(
+  () => import("./budget-charts").then((m) => m.BudgetVsActualChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[300px] animate-pulse rounded-lg bg-muted" />,
+  }
+);
+const SpendingByCategoryChart = dynamic(
+  () => import("./budget-charts").then((m) => m.SpendingByCategoryChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[300px] animate-pulse rounded-lg bg-muted" />,
+  }
+);
+const MonthlySpendChart = dynamic(
+  () => import("./budget-charts").then((m) => m.MonthlySpendChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[250px] animate-pulse rounded-lg bg-muted" />,
+  }
+);
 
 // Circular progress component for % used
 function CircularProgress({
@@ -113,25 +122,6 @@ function formatCurrency(amount: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);
-}
-
-// Custom tooltip for charts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CustomTooltip({ active, payload, label }: any) {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-popover border rounded-lg shadow-lg p-3">
-        <p className="font-medium">{label}</p>
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        {payload.map((entry: any, index: number) => (
-          <p key={index} style={{ color: entry.color }}>
-            {entry.name}: {formatCurrency(entry.value)}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
 }
 
 export default function BudgetPage() {
@@ -347,21 +337,7 @@ export default function BudgetPage() {
           </CardHeader>
           <CardContent>
             {barData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart
-                  data={barData}
-                  layout="vertical"
-                  margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                  <YAxis type="category" dataKey="shortCategory" width={75} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend />
-                  <Bar dataKey="budgeted" name="Budgeted" fill="#3b82f6" />
-                  <Bar dataKey="actual" name="Actual" fill="#22c55e" />
-                </BarChart>
-              </ResponsiveContainer>
+              <BudgetVsActualChart data={barData} />
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                 No budget data for {fiscalYear}
@@ -380,28 +356,7 @@ export default function BudgetPage() {
           </CardHeader>
           <CardContent>
             {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) =>
-                      `${(name || "").substring(0, 6)}.. ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                    labelLine={false}
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(typeof value === "number" ? value : 0)} />
-                </PieChart>
-              </ResponsiveContainer>
+              <SpendingByCategoryChart data={pieData} />
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                 No spending data for {fiscalYear}
@@ -421,40 +376,7 @@ export default function BudgetPage() {
         </CardHeader>
         <CardContent>
           {monthlySpend.some((m) => m.amount > 0) ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart
-                data={monthlySpend}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="month_name"
-                  tickFormatter={(v) => v.substring(0, 3)}
-                />
-                <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="amount"
-                  name="Spent"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-                {monthlySpend.some((m) => m.budgeted) && (
-                  <Line
-                    type="monotone"
-                    dataKey="budgeted"
-                    name="Budget"
-                    stroke="#9ca3af"
-                    strokeDasharray="5 5"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
+            <MonthlySpendChart data={monthlySpend} />
           ) : (
             <div className="h-[250px] flex items-center justify-center text-muted-foreground">
               No monthly spend data for {fiscalYear}
