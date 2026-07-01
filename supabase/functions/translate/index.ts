@@ -15,7 +15,7 @@ import { corsHeaders, handleCors, jsonError, jsonResponse } from "../_shared/cor
 import { getUser, getUserClient } from "../_shared/supabase.ts";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_INPUT_LENGTH = 2000;
 const REQUEST_TIMEOUT_MS = 20000;
