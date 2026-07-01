@@ -44,6 +44,8 @@ export interface ProShopSchedule {
   title: string;
   status: "draft" | "published";
   notes: string | null;
+  /** Per-day dismissed coverage-warning codes (see DismissedWarnings). */
+  dismissed_warnings: DismissedWarnings;
 }
 
 export interface ProShopShift {
@@ -66,6 +68,46 @@ export interface ProShopTimeOff {
   end_date: string;
   reason: string | null;
 }
+
+/** A duty targets a whole area (rec aids / golf ops / both) or one person. */
+export type DutyArea = ShiftGroup | "both";
+
+/** A standing daily duty for the pro-shop jobs, recurring on set weekdays. */
+export interface ProShopDuty {
+  id: string;
+  title: string;
+  /** Set iff this duty is assigned to an area (not a specific person). */
+  area: DutyArea | null;
+  /** Set iff this duty is assigned to one person (not an area). */
+  staff_id: string | null;
+  /** Weekday keys it recurs on, e.g. ["mon","wed","fri"]. */
+  days: WeekdayKey[];
+  note: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+/** Stable coverage-warning codes (see dayWarnings). */
+export type WarningCode =
+  | "no_outside"
+  | "no_inside"
+  | "no_inside_opener"
+  | "no_inside_closer"
+  | "no_outside_closer";
+
+export interface DayWarning {
+  code: WarningCode;
+  message: string;
+}
+
+/** Per-day dismissed warning codes, keyed by YYYY-MM-DD. Lives on the schedule row. */
+export type DismissedWarnings = Record<string, WarningCode[]>;
+
+export const DUTY_AREA_LABELS: Record<DutyArea, string> = {
+  outside: "Rec Aids (Outside)",
+  inside: "Golf Ops (Inside)",
+  both: "Both areas",
+};
 
 export const WEEKDAY_KEYS: WeekdayKey[] = [
   "sun",

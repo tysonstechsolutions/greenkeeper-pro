@@ -381,85 +381,63 @@ export function generateReportFilename(
   return `vmgc-${reportType}-report-${date}`;
 }
 
-/**
- * Print a specific element (opens print dialog)
- */
-export function printElement(element: HTMLElement, title?: string): void {
+const PRINT_STYLES = `
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    padding: 20px;
+    color: #000;
+    background: #fff;
+  }
+  @media print { body { padding: 0; } }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+  th { background-color: #f4f4f4; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+  h1 { color: #1B4332; margin-bottom: 4px; font-size: 20px; }
+  h2, h3 { color: #1B4332; margin: 14px 0 6px; font-size: 15px; }
+  .print-sub { color: #666; font-size: 12px; margin-bottom: 12px; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 10px 0; }
+`;
+
+function openPrintWindow(bodyHtml: string, title: string): void {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
     console.error("Failed to open print window");
     return;
   }
-
-  // Clone the element
-  const clone = element.cloneNode(true) as HTMLElement;
-
-  // Build print document
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>${title || "Report"}</title>
-      <style>
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          padding: 20px;
-          color: #000;
-          background: #fff;
-        }
-        @media print {
-          body {
-            padding: 0;
-          }
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin: 10px 0;
-        }
-        th, td {
-          border: 1px solid #ddd;
-          padding: 8px;
-          text-align: left;
-        }
-        th {
-          background-color: #f4f4f4;
-        }
-        .badge {
-          display: inline-block;
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-size: 12px;
-        }
-        h1, h2, h3 {
-          color: #1B4332;
-          margin-bottom: 10px;
-        }
-        .card {
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          padding: 16px;
-          margin: 10px 0;
-        }
-      </style>
-    </head>
-    <body>
-      ${clone.outerHTML}
-    </body>
-    </html>
-  `);
-
+  printWindow.document.write(
+    `<!DOCTYPE html><html><head><title>${title}</title><style>${PRINT_STYLES}</style></head><body>${bodyHtml}</body></html>`,
+  );
   printWindow.document.close();
   printWindow.focus();
-
-  // Wait for content to load then print
+  // Wait for content to load then print.
   setTimeout(() => {
     printWindow.print();
     printWindow.close();
   }, 250);
+}
+
+/**
+ * Print a specific element (opens print dialog)
+ */
+export function printElement(element: HTMLElement, title?: string): void {
+  const clone = element.cloneNode(true) as HTMLElement;
+  openPrintWindow(clone.outerHTML, title || "Report");
+}
+
+/**
+ * Print a raw HTML string with the shared print stylesheet. Use when the print
+ * layout is built independently of the on-screen DOM (e.g. a clean handout).
+ * `header` is an optional title/subtitle block rendered above the content.
+ */
+export function printHtml(
+  bodyHtml: string,
+  title: string,
+  header?: { heading: string; subtitle?: string },
+): void {
+  const headerHtml = header
+    ? `<h1>${header.heading}</h1>${header.subtitle ? `<p class="print-sub">${header.subtitle}</p>` : ""}`
+    : "";
+  openPrintWindow(headerHtml + bodyHtml, title);
 }

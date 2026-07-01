@@ -10,9 +10,11 @@
 import {
   WEEKDAY_KEYS,
   type DayPattern,
+  type DayWarning,
   type ProShopStaff,
   type ProShopTimeOff,
   type ShiftGroup,
+  type WarningCode,
   type WeekdayKey,
 } from "./types";
 
@@ -111,26 +113,39 @@ export function expandMonth(
 }
 
 /**
- * Coverage warnings for a single day. Intentionally light — flags the things
- * that actually leave the shop short: an empty group, or no early opener.
+ * Coverage warnings for a single day, as structured {code, message}. Light on
+ * purpose — flags what actually leaves the shop short: an empty group, or no
+ * early opener / late closer. Each code is stable so a warning can be dismissed.
  */
 export function dayWarnings(
   shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
-): string[] {
-  const warnings: string[] = [];
+): DayWarning[] {
+  const warnings: DayWarning[] = [];
   const inside = shiftsForDay.filter((s) => s.group === "inside");
   const outside = shiftsForDay.filter((s) => s.group === "outside");
-  if (inside.length === 0) warnings.push("No inside staff");
-  if (outside.length === 0) warnings.push("No outside staff");
+  const add = (code: WarningCode, message: string) => warnings.push({ code, message });
+
+  if (outside.length === 0) add("no_outside", "No outside staff (rec aids) scheduled");
+  if (inside.length === 0) add("no_inside", "No inside staff (golf ops) scheduled");
   // "Opener" = someone starting at or before 07:00 inside.
   const hasOpener = inside.some((s) => hhmm(s.start_time) <= "07:00");
-  if (inside.length > 0 && !hasOpener) warnings.push("No early inside opener");
+  if (inside.length > 0 && !hasOpener) add("no_inside_opener", "No early inside opener (no one starts by 07:00)");
   // "Closer" = someone working until 19:00+ in each active group.
   const insideCloses = inside.some((s) => hhmm(s.end_time) >= "19:00");
   const outsideCloses = outside.some((s) => hhmm(s.end_time) >= "19:00");
-  if (inside.length > 0 && !insideCloses) warnings.push("No inside closer");
-  if (outside.length > 0 && !outsideCloses) warnings.push("No outside closer");
+  if (inside.length > 0 && !insideCloses) add("no_inside_closer", "No inside closer (no one works to 19:00)");
+  if (outside.length > 0 && !outsideCloses) add("no_outside_closer", "No outside closer (no one works to 19:00)");
   return warnings;
+}
+
+/** Drop any warnings whose code the user has dismissed for that day. */
+export function activeWarnings(
+  warnings: DayWarning[],
+  dismissedCodes: WarningCode[] | undefined,
+): DayWarning[] {
+  if (!dismissedCodes || dismissedCodes.length === 0) return warnings;
+  const dismissed = new Set(dismissedCodes);
+  return warnings.filter((w) => !dismissed.has(w.code));
 }
 
 /** Short human label, e.g. "Mon Jun 1". */

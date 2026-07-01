@@ -16,6 +16,7 @@ import type {
   ProShopStaff,
   ProShopTimeOff,
   ShiftGroup,
+  WarningCode,
   WeeklyAvailability,
 } from "./types";
 import { datesInMonth, expandMonth, ymd } from "./schedule-engine";
@@ -301,6 +302,49 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     [loadShifts],
   );
 
+  // ── Coverage-warning dismissals (per issue, per day) ──────────────────────
+  /** Toggle a warning code as dismissed/restored for a given date. */
+  const setWarningDismissed = useCallback(
+    async (date: string, code: WarningCode, dismissed: boolean) => {
+      const sched = schedules.find((s) => s.month === monthKey) ?? null;
+      if (!sched) return;
+      const current = sched.dismissed_warnings ?? {};
+      const forDay = new Set(current[date] ?? []);
+      if (dismissed) forDay.add(code);
+      else forDay.delete(code);
+      const nextForDay = Array.from(forDay);
+      const next = { ...current };
+      if (nextForDay.length) next[date] = nextForDay;
+      else delete next[date];
+      // Optimistic local update so the ⚠ and count react immediately.
+      setSchedules((prev) =>
+        prev.map((s) => (s.id === sched.id ? { ...s, dismissed_warnings: next } : s)),
+      );
+      try {
+        await directPatchRow(
+          "pro_shop_schedules",
+          "id",
+          sched.id,
+          { dismissed_warnings: next },
+          "proshop.schedule.dismiss",
+        );
+      } catch (e) {
+        console.error("[pro-shop] dismiss warning failed:", e);
+        await loadStatic();
+      }
+    },
+    [schedules, monthKey, loadStatic],
+  );
+
+  const dismissWarning = useCallback(
+    (date: string, code: WarningCode) => setWarningDismissed(date, code, true),
+    [setWarningDismissed],
+  );
+  const restoreWarning = useCallback(
+    (date: string, code: WarningCode) => setWarningDismissed(date, code, false),
+    [setWarningDismissed],
+  );
+
   // ── Time off ──────────────────────────────────────────────────────────────
   const addTimeOff = useCallback(
     async (staffId: string, startDate: string, endDate: string, reason: string) => {
@@ -349,6 +393,8 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     deleteShift,
     addTimeOff,
     removeTimeOff,
+    dismissWarning,
+    restoreWarning,
     datesInMonth: () => datesInMonth(year, month0),
   };
 }

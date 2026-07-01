@@ -10,10 +10,12 @@ import {
   isSameMonth,
   format,
 } from "date-fns";
+import Link from "next/link";
 import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  ChevronRight as ChevronRightIcon,
   Plus,
   Loader2,
   Sparkles,
@@ -25,12 +27,16 @@ import {
   UserMinus,
   Sun,
   Moon,
+  ListChecks,
+  Ban,
+  Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useProShop, type ShiftInput } from "@/lib/pro-shop/use-pro-shop";
 import {
+  activeWarnings,
   compactTime,
   dayWarnings,
   hhmm,
@@ -40,9 +46,11 @@ import {
 } from "@/lib/pro-shop/schedule-engine";
 import {
   positionGroup,
+  type DayWarning,
   type ProShopShift,
   type ProShopStaff,
   type ShiftGroup,
+  type WarningCode,
 } from "@/lib/pro-shop/types";
 import { Overlay } from "@/components/features/pro-shop/overlay";
 import { AvailabilitySheet } from "@/components/features/pro-shop/availability-sheet";
@@ -67,6 +75,7 @@ export default function ProShopSchedulePage() {
     { mode: "new"; date: string } | { mode: "edit"; shift: ProShopShift } | null
   >(null);
   const [addStaffOpen, setAddStaffOpen] = useState(false);
+  const [attentionOpen, setAttentionOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const grid = useMemo(() => {
@@ -115,18 +124,37 @@ export default function ProShopSchedulePage() {
     }
   }
 
-  // Month-level coverage warning count.
-  const warningDays = useMemo(() => {
+  // Per-day dismissed warning codes (from the month's schedule row).
+  const dismissedMap = useMemo(
+    () => ps.schedule?.dismissed_warnings ?? {},
+    [ps.schedule],
+  );
+
+  // Active (non-dismissed) coverage issues, per flagged day in the month.
+  const flaggedDays = useMemo(() => {
     const days = eachDayOfInterval({ start: startOfMonth(monthDate), end: endOfMonth(monthDate) });
-    let count = 0;
+    const out: { date: string; active: DayWarning[] }[] = [];
     for (const d of days) {
       const ds = ymd(d);
-      const w = dayWarnings(shiftsOn(ds));
-      if (w.length) count++;
+      const active = activeWarnings(dayWarnings(shiftsOn(ds)), dismissedMap[ds]);
+      if (active.length) out.push({ date: ds, active });
     }
-    return count;
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ps.shifts, monthDate]);
+  }, [ps.shifts, monthDate, dismissedMap]);
+  const warningDays = flaggedDays.length;
+
+  // Active + dismissed issues for the currently-open day (for the day editor).
+  const openDayWarnings = useMemo(() => {
+    if (!dayOpen) return { active: [] as DayWarning[], dismissed: [] as DayWarning[] };
+    const all = dayWarnings(shiftsOn(dayOpen));
+    const codes = dismissedMap[dayOpen] ?? [];
+    return {
+      active: all.filter((w) => !codes.includes(w.code)),
+      dismissed: all.filter((w) => codes.includes(w.code)),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayOpen, ps.shifts, dismissedMap]);
 
   return (
     <div className="p-3 md:p-6 pb-28 max-w-6xl mx-auto">
@@ -152,6 +180,11 @@ export default function ProShopSchedulePage() {
           <Button variant="outline" size="icon" onClick={() => changeMonth(1)} aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </Button>
+          <Link href="/pro-shop-schedule/duties">
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <ListChecks className="w-4 h-4" /> <span className="hidden sm:inline">Duties</span>
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -171,9 +204,15 @@ export default function ProShopSchedulePage() {
           <span className="text-xs text-muted-foreground">Not created yet</span>
         )}
         {warningDays > 0 && (
-          <span className="text-xs px-2 py-1 rounded-full border bg-red-50 border-red-300 text-red-700 inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setAttentionOpen(true)}
+            className="text-xs px-2 py-1 rounded-full border bg-red-50 border-red-300 text-red-700 inline-flex items-center gap-1 hover:bg-red-100 active:scale-95 transition"
+            title="See what needs attention"
+          >
             <AlertTriangle className="w-3 h-3" /> {warningDays} day{warningDays === 1 ? "" : "s"} need attention
-          </span>
+            <ChevronRightIcon className="w-3 h-3" />
+          </button>
         )}
         <div className="flex-1" />
         <Button variant="outline" size="sm" className="gap-1.5" onClick={handleGenerate} disabled={busy || ps.staff.length === 0}>
@@ -217,7 +256,7 @@ export default function ProShopSchedulePage() {
           const dayShifts = shiftsOn(ds);
           const out = dayShifts.filter((s) => s.group === "outside");
           const ins = dayShifts.filter((s) => s.group === "inside");
-          const warns = inMonth ? dayWarnings(dayShifts) : [];
+          const warns = inMonth ? activeWarnings(dayWarnings(dayShifts), dismissedMap[ds]) : [];
           return (
             <button
               key={ds}
@@ -311,6 +350,10 @@ export default function ProShopSchedulePage() {
             date={dayOpen}
             shifts={shiftsOn(dayOpen)}
             staffById={ps.staffById}
+            activeIssues={openDayWarnings.active}
+            dismissedIssues={openDayWarnings.dismissed}
+            onDismiss={(code) => ps.dismissWarning(dayOpen, code)}
+            onRestore={(code) => ps.restoreWarning(dayOpen, code)}
             onEdit={(shift) => setEditShift({ mode: "edit", shift })}
             onAdd={() => setEditShift({ mode: "new", date: dayOpen })}
             onCover={() => setCoverDate({ date: dayOpen })}
@@ -362,6 +405,48 @@ export default function ProShopSchedulePage() {
       {/* ── Add staff ─────────────────────────────────────────────────────── */}
       {addStaffOpen && (
         <AddStaffSheet onClose={() => setAddStaffOpen(false)} addStaff={ps.addStaff} />
+      )}
+
+      {/* ── Attention: days needing coverage ──────────────────────────────── */}
+      {attentionOpen && (
+        <Overlay
+          title={`${warningDays} day${warningDays === 1 ? "" : "s"} need attention`}
+          onClose={() => setAttentionOpen(false)}
+        >
+          <div className="p-4 space-y-2">
+            {flaggedDays.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing needs attention. 🎉</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground mb-1">
+                  Tap a day to fix it, or dismiss issues you&apos;re fine with inside the day.
+                </p>
+                {flaggedDays.map(({ date, active }) => (
+                  <button
+                    key={date}
+                    onClick={() => {
+                      setAttentionOpen(false);
+                      setDayOpen(date);
+                    }}
+                    className="w-full text-left p-3 rounded-lg border border-red-200 bg-red-50/60 hover:bg-red-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-red-800">{shortDate(date)}</span>
+                      <ChevronRightIcon className="w-4 h-4 text-red-400" />
+                    </div>
+                    <ul className="mt-1 space-y-0.5">
+                      {active.map((w) => (
+                        <li key={w.code} className="text-xs text-red-700 flex items-start gap-1.5">
+                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" /> {w.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        </Overlay>
       )}
     </div>
   );
@@ -434,6 +519,10 @@ function DayEditor({
   date,
   shifts,
   staffById,
+  activeIssues,
+  dismissedIssues,
+  onDismiss,
+  onRestore,
   onEdit,
   onAdd,
   onCover,
@@ -441,6 +530,10 @@ function DayEditor({
   date: string;
   shifts: ProShopShift[];
   staffById: Record<string, ProShopStaff>;
+  activeIssues: DayWarning[];
+  dismissedIssues: DayWarning[];
+  onDismiss: (code: WarningCode) => void;
+  onRestore: (code: WarningCode) => void;
   onEdit: (s: ProShopShift) => void;
   onAdd: () => void;
   onCover: () => void;
@@ -451,6 +544,58 @@ function DayEditor({
 
   return (
     <div className="p-4 space-y-4">
+      {/* Needs attention — the specific coverage issues + how to clear them. */}
+      {(activeIssues.length > 0 || dismissedIssues.length > 0) && (
+        <div className="rounded-lg border border-red-200 bg-red-50/70 p-3 space-y-2">
+          {activeIssues.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-red-800 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> Needs attention
+              </p>
+              <ul className="space-y-1.5">
+                {activeIssues.map((w) => (
+                  <li key={w.code} className="flex items-start justify-between gap-2">
+                    <span className="text-xs text-red-700 flex items-start gap-1.5">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" /> {w.message}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onDismiss(w.code)}
+                      className="shrink-0 text-[11px] px-2 py-0.5 rounded-full border border-red-300 text-red-700 hover:bg-red-100 inline-flex items-center gap-1"
+                      title="Bypass this — I'm fine with it"
+                    >
+                      <Ban className="w-3 h-3" /> Looks fine
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-red-600/80">
+                Fix by adding or covering a shift below — or dismiss an issue you&apos;re fine with.
+              </p>
+            </>
+          )}
+          {dismissedIssues.length > 0 && (
+            <div className={activeIssues.length > 0 ? "pt-1.5 border-t border-red-200" : ""}>
+              <p className="text-[11px] font-medium text-muted-foreground mb-1">Dismissed</p>
+              <ul className="space-y-1">
+                {dismissedIssues.map((w) => (
+                  <li key={w.code} className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground line-through">{w.message}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRestore(w.code)}
+                      className="shrink-0 text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:bg-muted inline-flex items-center gap-1"
+                      title="Restore this warning"
+                    >
+                      <Undo2 className="w-3 h-3" /> Undo
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
       <ShiftGroupList
         title="Outside (rec aids)"
         list={out}
