@@ -18,7 +18,6 @@ import {
   Package,
   Cloud,
   Camera,
-  Repeat,
   Loader2,
   Search,
   ChevronDown,
@@ -43,7 +42,6 @@ import type {
   ChecklistItem,
   MaterialNeeded,
   WeatherConditions,
-  RecurringRule,
 } from "@/types/database";
 
 // Category options
@@ -69,26 +67,6 @@ const priorityOptions: { value: TaskPriority; label: string; color: string }[] =
   { value: "high", label: "High", color: "bg-orange-500" },
   { value: "normal", label: "Normal", color: "bg-green-500" },
   { value: "low", label: "Low", color: "bg-gray-400" },
-];
-
-// Frequency options
-const frequencyOptions: { value: RecurringRule["frequency"]; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Bi-weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "seasonal", label: "Seasonal" },
-];
-
-// Days of week
-const daysOfWeek = [
-  { value: 0, label: "Sun" },
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
 ];
 
 // Common equipment items
@@ -138,8 +116,6 @@ interface FormData {
   weather_dependent: boolean;
   weather_conditions: WeatherConditions;
   notes: string;
-  is_recurring: boolean;
-  recurring_rule: RecurringRule;
   template_id: string | null;
 }
 
@@ -163,12 +139,6 @@ const initialFormData: FormData = {
   weather_dependent: false,
   weather_conditions: {},
   notes: "",
-  is_recurring: false,
-  recurring_rule: {
-    frequency: "weekly",
-    interval: 1,
-    days_of_week: [],
-  },
   template_id: null,
 };
 
@@ -357,15 +327,6 @@ export default function NewTaskPage() {
     }
   };
 
-  // Toggle day of week for recurring
-  const toggleDayOfWeek = (day: number) => {
-    const currentDays = formData.recurring_rule.days_of_week || [];
-    const newDays = currentDays.includes(day)
-      ? currentDays.filter((d) => d !== day)
-      : [...currentDays, day].sort((a, b) => a - b);
-    updateField("recurring_rule", { ...formData.recurring_rule, days_of_week: newDays });
-  };
-
   // Validate form. The hook handles scroll-into-view + focus on the first
   // invalid field whose id matches the validator key.
   const validateForm = (): boolean =>
@@ -409,7 +370,7 @@ export default function NewTaskPage() {
         requires_photo_after: formData.requires_photo_after,
         weather_dependent: formData.weather_dependent,
         weather_conditions: formData.weather_dependent ? formData.weather_conditions : null,
-        recurring_rule: formData.is_recurring ? formData.recurring_rule : null,
+        recurring_rule: null,
         template_id: formData.template_id,
         notes: formData.notes.trim() || null,
       };
@@ -1174,90 +1135,6 @@ export default function NewTaskPage() {
             className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
             placeholder="Additional notes (optional)"
           />
-        </div>
-
-        {/* Recurring */}
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={formData.is_recurring}
-              onChange={(e) => updateField("is_recurring", e.target.checked)}
-              className="w-4 h-4 rounded border-border"
-            />
-            <span className="text-sm font-medium">
-              <Repeat className="w-4 h-4 inline mr-1" />
-              Recurring Task
-            </span>
-          </label>
-
-          {formData.is_recurring && (
-            <div className="pl-7 space-y-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  Frequency
-                </label>
-                <select
-                  value={formData.recurring_rule.frequency}
-                  onChange={(e) =>
-                    updateField("recurring_rule", {
-                      ...formData.recurring_rule,
-                      frequency: e.target.value as RecurringRule["frequency"],
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                >
-                  {frequencyOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {(formData.recurring_rule.frequency === "weekly" ||
-                formData.recurring_rule.frequency === "biweekly") && (
-                <div>
-                  <label className="block text-xs text-muted-foreground mb-1.5">
-                    Days of Week
-                  </label>
-                  <div className="flex gap-1.5">
-                    {daysOfWeek.map((day) => (
-                      <button
-                        key={day.value}
-                        type="button"
-                        onClick={() => toggleDayOfWeek(day.value)}
-                        className={`flex-1 py-1.5 rounded text-xs font-medium border transition-all ${
-                          (formData.recurring_rule.days_of_week || []).includes(day.value)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background border-border hover:bg-muted"
-                        }`}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
-                  End Date (optional)
-                </label>
-                <input
-                  type="date"
-                  value={formData.recurring_rule.end_date || ""}
-                  onChange={(e) =>
-                    updateField("recurring_rule", {
-                      ...formData.recurring_rule,
-                      end_date: e.target.value || undefined,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Submit Error */}
