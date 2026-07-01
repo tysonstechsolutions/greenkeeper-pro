@@ -217,7 +217,7 @@ export default function CalendarPage() {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mb-2 text-xs text-muted-foreground">
-        {["golf", "one_on_one", "fb_event", "appointment", "deadline"].map((k) => (
+        {["golf", "task", "one_on_one", "fb_event", "appointment", "deadline"].map((k) => (
           <span key={k} className="flex items-center gap-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${kindMeta(k).dot}`} /> {kindMeta(k).label}
           </span>

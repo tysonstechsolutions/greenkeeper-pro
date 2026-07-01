@@ -9,6 +9,7 @@ import {
   getCachedUserId,
 } from "@/lib/supabase/rest";
 import type { CalendarEvent, OneOnOneMeeting, CalendarItem } from "./types";
+import { isRecurring, recurrenceLabel, type RecurrenceFrequency } from "@/lib/my-day/recurrence";
 
 interface TournamentRow {
   id: string;
@@ -19,10 +20,21 @@ interface TournamentRow {
   first_tee_time: string | null;
 }
 
+/** My Day goal (deadlined tasks show on the calendar on their due date). */
+interface DailyGoalRow {
+  id: string;
+  title: string;
+  deadline: string | null;
+  status: string;
+  recurrence: RecurrenceFrequency;
+  recurrence_active: boolean;
+}
+
 export function useCalendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [meetings, setMeetings] = useState<OneOnOneMeeting[]>([]);
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
+  const [goals, setGoals] = useState<DailyGoalRow[]>([]);
   const [people, setPeople] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +43,7 @@ export function useCalendar() {
     setLoading(true);
     setError(null);
     try {
-      const [evs, mtgs, tourns, profs] = await Promise.all([
+      const [evs, mtgs, tourns, gls, profs] = await Promise.all([
         directSelectList<CalendarEvent>("calendar_events", {
           columns: "*",
           orderBy: [{ column: "event_date", ascending: true }],
@@ -47,6 +59,11 @@ export function useCalendar() {
           orderBy: [{ column: "event_date", ascending: true }],
           label: "calendar.tournaments",
         }),
+        directSelectList<DailyGoalRow>("daily_goals", {
+          columns: "id,title,deadline,status,recurrence,recurrence_active",
+          orderBy: [{ column: "deadline", ascending: true, nullsFirst: false }],
+          label: "calendar.goals",
+        }),
         directSelectList<{ id: string; full_name: string }>("profiles", {
           columns: "id,full_name",
           label: "calendar.profiles",
@@ -55,6 +72,7 @@ export function useCalendar() {
       setEvents(evs);
       setMeetings(mtgs);
       setTournaments(tourns);
+      setGoals(gls);
       const map: Record<string, string> = {};
       for (const p of profs) map[p.id] = p.full_name;
       setPeople(map);
@@ -111,8 +129,24 @@ export function useCalendar() {
         subtitle: e.location,
       });
     }
+    // My Day tasks with a deadline — recurring ones flagged in the subtitle.
+    for (const g of goals) {
+      if (!g.deadline || g.status === "archived") continue;
+      const repeats = isRecurring(g.recurrence) && g.recurrence_active;
+      out.push({
+        source: "daily_goal",
+        sourceId: g.id,
+        kind: "task",
+        title: g.title,
+        date: g.deadline,
+        endDate: null,
+        time: null,
+        href: "/my-day",
+        subtitle: repeats ? `Repeats ${recurrenceLabel(g.recurrence).toLowerCase()}` : "Task deadline",
+      });
+    }
     return out;
-  }, [tournaments, meetings, events, people]);
+  }, [tournaments, meetings, events, goals, people]);
 
   // ── calendar_events ──
   const addCalendarEvent = useCallback(
@@ -211,6 +245,8 @@ export function useCalendar() {
         await directPatchRow("tournaments", "id", item.sourceId, { event_date: newDate }, "calendar.reschedule.golf");
       } else if (item.source === "one_on_one") {
         await directPatchRow("staff_one_on_ones", "id", item.sourceId, { scheduled_on: newDate }, "calendar.reschedule.oneonone");
+      } else if (item.source === "daily_goal") {
+        await directPatchRow("daily_goals", "id", item.sourceId, { deadline: newDate }, "calendar.reschedule.goal");
       } else {
         await directPatchRow("calendar_events", "id", item.sourceId, { event_date: newDate }, "calendar.reschedule.event");
       }

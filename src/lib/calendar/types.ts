@@ -40,7 +40,11 @@ export interface OneOnOneMeeting {
   updated_at: string;
 }
 
-export type CalendarSource = "tournament" | "one_on_one" | "calendar_event";
+export type CalendarSource =
+  | "tournament"
+  | "one_on_one"
+  | "calendar_event"
+  | "daily_goal";
 
 /** Normalized item the calendar view renders (from any of the 3 sources). */
 export interface CalendarItem {
@@ -62,6 +66,7 @@ export const CALENDAR_KIND_META: Record<
   { label: string; chip: string; dot: string }
 > = {
   golf: { label: "Golf", chip: "bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300", dot: "bg-green-500" },
+  task: { label: "Task", chip: "bg-violet-100 text-violet-800 border-violet-300 dark:bg-violet-950/40 dark:text-violet-300", dot: "bg-violet-500" },
   one_on_one: { label: "1:1", chip: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300", dot: "bg-blue-500" },
   fb_event: { label: "F&B", chip: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300", dot: "bg-amber-500" },
   appointment: { label: "Appointment", chip: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300", dot: "bg-slate-500" },

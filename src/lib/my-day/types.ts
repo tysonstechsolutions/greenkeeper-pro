@@ -1,3 +1,5 @@
+import type { RecurrenceFrequency } from "./recurrence";
+
 export interface DailyGoal {
   id: string;
   title: string;
@@ -5,6 +7,11 @@ export interface DailyGoal {
   deadline: string | null; // YYYY-MM-DD
   buffer_days: number;
   status: "active" | "done" | "archived";
+  // Recurring tasks: how often the task repeats, whether the series is still
+  // live, and the id shared by every occurrence of the same recurring task.
+  recurrence: RecurrenceFrequency;
+  recurrence_active: boolean;
+  series_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

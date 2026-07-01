@@ -14,23 +14,48 @@ import {
   Upload,
   ChevronDown,
   ArrowUpRight,
+  Repeat,
+  CalendarClock,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { useMyDay } from "@/lib/my-day/use-my-day";
+import { useMyDay, type RecurringSeries } from "@/lib/my-day/use-my-day";
 import { todayLocal } from "@/lib/utils/date";
 import { matchCapability } from "@/lib/my-day/capabilities";
+import {
+  RECURRENCE_OPTIONS,
+  recurrenceLabel,
+  type RecurrenceFrequency,
+} from "@/lib/my-day/recurrence";
 import type { DailyStep } from "@/lib/my-day/types";
 import { BulkImportPanel } from "@/components/features/my-day/bulk-import-panel";
 
 export default function MyDayPage() {
-  const { view, loading, error, toggleStep, addSmart, bulkAdd, deleteStep } =
-    useMyDay();
+  const {
+    view,
+    loading,
+    error,
+    toggleStep,
+    addSmart,
+    bulkAdd,
+    deleteStep,
+    recurringSeries,
+    stopRecurring,
+  } = useMyDay();
 
   const [quick, setQuick] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [repeat, setRepeat] = useState<RecurrenceFrequency>("none");
   const [busy, setBusy] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+
+  // Recurrence needs a deadline to anchor its cadence — drop it if the deadline
+  // is cleared so we never store a repeat with nothing to repeat from.
+  const onDeadlineChange = (value: string) => {
+    setDeadline(value);
+    if (!value) setRepeat("none");
+  };
 
   const submitAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +64,16 @@ export default function MyDayPage() {
     setBusy(true);
     setNote(null);
     try {
-      const r = await addSmart(t, deadline || null);
+      const r = await addSmart(t, deadline || null, repeat);
+      const wasRecurring = !!deadline && repeat !== "none";
       setQuick("");
       setDeadline("");
-      if (r.capability) {
+      setRepeat("none");
+      if (wasRecurring) {
+        setNote(
+          `Set to repeat ${recurrenceLabel(repeat).toLowerCase()} — it'll roll over to the next one automatically.`,
+        );
+      } else if (r.capability) {
         setNote(`Recognized "${r.capability.label}" — added with a one-tap link to the tool.`);
       } else if (r.aiUsed) {
         setNote(`Broke that into ${r.stepCount} step${r.stepCount > 1 ? "s" : ""}.`);
@@ -82,15 +113,36 @@ export default function MyDayPage() {
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           </button>
         </div>
-        <div className="flex items-center gap-2 mt-1.5">
-          <label className="text-xs text-muted-foreground">Deadline (optional)</label>
-          <input
-            type="date"
-            value={deadline}
-            min={todayLocal()}
-            onChange={(e) => setDeadline(e.target.value)}
-            className="rounded-lg border border-border bg-background px-2 py-1 text-sm"
-          />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-1.5">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Deadline (optional)</label>
+            <input
+              type="date"
+              value={deadline}
+              min={todayLocal()}
+              onChange={(e) => onDeadlineChange(e.target.value)}
+              className="rounded-lg border border-border bg-background px-2 py-1 text-sm"
+            />
+          </div>
+          {/* Recurrence prompt — only meaningful once there's a deadline to
+              anchor the cadence. */}
+          <div className="flex items-center gap-1.5">
+            <Repeat className="w-3.5 h-3.5 text-muted-foreground" />
+            <label className="text-xs text-muted-foreground">Repeat</label>
+            <select
+              value={repeat}
+              disabled={!deadline}
+              onChange={(e) => setRepeat(e.target.value as RecurrenceFrequency)}
+              className="rounded-lg border border-border bg-background px-2 py-1 text-sm disabled:opacity-50"
+              title={deadline ? "How often does this repeat?" : "Set a deadline to make this repeat"}
+            >
+              {RECURRENCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </form>
 
@@ -131,10 +183,15 @@ export default function MyDayPage() {
         onDelete={deleteStep}
       />
 
+      {!loading && recurringSeries.length > 0 && (
+        <RecurringSection series={recurringSeries} onStop={stopRecurring} />
+      )}
+
       {!loading &&
         view.today.length === 0 &&
         view.overdue.length === 0 &&
-        view.backlog.length === 0 && (
+        view.backlog.length === 0 &&
+        recurringSeries.length === 0 && (
           <div className="gk-card p-6 text-center mt-2">
             <p className="text-sm font-medium">All caught up.</p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -143,6 +200,71 @@ export default function MyDayPage() {
           </div>
         )}
     </div>
+  );
+}
+
+/** Standing list of recurring tasks with cadence, next due date, and status. */
+function RecurringSection({
+  series,
+  onStop,
+}: {
+  series: RecurringSeries[];
+  onStop: (seriesId: string) => void;
+}) {
+  const statusMeta: Record<
+    RecurringSeries["status"],
+    { label: string; cls: string }
+  > = {
+    on_track: {
+      label: "On track",
+      cls: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10",
+    },
+    overdue: { label: "Overdue", cls: "text-red-600 dark:text-red-400 bg-red-500/10" },
+    done: {
+      label: "Done this period",
+      cls: "text-muted-foreground bg-muted",
+    },
+  };
+  return (
+    <section className="mb-4 mt-2">
+      <p className="gk-section-label mb-2 flex items-center gap-1.5">
+        <Repeat className="w-3.5 h-3.5" /> Recurring · {series.length}
+      </p>
+      <div className="space-y-1.5">
+        {series.map((s) => {
+          const meta = statusMeta[s.status];
+          return (
+            <div
+              key={s.seriesId}
+              className="flex items-center gap-3 py-2.5 px-3 rounded-xl border border-border bg-card"
+            >
+              <CalendarClock className="w-5 h-5 text-primary shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm truncate">{s.title}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {recurrenceLabel(s.recurrence)} · due {s.nextDue}
+                  {s.stepsTotal > 0 ? ` · ${s.stepsDone}/${s.stepsTotal} steps` : ""}
+                </p>
+              </div>
+              <span
+                className={`shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full ${meta.cls}`}
+              >
+                {meta.label}
+              </span>
+              <button
+                type="button"
+                onClick={() => onStop(s.seriesId)}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label="Stop repeating"
+                title="Stop repeating"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
