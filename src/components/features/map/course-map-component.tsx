@@ -59,26 +59,27 @@ const VMGC_BOUNDS: [[number, number], [number, number]] = [
 ];
 
 // Condition score color mapping
+// Values land in SVG attributes / divIcon inline styles, so CSS variables work.
 function getConditionColor(score: number | null): string {
-  if (score === null) return "#9ca3af"; // gray
-  if (score >= 8) return "#22c55e"; // green - excellent
-  if (score >= 5) return "#eab308"; // yellow - fair
-  return "#ef4444"; // red - poor
+  if (score === null) return "var(--muted-foreground)"; // gray - no data
+  if (score >= 8) return "var(--success)"; // green - excellent (turf-excellent)
+  if (score >= 5) return "var(--warning)"; // gold - fair (turf-fair)
+  return "var(--destructive)"; // red - poor (turf-poor)
 }
 
 // Priority color mapping
 function getPriorityColor(priority: string): string {
   switch (priority) {
     case "critical":
-      return "#ef4444";
+      return "var(--destructive)";
     case "high":
-      return "#f97316";
+      return "#E07B39"; // high-priority orange — no CSS token in the refreshed palette
     case "normal":
-      return "#22c55e";
+      return "var(--success)";
     case "low":
-      return "#3b82f6";
+      return "var(--info)";
     default:
-      return "#6b7280";
+      return "var(--muted-foreground)";
   }
 }
 
@@ -119,7 +120,7 @@ function createProblemIcon(): L.DivIcon {
       <div style="
         width: 28px;
         height: 28px;
-        background-color: #f97316;
+        background-color: #E07B39; /* high-priority orange — no CSS token in the refreshed palette */
         border: 2px solid white;
         border-radius: 50%;
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
@@ -211,7 +212,7 @@ function ZoneOverlay({ zone, onClick, selected }: ZoneOverlayProps) {
       <Polygon
         positions={positions}
         pathOptions={{
-          color: selected ? "#3b82f6" : color,
+          color: selected ? "var(--info)" : color,
           fillColor: color,
           fillOpacity: 0.3,
           weight: selected ? 3 : 2,
@@ -561,8 +562,8 @@ export function CourseMapComponent({
             <Polygon
               positions={drawingPoints.map((p) => [p.lat, p.lng] as [number, number])}
               pathOptions={{
-                color: "#3b82f6",
-                fillColor: "#3b82f6",
+                color: "var(--info)",
+                fillColor: "var(--info)",
                 fillOpacity: 0.2,
                 weight: 2,
                 dashArray: "5, 5",
@@ -577,7 +578,7 @@ export function CourseMapComponent({
                   html: `<div style="
                     width: 12px;
                     height: 12px;
-                    background: #3b82f6;
+                    background: var(--info);
                     border: 2px solid white;
                     border-radius: 50%;
                     transform: translate(-50%, -50%);

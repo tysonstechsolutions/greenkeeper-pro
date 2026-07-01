@@ -15,13 +15,14 @@ import { useState, useEffect } from "react";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
-import { getCatalog, type AppEntry } from "@/lib/layout/app-catalog";
+import { getCatalog, groupCatalog, type AppEntry } from "@/lib/layout/app-catalog";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Desktop sidebar. The role/view → app lists live in the shared catalog
 // (src/lib/layout/app-catalog.ts) so this stays in sync with the mobile
 // "More" grid automatically. Pinned entries render in the top section; the
-// rest are sorted by usage.
+// rest render under STABLE section labels (never resorted by usage — a menu
+// that reshuffles itself is worse than one you have to scroll).
 // ──────────────────────────────────────────────────────────────────────────
 
 function NavItem({
@@ -47,9 +48,9 @@ function NavItem({
         "group flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150 relative",
         isCollapsed ? "px-2.5 py-2.5 justify-center" : "px-3 py-2",
         isActive
-          ? "bg-white/10 text-white"
+          ? "bg-white/10 text-white gk-nav-active"
           : isCreatePr
-            ? "bg-[#D4A853]/10 text-[#D4A853] hover:bg-[#D4A853]/15"
+            ? "bg-sidebar-primary/10 text-sidebar-primary hover:bg-sidebar-primary/15"
             : "text-white/70 hover:text-white hover:bg-white/5",
       )}
       title={isCollapsed ? item.label : undefined}
@@ -59,14 +60,14 @@ function NavItem({
           className={cn(
             "w-5 h-5 transition-colors",
             isActive
-              ? "text-[#D4A853]"
+              ? "text-sidebar-primary"
               : isCreatePr
-                ? "text-[#D4A853]"
+                ? "text-sidebar-primary"
                 : "text-white/60 group-hover:text-white/90",
           )}
         />
         {isCollapsed && badgeCount > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-[#1B4332]">
+          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-sidebar">
             {badgeCount > 9 ? "9+" : badgeCount}
           </span>
         )}
@@ -95,7 +96,7 @@ export function Sidebar() {
 
   const { unreadCount: notificationsUnread, fetchUnreadCount } =
     useNotifications();
-  const { record, sortByUsage } = useAppUsage();
+  const { record } = useAppUsage();
 
   useEffect(() => {
     fetchUnreadCount();
@@ -108,10 +109,10 @@ export function Sidebar() {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
-  // Role/view-appropriate catalog → split into pinned + usage-sorted apps.
+  // Role/view-appropriate catalog → pinned block + stable labeled sections.
   const catalog = getCatalog({ view, isPro, isForeman, isMechanic, isLaborer });
   const pinned = catalog.filter((item) => item.pinned);
-  const apps = sortByUsage(catalog.filter((item) => !item.pinned));
+  const sections = groupCatalog(catalog.filter((item) => !item.pinned));
 
   return (
     <aside
@@ -121,21 +122,21 @@ export function Sidebar() {
       )}
       style={{
         background:
-          "linear-gradient(180deg, #1B4332 0%, #15352A 50%, #112B22 100%)",
+          "linear-gradient(180deg, var(--sidebar) 0%, var(--sidebar-deep) 100%)",
       }}
     >
       {/* Logo */}
       <div className="relative flex items-center h-16 px-4 border-b border-white/[0.08]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#B68D40] to-[#D4A853] flex items-center justify-center shadow-md shadow-black/20 shrink-0">
-            <Leaf className="w-5 h-5 text-[#1B4332]" />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-gold to-brand-gold-light flex items-center justify-center shadow-md shadow-black/20 shrink-0">
+            <Leaf className="w-5 h-5 text-brand-green" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
               <span className="font-bold text-white text-sm tracking-tight leading-tight">
                 VMGC
               </span>
-              <span className="text-[10px] font-medium text-[#D4A853] uppercase tracking-[0.1em]">
+              <span className="text-[10px] font-medium text-sidebar-primary uppercase tracking-[0.1em]">
                 GreenKeeper Pro
               </span>
             </div>
@@ -144,7 +145,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="relative flex-1 px-2.5 py-3 space-y-1 overflow-y-auto gk-scrollbar">
+      <nav className="relative flex-1 px-2.5 py-3 overflow-y-auto gk-scrollbar">
         {/* Pinned (always-on, role-specific shortcuts) */}
         <div className="space-y-0.5">
           {pinned.map((item) => (
@@ -159,31 +160,30 @@ export function Sidebar() {
           ))}
         </div>
 
-        {/* Divider + label */}
-        {apps.length > 0 && (
-          <>
-            <div className="my-3 mx-1 border-t border-white/[0.08]" />
-            {!isCollapsed && (
-              <p className="px-2 mb-1.5 text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
-                Apps
+        {/* Labeled sections — stable order, stable membership */}
+        {sections.map((section) => (
+          <div key={section.label}>
+            {isCollapsed ? (
+              <div className="my-3 mx-1 border-t border-white/[0.08]" />
+            ) : (
+              <p className="px-2 mt-4 mb-1.5 text-[10px] font-semibold text-white/40 uppercase tracking-[0.12em]">
+                {section.label}
               </p>
             )}
-          </>
-        )}
-
-        {/* Apps (sorted by usage) */}
-        <div className="space-y-0.5">
-          {apps.map((item) => (
-            <NavItem
-              key={item.href}
-              item={item}
-              isActive={isActive(item.href)}
-              isCollapsed={isCollapsed}
-              badgeCount={badgeCounts[item.href] || 0}
-              onClick={() => record(item.href)}
-            />
-          ))}
-        </div>
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavItem
+                  key={item.href}
+                  item={item}
+                  isActive={isActive(item.href)}
+                  isCollapsed={isCollapsed}
+                  badgeCount={badgeCounts[item.href] || 0}
+                  onClick={() => record(item.href)}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Footer: Notifications + Settings */}

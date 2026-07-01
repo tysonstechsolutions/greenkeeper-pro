@@ -70,7 +70,7 @@ export function PinLock({ onUnlock }: { onUnlock: () => void }) {
       className="min-h-dvh flex flex-col items-center justify-center relative overflow-hidden px-4 py-12"
       style={{
         background:
-          "linear-gradient(160deg, #1B4332 0%, #14352A 55%, #0D2018 100%)",
+          "linear-gradient(160deg, var(--brand-pine) 0%, var(--brand-pine-deep) 100%)",
       }}
     >
       <div
@@ -86,15 +86,16 @@ export function PinLock({ onUnlock }: { onUnlock: () => void }) {
         <div
           className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 shadow-lg shadow-black/30"
           style={{
-            background: "linear-gradient(135deg, #B68D40 0%, #D4A853 100%)",
+            background:
+              "linear-gradient(135deg, var(--brand-honey) 0%, var(--brand-honey-light) 100%)",
           }}
         >
-          <Leaf className="w-8 h-8 text-[#1B4332]" strokeWidth={2.5} />
+          <Leaf className="w-8 h-8 text-brand-green" strokeWidth={2.5} />
         </div>
         <h1 className="text-2xl font-bold text-white tracking-tight">VMGC</h1>
         <p
           className="text-xs font-semibold mt-1 tracking-[0.18em] uppercase"
-          style={{ color: "rgba(182,141,64,0.85)" }}
+          style={{ color: "color-mix(in oklab, var(--brand-honey-light) 85%, transparent)" }}
         >
           GreenKeeper Pro
         </p>
@@ -120,14 +121,14 @@ export function PinLock({ onUnlock }: { onUnlock: () => void }) {
                 background:
                   i < pin.length
                     ? error
-                      ? "#C1292E"
-                      : "linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%)"
+                      ? "var(--brand-clay)"
+                      : "linear-gradient(135deg, var(--brand-pine) 0%, var(--brand-fairway) 100%)"
                     : "transparent",
                 border:
                   i < pin.length
                     ? error
-                      ? "2px solid #C1292E"
-                      : "2px solid #1B4332"
+                      ? "2px solid var(--brand-clay)"
+                      : "2px solid var(--brand-pine)"
                     : "2px solid rgba(0,0,0,0.18)",
                 transform: i < pin.length ? "scale(1.15)" : "scale(1)",
               }}

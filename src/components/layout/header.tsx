@@ -201,7 +201,7 @@ export function Header() {
             href="/weather"
             className="flex md:hidden items-center gap-1 px-2 py-1 rounded-full bg-muted/60 text-xs"
           >
-            <span className="text-[#B68D40]">
+            <span className="text-secondary">
               <WeatherIcon condition={currentWeather.conditions} className="w-3.5 h-3.5" />
             </span>
             <span className="font-semibold text-foreground">
@@ -216,7 +216,7 @@ export function Header() {
             href="/weather"
             className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm group"
           >
-            <span className="text-[#B68D40]">
+            <span className="text-secondary">
               <WeatherIcon condition={currentWeather.conditions} className="w-4 h-4" />
             </span>
             <span className="font-semibold text-foreground">
@@ -368,7 +368,7 @@ export function Header() {
             }}
             className="flex items-center gap-2 p-1.5 rounded-full hover:bg-muted/60 active:bg-muted/80 transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1B4332] to-[#2D6A4F] flex items-center justify-center ring-2 ring-[#B68D40]/20">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-green to-brand-green-light flex items-center justify-center ring-2 ring-secondary/25">
               {profile?.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

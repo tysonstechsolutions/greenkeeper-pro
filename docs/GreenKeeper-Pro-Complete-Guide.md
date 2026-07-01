@@ -43,7 +43,7 @@ The app has **no per-user roles or logins anymore**. Instead, everyone shares a 
 | **General Manager** (`gm`) | Business/admin | `/gm` | Budget, purchase requests, reports, revenue, tournaments, financial watch |
 | **Business Division Head** (`bdh`) | Procurement oversight | `/pr-audit` | PR audit, budgets, reports, revenue, capital projects |
 
-You switch hats from the header; the choice is remembered on the device (localStorage). The menus (sidebar on desktop, "More" grid on mobile, bottom nav) reconfigure automatically for the chosen view. Menu contents come from **one shared catalog** (`src/lib/layout/app-catalog.ts`) so the sidebar and mobile grid never drift apart. Legacy `RoleGuard` components still exist but are pass-through — nothing is role-gated.
+You switch hats from the header; the choice is remembered on the device (localStorage). The menus (sidebar on desktop, "More" grid on mobile, bottom nav) reconfigure automatically for the chosen view. Menu contents come from **one shared catalog** (`src/lib/layout/app-catalog.ts`) so the sidebar and mobile grid never drift apart. Both menus render the same **stable labeled sections** (Planning / Course & Field / Money & Assets / Paperwork / People & Events / Reference & AI — defined as `GROUPS` in the catalog, one color family per section); items never re-sort by usage. Legacy `RoleGuard` components still exist but are pass-through — nothing is role-gated.
 
 ### Signing in
 

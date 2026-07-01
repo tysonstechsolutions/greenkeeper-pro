@@ -242,7 +242,7 @@ export function GpsCalibrationDialog({
       <DialogContent className="max-w-3xl w-[95vw] max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Crosshair className="w-5 h-5 text-[#B68D40]" />
+            <Crosshair className="w-5 h-5 text-brand-gold" />
             Calibrate Hole {holeNumber}{" "}
             <span className="text-muted-foreground font-normal">
               ({surfaceType === "green" ? "Green" : "Fairway"})
@@ -269,7 +269,7 @@ export function GpsCalibrationDialog({
                 onClick={() => setStep(s)}
                 className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-all flex items-center gap-2 justify-center ${
                   active
-                    ? "bg-[#1B4332] text-white border-[#1B4332]"
+                    ? "bg-brand-green text-white border-brand-green"
                     : done
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : "bg-card text-muted-foreground border-border"
@@ -317,7 +317,7 @@ export function GpsCalibrationDialog({
               onClick={handleImageClick}
               className={`relative w-full aspect-[16/10] rounded-lg overflow-hidden border ${
                 stepIndex >= 0
-                  ? "border-[#B68D40] cursor-crosshair"
+                  ? "border-brand-gold cursor-crosshair"
                   : "border-border"
               } bg-gradient-to-b from-green-50 to-green-100/50`}
             >
@@ -353,7 +353,7 @@ export function GpsCalibrationDialog({
                   >
                     <div
                       className={`w-5 h-5 rounded-full border-2 border-white shadow-md flex items-center justify-center text-[10px] font-bold text-white ${
-                        i === 0 ? "bg-[#1B4332]" : "bg-[#B68D40]"
+                        i === 0 ? "bg-brand-green" : "bg-brand-gold"
                       }`}
                     >
                       {i + 1}
@@ -413,7 +413,7 @@ export function GpsCalibrationDialog({
                 type="button"
                 onClick={() => setStep("p2")}
                 disabled={!canContinue}
-                className="bg-[#1B4332] hover:bg-[#2D6A4F]"
+                className="bg-brand-green hover:bg-brand-green-light"
               >
                 Next: Green Flag
               </Button>
@@ -432,7 +432,7 @@ export function GpsCalibrationDialog({
                   type="button"
                   onClick={handleSave}
                   disabled={!canSave || saving}
-                  className="bg-[#1B4332] hover:bg-[#2D6A4F] gap-2"
+                  className="bg-brand-green hover:bg-brand-green-light gap-2"
                 >
                   {saving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
