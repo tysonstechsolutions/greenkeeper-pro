@@ -76,6 +76,16 @@ export default function RootLayout({
         {/* PWA Safe Area Insets */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        {/* Apply the saved theme BEFORE first paint. Without this, the
+            "dark"/"system" choice made in /settings/appearance only lasted
+            until the next launch — nothing re-applied the class at boot, so
+            the app always started light. Mirrors the settings page exactly:
+            stored "dark"/"light" wins; "system" or nothing follows the OS. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");var dark=t==="dark"||((t===null||t==="system")&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.classList.add("dark");}catch(e){}})();`,
+          }}
+        />
       </head>
       <body
         suppressHydrationWarning
