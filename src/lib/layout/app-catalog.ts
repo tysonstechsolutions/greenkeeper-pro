@@ -35,6 +35,7 @@ import {
   GraduationCap,
   Activity,
   ListChecks,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import type { AppView } from "@/lib/providers/view-provider";
@@ -130,6 +131,7 @@ const ONBOARDING: AppEntry = { href: "/onboarding", label: "Onboarding & SOPs", 
 const SF52: AppEntry = { href: "/staff/sf52", label: "SF-52", icon: FileText, color: "from-slate-600 to-gray-700" };
 const DD200: AppEntry = { href: "/dd-forms/200", label: "DD-200 (Property Loss)", icon: FileText, color: "from-slate-600 to-gray-700" };
 const DD2212: AppEntry = { href: "/dd-forms/2212", label: "2212 (Disposition)", icon: FileText, color: "from-slate-600 to-gray-700" };
+const DISPOSITION_PACKET: AppEntry = { href: "/dd-forms/packet", label: "Disposition Packet", icon: Package, color: "from-slate-600 to-gray-700" };
 
 // ── Hubs ──────────────────────────────────────────────────────────────────
 // Each hub is one menu entry that opens a landing page (the matching route in
@@ -149,7 +151,7 @@ export const HUB_PAPERWORK: AppEntry = {
   label: "Paperwork",
   icon: ClipboardSignature,
   color: "from-cyan-600 to-teal-700",
-  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, DD200, DD2212, ENVIRONMENTAL],
+  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, DD200, DD2212, DISPOSITION_PACKET, ENVIRONMENTAL],
 };
 
 export const HUB_PROCUREMENT: AppEntry = {

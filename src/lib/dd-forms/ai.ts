@@ -5,6 +5,76 @@
  * on any error so the filler still works entirely by hand.
  */
 import { callApi } from "@/lib/api/client";
+import { defaultDispositionReason, type Circumstance } from "./reasons";
+import type { Fy26Asset } from "@/types/fy26-assets";
+
+const ALLOWED_IMAGE = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+/** First usable photo URL on an asset (main, then condition angles). */
+function firstAssetPhoto(asset: Fy26Asset): string | null {
+  const urls = [
+    asset.photo_url,
+    asset.condition_photos?.front,
+    asset.condition_photos?.back,
+    asset.condition_photos?.left,
+    asset.condition_photos?.right,
+  ];
+  return urls.find((u): u is string => !!u && u.trim().length > 0) ?? null;
+}
+
+async function fetchImageBase64(url: string): Promise<{ base64: string; mediaType: string } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let mediaType = (res.headers.get("content-type") ?? "").split(";")[0].trim();
+    if (!mediaType) {
+      if (bytes[0] === 0x89 && bytes[1] === 0x50) mediaType = "image/png";
+      else if (bytes[0] === 0xff && bytes[1] === 0xd8) mediaType = "image/jpeg";
+    }
+    if (!ALLOWED_IMAGE.includes(mediaType)) return null;
+    let bin = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return { base64: btoa(bin), mediaType };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Draft a damaged/destroyed disposition reason from the asset's photo via
+ * dd-forms-ai. Always resolves — falls back to the deterministic default if
+ * there's no photo, the function isn't deployed, or anything errors.
+ */
+export async function draftDamageReason(
+  asset: Fy26Asset,
+  circumstance: Circumstance,
+  item: string,
+): Promise<string> {
+  const fallback = defaultDispositionReason(circumstance);
+  const url = firstAssetPhoto(asset);
+  if (!url) return fallback;
+  const img = await fetchImageBase64(url);
+  if (!img) return fallback;
+  try {
+    const res = await callApi<{ reason?: string }>("dd-forms-ai", {
+      method: "POST",
+      body: {
+        action: "describe_damage",
+        imageBase64: img.base64,
+        mediaType: img.mediaType,
+        item,
+        circumstance,
+      },
+    });
+    return res?.reason?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export interface Dd200NarrativeInput {
   item: string;

@@ -8,7 +8,8 @@ import type { Fy26Asset } from "@/types/fy26-assets";
 import { generateDd200Report, dd200Filename, type Dd200Data } from "@/lib/reports/dd200-report";
 import { generateDd2212Report, dd2212Filename, type Dd2212Data } from "@/lib/reports/dd2212-report";
 import { DD200_ORG_ADDRESS } from "@/lib/dd-forms/dd200-fields";
-import { DD_ACTIVITY_DEFAULT, ddMonYyyy, ymd, mdy, money } from "@/lib/dd-forms/constants";
+import { DD_ACTIVITY_DEFAULT, DD200_INITIATOR_NAME, ddMonYyyy, ymd, mdy, money } from "@/lib/dd-forms/constants";
+import { defaultDispositionReason } from "@/lib/dd-forms/reasons";
 import { saveCreatedDocument } from "@/lib/documents/saved-documents";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 
@@ -25,7 +26,9 @@ export function buildDispositionItem(asset: Fy26Asset): string {
 }
 
 function dispositionReason(asset: Fy26Asset): string {
-  return asset.notes?.trim() || "Beyond economical repair";
+  // Prefer a real note; otherwise the specific default (destroyed is this flow's
+  // default circumstance) rather than the terse "Beyond economical repair".
+  return asset.notes?.trim() || defaultDispositionReason("destroyed");
 }
 
 export function assetToDd2212Data(asset: Fy26Asset): Dd2212Data {
@@ -63,6 +66,7 @@ export function assetToDd200Data(asset: Fy26Asset): Dd200Data {
     category: "organization",
     circumstances: dispositionReason(asset),
     orgAddress: DD200_ORG_ADDRESS,
+    typedName: DD200_INITIATOR_NAME,
     dateSigned: mdy(),
   };
 }

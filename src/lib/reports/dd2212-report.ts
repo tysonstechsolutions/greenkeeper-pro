@@ -9,6 +9,7 @@ import {
   PAGE_W,
   PAGE_H,
   drawAt,
+  drawWrapped,
   fetchTemplateBytes,
   sanitize,
 } from "./form-overlay";
@@ -67,7 +68,14 @@ export async function generateDd2212Report(
       const raw = item[col as keyof Dd2212Item];
       if (!raw || !raw.trim()) return;
       const c = DD2212_TABLE.cols[col];
-      drawAt(page, font, { x: c.x, baseline, maxW: c.maxW, align: c.align }, sanitize(raw.trim()));
+      const clean = sanitize(raw.trim());
+      // The description and reason can be long — wrap to a 2nd line within the
+      // cell instead of shrinking to a sliver and bleeding past the column rule.
+      if (col === "description" || col === "reason") {
+        drawWrapped(page, font, { x: c.x, baseline, maxW: c.maxW, align: c.align, maxLines: 2 }, clean);
+      } else {
+        drawAt(page, font, { x: c.x, baseline, maxW: c.maxW, align: c.align }, clean);
+      }
     });
   });
 

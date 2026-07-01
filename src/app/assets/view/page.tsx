@@ -601,6 +601,12 @@ function PageContent() {
                   </Link>
                 </Button>
               </div>
+              <p className="text-[11px] text-muted-foreground mt-3">
+                Disposing several at once?{" "}
+                <Link href="/dd-forms/packet" className="text-primary font-medium hover:underline">
+                  Build a multi-item packet →
+                </Link>
+              </p>
             </CardContent>
           </Card>
         );

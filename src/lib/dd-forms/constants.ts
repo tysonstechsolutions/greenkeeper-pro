@@ -10,6 +10,9 @@ export type DdSite = (typeof DD_SITES)[number];
 /** Default activity for the 2212 "ACTIVITY NAME/LOCATION" cell. */
 export const DD_ACTIVITY_DEFAULT = "NAVAL STATION GREAT LAKES MWR - GOLF";
 
+/** DD-200 block 11b typed name of the initiator (the superintendent). Editable. */
+export const DD200_INITIATOR_NAME = "Bruce Tyson K";
+
 export const DD200_CIRCUMSTANCES = [
   { key: "lost", label: "Lost" },
   { key: "damaged", label: "Damaged" },

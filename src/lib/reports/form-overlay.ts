@@ -104,6 +104,51 @@ export function drawAt(
   page.drawText(text, { x, y: opts.baseline, size, font, color: BLACK });
 }
 
+/**
+ * Draw text on a table baseline, wrapping to up to `maxLines` WITHIN the cell
+ * width instead of shrinking to a sliver and bleeding past the rule. The bottom
+ * line sits on `baseline`; extra lines stack UPWARD (into the cell, above the
+ * rule) so it reads top-to-bottom and never crosses into the row below. Shrinks
+ * the font only if the text still won't fit in `maxLines`.
+ */
+export function drawWrapped(
+  page: PDFPage,
+  font: PDFFont,
+  opts: {
+    x: number;
+    baseline: number;
+    maxW: number;
+    align?: Align;
+    size?: number;
+    maxLines?: number;
+    lineGap?: number;
+  },
+  text: string,
+): void {
+  const maxLines = opts.maxLines ?? 2;
+  let size = opts.size ?? 8.5;
+  const floor = 5.5;
+  let lines = wrapText(text, font, size, opts.maxW);
+  while (lines.length > maxLines && size > floor) {
+    size -= 0.5;
+    lines = wrapText(text, font, size, opts.maxW);
+  }
+  if (lines.length > maxLines) lines = lines.slice(0, maxLines);
+
+  const lineGap = opts.lineGap ?? size + 1.5;
+  const n = lines.length;
+  lines.forEach((line, i) => {
+    if (!line) return;
+    // Bottom line (i = n-1) on the baseline; earlier lines above it.
+    const y = opts.baseline + (n - 1 - i) * lineGap;
+    const tw = font.widthOfTextAtSize(line, size);
+    let x = opts.x;
+    if (opts.align === "center") x = opts.x + (opts.maxW - tw) / 2;
+    else if (opts.align === "right") x = opts.x + (opts.maxW - tw);
+    page.drawText(line, { x, y, size, font, color: BLACK });
+  });
+}
+
 /** Centered "X" for a checkbox. */
 export function drawCheck(page: PDFPage, font: PDFFont, box: OverlayBox): void {
   const size = Math.min(11, box.h - 2);

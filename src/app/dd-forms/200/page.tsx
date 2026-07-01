@@ -16,6 +16,7 @@ import {
   DD_SITES,
   DD200_CIRCUMSTANCES,
   DD200_CATEGORIES,
+  DD200_INITIATOR_NAME,
   ymd,
   mdy,
   money,
@@ -59,7 +60,7 @@ function Dd200Content() {
   const [aiNote, setAiNote] = useState<string | null>(null);
 
   const [orgAddress, setOrgAddress] = useState(DD200_ORG_ADDRESS);
-  const [typedName, setTypedName] = useState("");
+  const [typedName, setTypedName] = useState(DD200_INITIATOR_NAME);
   const [dsn, setDsn] = useState("");
   const [dateSigned, setDateSigned] = useState(mdy());
 

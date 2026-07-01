@@ -10,6 +10,7 @@ import {
   PAGE_H,
   BLACK,
   drawAt,
+  drawWrapped,
   drawMultiline,
   fetchTemplateBytes,
   sanitize,
@@ -71,7 +72,13 @@ export async function generateDd200Report(
   for (const [key, f] of Object.entries(DD200_LINES)) {
     const raw = lineData[key];
     if (!raw || !raw.trim()) continue;
-    drawAt(p1, font, { x: f.x, baseline: f.baseline, maxW: f.maxW, align: f.align }, sanitize(raw.trim()));
+    const clean = sanitize(raw.trim());
+    // Long item descriptions wrap to a 2nd line within the cell (no bleed).
+    if (key === "itemDescription") {
+      drawWrapped(p1, font, { x: f.x, baseline: f.baseline, maxW: f.maxW, align: f.align, maxLines: 2 }, clean);
+    } else {
+      drawAt(p1, font, { x: f.x, baseline: f.baseline, maxW: f.maxW, align: f.align }, clean);
+    }
   }
 
   // Multi-line boxes.
