@@ -77,8 +77,11 @@ const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
   "task-breakdown",
   "bulk-tasks",
   "dd-forms-ai",
-  // Auth functions (pin-login, pin-signup) have a special return shape
-  // (session tokens) handled at their callsites, not via callApi.
+  // pin-signup returns plain JSON ({success, user, session?, error?}) and is
+  // called through callApi by the add-staff sheet. pin-login is NOT here —
+  // its session persistence is handled at its callsite via
+  // supabase.functions.invoke directly (see /pin-login).
+  "pin-signup",
 ]);
 
 export interface CallApiOptions {
@@ -324,10 +327,23 @@ export async function callApi<T = unknown>(
     });
 
     if (error) {
-      const apiErr: ApiError = Object.assign(
-        new Error(`Edge function ${route} failed: ${error.message}`),
-        {}
-      );
+      // FunctionsHttpError carries the raw Response in `context`. Prefer the
+      // function's own {error|message} body over the generic supabase-js
+      // message — same convention as the slow-direct path above.
+      let message = `Edge function ${route} failed: ${error.message}`;
+      let status: number | undefined;
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        status = ctx.status;
+        try {
+          const errBody = (await ctx.json()) as { error?: string; message?: string };
+          if (errBody.error) message = errBody.error;
+          else if (errBody.message) message = errBody.message;
+        } catch {
+          /* body wasn't JSON */
+        }
+      }
+      const apiErr: ApiError = Object.assign(new Error(message), { status });
       throw apiErr;
     }
     return data as T;
