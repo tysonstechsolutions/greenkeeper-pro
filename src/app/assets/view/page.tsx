@@ -52,6 +52,7 @@ import {
 } from "@/lib/hooks/useEquipment";
 import { directSelectRow, directSelectList } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
+import { createDispositionForms, buildDispositionItem } from "@/lib/dd-forms/from-asset";
 import type { Equipment } from "@/types/database";
 import {
   fy26AssetStatusLabels,
@@ -103,6 +104,8 @@ function PageContent() {
   const [savingStatus, setSavingStatus] = useState<Fy26AssetStatus | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [creatingForms, setCreatingForms] = useState(false);
+  const [formsMsg, setFormsMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Condition photos state
   const [conditionPhotos, setConditionPhotos] = useState<ConditionPhotos>({});
@@ -232,6 +235,19 @@ function PageContent() {
     const updated = await updateStatus(asset.id, s);
     if (updated) setAsset(updated);
     setSavingStatus(null);
+  };
+
+  const handleCreateForms = async (a: Fy26Asset) => {
+    setCreatingForms(true);
+    setFormsMsg(null);
+    try {
+      const { filenames } = await createDispositionForms(a);
+      setFormsMsg({ ok: true, text: `Created ${filenames.length} forms — saved to Documents and downloaded.` });
+    } catch (e) {
+      setFormsMsg({ ok: false, text: e instanceof Error ? e.message : "Couldn't create the forms." });
+    } finally {
+      setCreatingForms(false);
+    }
   };
 
   const handleSaveNotes = async () => {
@@ -529,18 +545,10 @@ function PageContent() {
           prefilled with this asset's site, description, value, and reason. */}
       {(asset.status === "needs_disposed" || asset.status === "disposed") && (() => {
         const dispReason = asset.notes?.trim() || "Beyond economical repair";
-        const dispItem = [
-          asset.description,
-          [asset.manufacturer, asset.model_text].filter(Boolean).join(" ").trim(),
-          asset.serial_number ? `SN ${asset.serial_number}` : "",
-          `Asset ${asset.asset_number}`,
-        ]
-          .filter(Boolean)
-          .join(" — ");
         const base: Record<string, string> = {
           site: asset.site,
           asset: asset.description,
-          item: dispItem,
+          item: buildDispositionItem(asset),
           unitCost: asset.original_value != null ? String(asset.original_value) : "",
           reason: dispReason,
         };
@@ -555,25 +563,41 @@ function PageContent() {
                 Disposition paperwork
               </p>
               <p className="text-xs text-muted-foreground mb-3">
-                Generate the official form for this asset — prefilled with its
-                description, value, site, and reason. Review, then download.
+                Create both forms for this asset (Certificate of Disposition + DD-200),
+                prefilled from its description, value, site, and reason — then save or print.
+              </p>
+              <Button
+                onClick={() => handleCreateForms(asset)}
+                disabled={creatingForms}
+                className="w-full"
+                style={{ backgroundColor: "#ea580c", borderColor: "#ea580c", color: "white" }}
+              >
+                {creatingForms ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="w-4 h-4 mr-2" />
+                )}
+                Create both forms (2212 + DD-200)
+              </Button>
+              {formsMsg && (
+                <p className={`text-xs mt-2 ${formsMsg.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}`}>
+                  {formsMsg.text}
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground mt-3 mb-1.5">
+                Or open one to review / edit first:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full justify-start"
-                  style={{ borderColor: "#ea580c", color: "#ea580c" }}
-                >
+                <Button asChild variant="outline" size="sm" className="w-full justify-start">
                   <Link href={url2212}>
                     <FileText className="w-4 h-4 mr-2" />
-                    Certificate of Disposition (2212)
+                    2212 (Disposition)
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="w-full justify-start">
+                <Button asChild variant="outline" size="sm" className="w-full justify-start">
                   <Link href={url200}>
                     <FileText className="w-4 h-4 mr-2" />
-                    Property Loss (DD-200)
+                    DD-200 (Property Loss)
                   </Link>
                 </Button>
               </div>
