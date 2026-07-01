@@ -58,6 +58,8 @@ export interface CalendarItem {
   time: string | null;
   href: string | null;
   subtitle: string | null;
+  /** True for a recurring My Day task — the reschedule flow offers this-one vs series. */
+  recurring?: boolean;
 }
 
 /** Per-kind label + Tailwind colors for chips/dots. */

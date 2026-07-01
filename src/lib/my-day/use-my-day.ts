@@ -262,6 +262,8 @@ export function useMyDay(): UseMyDay {
             recurrence,
             recurrence_active: true,
             series_id: seriesId,
+            // Canonical schedule anchor = the first deadline (recurring only).
+            anchor_deadline: recurrence !== "none" ? deadline : null,
             created_by: uid,
           },
         ],
@@ -467,7 +469,10 @@ async function rollForward(
     if (!g.deadline || !g.series_id) continue;
     if (!needsRollover(g.deadline, today)) continue;
 
-    const dl = nextDeadline(g.deadline, g.recurrence, today);
+    // Advance the canonical schedule (anchor), not the actual deadline — so a
+    // one-off "move just this one" doesn't drift the whole series.
+    const anchor = g.anchor_deadline ?? g.deadline;
+    const dl = nextDeadline(anchor, g.recurrence, today);
     if (existing.has(`${g.series_id}|${dl}`)) continue;
 
     try {
@@ -483,6 +488,7 @@ async function rollForward(
             recurrence: g.recurrence,
             recurrence_active: true,
             series_id: g.series_id,
+            anchor_deadline: dl,
             created_by: g.created_by ?? getCachedUserId(),
           },
         ],

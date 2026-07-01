@@ -143,6 +143,7 @@ export function useCalendar() {
         time: null,
         href: "/my-day",
         subtitle: repeats ? `Repeats ${recurrenceLabel(g.recurrence).toLowerCase()}` : "Task deadline",
+        recurring: repeats,
       });
     }
     return out;
@@ -238,15 +239,24 @@ export function useCalendar() {
     [load],
   );
 
-  /** Move any item to a new date — dispatches to its source table. */
+  /**
+   * Move any item to a new date — dispatches to its source table. For a
+   * recurring task, `scope` decides whether the whole series follows: "series"
+   * moves the canonical anchor too, "one" (default) leaves it so future
+   * occurrences stay on the original schedule.
+   */
   const rescheduleItem = useCallback(
-    async (item: CalendarItem, newDate: string) => {
+    async (item: CalendarItem, newDate: string, scope: "one" | "series" = "one") => {
       if (item.source === "tournament") {
         await directPatchRow("tournaments", "id", item.sourceId, { event_date: newDate }, "calendar.reschedule.golf");
       } else if (item.source === "one_on_one") {
         await directPatchRow("staff_one_on_ones", "id", item.sourceId, { scheduled_on: newDate }, "calendar.reschedule.oneonone");
       } else if (item.source === "daily_goal") {
-        await directPatchRow("daily_goals", "id", item.sourceId, { deadline: newDate }, "calendar.reschedule.goal");
+        const patch =
+          item.recurring && scope === "series"
+            ? { deadline: newDate, anchor_deadline: newDate }
+            : { deadline: newDate };
+        await directPatchRow("daily_goals", "id", item.sourceId, patch, "calendar.reschedule.goal");
       } else {
         await directPatchRow("calendar_events", "id", item.sourceId, { event_date: newDate }, "calendar.reschedule.event");
       }

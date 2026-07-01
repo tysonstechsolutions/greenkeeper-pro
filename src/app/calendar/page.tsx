@@ -163,11 +163,11 @@ export default function CalendarPage() {
     }
   }
 
-  async function doMove() {
+  async function doMove(scope: "one" | "series" = "one") {
     if (!item || !moveDate) return;
     setBusy(true);
     try {
-      await cal.rescheduleItem(item, moveDate);
+      await cal.rescheduleItem(item, moveDate, scope);
       setItem(null);
     } finally {
       setBusy(false);
@@ -339,10 +339,36 @@ export default function CalendarPage() {
 
             <div className="space-y-1.5">
               <Label className="text-xs">Reschedule to</Label>
-              <div className="flex gap-2">
-                <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} className="flex-1" />
-                <Button onClick={doMove} disabled={busy || !moveDate || moveDate === item.date}>Move</Button>
-              </div>
+              {item.recurring ? (
+                <>
+                  <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => doMove("one")}
+                      disabled={busy || !moveDate || moveDate === item.date}
+                    >
+                      Move just this one
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      onClick={() => doMove("series")}
+                      disabled={busy || !moveDate || moveDate === item.date}
+                    >
+                      Move whole series
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    &quot;This one&quot; changes only this occurrence; &quot;whole series&quot; shifts every future one too.
+                  </p>
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  <Input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} className="flex-1" />
+                  <Button onClick={() => doMove()} disabled={busy || !moveDate || moveDate === item.date}>Move</Button>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1">

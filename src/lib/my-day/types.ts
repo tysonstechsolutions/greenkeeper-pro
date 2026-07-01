@@ -12,6 +12,9 @@ export interface DailyGoal {
   recurrence: RecurrenceFrequency;
   recurrence_active: boolean;
   series_id: string | null;
+  /** Canonical date the recurrence advances from (survives "move just this
+   *  one"). Null for one-off goals; falls back to `deadline` when absent. */
+  anchor_deadline: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
