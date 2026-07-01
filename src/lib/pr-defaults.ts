@@ -45,18 +45,18 @@ export const PR_ACCOUNTING_DEFAULTS = {
 } as const;
 
 /**
- * Site-wide fallback for the Requestor block. Used as the last resort
- * when:
- *   - the saved PR row's `requestor_phone` is blank, AND
- *   - the currently signed-in user's profile.phone is blank too.
+ * Site-wide defaults for the Requestor block, pre-filled on every new PR and
+ * used as the print fallback when a saved row left the field blank. The user
+ * can override per-PR by typing into the form.
  *
- * Lets old PRs print the right phone on download even if the user hasn't
- * yet saved it to their profile. Also pre-fills the field on a new PR
- * when no profile phone exists. The user can override per-PR by typing
- * a different number into the form.
+ * `email` is the requestor's official Navy address — NOT the app login account
+ * (the sign-in profile's email is the shared kiosk/admin account, which must
+ * never end up on an official purchase request), so it's a fixed default here
+ * rather than sourced from profile.email.
  */
 export const PR_REQUESTOR_DEFAULTS = {
   phone: "(847) 688-4593",
+  email: "Tyson.k.bruce.naf@us.navy.mil",
 } as const;
 
 /** Default request method. Overridable in the form. */

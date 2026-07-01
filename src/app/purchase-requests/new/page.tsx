@@ -985,8 +985,10 @@ function NewPurchaseRequestPageInner() {
     if (!requestorName) {
       setRequestorName(profile.full_name || profile.display_name || "");
     }
-    if (!requestorEmail && profile.email) {
-      setRequestorEmail(profile.email);
+    if (!requestorEmail) {
+      // Use the requestor's official Navy address, NOT the shared app-login
+      // profile.email (that's the kiosk/admin account, wrong for an official PR).
+      setRequestorEmail(PR_REQUESTOR_DEFAULTS.email);
     }
     if (!requestorPhone) {
       // Profile phone wins; fall back to the site-wide default so a new
@@ -1110,7 +1112,7 @@ function NewPurchaseRequestPageInner() {
           profile?.display_name ||
           "",
       );
-      setRequestorEmail(row.requestor_email || profile?.email || "");
+      setRequestorEmail(row.requestor_email || PR_REQUESTOR_DEFAULTS.email);
       setRequestorPhone(
         row.requestor_phone || profile?.phone || PR_REQUESTOR_DEFAULTS.phone,
       );

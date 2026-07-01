@@ -234,7 +234,6 @@ export async function generatePurchaseRequestReport(
     // last week, your phone shows even though the row still has it blank.
     step = "fill-requestor";
     let fallbackName = "";
-    let fallbackEmail = "";
     let fallbackPhone = "";
     try {
       const uid = getCachedUserId();
@@ -253,7 +252,6 @@ export async function generatePurchaseRequestReport(
         );
         if (profile) {
           fallbackName = profile.full_name || profile.display_name || "";
-          fallbackEmail = profile.email || "";
           fallbackPhone = profile.phone || "";
         }
       }
@@ -262,7 +260,7 @@ export async function generatePurchaseRequestReport(
       // row has (blank if blank). Same as before.
     }
     setText(form, "REQUESTOR_NAME", pr.requestor_name || fallbackName, written);
-    setText(form, "REQUESTOR_EMAIL", pr.requestor_email || fallbackEmail, written);
+    setText(form, "REQUESTOR_EMAIL", pr.requestor_email || PR_REQUESTOR_DEFAULTS.email, written);
     // Final fallback for phone is the site-wide default — guarantees the
     // PR prints with a phone number even on rows saved before the
     // auto-fill rule existed and on accounts that never set a profile phone.
