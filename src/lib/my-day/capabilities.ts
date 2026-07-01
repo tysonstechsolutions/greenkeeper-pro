@@ -5,8 +5,8 @@
  * no AI and no network; used both to route a typed task and to render the
  * "Do it" link on a step.
  *
- * `available: false` entries are recognized but NOT built in the app yet (e.g.
- * DD-200 / DD-2212) — surfaced so the UI can say so rather than dead-link.
+ * `available: false` entries are recognized but NOT built in the app yet —
+ * surfaced so the UI can say so rather than dead-link.
  */
 export interface Capability {
   key: string;
@@ -74,22 +74,22 @@ const CAPABILITIES: Capability[] = [
     available: true,
     patterns: [/\bonboard/i, /new[\s-]?hire packet/i],
   },
-  // Recognized but NOT built in the app yet.
+  {
+    key: "dd2212",
+    label: "NAVCOMPT 2212",
+    action: "Open the 2212 filler",
+    href: "/dd-forms/2212",
+    available: true,
+    // Match before dd200 so "dd 2212" isn't caught by the looser 200 rule.
+    patterns: [/\bdd[\s-]?2212\b/i, /\b2212\b/, /certificate of disposition/i],
+  },
   {
     key: "dd200",
     label: "DD-200",
-    action: "",
-    href: "",
-    available: false,
-    patterns: [/\bdd[\s-]?200\b/i],
-  },
-  {
-    key: "dd2212",
-    label: "DD-2212",
-    action: "",
-    href: "",
-    available: false,
-    patterns: [/\bdd[\s-]?2212\b/i],
+    action: "Open the DD-200 filler",
+    href: "/dd-forms/200",
+    available: true,
+    patterns: [/\bdd[\s-]?200\b/i, /financial liability investigation/i, /property loss/i],
   },
 ];
 

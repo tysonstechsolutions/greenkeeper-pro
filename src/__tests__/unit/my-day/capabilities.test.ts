@@ -22,11 +22,16 @@ describe("matchCapability", () => {
     expect(matchCapability("order bunker sand")).toBeNull();
   });
 
-  it("flags DD-200 / DD-2212 as recognized but not available in the app", () => {
+  it("recognizes DD-200 / NAVCOMPT-2212 and points at their fillers", () => {
     const dd200 = matchCapability("complete a DD-200 for the broken pump");
     expect(dd200?.key).toBe("dd200");
-    expect(dd200?.available).toBe(false);
-    expect(matchCapability("DD 2212 for the missing asset")?.available).toBe(false);
+    expect(dd200?.available).toBe(true);
+    expect(dd200?.href).toBe("/dd-forms/200");
+
+    const dd2212 = matchCapability("DD 2212 for the missing asset");
+    expect(dd2212?.key).toBe("dd2212");
+    expect(dd2212?.available).toBe(true);
+    expect(dd2212?.href).toBe("/dd-forms/2212");
   });
 
   it("returns null for ordinary tasks", () => {

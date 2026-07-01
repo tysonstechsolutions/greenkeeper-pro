@@ -128,6 +128,8 @@ const TOURNAMENTS: AppEntry = { href: "/tournaments", label: "Tournaments", icon
 const CAPITAL_PROJECTS: AppEntry = { href: "/capital-projects", label: "Capital Projects", icon: HardHat, color: "from-orange-600 to-amber-700" };
 const ONBOARDING: AppEntry = { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap, color: "from-teal-500 to-emerald-600" };
 const SF52: AppEntry = { href: "/staff/sf52", label: "SF-52", icon: FileText, color: "from-slate-600 to-gray-700" };
+const DD200: AppEntry = { href: "/dd-forms/200", label: "DD-200 (Property Loss)", icon: FileText, color: "from-slate-600 to-gray-700" };
+const DD2212: AppEntry = { href: "/dd-forms/2212", label: "2212 (Disposition)", icon: FileText, color: "from-slate-600 to-gray-700" };
 
 // ── Hubs ──────────────────────────────────────────────────────────────────
 // Each hub is one menu entry that opens a landing page (the matching route in
@@ -147,7 +149,7 @@ export const HUB_PAPERWORK: AppEntry = {
   label: "Paperwork",
   icon: ClipboardSignature,
   color: "from-cyan-600 to-teal-700",
-  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, ENVIRONMENTAL],
+  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, DD200, DD2212, ENVIRONMENTAL],
 };
 
 export const HUB_PROCUREMENT: AppEntry = {
