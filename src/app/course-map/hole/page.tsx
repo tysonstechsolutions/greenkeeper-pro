@@ -73,7 +73,6 @@ import {
 } from "@/lib/hooks/useHoleObservations";
 import { issueTypeDescriptions, issueTypeFixTemplates } from "@/lib/hole-constants";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { createClient } from "@/lib/supabase/client";
 import { directInsertRow } from "@/lib/supabase/rest";
 import { downloadObservationReport } from "@/lib/reports/observation-report";
 import { callApi } from "@/lib/api/client";
@@ -397,7 +396,7 @@ function PageContent() {
       setFormStep("review");
     };
     reader.readAsDataURL(file);
-  }, [holeNumber]);
+  }, []);
 
   const handlePhotoInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

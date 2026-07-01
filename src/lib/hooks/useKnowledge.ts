@@ -301,7 +301,7 @@ export function useKnowledge() {
         setLoading(false);
       }
     },
-    [activeCourse?.id, supabase]
+    [supabase]
   );
 
   /**
@@ -606,7 +606,7 @@ export function useKnowledge() {
         setLoading(false);
       }
     },
-    [activeCourse?.id, supabase]
+    [supabase]
   );
 
   /**
@@ -635,7 +635,7 @@ export function useKnowledge() {
         return [];
       }
     },
-    [activeCourse?.id, supabase]
+    [supabase]
   );
 
   /**
@@ -694,7 +694,7 @@ export function useKnowledge() {
         setLoading(false);
       }
     },
-    [activeCourse?.id, supabase]
+    [supabase]
   );
 
   /**
@@ -727,7 +727,7 @@ export function useKnowledge() {
         {} as Record<KnowledgeCategory, number>
       );
     }
-  }, [activeCourse?.id, supabase]);
+  }, [supabase]);
 
   /**
    * Fetch onboarding articles
@@ -780,7 +780,7 @@ export function useKnowledge() {
         return { articles: [], readCount: 0 };
       }
     },
-    [activeCourse?.id, supabase]
+    [supabase]
   );
 
   /**

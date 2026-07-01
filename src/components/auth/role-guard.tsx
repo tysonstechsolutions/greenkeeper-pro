@@ -57,11 +57,20 @@ export function RoleVisible({ children }: RoleVisibleProps) {
 }
 
 // Hook for checking role permissions — all permissive while roles are off.
-export function useRoleAccess() {
+export function useRoleAccess(): {
+  userRole: UserRole | undefined;
+  hasRole: (roles: UserRole[]) => boolean;
+  hasMinimumRole: (minimumRole: UserRole) => boolean;
+  isManagement: () => boolean;
+  isAdmin: () => boolean;
+  isSuperintendent: () => boolean;
+  isPro: () => boolean;
+  isStaff: () => boolean;
+} {
   return {
     userRole: undefined as UserRole | undefined,
-    hasRole: (_roles: UserRole[]) => true,
-    hasMinimumRole: (_minimumRole: UserRole) => true,
+    hasRole: () => true,
+    hasMinimumRole: () => true,
     isManagement: () => true,
     isAdmin: () => true,
     isSuperintendent: () => true,

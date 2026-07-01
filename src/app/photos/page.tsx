@@ -871,7 +871,7 @@ export default function PhotosPage() {
                 <div key={date}>
                   <h3 className="text-sm font-semibold text-muted-foreground mb-3">{date}</h3>
                   <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
-                    {datePhotos.map((photo, idx) => (
+                    {datePhotos.map((photo) => (
                       <div
                         key={photo.id}
                         className={cn(

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   getCachedUserId,
   directSelectList,
@@ -180,8 +179,6 @@ export function useBudget(): UseBudgetReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   /**
    * Fetch all budget items for a fiscal year with spent amounts
    */
@@ -245,7 +242,7 @@ export function useBudget(): UseBudgetReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -377,7 +374,7 @@ export function useBudget(): UseBudgetReturn {
         return defaultSummary;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -456,7 +453,7 @@ export function useBudget(): UseBudgetReturn {
         return [];
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -558,7 +555,7 @@ export function useBudget(): UseBudgetReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -658,7 +655,7 @@ export function useBudget(): UseBudgetReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**

@@ -6,13 +6,10 @@ import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import {
-  Book,
-  ArrowLeft,
   Edit,
   Trash2,
   Clock,
   User,
-  Users,
   Eye,
   Download,
   ExternalLink,
@@ -22,7 +19,6 @@ import {
   CheckCircle2,
   ChevronRight,
 } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";

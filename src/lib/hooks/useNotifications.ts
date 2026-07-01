@@ -178,7 +178,7 @@ export function useNotifications(): UseNotificationsReturn {
       setError(err instanceof Error ? err.message : "Failed to mark all notifications as read");
       return false;
     }
-  }, [user, supabase]);
+  }, [user]);
 
   // Create a notification for another user
   const createNotification = useCallback(
@@ -246,7 +246,7 @@ export function useNotifications(): UseNotificationsReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   // Delete a notification
@@ -283,7 +283,7 @@ export function useNotifications(): UseNotificationsReturn {
         return false;
       }
     },
-    [user, supabase, notifications]
+    [user, notifications]
   );
 
   // Set up realtime subscription for notifications
@@ -427,8 +427,6 @@ export async function sendNotification(
   referenceType?: string,
   referenceId?: string
 ): Promise<Notification | null> {
-  const supabase = createClient();
-
   try {
     const insertData = {
       user_id: userId,
@@ -468,8 +466,6 @@ export async function sendNotifications(
   referenceId?: string
 ): Promise<boolean> {
   if (userIds.length === 0) return true;
-
-  const supabase = createClient();
 
   try {
     const notifications = userIds.map((userId) => ({

@@ -15,7 +15,6 @@ import type {
   ImprovementPlan,
   ObservationCategory,
   ObservationSentiment,
-  PlanItemStatus,
 } from "@/types/database";
 
 interface UseObservationsReturn {

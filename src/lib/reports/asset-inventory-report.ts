@@ -21,14 +21,11 @@ import type { Fy26Asset } from "@/types/fy26-assets";
 
 // ── Brand palette ────────────────────────────────────────────────────────────
 const DARK:   [number,number,number] = [27,  67,  50 ];
-const GREEN:  [number,number,number] = [45,  106, 79 ];
 const GOLD:   [number,number,number] = [182, 141, 64 ];
 const GRAY6:  [number,number,number] = [75,  85,  99 ];
 const GRAY4:  [number,number,number] = [156, 163, 175];
 const WHITE:  [number,number,number] = [255, 255, 255];
 const RED:    [number,number,number] = [220, 38,  38 ];
-const AMBER:  [number,number,number] = [245, 158, 11 ];
-const ORANGE: [number,number,number] = [234, 88,  12 ];
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 const STATUS_LABELS: Record<string, string> = {
@@ -46,11 +43,6 @@ const STATUS_COLORS: Record<string, [number,number,number]> = {
   no_asset_tag:     [245, 158, 11 ],
   needs_disposed:   [234, 88,  12 ],
   disposed:         [153, 27,  27 ],
-};
-
-const SITE_LABELS: Record<string, string> = {
-  "7009": "7009 — Golf Course",
-  "7010": "7010 — Golf Course Maintenance",
 };
 
 function s(v: unknown, fallback = "—"): string {
@@ -174,17 +166,6 @@ export async function generateAssetInventoryReport(): Promise<{ blob: Blob; file
       doc.text(`Page ${pageNum} of ${totalPages}`, pw / 2, ph - 5, { align: "center" });
       doc.text("VMGC GreenKeeper Pro — FY26 Asset Inventory", M, ph - 5);
       doc.text(new Date().toLocaleDateString(), pw - M, ph - 5, { align: "right" });
-    };
-
-    // Helper: draw section header banner
-    const sectionHeader = (title: string, yPos: number): number => {
-      doc.setFillColor(...GREEN);
-      doc.rect(M, yPos, pw - M * 2, 7, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...WHITE);
-      doc.text(title.toUpperCase(), M + 3, yPos + 4.8);
-      return yPos + 9;
     };
 
     // ════════════════════════════════════════════════════════════════════════
@@ -426,14 +407,6 @@ export async function generateAssetInventoryReport(): Promise<{ blob: Blob; file
         front: "Front", back: "Back", left: "Left Side", right: "Right Side",
       };
       const ANGLES = ["front", "back", "left", "right"] as const;
-
-      const CARD_H =
-        9 +          // header bar
-        4 +          // top padding
-        PHOTO_H +    // row 1
-        PHOTO_GAP +
-        PHOTO_H +    // row 2 (back/right might not exist, but space reserved)
-        6;           // bottom padding
 
       for (const asset of assetsWithPhotos) {
         const photosByAngle = photoDataMap.get(asset.id) || {};

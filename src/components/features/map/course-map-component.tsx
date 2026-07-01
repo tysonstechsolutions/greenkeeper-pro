@@ -245,21 +245,6 @@ function ZoneOverlay({ zone, onClick, selected }: ZoneOverlayProps) {
   );
 }
 
-// Task marker component
-interface TaskMarkerProps {
-  task: TaskWithRelations;
-  onClick?: (task: TaskWithRelations) => void;
-}
-
-function TaskMarker({ task, onClick }: TaskMarkerProps) {
-  // Use zone's geojson centroid for position
-  if (!task.zone?.id) return null;
-
-  // We'll need the zone's geojson - for now use a placeholder
-  // In actual use, tasks with GPS data would have coordinates
-  return null;
-}
-
 // Photo/Problem marker component
 interface ProblemMarkerProps {
   photo: PhotoWithUploader;

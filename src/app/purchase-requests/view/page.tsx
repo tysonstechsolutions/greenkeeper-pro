@@ -14,7 +14,6 @@ import {
   FileText,
   X,
   ChevronLeft,
-  ChevronRight,
   CheckCircle,
   Sparkles,
 } from "lucide-react";
@@ -46,10 +45,7 @@ import {
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type { UserRole } from "@/types/database";
-import {
-  PR_DELIVERY_DEFAULTS,
-  PR_REQUESTOR_DEFAULTS,
-} from "@/lib/pr-defaults";
+import { PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
 import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
 

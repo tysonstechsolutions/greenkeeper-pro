@@ -12,7 +12,6 @@ import {
   FileText,
   Link as LinkIcon,
   Eye,
-  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
 import {
   useKnowledge,
@@ -151,7 +150,7 @@ function NewArticleContent() {
           setAttachments((prev) => [...prev, attachment]);
         }
       }
-    } catch (err) {
+    } catch {
       setError("Failed to upload file");
     } finally {
       setUploading(false);

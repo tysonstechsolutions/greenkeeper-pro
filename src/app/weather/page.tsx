@@ -9,7 +9,6 @@ import {
   Droplets,
   Thermometer,
   Snowflake,
-  AlertTriangle,
   ChevronDown,
   RefreshCw,
   Download,
@@ -27,7 +26,6 @@ import {
   useWeather,
   GDD_MILESTONES,
   type WeatherAlert,
-  type ForecastDay,
   type GDDData,
 } from "@/lib/hooks/useWeather";
 import { createClient } from "@/lib/supabase/client";

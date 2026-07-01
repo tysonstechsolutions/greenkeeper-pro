@@ -6,8 +6,6 @@ import {
   Flag,
   Camera,
   MapPin,
-  AlertTriangle,
-  Upload,
   X,
   Check,
   ChevronDown,
@@ -15,10 +13,8 @@ import {
 } from "lucide-react";
 import { DetailPageHeader } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,7 +115,7 @@ export default function ReportIssuePage() {
   const [category, setCategory] = useState<IssueCategory | null>(null);
   const [urgency, setUrgency] = useState<Urgency>("normal");
   const [description, setDescription] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);

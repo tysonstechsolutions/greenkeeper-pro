@@ -179,7 +179,6 @@ export default function ReportsPage() {
     generateDailyReport,
     generateWeeklyReport,
     generateChemicalReport,
-    generateEquipmentReport,
   } = useReports();
 
   // Check if user can access report type

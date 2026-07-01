@@ -25,7 +25,6 @@ import {
   Plus,
   Trash2,
   Wrench,
-  X,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,7 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import { directPatchRow, directInsertRow } from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -205,8 +203,6 @@ export function ScanWizard({
     | null
   >(null);
 
-  const supabase = createClient();
-
   // ── Helpers ────────────────────────────────────────────────────────────
 
   const safeSetError = useCallback((msg: string | null) => {
@@ -299,7 +295,6 @@ export function ScanWizard({
     barcode,
     equipmentId,
     createEquipment,
-    supabase,
     safeSetError,
   ]);
 
@@ -402,7 +397,7 @@ export function ScanWizard({
         setCameraFor(null);
       }
     },
-    [cameraFor, conditionPhotos, asset.id, supabase, uploadFileAsPhoto, safeSetError],
+    [cameraFor, conditionPhotos, asset.id, uploadFileAsPhoto, safeSetError],
   );
 
   const skipConditionPhoto = useCallback(
@@ -482,7 +477,6 @@ export function ScanWizard({
       pendingDamageNote,
       asset.id,
       user?.id,
-      supabase,
       openDamageCamera,
       safeSetError,
     ],
@@ -506,7 +500,7 @@ export function ScanWizard({
     } finally {
       setBusy(false);
     }
-  }, [asset.id, supabase, safeSetError]);
+  }, [asset.id, safeSetError]);
 
   // ── Step 6: Operational ────────────────────────────────────────────────
 

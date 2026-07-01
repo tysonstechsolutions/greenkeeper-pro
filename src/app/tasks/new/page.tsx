@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -147,9 +147,9 @@ export default function NewTaskPage() {
   const { isManager, isForeman, loading: authLoading } = useAuth();
   const { createTask } = useTasks();
   const { templates, loading: templatesLoading } = useTaskTemplates();
-  const { profiles, allStaff, loading: profilesLoading } = useProfiles();
-  const { zones, loading: zonesLoading } = useCourseZones();
-  const { crews, loading: crewsLoading, getCrewNames } = useCrews();
+  const { allStaff } = useProfiles();
+  const { zones } = useCourseZones();
+  const { crews } = useCrews();
   const { getActiveREIs } = useChemicals();
 
   // Active Restricted Entry Intervals — fetched once so we can warn when the
@@ -965,7 +965,7 @@ export default function NewTaskPage() {
           <label className="block text-sm font-medium mb-1.5">Checklist Items</label>
           {formData.checklist.length > 0 && (
             <div className="space-y-2 mb-3">
-              {formData.checklist.map((item, idx) => (
+              {formData.checklist.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-2 p-2 bg-muted rounded-lg"

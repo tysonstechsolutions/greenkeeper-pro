@@ -195,7 +195,7 @@ export function useCrews(): UseCrewsReturn {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   // Create a new crew (just adds an entry to our system)
   const createCrew = useCallback(

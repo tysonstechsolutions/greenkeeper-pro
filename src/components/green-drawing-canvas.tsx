@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import type { AreaPoint, GreenObservation, TaskPriority } from "@/types/database";
 import { greenIssueTypeIcons } from "@/lib/green-constants";
 
@@ -108,7 +108,6 @@ export default function GreenDrawingCanvas({
   const drawingRef = useRef(false);
   const pathElRef = useRef<SVGPathElement>(null);
   const startDotRef = useRef<SVGCircleElement>(null);
-  const [, forceUpdate] = useState(0);
 
   // Reset drawing state when isDrawing becomes false
   useEffect(() => {

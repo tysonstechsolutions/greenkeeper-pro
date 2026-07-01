@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Users,
@@ -44,9 +43,8 @@ interface StaffProfile extends Profile {
 }
 
 export default function StaffPage() {
-  const router = useRouter();
-  const { profile: currentUser, loading: authLoading, isSuper, isAsstSuper, isDirector, isGM } = useAuth();
-  const { crews, loading: crewsLoading } = useCrews();
+  const { profile: currentUser, isSuper, isAsstSuper, isDirector, isGM } = useAuth();
+  useCrews();
   // Anyone in the upper-management bucket can open the per-staff edit
   // page. Mirrors the role gate inside /settings/staff/view so the
   // button doesn't lead to a "Not Authorized" screen for the same role.

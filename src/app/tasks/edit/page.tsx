@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -117,7 +117,7 @@ function PageContent() {
 
   const { user, isManager, isForeman, loading: authLoading } = useAuth();
   const { getTask, updateTask } = useTasks();
-  const { profiles, allStaff } = useProfiles();
+  const { allStaff } = useProfiles();
   const { zones } = useCourseZones();
   const { getActiveREIs } = useChemicals();
 

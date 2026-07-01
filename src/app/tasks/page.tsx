@@ -7,8 +7,6 @@ import {
   ClipboardList,
   Plus,
   Filter,
-  ChevronDown,
-  ChevronUp,
   Search,
   Calendar,
   X,
@@ -18,8 +16,6 @@ import {
   AlertTriangle,
   Camera,
   MapPin,
-  User,
-  Loader2,
   Inbox,
 } from "lucide-react";
 import { SkeletonList } from "@/components/ui/skeleton-card";
@@ -259,7 +255,7 @@ export default function TasksPage() {
     return filters;
   }, [selectedStatuses, selectedCategory, selectedPriorities, selectedAssignee, debouncedSearch]);
 
-  const { tasks, loading: tasksLoading, fetchTasks, fetchMyTasks, fetchTeamTasks } = useTasks();
+  const { tasks, loading: tasksLoading, fetchTasks } = useTasks();
 
   // Fetch tasks based on active tab
   const loadTasks = useCallback(async () => {

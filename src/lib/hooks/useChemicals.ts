@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   getCachedUserId,
   directSelectList,
@@ -180,8 +179,6 @@ export function useChemicals(): UseChemicalsReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const supabase = createClient();
-
   /**
    * Fetch products with optional filters
    */
@@ -239,7 +236,7 @@ export function useChemicals(): UseChemicalsReturn {
         setLoading(false);
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -291,7 +288,7 @@ export function useChemicals(): UseChemicalsReturn {
         return null;
       }
     },
-    [supabase]
+    []
   );
 
   /**
@@ -417,7 +414,7 @@ export function useChemicals(): UseChemicalsReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   /**

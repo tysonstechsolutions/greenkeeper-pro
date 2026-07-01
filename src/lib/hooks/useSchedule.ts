@@ -452,7 +452,6 @@ export function useSchedule(): UseScheduleReturn {
       try {
         // Fetch source week schedules
         const sourceDates = getWeekDates(sourceWeekStart);
-        const targetDates = getWeekDates(targetWeekStart);
 
         type SourceScheduleResult = {
           user_id: string;

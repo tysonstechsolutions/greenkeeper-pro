@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   Circle,
   Camera,
-  Upload,
   Plus,
   MessageSquare,
   Play,
@@ -44,8 +43,7 @@ import { formatZoneName } from "@/lib/hooks/useCourseZones";
 import { useChemicals, type ActiveREI } from "@/lib/hooks/useChemicals";
 import { findREIConflicts } from "@/lib/utils/rei-conflicts";
 import { REIWarningBanner } from "@/components/features/chemicals/rei-warning-banner";
-import { getDisplayName, roleLabels } from "@/lib/hooks/useProfiles";
-import { createClient } from "@/lib/supabase/client";
+import { roleLabels } from "@/lib/hooks/useProfiles";
 import { usePhotos, photoTypeLabels } from "@/lib/hooks/usePhotos";
 import { CameraCaptureModal } from "@/components/features/photos/camera-capture";
 import { BeforeAfterModal } from "@/components/features/photos/before-after-slider";
@@ -53,7 +51,6 @@ import type {
   TaskStatus,
   TaskPriority,
   TaskCategory,
-  ChecklistItem,
   Photo,
   PhotoType,
 } from "@/types/database";
@@ -243,8 +240,6 @@ function PageContent() {
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-
-  const supabase = createClient();
 
   // Fetch task data
   const fetchTaskData = useCallback(async () => {

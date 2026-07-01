@@ -100,7 +100,6 @@ export default function TimeOffPage() {
     denyRequest,
     cancelRequest,
     getConflicts,
-    loading: timeOffLoading,
   } = useTimeOff();
   const { allStaff } = useProfiles();
   const { createNotification } = useNotifications();

@@ -2,7 +2,6 @@
 
 import { useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useCourse } from "./useCourse";
 import { formatLocalDate } from "@/lib/utils/date";
 
 // Report data types
@@ -333,14 +332,11 @@ const monthNames = [
 ];
 
 export function useReports() {
-  const { activeCourse } = useCourse();
   const supabase = createClient();
 
   // Generate Daily Operations Report
   const generateDailyReport = useCallback(
     async (date: string): Promise<DailyReportData> => {
-      const courseId = activeCourse?.id;
-
       // Initialize report
       const report: DailyReportData = {
         date,
@@ -565,7 +561,7 @@ export function useReports() {
 
       return report;
     },
-    [activeCourse?.id, supabase]
+    [supabase]
   );
 
   // Generate Weekly Summary Report

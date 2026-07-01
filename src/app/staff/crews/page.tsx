@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useCrews, type Crew } from "@/lib/hooks/useCrews";
 import { useProfiles, roleLabels, roleColors, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
-import type { UserRole } from "@/types/database";
 
 export default function CrewsPage() {
   const router = useRouter();
@@ -30,7 +29,6 @@ export default function CrewsPage() {
     crews,
     loading: crewsLoading,
     error: crewsError,
-    fetchCrews,
     createCrew,
     deleteCrew,
     renameCrew,
@@ -38,7 +36,7 @@ export default function CrewsPage() {
     addMemberToCrew,
     removeMemberFromCrew,
   } = useCrews();
-  const { profiles, loading: profilesLoading, foremen, allStaff } = useProfiles();
+  const { loading: profilesLoading, foremen, allStaff } = useProfiles();
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
