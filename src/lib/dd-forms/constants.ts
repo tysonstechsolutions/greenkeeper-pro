@@ -1,9 +1,10 @@
 /**
  * Shared constants + small formatting helpers for the DD-200 / NAVCOMPT-2212
- * fillers. The golf course files these under one of two site numbers, and the
- * organization block is standing (MWR N92, Great Lakes).
+ * fillers. The golf course files these under exactly three site numbers
+ * (7009 / 7010 / 7011 — fixed, these are the only ones), and the organization
+ * block is standing (MWR N92, Great Lakes).
  */
-export const DD_SITES = ["7009", "7010"] as const;
+export const DD_SITES = ["7009", "7010", "7011"] as const;
 export type DdSite = (typeof DD_SITES)[number];
 
 /** Default activity for the 2212 "ACTIVITY NAME/LOCATION" cell. */
