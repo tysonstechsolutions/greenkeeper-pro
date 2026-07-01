@@ -19,19 +19,22 @@ export interface Dd200Line {
   align?: Align;
 }
 
+// Dates, quantity, and costs are centered within their form cell — the XFA
+// original centers them, so a fixed left offset looked off (e.g. block 11e
+// date signed sat too far left). x + maxW spans the cell; align "center".
 export const DD200_LINES: Record<string, Dd200Line> = {
-  dateInitiated: { x: 100, baseline: 695, maxW: 100, align: "left" },
-  inquiryNumber: { x: 210, baseline: 695, maxW: 140, align: "left" },
-  dateLossDiscovered: { x: 505, baseline: 695, maxW: 62, align: "left" },
+  dateInitiated: { x: 40, baseline: 695, maxW: 167, align: "center" },
+  inquiryNumber: { x: 208, baseline: 695, maxW: 221, align: "center" },
+  dateLossDiscovered: { x: 460, baseline: 695, maxW: 115, align: "center" },
   nsn: { x: 42, baseline: 664, maxW: 100, align: "left" },
   itemDescription: { x: 148, baseline: 664, maxW: 205, align: "left" },
-  quantity: { x: 378, baseline: 662, maxW: 44, align: "center" },
-  unitCost: { x: 435, baseline: 662, maxW: 58, align: "left" },
-  totalCost: { x: 508, baseline: 662, maxW: 58, align: "left" },
+  quantity: { x: 358, baseline: 662, maxW: 71, align: "center" },
+  unitCost: { x: 430, baseline: 662, maxW: 71, align: "center" },
+  totalCost: { x: 502, baseline: 662, maxW: 73, align: "center" },
   // Block 11 — individual completing blocks 1-10.
   typedName: { x: 244, baseline: 434, maxW: 215, align: "left" },
-  dsn: { x: 466, baseline: 434, maxW: 100, align: "left" },
-  dateSigned: { x: 470, baseline: 407, maxW: 95, align: "left" },
+  dsn: { x: 466, baseline: 434, maxW: 109, align: "center" },
+  dateSigned: { x: 466, baseline: 407, maxW: 109, align: "center" },
 };
 
 export type Dd200LineKey = keyof typeof DD200_LINES;
