@@ -13,7 +13,14 @@
  *     out: { explanation, additions: [{staffName, group, start, end, note}] }
  *     Proposes who covers when someone drops a shift.
  *
- * Both have manual fallbacks in the UI, so nothing hard-depends on this function.
+ *   action: "schedule_update"
+ *     in : { text, today, roster[] }
+ *     out: { summary, timeOff:[{staffName,start,end,reason}],
+ *            availability:[{staffName,weekly,note}], unresolved:[] }
+ *     Turns a plain-English change ("Aniya out till Jul 25", "Devin to 30 hrs/wk")
+ *     into time-off + availability edits the client applies, then regenerates.
+ *
+ * All have manual fallbacks in the UI, so nothing hard-depends on this function.
  *
  * Auth: requires a signed-in user. Secret: ANTHROPIC_API_KEY.
  * Deploy:  supabase functions deploy pro-shop-ai
@@ -112,6 +119,32 @@ Rules:
 - Use exact names from the roster. Times are 24-hour "HH:MM".
 - If nobody is a good fit, return an empty additions array and say so in the explanation.`;
 
+const SCHEDULE_UPDATE_SYSTEM = `You apply a golf course manager's plain-English scheduling change to the pro-shop roster. This is internal scheduling — always help.
+
+You are given TODAY's date and the roster (each: name, position, home group, flex, and their current weekly pattern). Turn the manager's instruction into structured changes. There are two kinds:
+
+1. TIME OFF — someone is out for a date range (vacation, sick, etc.). This is TEMPORARY and does NOT change their weekly pattern.
+2. AVAILABILITY — a lasting change to how many hours / which days / which times a person normally works.
+
+Return ONLY a JSON object, no prose:
+{
+  "summary": "one or two plain sentences describing every change you made",
+  "timeOff": [
+    {"staffName": "Exact Name", "start": "2026-07-21", "end": "2026-07-25", "reason": "vacation"}
+  ],
+  "availability": [
+    {"staffName": "Exact Name", "weekly": {"sun": {"works": false}, "mon": {"works": true, "group": "outside", "start": "08:00", "end": "14:00"}, "tue": {...}, "wed": {...}, "thu": {...}, "fri": {...}, "sat": {...}}, "note": "what changed"}
+  ],
+  "unresolved": ["anything you could not map, e.g. a name not on the roster"]
+}
+
+Rules:
+- Use TODAY's date to resolve relative/partial dates. "until July 25th" -> end 2026-07-25 (pick the year that puts the date on/after today). Dates are "YYYY-MM-DD"; end is inclusive.
+- "on vacation", "out", "off", "sick" for a period -> timeOff (NOT an availability change).
+- A change to normal hours/days ("30 hours a week", "no longer works Mondays", "starts at 7 now") -> availability. Return the person's FULL updated weekly with all seven keys sun..sat, STARTING FROM their current pattern and changing only what the instruction says. For an hours target, keep their existing working days and area and adjust start/end to total about that many hours (trim evenly; drop a day only if needed). Times are 24-hour "HH:MM"; the shop runs ~05:30-20:00. group is "inside" or "outside".
+- Only include people the instruction actually affects. Use EXACT names from the roster. If a named person isn't on the roster, put a short note in "unresolved" and do not guess.
+- Empty arrays are fine. If you truly can't do anything, return empty arrays and explain in summary.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return handleCors();
   if (req.method === "GET") {
@@ -176,6 +209,31 @@ Deno.serve(async (req) => {
       const parsed = extractJson(replyText);
       if (!parsed) return jsonError("Couldn't read a suggestion. Try again.", 422);
       if (!Array.isArray(parsed.additions)) parsed.additions = [];
+      return jsonResponse(parsed);
+    }
+
+    if (action === "schedule_update") {
+      const text = String(body.text ?? "").slice(0, 2000);
+      const today = String(body.today ?? "");
+      const roster = Array.isArray(body.roster) ? body.roster : [];
+      if (!text.trim()) return jsonError("Type what you'd like to change.", 400);
+
+      const userText = `TODAY: ${today}\n\nRoster (name, position, home group, flex, current weekly pattern):\n${JSON.stringify(roster, null, 2)}\n\nManager's instruction:\n"""${text}"""\n\nProduce the structured changes.`;
+      const res = await callClaude(apiKey, SCHEDULE_UPDATE_SYSTEM, userText);
+      if (!res.ok) {
+        console.error("Claude error (schedule_update):", res.status, await res.text());
+        return jsonError("AI is temporarily unavailable. Please try again.", 502);
+      }
+      const data = await res.json();
+      const replyText = (data.content || [])
+        .filter((b: { type: string }) => b.type === "text")
+        .map((b: { text: string }) => b.text)
+        .join("\n");
+      const parsed = extractJson(replyText);
+      if (!parsed) return jsonError("Couldn't read a change from that. Try rephrasing.", 422);
+      if (!Array.isArray(parsed.timeOff)) parsed.timeOff = [];
+      if (!Array.isArray(parsed.availability)) parsed.availability = [];
+      if (!Array.isArray(parsed.unresolved)) parsed.unresolved = [];
       return jsonResponse(parsed);
     }
 

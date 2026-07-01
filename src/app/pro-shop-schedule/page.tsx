@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { callApi } from "@/lib/api/client";
 import { useProShop, type ShiftInput } from "@/lib/pro-shop/use-pro-shop";
 import {
   activeWarnings,
@@ -44,8 +45,10 @@ import {
   summarizeWeekly,
   ymd,
 } from "@/lib/pro-shop/schedule-engine";
+import { matchStaffName, sanitizeWeekly, validDate } from "@/lib/pro-shop/schedule-update";
 import {
   positionGroup,
+  emptyWeekly,
   type DayWarning,
   type ProShopShift,
   type ProShopStaff,
@@ -77,6 +80,14 @@ export default function ProShopSchedulePage() {
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // AI quick-update box (plain-English change → availability/time-off → regenerate).
+  const [quickText, setQuickText] = useState("");
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const [quickResult, setQuickResult] = useState<
+    { summary: string; applied: string[]; unresolved: string[] } | null
+  >(null);
 
   const grid = useMemo(() => {
     const start = startOfWeek(startOfMonth(monthDate));
@@ -121,6 +132,100 @@ export default function ProShopSchedulePage() {
       await ps.publishMonth(ps.schedule.id);
     } finally {
       setBusy(false);
+    }
+  }
+
+  // AI quick-update: parse a plain-English change → apply time-off / availability
+  // → regenerate the month. Applies immediately, then shows exactly what changed.
+  async function applyQuickUpdate() {
+    const text = quickText.trim();
+    if (!text || quickBusy) return;
+    setQuickBusy(true);
+    setQuickError(null);
+    setQuickResult(null);
+    try {
+      const roster = ps.staff
+        .filter((s) => s.is_active)
+        .map((s) => ({
+          name: s.full_name,
+          position: s.position,
+          group: s.default_group,
+          flex: s.flex,
+          weekly: s.availability?.weekly ?? emptyWeekly(),
+        }));
+
+      const res = await callApi<{
+        summary?: string;
+        timeOff?: { staffName: string; start: string; end: string; reason?: string }[];
+        availability?: { staffName: string; weekly: unknown; note?: string }[];
+        unresolved?: string[];
+      }>("pro-shop-ai", {
+        method: "POST",
+        body: { action: "schedule_update", text, today: TODAY, roster },
+      });
+
+      const applied: string[] = [];
+      const unresolved: string[] = [...(res.unresolved ?? [])];
+
+      // Lasting availability changes.
+      for (const a of res.availability ?? []) {
+        const target = matchStaffName(a.staffName, ps.staff);
+        if (!target) {
+          unresolved.push(`Couldn't find "${a.staffName}" for an availability change.`);
+          continue;
+        }
+        const weekly = sanitizeWeekly(a.weekly, target.default_group);
+        if (!weekly) {
+          unresolved.push(`Skipped ${target.full_name}: the new pattern wasn't clear.`);
+          continue;
+        }
+        await ps.saveAvailability(target.id, { weekly, notes: a.note ?? "" }, a.note ?? text);
+        applied.push(`${target.full_name}: availability updated${a.note ? ` — ${a.note}` : ""}`);
+      }
+
+      // Temporary time off.
+      for (const t of res.timeOff ?? []) {
+        const target = matchStaffName(t.staffName, ps.staff);
+        if (!target) {
+          unresolved.push(`Couldn't find "${t.staffName}" for time off.`);
+          continue;
+        }
+        const start = validDate(t.start);
+        const end = validDate(t.end);
+        if (!start || !end || end < start) {
+          unresolved.push(`Skipped ${target.full_name}: the dates weren't clear.`);
+          continue;
+        }
+        await ps.addTimeOff(target.id, start, end, t.reason || "Time off");
+        applied.push(
+          `${target.full_name}: off ${start}${end !== start ? `–${end}` : ""}${t.reason ? ` (${t.reason})` : ""}`,
+        );
+      }
+
+      // Rebuild the whole month from the updated patterns/time-off.
+      if (applied.length > 0) {
+        await ps.generateMonth(!!ps.schedule);
+        setQuickText("");
+      }
+
+      setQuickResult({
+        summary:
+          res.summary?.trim() ||
+          (applied.length ? "Applied and rebuilt the schedule." : "No changes were applied."),
+        applied,
+        unresolved,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (/unknown action/i.test(msg)) {
+        setQuickError(
+          "AI quick-update needs the pro-shop-ai function redeployed. Until then, use Edit availability / Day off below.",
+        );
+      } else {
+        setQuickError(msg || "Couldn't apply that. Try rephrasing, or edit availability / time off manually.");
+      }
+    } finally {
+      setQuickBusy(false);
     }
   }
 
@@ -229,6 +334,55 @@ export default function ProShopSchedulePage() {
       {ps.error && (
         <div className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{ps.error}</div>
       )}
+
+      {/* AI quick update — plain-English change → availability/time-off → rebuild */}
+      <div className="mb-3 rounded-xl border border-border bg-card p-3">
+        <label className="text-xs font-medium flex items-center gap-1.5 mb-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-primary" /> Quick update
+        </label>
+        <div className="flex gap-2">
+          <input
+            value={quickText}
+            onChange={(e) => setQuickText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applyQuickUpdate();
+              }
+            }}
+            placeholder={'e.g. "Aniya is out until July 25" or "Devin to 30 hours a week"'}
+            disabled={quickBusy}
+            className="flex-1 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+          />
+          <Button onClick={applyQuickUpdate} disabled={quickBusy || !quickText.trim()} className="gap-1.5 shrink-0">
+            {quickBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Apply
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          Type a change in plain English — it updates the person&apos;s availability or time off and rebuilds the month.
+        </p>
+        {quickError && <p className="text-xs text-red-600 mt-2">{quickError}</p>}
+        {quickResult && (
+          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/30 dark:border-emerald-900 p-2.5 text-xs space-y-1">
+            <p className="font-medium text-emerald-800 dark:text-emerald-300">{quickResult.summary}</p>
+            {quickResult.applied.length > 0 && (
+              <ul className="list-disc pl-4 text-emerald-700 dark:text-emerald-400">
+                {quickResult.applied.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            )}
+            {quickResult.unresolved.length > 0 && (
+              <ul className="list-disc pl-4 text-amber-700 dark:text-amber-400">
+                {quickResult.unresolved.map((u, i) => (
+                  <li key={i}>{u}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mb-2 text-xs text-muted-foreground">

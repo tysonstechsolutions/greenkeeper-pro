@@ -195,7 +195,21 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           "proshop.shifts.clear",
         );
       }
-      const planned = expandMonth(staff, year, month0, timeOff);
+      // Read staff + time-off FRESH so a change applied moments earlier (e.g. the
+      // AI quick-update) is reflected — the closed-over state may be a render behind.
+      const [freshStaff, freshTimeOff] = await Promise.all([
+        directSelectList<ProShopStaff>("pro_shop_staff", {
+          columns: "*",
+          orderBy: [{ column: "sort_order", ascending: true }],
+          label: "proshop.staff.fresh",
+        }),
+        directSelectList<ProShopTimeOff>("pro_shop_time_off", {
+          columns: "*",
+          orderBy: [{ column: "start_date", ascending: true }],
+          label: "proshop.timeoff.fresh",
+        }),
+      ]);
+      const planned = expandMonth(freshStaff, year, month0, freshTimeOff);
       const rows = planned.map((p) => ({
         schedule_id: sched!.id,
         staff_id: p.staff_id,
@@ -209,7 +223,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       await Promise.all([loadStatic(), loadShifts()]);
       return { inserted: rows.length };
     },
-    [schedules, monthKey, year, month0, staff, timeOff, loadStatic, loadShifts],
+    [schedules, monthKey, year, month0, loadStatic, loadShifts],
   );
 
   const setScheduleNotes = useCallback(
