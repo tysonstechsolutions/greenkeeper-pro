@@ -162,9 +162,9 @@ export default function ReportIssuePage() {
 
       if (success) {
         setSubmitted(true);
-        // Redirect after showing success
+        // Redirect after showing success — "/" resolves to the view's home.
         setTimeout(() => {
-          router.push("/dashboard");
+          router.push("/");
         }, 2000);
       }
     } catch (error) {
@@ -188,7 +188,7 @@ export default function ReportIssuePage() {
             Your report has been sent to the maintenance team. They will address it as soon as possible.
           </p>
           <p className="text-sm text-muted-foreground">
-            Redirecting to dashboard...
+            Taking you back home...
           </p>
         </div>
       </div>
@@ -198,8 +198,8 @@ export default function ReportIssuePage() {
   return (
     <div className="p-4 md:p-6 pb-24 md:pb-6">
       <DetailPageHeader
-        backHref="/dashboard"
-        backLabel="Dashboard"
+        backHref="/"
+        backLabel="Home"
         title="Report an Issue"
         subtitle="Alert maintenance about problems on the course"
         className="mb-6"

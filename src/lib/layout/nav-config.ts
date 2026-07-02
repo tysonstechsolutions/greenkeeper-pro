@@ -2,13 +2,13 @@ import {
   LayoutDashboard,
   CalendarDays,
   Map,
-  Archive,
   MoreHorizontal,
   Wallet,
   FileText,
   BarChart3,
   ClipboardCheck,
   Landmark,
+  Sunrise,
   type LucideIcon,
 } from "lucide-react";
 import type { AppView } from "@/lib/providers/view-provider";
@@ -26,10 +26,10 @@ export interface NavItem {
  */
 export const NAV_ITEMS: Record<AppView, NavItem[]> = {
   super: [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/today", label: "Today", icon: Sunrise },
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/course-map", label: "Map", icon: Map },
-    { href: "/assets", label: "Assets", icon: Archive },
+    { href: "/money", label: "Money", icon: Wallet },
     { href: "/more", label: "More", icon: MoreHorizontal },
   ],
   gm: [

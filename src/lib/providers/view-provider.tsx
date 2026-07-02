@@ -40,7 +40,9 @@ interface ViewState {
 function homeFor(v: AppView): string {
   if (v === "gm") return "/gm";
   if (v === "bdh") return "/pr-audit";
-  return "/dashboard";
+  // Superintendent home is Today — the operating-rhythm page (Phase 1 of the
+  // Operation Blueprint). The turf dashboard lives on under Course & Range.
+  return "/today";
 }
 
 const ViewContext = createContext<ViewContextValue>({

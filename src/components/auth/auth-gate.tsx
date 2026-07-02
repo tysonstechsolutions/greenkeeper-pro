@@ -19,7 +19,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (pathname && DEFUNCT_LOGIN_ROUTES.has(pathname)) {
-      router.replace("/dashboard");
+      router.replace("/today");
     }
   }, [pathname, router]);
 

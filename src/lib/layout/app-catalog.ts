@@ -36,6 +36,9 @@ import {
   Activity,
   ListChecks,
   Package,
+  Sunrise,
+  UtensilsCrossed,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 import type { AppView } from "@/lib/providers/view-provider";
@@ -89,6 +92,7 @@ export interface AppEntry {
 // planning=sky, course=teal, money=honey/amber, paperwork=slate,
 // people=indigo, reference=violet. Alerts stay red.
 export const GROUPS = {
+  workspaces: "Workspaces",
   planning: "Planning",
   course: "Course & Field",
   money: "Money & Assets",
@@ -99,6 +103,7 @@ export const GROUPS = {
 
 /** Render order for sections in the sidebar and the More grid. */
 export const GROUP_ORDER: string[] = [
+  GROUPS.workspaces,
   GROUPS.planning,
   GROUPS.course,
   GROUPS.money,
@@ -145,6 +150,12 @@ export type CatalogKey =
 // comes from its section's family so the More grid reads as organized
 // shelves instead of confetti.
 const DASHBOARD: AppEntry = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "from-emerald-600 to-green-700", pinned: true };
+// Today — the operating-rhythm home (duties, obligations, events). The
+// superintendent view's landing page since the Phase-1 workspace restructure.
+const TODAY: AppEntry = { href: "/today", label: "Today", icon: Sunrise, color: "from-emerald-600 to-green-700", pinned: true };
+// Dashboard re-homed inside Course & Range for the leadership view (other
+// views keep the pinned DASHBOARD above).
+const TURF_DASHBOARD: AppEntry = { ...DASHBOARD, pinned: false, label: "Turf Dashboard", group: GROUPS.course };
 const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true };
 const MY_DAY: AppEntry = { href: "/my-day", label: "My Day", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true };
 const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, color: "from-amber-500 to-yellow-600", pinned: true };
@@ -175,6 +186,7 @@ const DOCUMENTS: AppEntry = { href: "/documents", label: "Documents", icon: Fold
 
 const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
+const PRO_SHOP_DUTIES: AppEntry = { href: "/pro-shop-schedule/duties", label: "Shop Duties", icon: ListChecks, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 
 const ASSISTANT: AppEntry = { href: "/assistant", label: "AI Assistant", icon: Bot, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
 const KNOWLEDGE: AppEntry = { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
@@ -202,11 +214,25 @@ const DISPOSITION_PACKET: AppEntry = { href: "/dd-forms/packet", label: "Disposi
 
 export const HUB_COURSE: AppEntry = {
   href: "/grounds",
-  label: "Course & Grounds",
+  label: "Course & Range",
   icon: MapIcon,
   color: "from-teal-500 to-emerald-600",
-  group: GROUPS.course,
-  children: [COURSE_MAP, PARKING, SPRINKLER_MAP, CLUBHOUSE],
+  group: GROUPS.workspaces,
+  children: [
+    TURF_DASHBOARD,
+    COURSE_MAP,
+    SPRINKLER_MAP,
+    PARKING,
+    CLUBHOUSE,
+    WORK_ORDERS,
+    ENVIRONMENTAL,
+    PHOTOS,
+    VOICE_LOG,
+    WEATHER,
+    CALENDAR,
+    STANDARDS_PLAN,
+    REPORT_ISSUE,
+  ],
 };
 
 export const HUB_PAPERWORK: AppEntry = {
@@ -241,34 +267,88 @@ export const HUB_LIBRARY: AppEntry = {
   children: [KNOWLEDGE, DOCUMENTS, ONBOARDING, AI_LIBRARY],
 };
 
+// ── Workspace hubs (Operation Blueprint Phase 1) ──────────────────────────
+// The leadership view organizes around the real businesses: Course & Range
+// (HUB_COURSE above), Restaurant, Pro Shop, Money, People & Paperwork.
+// Restaurant and Pro Shop have CUSTOM landing pages (duties + obligations +
+// these children as link cards); Money and People render the plain hub grid.
+
+export const HUB_RESTAURANT: AppEntry = {
+  href: "/restaurant",
+  label: "Restaurant",
+  icon: UtensilsCrossed,
+  color: "from-amber-500 to-orange-600",
+  group: GROUPS.workspaces,
+  children: [REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+};
+
+export const HUB_PRO_SHOP: AppEntry = {
+  href: "/pro-shop",
+  label: "Pro Shop",
+  icon: Store,
+  color: "from-indigo-500 to-blue-600",
+  group: GROUPS.workspaces,
+  children: [PRO_SHOP, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
+};
+
+export const HUB_MONEY: AppEntry = {
+  href: "/money",
+  label: "Money",
+  icon: Wallet,
+  color: "from-amber-500 to-yellow-600",
+  group: GROUPS.workspaces,
+  children: [
+    FINANCIAL_WATCH,
+    BUDGET,
+    REVENUE,
+    PURCHASE_REQUESTS,
+    PR_AUDIT,
+    ORDER_LIST,
+    VENDORS,
+    CAPITAL_PROJECTS,
+    REPORTS,
+    BOARD_REPORT,
+    ASSETS,
+  ],
+};
+
+export const HUB_PEOPLE: AppEntry = {
+  href: "/people",
+  label: "People & Paperwork",
+  icon: Users,
+  color: "from-indigo-500 to-blue-600",
+  group: GROUPS.workspaces,
+  children: [STAFF, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
+};
+
 /** Hub lookup by route, so the hub pages can render their own card grid. */
 export const HUBS: Record<string, AppEntry> = {
   [HUB_COURSE.href]: HUB_COURSE,
   [HUB_PAPERWORK.href]: HUB_PAPERWORK,
   [HUB_PROCUREMENT.href]: HUB_PROCUREMENT,
   [HUB_LIBRARY.href]: HUB_LIBRARY,
+  [HUB_RESTAURANT.href]: HUB_RESTAURANT,
+  [HUB_PRO_SHOP.href]: HUB_PRO_SHOP,
+  [HUB_MONEY.href]: HUB_MONEY,
+  [HUB_PEOPLE.href]: HUB_PEOPLE,
 };
 
 export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
+  // The Operation Blueprint layout: four daily anchors + five workspaces.
+  // Everything else is reachable INSIDE a workspace (hub children), so the
+  // menu stays six doors instead of twenty entries.
   leadership: [
-    DASHBOARD,
+    TODAY,
     MY_DAY,
     SCHEDULE,
     CREATE_PR,
-    CALENDAR,
-    ASSETS,
     HUB_COURSE,
-    HUB_PAPERWORK,
-    HUB_PROCUREMENT,
-    STAFF,
-    PRO_SHOP,
-    PHOTOS,
-    VOICE_LOG,
-    WEATHER,
+    HUB_RESTAURANT,
+    HUB_PRO_SHOP,
+    HUB_MONEY,
+    HUB_PEOPLE,
     ASSISTANT,
-    HUB_LIBRARY,
-    STANDARDS_PLAN,
-    REPORT_ISSUE,
+    AI_LIBRARY,
   ],
   foreman: [
     DASHBOARD,

@@ -23,7 +23,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
       <AlertTriangle className="w-16 h-16 text-destructive mb-6" />
       <h1 className="text-2xl font-semibold mb-2">Something went wrong</h1>
       <p className="text-muted-foreground mb-6 text-center max-w-md">
-        We encountered an error loading this page. Please try again or return to the dashboard.
+        We encountered an error loading this page. Please try again or head back home.
       </p>
       <div className="flex gap-4">
         <Button onClick={reset} variant="default">
@@ -31,9 +31,10 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           Try Again
         </Button>
         <Button variant="outline" asChild>
-          <Link href="/dashboard">
+          {/* "/" resolves to the current view's home (Today / GM / PR Audit). */}
+          <Link href="/">
             <Home className="w-4 h-4 mr-2" />
-            Dashboard
+            Go Home
           </Link>
         </Button>
       </div>

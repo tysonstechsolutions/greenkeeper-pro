@@ -2,7 +2,7 @@
   "name": "VMGC",
   "short_name": "VMGC",
   "description": "Championship Golf Course Management — Veterans Memorial GC",
-  "start_url": "/dashboard",
+  "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "theme_color": "#1B4332",
