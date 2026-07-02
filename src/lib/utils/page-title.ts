@@ -33,7 +33,7 @@ const TITLES: Record<string, string> = {
   // even if a deep link lands the user there.
   "/equipment": "Assets",
   "/gm": "Overview",
-  "/grounds": "Course & Grounds",
+  "/grounds": "Course & Range",
   "/install": "Install App",
   "/invite": "Invite",
   "/irrigation": "Irrigation",

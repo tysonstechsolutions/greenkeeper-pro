@@ -60,10 +60,10 @@ export default function CrewsPage() {
   const [settingForeman, setSettingForeman] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Check authorization
+  // Check authorization — "/" resolves to the current view's home.
   useEffect(() => {
     if (!authLoading && currentUser && !isSuper) {
-      router.push("/dashboard");
+      router.push("/");
     }
   }, [authLoading, currentUser, isSuper, router]);
 

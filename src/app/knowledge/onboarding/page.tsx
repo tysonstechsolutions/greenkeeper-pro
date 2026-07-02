@@ -266,8 +266,8 @@ export default function OnboardingPage() {
             <Link href="/knowledge">
               <Button variant="outline">Browse Knowledge Base</Button>
             </Link>
-            <Link href="/dashboard">
-              <Button>Go to Dashboard</Button>
+            <Link href="/">
+              <Button>Go Home</Button>
             </Link>
           </div>
         </div>

@@ -142,7 +142,6 @@ export function useOperations(): UseOperations {
       duty,
       done: doneIds.has(duty.id),
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duties, dutyDone, today]);
 
   // In-flight guards: a double-tap must not fire a second insert for the
