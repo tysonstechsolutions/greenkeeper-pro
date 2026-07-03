@@ -734,7 +734,7 @@ export default function StaffPage() {
                                     ? "bg-red-500/10 text-red-600"
                                     : task.priority === "normal"
                                     ? "bg-amber-500/10 text-amber-600"
-                                    : "bg-gray-500/10 text-gray-600"
+                                    : "bg-muted text-muted-foreground"
                                 }`}
                               >
                                 {task.priority}

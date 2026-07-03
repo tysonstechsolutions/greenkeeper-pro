@@ -140,7 +140,7 @@ export function MiniMapWidget({ className }: MiniMapWidgetProps) {
             )}
             {conditionCounts.unrated > 0 && (
               <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-gray-400" />
+                <span className="w-2 h-2 rounded-full bg-muted-foreground" />
                 <span className="text-muted-foreground">{conditionCounts.unrated}</span>
               </div>
             )}

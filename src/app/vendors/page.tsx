@@ -104,7 +104,7 @@ const categoryColors: Record<string, string> = {
   construction: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
   fuel: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
   seed_sod: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  general: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300",
+  general: "bg-muted text-muted-foreground",
 };
 
 function categoryLabel(cat: string) {
@@ -137,7 +137,7 @@ const STATUS_COLORS: Record<ReturnType<typeof get889Status>, string> = {
   compliant: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   expiring_soon: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   expired: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  missing: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+  missing: "bg-muted text-muted-foreground",
 };
 
 export default function VendorsPage() {

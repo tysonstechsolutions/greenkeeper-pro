@@ -78,7 +78,7 @@ export const RECORD_TYPE_COLORS: Record<StaffRecordType, string> = {
   sick_time: "bg-sky-100 text-sky-800",
   disciplinary: "bg-red-100 text-red-800",
   one_on_one: "bg-indigo-100 text-indigo-800",
-  note: "bg-gray-100 text-gray-700",
+  note: "bg-muted text-muted-foreground",
 };
 
 /** Which record types use the hours / amount fields. */

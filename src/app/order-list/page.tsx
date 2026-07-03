@@ -473,7 +473,7 @@ export default function OrderListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6 pb-40 md:pb-6">
+    <div className="min-h-screen bg-background p-4 md:p-6 pb-40 md:pb-6">
       {/* Toast Message */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg px-4 py-3 shadow-lg ${
@@ -504,10 +504,10 @@ export default function OrderListPage() {
               <Package className="h-8 w-8 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 truncate">
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground truncate">
                 Order List
               </h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Manage supplies and materials
               </p>
             </div>
@@ -607,7 +607,7 @@ export default function OrderListPage() {
                   Search
                 </Label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="search"
                     placeholder="Search by name, vendor, or description..."
@@ -671,8 +671,8 @@ export default function OrderListPage() {
         ) : filteredItems.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <Package className="mx-auto mb-4 h-12 w-12 text-gray-300" />
-              <p className="text-gray-600">
+              <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+              <p className="text-muted-foreground">
                 {items.length === 0
                   ? 'No order items yet.'
                   : 'No items match your filters.'}
@@ -683,7 +683,7 @@ export default function OrderListPage() {
           <div className="space-y-6">
             {consolidatedByStatus.needed.length > 0 && (
               <div>
-                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-foreground">
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: orderStatusColors['needed'] }}
@@ -706,7 +706,7 @@ export default function OrderListPage() {
 
             {consolidatedByStatus.ordered.length > 0 && (
               <div>
-                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-foreground">
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: orderStatusColors['ordered'] }}
@@ -729,7 +729,7 @@ export default function OrderListPage() {
 
             {consolidatedByStatus.received.length > 0 && (
               <div>
-                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+                <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-foreground">
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: orderStatusColors['received'] }}
@@ -757,7 +757,7 @@ export default function OrderListPage() {
         <SheetContent className="max-h-screen overflow-y-auto sm:max-w-lg">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-gray-700" />
+              <Package className="h-5 w-5 text-muted-foreground" />
               Add New Order Item
             </SheetTitle>
           </SheetHeader>
@@ -832,7 +832,7 @@ export default function OrderListPage() {
                 Estimated Cost
               </Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                 <Input
                   id="cost"
                   type="number"

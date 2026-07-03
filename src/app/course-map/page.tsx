@@ -440,7 +440,7 @@ export default function CourseMapPage() {
           onClick={() => { setActiveTab("holes"); setSearch(""); setFilterPriority("all"); }}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
             activeTab === "holes"
-              ? "bg-white text-foreground shadow-sm"
+              ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -456,7 +456,7 @@ export default function CourseMapPage() {
           onClick={() => { setActiveTab("greens"); setSearch(""); setFilterPriority("all"); }}
           className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
             activeTab === "greens"
-              ? "bg-white text-foreground shadow-sm"
+              ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >

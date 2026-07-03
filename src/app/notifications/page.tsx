@@ -55,7 +55,7 @@ const notificationIcons: Record<NotificationType, React.ReactNode> = {
   schedule_change: <Calendar className="w-5 h-5 text-amber-500" />,
   approval_needed: <Clock className="w-5 h-5 text-orange-500" />,
   weather: <Cloud className="w-5 h-5 text-sky-500" />,
-  equipment: <Wrench className="w-5 h-5 text-gray-500" />,
+  equipment: <Wrench className="w-5 h-5 text-muted-foreground" />,
   reminder: <Bell className="w-5 h-5 text-indigo-500" />,
 };
 
@@ -68,7 +68,7 @@ const notificationBgs: Record<NotificationType, string> = {
   schedule_change: "bg-amber-500/10",
   approval_needed: "bg-orange-500/10",
   weather: "bg-sky-500/10",
-  equipment: "bg-gray-500/10",
+  equipment: "bg-muted",
   reminder: "bg-indigo-500/10",
 };
 

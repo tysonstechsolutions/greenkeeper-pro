@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Settings, Bell, Smartphone } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useView } from "@/lib/providers/view-provider";
 import { useAppUsage } from "@/lib/hooks/useAppUsage";
 import { getCatalog, groupCatalog, type AppEntry } from "@/lib/layout/app-catalog";
 
@@ -72,11 +71,10 @@ function BottomLinks({ showSettings = true }: { showSettings?: boolean }) {
 
 export default function MorePage() {
   const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
-  const { view } = useView();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
-  const apps = getCatalog({ view, isPro, isForeman, isMechanic, isLaborer });
+  const apps = getCatalog({ isPro, isForeman, isMechanic, isLaborer });
   const pinned = apps.filter((item) => item.pinned);
   const sections = groupCatalog(apps.filter((item) => !item.pinned));
 

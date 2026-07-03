@@ -242,7 +242,7 @@ export default function PinManagementPage() {
       case "seasonal":
         return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400";
       default:
-        return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400";
+        return "bg-muted text-muted-foreground";
     }
   };
 

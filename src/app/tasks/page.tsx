@@ -51,18 +51,18 @@ const priorityBadgeColors: Record<TaskPriority, string> = {
   critical: "bg-red-500/10 text-red-600",
   high: "bg-orange-500/10 text-orange-600",
   normal: "bg-green-500/10 text-green-600",
-  low: "bg-gray-500/10 text-gray-600",
+  low: "bg-muted text-muted-foreground",
 };
 
 // Status styles
 const statusColors: Record<TaskStatus, string> = {
-  pending: "bg-gray-500/10 text-gray-600",
+  pending: "bg-muted text-muted-foreground",
   in_progress: "bg-blue-500/10 text-blue-600",
   completed: "bg-green-500/10 text-green-600",
   verified: "bg-primary/10 text-primary",
   blocked: "bg-red-500/10 text-red-600",
   deferred: "bg-amber-500/10 text-amber-600",
-  cancelled: "bg-gray-400/10 text-gray-500",
+  cancelled: "bg-muted text-muted-foreground",
 };
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -108,7 +108,7 @@ const categoryColors: Record<TaskCategory, string> = {
   grounds: "bg-stone-500/10 text-stone-700",
   admin: "bg-slate-500/10 text-slate-700",
   safety: "bg-red-500/10 text-red-700",
-  other: "bg-gray-500/10 text-gray-700",
+  other: "bg-muted text-muted-foreground",
   pro_shop: "bg-teal-500/10 text-teal-700",
   events: "bg-pink-500/10 text-pink-700",
   customer_service: "bg-cyan-500/10 text-cyan-700",

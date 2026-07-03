@@ -73,7 +73,7 @@ const categoryColors: Record<string, string> = {
   events: "bg-pink-500/10 text-pink-700 border-pink-200",
   memberships: "bg-indigo-500/10 text-indigo-700 border-indigo-200",
   driving_range: "bg-teal-500/10 text-teal-700 border-teal-200",
-  other: "bg-gray-500/10 text-gray-700 border-gray-200",
+  other: "bg-muted text-muted-foreground border-border",
 };
 
 function formatCurrency(amount: number): string {

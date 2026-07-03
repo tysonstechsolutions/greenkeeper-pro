@@ -60,10 +60,10 @@ const alertStyles: Record<
     iconColor: "text-orange-600",
   },
   rain: {
-    bg: "bg-slate-50",
-    border: "border-slate-300",
+    bg: "bg-muted",
+    border: "border-border",
     icon: CloudRain,
-    iconColor: "text-slate-600",
+    iconColor: "text-muted-foreground",
   },
   heat: {
     bg: "bg-red-50",
@@ -296,20 +296,20 @@ export default function WeatherPage() {
                       <Icon className={`w-5 h-5 ${style.iconColor}`} />
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-900">{alert.title}</p>
-                      <p className="text-sm text-gray-600">{alert.message}</p>
+                      <p className="font-semibold text-foreground">{alert.title}</p>
+                      <p className="text-sm text-muted-foreground">{alert.message}</p>
                     </div>
                   </div>
                   <ChevronDown
-                    className={`w-5 h-5 text-gray-400 transition-transform ${
+                    className={`w-5 h-5 text-muted-foreground transition-transform ${
                       isExpanded ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 border-t border-dashed border-gray-200">
-                    <p className="text-sm text-gray-700 mt-3">
+                  <div className="px-4 pb-4 border-t border-dashed border-border">
+                    <p className="text-sm text-muted-foreground mt-3">
                       <span className="font-medium">Recommendation:</span>{" "}
                       {alert.recommendation}
                     </p>
@@ -370,7 +370,7 @@ export default function WeatherPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <CloudRain className="w-5 h-5 text-slate-500" />
+                <CloudRain className="w-5 h-5 text-sky-500" />
                 <div>
                   <p className="text-xs text-muted-foreground">Rain Chance</p>
                   <p className="font-semibold">
@@ -396,7 +396,7 @@ export default function WeatherPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Eye className="w-5 h-5 text-gray-500" />
+                <Eye className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="text-xs text-muted-foreground">Visibility</p>
                   <p className="font-semibold">
@@ -406,7 +406,7 @@ export default function WeatherPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Cloud className="w-5 h-5 text-slate-400" />
+                <Cloud className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <p className="text-xs text-muted-foreground">Cloud Cover</p>
                   <p className="font-semibold">{currentWeather.cloud_cover}%</p>
@@ -505,7 +505,7 @@ export default function WeatherPage() {
                   <div className="flex items-center gap-2">
                     <div
                       className={`w-2 h-2 rounded-full ${
-                        reached ? "bg-green-500" : "bg-gray-300"
+                        reached ? "bg-green-500" : "bg-muted"
                       }`}
                     />
                     <span

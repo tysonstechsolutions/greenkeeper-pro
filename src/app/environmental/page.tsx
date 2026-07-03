@@ -44,7 +44,7 @@ const CATEGORIES: { value: ComplianceLogCategory; label: string; color: string }
 ];
 
 const SEVERITIES: { value: ComplianceSeverity; label: string; dot: string }[] = [
-  { value: "routine", label: "Routine", dot: "bg-slate-400" },
+  { value: "routine", label: "Routine", dot: "bg-muted-foreground" },
   { value: "minor", label: "Minor", dot: "bg-yellow-500" },
   { value: "major", label: "Major", dot: "bg-orange-500" },
   { value: "critical", label: "Critical", dot: "bg-red-500" },

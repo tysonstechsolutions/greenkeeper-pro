@@ -308,9 +308,9 @@ const STATION_STATUS_META: Record<
 > = {
   unused: {
     label: "Unused (no head)",
-    chipBg: "bg-gray-100 dark:bg-gray-800",
-    chipText: "text-gray-700 dark:text-gray-300",
-    cellBg: "bg-gray-200 dark:bg-gray-700",
+    chipBg: "bg-muted",
+    chipText: "text-muted-foreground",
+    cellBg: "bg-muted",
   },
   broken: {
     label: "Broken station",
@@ -1560,8 +1560,8 @@ export default function SprinklerMapPage() {
         <>
           {/* Active valve shutoffs — heads offline until the issue is fixed */}
           {activeShutoffs.length > 0 && (
-            <div className="mb-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 space-y-1.5">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            <div className="mb-3 rounded-lg border border-border bg-muted p-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                 <PowerOff className="w-4 h-4 shrink-0" />
                 {activeShutoffs.length === 1
                   ? "1 valve shut off"
@@ -1576,7 +1576,7 @@ export default function SprinklerMapPage() {
                     key={so.issueId}
                     className="flex items-center gap-2 text-[11px]"
                   >
-                    <Ban className="w-3 h-3 shrink-0 text-slate-500" />
+                    <Ban className="w-3 h-3 shrink-0 text-muted-foreground" />
                     <span className="font-medium">{so.valveLabel}</span>
                     <span className="text-muted-foreground truncate">
                       — {so.headCount} {so.headCount === 1 ? "head" : "heads"}{" "}
@@ -1796,8 +1796,8 @@ export default function SprinklerMapPage() {
                 {editingPin &&
                   !editingPinStatus &&
                   offlineMap.has(editingPin.id) && (
-                    <div className="rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-2 text-[11px] flex items-start gap-2">
-                      <Ban className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-500" />
+                    <div className="rounded-md border border-border bg-muted p-2 text-[11px] flex items-start gap-2">
+                      <Ban className="w-3.5 h-3.5 mt-0.5 shrink-0 text-muted-foreground" />
                       <span>
                         <span className="font-medium">Offline.</span> Valve{" "}
                         <span className="font-medium">
@@ -1861,7 +1861,7 @@ export default function SprinklerMapPage() {
                               </p>
                             )}
                             {shutoffValve && (
-                              <p className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                              <p className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-muted-foreground">
                                 <Ban className="w-3 h-3 shrink-0" />
                                 Shut valve{" "}
                                 <span className="font-medium">
@@ -3835,7 +3835,7 @@ function StatusPill({
   if (offline) {
     return (
       <span
-        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+        className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
         title={`Offline — valve ${offline.valveLabel} shut for ${offline.byHeadLabel}`}
       >
         <Ban className="w-2.5 h-2.5" />

@@ -265,7 +265,7 @@ export default function ParkingLotPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-6">
+    <div className="min-h-screen bg-background pb-24 md:pb-6">
       {/* Toast */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border max-w-md ${
@@ -285,17 +285,17 @@ export default function ParkingLotPage() {
               <Car className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Parking & Cart Paths</h1>
-              <p className="text-xs text-gray-600">Track asphalt issues across the course</p>
+              <h1 className="text-xl font-bold text-foreground">Parking & Cart Paths</h1>
+              <p className="text-xs text-muted-foreground">Track asphalt issues across the course</p>
             </div>
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center gap-1 bg-gray-200 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
             <button
               onClick={() => setViewMode('map')}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                viewMode === 'map' ? 'bg-white shadow text-gray-900' : 'text-gray-600'
+                viewMode === 'map' ? 'bg-card shadow text-foreground' : 'text-muted-foreground'
               }`}
             >
               <Map className="w-3.5 h-3.5" /> Map
@@ -303,7 +303,7 @@ export default function ParkingLotPage() {
             <button
               onClick={() => setViewMode('list')}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                viewMode === 'list' ? 'bg-white shadow text-gray-900' : 'text-gray-600'
+                viewMode === 'list' ? 'bg-card shadow text-foreground' : 'text-muted-foreground'
               }`}
             >
               <List className="w-3.5 h-3.5" /> List
@@ -314,19 +314,19 @@ export default function ParkingLotPage() {
         {/* Stats */}
         <div className="mb-4 grid grid-cols-4 gap-2">
           <Card className="p-3">
-            <p className="text-[10px] font-medium text-gray-500 uppercase">Open</p>
-            <p className="text-xl font-bold text-gray-900">{stats.open}</p>
+            <p className="text-[10px] font-medium text-muted-foreground uppercase">Open</p>
+            <p className="text-xl font-bold text-foreground">{stats.open}</p>
           </Card>
           <Card className="p-3">
-            <p className="text-[10px] font-medium text-gray-500 uppercase">In Progress</p>
+            <p className="text-[10px] font-medium text-muted-foreground uppercase">In Progress</p>
             <p className="text-xl font-bold text-blue-600">{stats.inProgress}</p>
           </Card>
           <Card className="p-3">
-            <p className="text-[10px] font-medium text-gray-500 uppercase">Done</p>
+            <p className="text-[10px] font-medium text-muted-foreground uppercase">Done</p>
             <p className="text-xl font-bold text-green-600">{stats.completed}</p>
           </Card>
           <Card className="p-3">
-            <p className="text-[10px] font-medium text-gray-500 uppercase">Critical</p>
+            <p className="text-[10px] font-medium text-muted-foreground uppercase">Critical</p>
             <p className="text-xl font-bold text-red-600">{stats.critical}</p>
           </Card>
         </div>
@@ -335,7 +335,7 @@ export default function ParkingLotPage() {
         {viewMode === 'map' && (
           <div className="relative">
             {/* Map Container */}
-            <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-100" style={{ height: 'calc(100dvh - 280px)', minHeight: '400px' }}>
+            <div className="relative rounded-xl overflow-hidden border border-border bg-muted" style={{ height: 'calc(100dvh - 280px)', minHeight: '400px' }}>
               <TransformWrapper
                 minScale={1}
                 maxScale={8}
@@ -491,7 +491,7 @@ export default function ParkingLotPage() {
               <CardContent className="pt-4 pb-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -520,9 +520,9 @@ export default function ParkingLotPage() {
 
             {/* Issues Grid */}
             {loading ? (
-              <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>
+              <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : filteredIssues.length === 0 ? (
-              <Card><CardContent className="py-12 text-center"><Car className="mx-auto mb-4 h-12 w-12 text-gray-300" /><p className="text-gray-600">{issues.length === 0 ? 'No issues reported yet.' : 'No issues match your filters.'}</p></CardContent></Card>
+              <Card><CardContent className="py-12 text-center"><Car className="mx-auto mb-4 h-12 w-12 text-muted-foreground" /><p className="text-muted-foreground">{issues.length === 0 ? 'No issues reported yet.' : 'No issues match your filters.'}</p></CardContent></Card>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredIssues.map((issue) => {
@@ -531,7 +531,7 @@ export default function ParkingLotPage() {
                   return (
                     <Card key={issue.id} className="flex flex-col overflow-hidden transition-shadow hover:shadow-lg">
                       {firstPhoto && (
-                        <div className="relative h-32 w-full overflow-hidden bg-gray-200">
+                        <div className="relative h-32 w-full overflow-hidden bg-muted">
                           <img src={firstPhoto} alt={issue.title} className="h-full w-full object-cover" />
                         </div>
                       )}
@@ -539,9 +539,9 @@ export default function ParkingLotPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <CardTitle className="text-sm">{issueTypeIcons[issue.issue_type]} {issue.title}</CardTitle>
-                            {issue.location && <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-500"><MapPin className="h-3 w-3" />{issue.location}</p>}
+                            {issue.location && <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{issue.location}</p>}
                           </div>
-                          <button onClick={() => setExpandedIssueId(isExpanded ? null : issue.id)} className="text-gray-400 hover:text-gray-600">
+                          <button onClick={() => setExpandedIssueId(isExpanded ? null : issue.id)} className="text-muted-foreground hover:text-foreground">
                             <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                           </button>
                         </div>
@@ -552,10 +552,10 @@ export default function ParkingLotPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="pt-0 pb-3">
-                        <p className="text-[10px] text-gray-400">{new Date(issue.created_at).toLocaleDateString()}</p>
+                        <p className="text-[10px] text-muted-foreground">{new Date(issue.created_at).toLocaleDateString()}</p>
                         {isExpanded && (
                           <div className="space-y-3 border-t mt-2 pt-3">
-                            {issue.description && <p className="text-xs text-gray-600">{issue.description}</p>}
+                            {issue.description && <p className="text-xs text-muted-foreground">{issue.description}</p>}
                             {issue.estimated_cost != null && <p className="text-xs font-semibold">${Number(issue.estimated_cost).toFixed(2)}</p>}
                             {issue.photos && issue.photos.length > 0 && (
                               <div className="grid grid-cols-3 gap-1">{issue.photos.map((p, i) => <img key={i} src={p} alt="" className="h-16 rounded object-cover w-full" />)}</div>
@@ -639,7 +639,7 @@ export default function ParkingLotPage() {
             <div className="space-y-2">
               <Label className="font-medium">Estimated Cost</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                 <Input type="number"
  inputMode="decimal" step="0.01" min="0" placeholder="0.00" className="pl-7" value={formData.estimatedCost} onChange={(e) => setFormData((p) => ({ ...p, estimatedCost: e.target.value }))} />
               </div>
@@ -662,9 +662,9 @@ export default function ParkingLotPage() {
             <div className="space-y-2">
               <Label className="font-medium">Photo</Label>
               <div className="flex items-center gap-2">
-                <label className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-3 cursor-pointer hover:border-gray-400 transition-colors">
-                  <Camera className="w-5 h-5 text-gray-400" />
-                  <span className="text-sm text-gray-500">{uploadingPhoto ? 'Uploading...' : 'Take or choose photo'}</span>
+                <label className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg p-3 cursor-pointer hover:border-muted-foreground transition-colors">
+                  <Camera className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{uploadingPhoto ? 'Uploading...' : 'Take or choose photo'}</span>
                   <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} disabled={uploadingPhoto} className="hidden" />
                 </label>
               </div>
@@ -714,14 +714,14 @@ export default function ParkingLotPage() {
 
                 {/* Location */}
                 {selectedIssue.location && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="w-4 h-4" />
                     {selectedIssue.location}
                   </div>
                 )}
 
                 {/* Description */}
-                {selectedIssue.description && <p className="text-sm text-gray-700">{selectedIssue.description}</p>}
+                {selectedIssue.description && <p className="text-sm text-muted-foreground">{selectedIssue.description}</p>}
 
                 {/* Cost */}
                 {selectedIssue.estimated_cost != null && (
@@ -736,7 +736,7 @@ export default function ParkingLotPage() {
                 )}
 
                 {/* Date */}
-                <p className="text-xs text-gray-400">Reported {new Date(selectedIssue.created_at).toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground">Reported {new Date(selectedIssue.created_at).toLocaleDateString()}</p>
 
                 {/* Actions */}
                 <div className="space-y-2 border-t pt-4">

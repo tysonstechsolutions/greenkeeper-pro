@@ -19,12 +19,9 @@ import {
   Clock,
   Wind,
 } from "lucide-react";
-import { getPageTitle } from "@/lib/utils/page-title";
+import { getPageTitle, stripTrailingSlash } from "@/lib/utils/page-title";
 import { Button } from "@/components/ui/button";
 import { WeatherIcon } from "@/components/ui/weather-icon";
-import { ViewSwitch } from "./view-switch";
-import { useView } from "@/lib/providers/view-provider";
-import { isViewTopLevel } from "@/lib/layout/nav-config";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { roleLabels, getInitials } from "@/lib/hooks/useProfiles";
@@ -48,7 +45,7 @@ const notificationIcons: Record<NotificationType, React.ReactNode> = {
   schedule_change: <Calendar className="w-4 h-4 text-amber-500" />,
   approval_needed: <Clock className="w-4 h-4 text-orange-500" />,
   weather: <Cloud className="w-4 h-4 text-sky-500" />,
-  equipment: <Wrench className="w-4 h-4 text-gray-500" />,
+  equipment: <Wrench className="w-4 h-4 text-muted-foreground" />,
   reminder: <Bell className="w-4 h-4 text-indigo-500" />,
 };
 
@@ -58,7 +55,6 @@ const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { view } = useView();
   const { profile, loading, refreshProfile } = useAuth();
   const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
@@ -149,11 +145,20 @@ export function Header() {
   const weatherFailed = !weatherAvailable && weatherError !== null;
 
   // Keep dropdowns open override: don't hide header when dropdown is open.
-  // Only auto-hide on top-level routes — deep pages need the back button visible.
+  // Only auto-hide on the home page — everywhere else the back button must
+  // stay reachable (every page has one now, home is the only exception).
   const isDropdownOpen = menuOpen || notificationsOpen;
-  const onTopLevel = isViewTopLevel(view, pathname);
-  const shouldHide = onTopLevel && scrollDirection === "down" && !isDropdownOpen;
+  const normalizedPath = stripTrailingSlash(pathname) || "/";
+  const isHome = normalizedPath === "/" || normalizedPath === "/today";
+  const shouldHide = isHome && scrollDirection === "down" && !isDropdownOpen;
   const pageTitle = getPageTitle(pathname);
+
+  // History back with a home fallback so a deep link / fresh PWA launch
+  // (history length 1) still has somewhere to go.
+  const goBack = () => {
+    if (window.history.length > 1) router.back();
+    else router.push("/today");
+  };
 
   return (
     <header
@@ -167,30 +172,20 @@ export function Header() {
         shouldHide ? "-translate-y-full md:translate-y-0" : "translate-y-0"
       )}
     >
-      {/* Left: view switch on top-level pages, back + title on deep pages */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 md:hidden min-w-0">
-          {onTopLevel ? (
-            <ViewSwitch />
-          ) : (
-            <>
-              <button
-                onClick={() => router.back()}
-                aria-label="Go back"
-                className="w-11 h-11 -ml-2 flex items-center justify-center rounded-full active:bg-muted/70 transition-colors shrink-0"
-              >
-                <ChevronLeft className="w-6 h-6 text-foreground" />
-              </button>
-              <span className="font-semibold text-foreground text-base tracking-tight truncate">
-                {pageTitle}
-              </span>
-            </>
-          )}
-        </div>
-        {/* Desktop — view switch is always available in the header */}
-        <div className="hidden md:flex">
-          <ViewSwitch />
-        </div>
+      {/* Left: back button (every page except home) + page title */}
+      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        {!isHome && (
+          <button
+            onClick={goBack}
+            aria-label="Go back"
+            className="w-11 h-11 -ml-2 flex items-center justify-center rounded-full hover:bg-muted/50 active:bg-muted/70 transition-colors shrink-0"
+          >
+            <ChevronLeft className="w-6 h-6 text-foreground" />
+          </button>
+        )}
+        <span className="font-semibold text-foreground text-base tracking-tight truncate">
+          {pageTitle}
+        </span>
       </div>
 
       {/* Right: Weather + Notifications + Profile */}

@@ -21,7 +21,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
         <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-background text-foreground">
           <AlertTriangle className="w-16 h-16 text-red-500 mb-6" />
           <h1 className="text-2xl font-semibold mb-2">Application Error</h1>
-          <p className="text-gray-600 mb-6 text-center max-w-md">
+          <p className="text-muted-foreground mb-6 text-center max-w-md">
             A critical error occurred. Please refresh the page to continue.
           </p>
           {error?.digest && (

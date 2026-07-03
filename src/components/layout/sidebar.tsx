@@ -10,7 +10,6 @@ import {
   Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useView } from "@/lib/providers/view-provider";
 import { useState, useEffect } from "react";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -90,7 +89,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
-  const { view } = useView();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
@@ -109,8 +107,8 @@ export function Sidebar() {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
-  // Role/view-appropriate catalog → pinned block + stable labeled sections.
-  const catalog = getCatalog({ view, isPro, isForeman, isMechanic, isLaborer });
+  // Role-appropriate catalog → pinned block + stable labeled sections.
+  const catalog = getCatalog({ isPro, isForeman, isMechanic, isLaborer });
   const pinned = catalog.filter((item) => item.pinned);
   const sections = groupCatalog(catalog.filter((item) => !item.pinned));
 

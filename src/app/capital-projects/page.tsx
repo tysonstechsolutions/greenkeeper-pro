@@ -71,7 +71,7 @@ const STATUS_TABS = [
 ] as const;
 
 const statusColors: Record<string, string> = {
-  proposed: "bg-gray-500/10 text-gray-700 border-gray-300",
+  proposed: "bg-muted text-muted-foreground border-border",
   approved: "bg-blue-500/10 text-blue-700 border-blue-300",
   in_progress: "bg-amber-500/10 text-amber-700 border-amber-300",
   completed: "bg-green-500/10 text-green-700 border-green-300",

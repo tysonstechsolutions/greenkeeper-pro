@@ -764,7 +764,7 @@ function PageContent() {
                           <div
                             key={step.key}
                             className={`h-2 flex-1 rounded-full ${
-                              i < currentIdx ? 'bg-green-500' : i === currentIdx ? 'bg-blue-500' : 'bg-gray-200'
+                              i < currentIdx ? 'bg-green-500' : i === currentIdx ? 'bg-blue-500' : 'bg-muted'
                             }`}
                           />
                         ))}
@@ -913,7 +913,7 @@ function PageContent() {
           {displayPhotos.length > 0 && (
             <>
               {/* Main Photo */}
-              <div className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video">
+              <div className="relative bg-muted rounded-lg overflow-hidden aspect-video">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={displayPhotos[selectedPhotoIndex]}
@@ -938,7 +938,7 @@ function PageContent() {
                     key={index}
                     onClick={() => setSelectedPhotoIndex(index)}
                     className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-colors ${
-                      selectedPhotoIndex === index ? "border-blue-500" : "border-gray-300"
+                      selectedPhotoIndex === index ? "border-blue-500" : "border-border"
                     }`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -950,8 +950,8 @@ function PageContent() {
           )}
 
           {displayPhotos.length === 0 && (
-            <div className="flex items-center justify-center h-40 bg-gray-100 rounded-lg">
-              <p className="text-gray-500">No photos uploaded yet</p>
+            <div className="flex items-center justify-center h-40 bg-muted rounded-lg">
+              <p className="text-muted-foreground">No photos uploaded yet</p>
             </div>
           )}
 
@@ -1009,7 +1009,7 @@ function PageContent() {
           {equipment.condition_notes && (
             <div>
               <Label className="text-sm font-medium">Condition Notes</Label>
-              <p className="text-sm text-gray-600 mt-1">{equipment.condition_notes}</p>
+              <p className="text-sm text-muted-foreground mt-1">{equipment.condition_notes}</p>
             </div>
           )}
 
@@ -1062,7 +1062,7 @@ function PageContent() {
 
           {/* Add Part Form */}
           {addingPart && (
-            <div className="border rounded-lg p-4 mb-4 bg-gray-50 space-y-3">
+            <div className="border rounded-lg p-4 mb-4 bg-muted/50 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="part-name" className="text-xs">Part Name *</Label>
@@ -1085,7 +1085,7 @@ function PageContent() {
                 <div>
                   <Label htmlFor="part-cost" className="text-xs">Estimated Cost</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                     <Input id="part-cost" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newPart.estimated_cost} onChange={(e) => setNewPart({ ...newPart, estimated_cost: e.target.value })} />
                   </div>
                 </div>
@@ -1129,8 +1129,8 @@ function PageContent() {
                         {partStatusLabels[part.status]}
                       </Badge>
                     </div>
-                    {part.description && <p className="text-xs text-gray-500 mt-1">{part.description}</p>}
-                    <div className="text-xs text-gray-400 mt-1 flex gap-3">
+                    {part.description && <p className="text-xs text-muted-foreground mt-1">{part.description}</p>}
+                    <div className="text-xs text-muted-foreground mt-1 flex gap-3">
                       <span>Qty: {part.quantity}</span>
                       {part.estimated_cost != null && <span>Est: ${Number(part.estimated_cost).toFixed(2)}</span>}
                     </div>
@@ -1248,7 +1248,7 @@ function PageContent() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 text-center py-4">No parts needed</p>
+            <p className="text-sm text-muted-foreground text-center py-4">No parts needed</p>
           )}
         </CardContent>
       </Card>
@@ -1275,7 +1275,7 @@ function PageContent() {
         <CardContent>
           {/* Add Service Form */}
           {addingService && (
-            <div className="border rounded-lg p-4 mb-4 bg-gray-50 space-y-3">
+            <div className="border rounded-lg p-4 mb-4 bg-muted/50 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="svc-date" className="text-xs">Service Date *</Label>
@@ -1297,19 +1297,19 @@ function PageContent() {
                       <SelectValue placeholder="Select who serviced it" />
                     </SelectTrigger>
                     <SelectContent>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">External</div>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">External</div>
                       <SelectItem value="__manufacturer__">
                         <span className="flex items-center gap-1.5">Manufacturer / Dealer</span>
                       </SelectItem>
                       {mechanicStaff.length > 0 && (
                         <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">Mechanics</div>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Mechanics</div>
                           {mechanicStaff.map((s) => (
                             <SelectItem key={s.id} value={s.full_name}>{s.full_name}</SelectItem>
                           ))}
                         </>
                       )}
-                      <div className="px-2 py-1.5 text-xs font-semibold text-gray-500">All Staff</div>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">All Staff</div>
                       {allStaff.filter((s) => s.role !== "mechanic").map((s) => (
                         <SelectItem key={s.id} value={s.full_name}>{s.full_name} ({s.role})</SelectItem>
                       ))}
@@ -1366,7 +1366,7 @@ function PageContent() {
                     <div>
                       <Label htmlFor="svc-cost" className="text-xs">Cost</Label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                         <Input id="svc-cost" type="number" inputMode="decimal" step="0.01" min="0" placeholder="0.00" className="pl-7" value={newService.cost} onChange={(e) => setNewService({ ...newService, cost: e.target.value })} />
                       </div>
                     </div>
@@ -1413,9 +1413,9 @@ function PageContent() {
                 <div key={record.id} className={`border rounded-lg p-3 ${record.sent_to_manufacturer ? "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                      <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                       <span className="text-sm font-medium">{parseAppDate(record.service_date)?.toLocaleDateString()}</span>
-                      <span className="text-xs text-gray-400">by</span>
+                      <span className="text-xs text-muted-foreground">by</span>
                       <span className="text-sm font-medium text-green-800">{record.performed_by}</span>
                       {record.sent_to_manufacturer && (
                         <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30">Manufacturer</Badge>
@@ -1427,7 +1427,7 @@ function PageContent() {
                       </Button>
                     )}
                   </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{record.description}</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{record.description}</p>
                   {record.sent_to_manufacturer && (
                     <div className="text-xs mt-1.5 flex gap-3 text-amber-700 dark:text-amber-400">
                       {record.pickup_date && <span>Picked up: {parseAppDate(record.pickup_date)?.toLocaleDateString()}</span>}
@@ -1439,9 +1439,9 @@ function PageContent() {
                     </div>
                   )}
                   {record.parts_used && (
-                    <p className="text-xs text-gray-500 mt-1"><span className="font-medium">Parts:</span> {record.parts_used}</p>
+                    <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Parts:</span> {record.parts_used}</p>
                   )}
-                  <div className="text-xs text-gray-400 mt-1 flex gap-3">
+                  <div className="text-xs text-muted-foreground mt-1 flex gap-3">
                     {record.hours_at_service && <span>{record.hours_at_service} hrs</span>}
                     {record.cost && <span>Cost: ${Number(record.cost).toFixed(2)}</span>}
                   </div>
@@ -1449,7 +1449,7 @@ function PageContent() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 text-center py-4">No service records yet</p>
+            <p className="text-sm text-muted-foreground text-center py-4">No service records yet</p>
           )}
         </CardContent>
       </Card>
@@ -1463,61 +1463,61 @@ function PageContent() {
           {equipment.make && (
             <div>
               <Label className="text-sm font-medium">Make</Label>
-              <p className="text-sm text-gray-600">{equipment.make}</p>
+              <p className="text-sm text-muted-foreground">{equipment.make}</p>
             </div>
           )}
           {equipment.model && (
             <div>
               <Label className="text-sm font-medium">Model</Label>
-              <p className="text-sm text-gray-600">{equipment.model}</p>
+              <p className="text-sm text-muted-foreground">{equipment.model}</p>
             </div>
           )}
           {equipment.year && (
             <div>
               <Label className="text-sm font-medium">Year</Label>
-              <p className="text-sm text-gray-600">{equipment.year}</p>
+              <p className="text-sm text-muted-foreground">{equipment.year}</p>
             </div>
           )}
           {equipment.serial_number && (
             <div>
               <Label className="text-sm font-medium">Serial Number</Label>
-              <p className="text-sm text-gray-600">{equipment.serial_number}</p>
+              <p className="text-sm text-muted-foreground">{equipment.serial_number}</p>
             </div>
           )}
           {equipment.asset_tag && (
             <div>
               <Label className="text-sm font-medium">Asset Tag</Label>
-              <p className="text-sm text-gray-600">{equipment.asset_tag}</p>
+              <p className="text-sm text-muted-foreground">{equipment.asset_tag}</p>
             </div>
           )}
           {equipment.fuel_type && (
             <div>
               <Label className="text-sm font-medium">Fuel Type</Label>
-              <p className="text-sm text-gray-600">{fuelTypeLabels[equipment.fuel_type]}</p>
+              <p className="text-sm text-muted-foreground">{fuelTypeLabels[equipment.fuel_type]}</p>
             </div>
           )}
           {equipment.location && (
             <div>
               <Label className="text-sm font-medium">Location</Label>
-              <p className="text-sm text-gray-600">{equipment.location}</p>
+              <p className="text-sm text-muted-foreground">{equipment.location}</p>
             </div>
           )}
           {equipment.current_hours !== null && (
             <div>
               <Label className="text-sm font-medium">Current Hours</Label>
-              <p className="text-sm text-gray-600">{equipment.current_hours.toFixed(1)}</p>
+              <p className="text-sm text-muted-foreground">{equipment.current_hours.toFixed(1)}</p>
             </div>
           )}
           {equipment.service_interval_hours !== null && (
             <div>
               <Label className="text-sm font-medium">Service Interval</Label>
-              <p className="text-sm text-gray-600">{equipment.service_interval_hours.toFixed(1)} hours</p>
+              <p className="text-sm text-muted-foreground">{equipment.service_interval_hours.toFixed(1)} hours</p>
             </div>
           )}
           {equipment.purchase_date && (
             <div>
               <Label className="text-sm font-medium">Purchase Date</Label>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 {parseAppDate(equipment.purchase_date)?.toLocaleDateString()}
               </p>
             </div>
@@ -1525,7 +1525,7 @@ function PageContent() {
           {equipment.purchase_price != null && (
             <div>
               <Label className="text-sm font-medium">Purchase Price</Label>
-              <p className="text-sm text-gray-600">${Number(equipment.purchase_price).toFixed(2)}</p>
+              <p className="text-sm text-muted-foreground">${Number(equipment.purchase_price).toFixed(2)}</p>
             </div>
           )}
         </CardContent>
@@ -1550,12 +1550,12 @@ function PageContent() {
           </div>
 
           {latestInspection && (
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="bg-muted/50 p-4 rounded-lg">
               <h3 className="font-medium mb-2">Latest Inspection</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <Label className="text-xs font-medium">Type</Label>
-                  <p className="text-gray-600">
+                  <p className="text-muted-foreground">
                     {latestInspection.inspection_type === "pre"
                       ? "Pre-Operation"
                       : latestInspection.inspection_type === "post"
@@ -1565,11 +1565,11 @@ function PageContent() {
                 </div>
                 <div>
                   <Label className="text-xs font-medium">Status</Label>
-                  <p className="text-gray-600">{latestInspection.overall_status}</p>
+                  <p className="text-muted-foreground">{latestInspection.overall_status}</p>
                 </div>
                 <div>
                   <Label className="text-xs font-medium">Date</Label>
-                  <p className="text-gray-600">
+                  <p className="text-muted-foreground">
                     {new Date(latestInspection.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -1709,8 +1709,8 @@ function PageContent() {
             </div>
 
             {/* Parts & Repair */}
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <p className="text-sm text-gray-600">
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <p className="text-sm text-muted-foreground">
                 Parts are now managed in the <strong>Parts Needed</strong> section below. Use it to add individual parts with part numbers, descriptions, and track their order status.
               </p>
             </div>
@@ -1718,7 +1718,7 @@ function PageContent() {
             <div>
               <Label htmlFor="estimated_repair_cost">Estimated Repair Cost</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                 <Input
                   id="estimated_repair_cost"
                   type="number"
@@ -1850,7 +1850,7 @@ function PageContent() {
                             : status === "issue"
                             ? "bg-red-500 text-white"
                             : "bg-gray-500 text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
                       }`}
                     >
                       {status === "ok" ? "OK" : status === "issue" ? "Issue" : "N/A"}

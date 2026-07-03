@@ -39,7 +39,7 @@ const TITLES: Record<string, string> = {
   // /assets/view. Title still reads "Assets" so the header is consistent
   // even if a deep link lands the user there.
   "/equipment": "Assets",
-  "/gm": "Overview",
+  "/gm": "GM Dashboard",
   "/grounds": "Course & Range",
   "/install": "Install App",
   "/invite": "Invite",

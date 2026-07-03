@@ -4,7 +4,6 @@ import "./globals.css";
 import { AppShell } from "@/components/layout";
 import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
-import { ViewProvider } from "@/lib/providers/view-provider";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { LockGate } from "@/components/auth/lock-gate";
 import { CapacitorInit } from "@/components/capacitor-init";
@@ -126,10 +125,8 @@ export default function RootLayout({
         <LockGate>
           <AuthProvider>
             <AuthGate>
-              <ViewProvider>
-                <AppShell>{children}</AppShell>
-                <OfflineSyncIndicator />
-              </ViewProvider>
+              <AppShell>{children}</AppShell>
+              <OfflineSyncIndicator />
             </AuthGate>
           </AuthProvider>
         </LockGate>

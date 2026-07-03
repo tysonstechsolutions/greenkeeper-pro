@@ -600,7 +600,7 @@ function ProfileContent() {
 
           {/* Active + direct reports */}
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsActive(!isActive)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? "bg-green-600" : "bg-gray-300"}`}>
+            <button onClick={() => setIsActive(!isActive)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? "bg-green-600" : "bg-muted"}`}>
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
             </button>
             <Label className="text-sm font-medium">{isActive ? "Active" : "Inactive"}</Label>

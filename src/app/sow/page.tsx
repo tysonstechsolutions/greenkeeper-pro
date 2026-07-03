@@ -365,7 +365,7 @@ export default function SowPage() {
                         ? "bg-[#1B4332] text-white"
                         : isComplete
                           ? "bg-[#1B4332]/20 text-[#1B4332]"
-                          : "bg-gray-100 text-gray-400"
+                          : "bg-muted text-muted-foreground"
                     }`}
                   >
                     {isComplete ? (
@@ -376,7 +376,7 @@ export default function SowPage() {
                     <span className="hidden sm:inline">{s.label}</span>
                   </div>
                   {idx < STEPS.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-1 ${step > s.id ? "bg-[#1B4332]/40" : "bg-gray-200"}`} />
+                    <div className={`flex-1 h-0.5 mx-1 ${step > s.id ? "bg-[#1B4332]/40" : "bg-muted"}`} />
                   )}
                 </div>
               );

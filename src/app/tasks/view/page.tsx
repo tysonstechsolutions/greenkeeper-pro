@@ -72,13 +72,13 @@ const priorityLabels: Record<TaskPriority, string> = {
 
 // Status styles
 const statusColors: Record<TaskStatus, { bg: string; text: string }> = {
-  pending: { bg: "bg-gray-100", text: "text-gray-700" },
+  pending: { bg: "bg-muted", text: "text-muted-foreground" },
   in_progress: { bg: "bg-blue-100", text: "text-blue-700" },
   completed: { bg: "bg-green-100", text: "text-green-700" },
   verified: { bg: "bg-primary/10", text: "text-primary" },
   blocked: { bg: "bg-red-100", text: "text-red-700" },
   deferred: { bg: "bg-amber-100", text: "text-amber-700" },
-  cancelled: { bg: "bg-gray-200", text: "text-gray-500" },
+  cancelled: { bg: "bg-muted", text: "text-muted-foreground" },
 };
 
 const statusLabels: Record<TaskStatus, string> = {

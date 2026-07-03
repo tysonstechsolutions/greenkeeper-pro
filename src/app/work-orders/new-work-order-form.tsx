@@ -535,7 +535,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
 
             {photos.length < MAX_PHOTOS && (
               <div className="flex gap-2">
-                <label className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors">
+                <label className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-dashed border-border bg-background hover:bg-muted/50 cursor-pointer transition-colors">
                   <ImagePlus className="w-4 h-4 text-muted-foreground" />
                   Choose Photos
                   <input

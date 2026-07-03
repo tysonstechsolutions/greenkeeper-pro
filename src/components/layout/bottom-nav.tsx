@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useView } from "@/lib/providers/view-provider";
 import { NAV_ITEMS } from "@/lib/layout/nav-config";
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { view } = useView();
 
-  const navItems = NAV_ITEMS[view];
+  const navItems = NAV_ITEMS;
 
   const topLevelHrefs = navItems
     .filter((item) => item.href !== "/more")

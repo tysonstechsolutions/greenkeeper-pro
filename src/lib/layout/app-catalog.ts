@@ -42,7 +42,6 @@ import {
   Store,
   type LucideIcon,
 } from "lucide-react";
-import type { AppView } from "@/lib/providers/view-provider";
 
 // ──────────────────────────────────────────────────────────────────────────
 // SHARED APP CATALOG — single source of truth for both the desktop sidebar
@@ -142,9 +141,7 @@ export type CatalogKey =
   | "foreman"
   | "mechanic"
   | "crew"
-  | "pro"
-  | "gm"
-  | "bdh";
+  | "pro";
 
 // Reusable entries (same metadata everywhere they appear).
 // Daily anchors (pinned) wear the brand green; every other entry's color
@@ -204,8 +201,9 @@ const ASSISTANT: AppEntry = { href: "/assistant", label: "AI Assistant", icon: B
 const KNOWLEDGE: AppEntry = { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
 const AI_LIBRARY: AppEntry = { href: "/ai-library", label: "AI Library", icon: Library, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
 
-// GM / BDH (business + admin) entries.
-const GM_DASHBOARD: AppEntry = { href: "/gm", label: "Dashboard", icon: LayoutDashboard, color: "from-emerald-600 to-green-700", pinned: true };
+// Business + admin entries. The GM dashboard survives the view merge as a
+// regular Money tool — same page, just reached through the workspace now.
+const GM_DASHBOARD: AppEntry = { href: "/gm", label: "GM Dashboard", icon: LayoutDashboard, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const FINANCIAL_WATCH: AppEntry = { href: "/financial-watch", label: "Financial Watch", icon: Activity, color: "from-amber-500 to-yellow-600", pinned: true, group: GROUPS.money };
 const BUDGET: AppEntry = { href: "/budget", label: "Budget", icon: Wallet, color: "from-amber-500 to-yellow-600", pinned: true, group: GROUPS.money };
 const REPORTS: AppEntry = { href: "/reports", label: "Reports", icon: BarChart3, color: "from-amber-600 to-yellow-700", pinned: true, group: GROUPS.money };
@@ -311,6 +309,7 @@ export const HUB_MONEY: AppEntry = {
   color: "from-amber-500 to-yellow-600",
   group: GROUPS.workspaces,
   children: [
+    GM_DASHBOARD,
     FINANCIAL_WATCH,
     BUDGET,
     REVENUE,
@@ -410,58 +409,22 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     PHOTOS,
     KNOWLEDGE,
   ],
-  gm: [
-    GM_DASHBOARD,
-    MY_DAY,
-    FINANCIAL_WATCH,
-    BUDGET,
-    { ...PURCHASE_REQUESTS, pinned: true },
-    REPORTS,
-    CREATE_PR,
-    CALENDAR,
-    HUB_PROCUREMENT,
-    HUB_PAPERWORK,
-    BOARD_REPORT,
-    REVENUE,
-    TOURNAMENTS,
-    CLUBHOUSE,
-    CAPITAL_PROJECTS,
-    STANDARDS_PLAN,
-    HUB_LIBRARY,
-    STAFF,
-    REPORT_ISSUE,
-  ],
-  bdh: [
-    { ...PR_AUDIT, pinned: true },
-    { ...PURCHASE_REQUESTS, pinned: true },
-    FINANCIAL_WATCH,
-    BUDGET,
-    REPORTS,
-    REVENUE,
-    CAPITAL_PROJECTS,
-    TOURNAMENTS,
-    WORK_ORDERS,
-  ],
 };
 
 export interface RoleFlags {
-  view: AppView;
   isPro: boolean;
   isForeman: boolean;
   isMechanic: boolean;
   isLaborer: boolean;
 }
 
-/** Resolve which catalog a user sees from their view + role flags. */
+/** Resolve which catalog a user sees from their role flags. */
 export function resolveCatalogKey({
-  view,
   isPro,
   isForeman,
   isMechanic,
   isLaborer,
 }: RoleFlags): CatalogKey {
-  if (view === "gm") return "gm";
-  if (view === "bdh") return "bdh";
   if (isPro) return "pro";
   if (isLaborer) return "crew";
   if (isMechanic) return "mechanic";

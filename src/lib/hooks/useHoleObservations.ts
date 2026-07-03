@@ -47,7 +47,7 @@ export const priorityColors: Record<TaskPriority, { bg: string; text: string; pi
   critical: { bg: "bg-red-100", text: "text-red-700", pin: "#DC2626" },
   high: { bg: "bg-orange-100", text: "text-orange-700", pin: "#EA580C" },
   normal: { bg: "bg-blue-100", text: "text-blue-700", pin: "#2563EB" },
-  low: { bg: "bg-gray-100", text: "text-gray-600", pin: "#6B7280" },
+  low: { bg: "bg-muted", text: "text-muted-foreground", pin: "#6B7280" },
 };
 
 // ── Create Data ──

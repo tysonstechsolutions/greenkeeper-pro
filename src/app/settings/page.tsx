@@ -10,8 +10,6 @@ import {
   Shield,
   ChevronRight,
   Leaf,
-  Briefcase,
-  Landmark,
   HelpCircle,
   FileText,
   Smartphone,
@@ -19,8 +17,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { useView } from "@/lib/providers/view-provider";
-import { cn } from "@/lib/utils";
 import { RoleVisible } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { usePwaInstall } from "@/lib/hooks/usePwaInstall";
@@ -84,7 +80,6 @@ const adminSections = [
 
 export default function SettingsPage() {
   const { profile, loading } = useAuth();
-  const { view, setView } = useView();
   const { isInstalled } = usePwaInstall();
 
   // Hide the "Install App" row once running as an installed standalone app.
@@ -148,54 +143,6 @@ export default function SettingsPage() {
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
         </Link>
-      </div>
-
-      {/* App view switch */}
-      <div className="gk-animate-in gk-animate-in-1 mb-6">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
-          App view
-        </h2>
-        <div className="bg-card rounded-xl border border-border p-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <button
-            onClick={() => setView("super")}
-            className={cn(
-              "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
-              view === "super"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/50",
-            )}
-          >
-            <Leaf className="w-4 h-4" />
-            Superintendent
-          </button>
-          <button
-            onClick={() => setView("gm")}
-            className={cn(
-              "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
-              view === "gm"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/50",
-            )}
-          >
-            <Briefcase className="w-4 h-4" />
-            General Manager
-          </button>
-          <button
-            onClick={() => setView("bdh")}
-            className={cn(
-              "flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition",
-              view === "bdh"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/50",
-            )}
-          >
-            <Landmark className="w-4 h-4" />
-            Business Division Head
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2 px-1">
-          Switch between turf operations and business/admin. Same data either way.
-        </p>
       </div>
 
       {/* General Settings */}

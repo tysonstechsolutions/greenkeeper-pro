@@ -274,7 +274,7 @@ export default function ClubhousePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-6">
+    <div className="min-h-screen bg-background pb-24 md:pb-6">
       {/* Toast Message */}
       {toastMessage && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border max-w-md animate-in fade-in slide-in-from-top-2 ${
@@ -295,7 +295,7 @@ export default function ClubhousePage() {
       )}
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-card border-b border-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -303,8 +303,8 @@ export default function ClubhousePage() {
                 <Building className="w-8 h-8 text-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 truncate">Clubhouse</h1>
-                <p className="text-sm md:text-base text-gray-600">Issues & Maintenance Tracking</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-foreground truncate">Clubhouse</h1>
+                <p className="text-sm md:text-base text-muted-foreground">Issues & Maintenance Tracking</p>
               </div>
             </div>
             <Button
@@ -323,26 +323,26 @@ export default function ClubhousePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card className="border-l-4 border-l-blue-500">
             <CardContent className="pt-6">
-              <div className="text-sm text-gray-600 mb-1">Open Issues</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.openCount}</div>
+              <div className="text-sm text-muted-foreground mb-1">Open Issues</div>
+              <div className="text-3xl font-bold text-foreground">{stats.openCount}</div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-amber-500">
             <CardContent className="pt-6">
-              <div className="text-sm text-gray-600 mb-1">In Progress</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.inProgressCount}</div>
+              <div className="text-sm text-muted-foreground mb-1">In Progress</div>
+              <div className="text-3xl font-bold text-foreground">{stats.inProgressCount}</div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-green-500">
             <CardContent className="pt-6">
-              <div className="text-sm text-gray-600 mb-1">Completed</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.completedCount}</div>
+              <div className="text-sm text-muted-foreground mb-1">Completed</div>
+              <div className="text-3xl font-bold text-foreground">{stats.completedCount}</div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-red-500">
             <CardContent className="pt-6">
-              <div className="text-sm text-gray-600 mb-1">Urgent</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.urgentCount}</div>
+              <div className="text-sm text-muted-foreground mb-1">Urgent</div>
+              <div className="text-3xl font-bold text-foreground">{stats.urgentCount}</div>
             </CardContent>
           </Card>
         </div>
@@ -353,46 +353,46 @@ export default function ClubhousePage() {
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="w-5 h-5" style={{ color: categoryColors['damage'] }} />
-                <span className="text-sm text-gray-600">Damage</span>
+                <span className="text-sm text-muted-foreground">Damage</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.damageCount}</div>
+              <div className="text-2xl font-bold text-foreground">{stats.damageCount}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="w-5 h-5" style={{ color: categoryColors['cleaning'] }} />
-                <span className="text-sm text-gray-600">Cleaning</span>
+                <span className="text-sm text-muted-foreground">Cleaning</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.cleaningCount}</div>
+              <div className="text-2xl font-bold text-foreground">{stats.cleaningCount}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-2">
                 <ShoppingCart className="w-5 h-5" style={{ color: categoryColors['order'] }} />
-                <span className="text-sm text-gray-600">Orders</span>
+                <span className="text-sm text-muted-foreground">Orders</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.orderCount}</div>
+              <div className="text-2xl font-bold text-foreground">{stats.orderCount}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 mb-2">
                 <Wrench className="w-5 h-5" style={{ color: categoryColors['maintenance'] }} />
-                <span className="text-sm text-gray-600">Maintenance</span>
+                <span className="text-sm text-muted-foreground">Maintenance</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.maintenanceCount}</div>
+              <div className="text-2xl font-bold text-foreground">{stats.maintenanceCount}</div>
             </CardContent>
           </Card>
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
+        <div className="bg-card rounded-lg border border-border p-6 mb-8">
           <div className="flex flex-col gap-4">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search issues..."
                 value={searchTerm}
@@ -404,7 +404,7 @@ export default function ClubhousePage() {
             {/* Category and Status Filters */}
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
-                <Label className="text-xs font-semibold text-gray-700 mb-2 block">Category</Label>
+                <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Category</Label>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant={selectedCategory === 'all' ? 'default' : 'outline'}
@@ -429,7 +429,7 @@ export default function ClubhousePage() {
               </div>
 
               <div className="flex-1">
-                <Label className="text-xs font-semibold text-gray-700 mb-2 block">Status</Label>
+                <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Status</Label>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant={selectedStatus === 'all' ? 'default' : 'outline'}
@@ -464,9 +464,9 @@ export default function ClubhousePage() {
         ) : filteredIssues.length === 0 ? (
           <Card>
             <CardContent className="pt-12 pb-12 text-center">
-              <Building className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 font-medium">No issues found</p>
-              <p className="text-gray-400 text-sm mt-1">Create a new issue or adjust your filters</p>
+              <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground font-medium">No issues found</p>
+              <p className="text-muted-foreground text-sm mt-1">Create a new issue or adjust your filters</p>
             </CardContent>
           </Card>
         ) : (
@@ -481,7 +481,7 @@ export default function ClubhousePage() {
               >
                 {/* Photo Thumbnail */}
                 {issue.photos && issue.photos.length > 0 && (
-                  <div className="relative w-full h-48 bg-gray-200 overflow-hidden">
+                  <div className="relative w-full h-48 bg-muted overflow-hidden">
                     <img
                       src={issue.photos[0]}
                       alt={issue.title}
@@ -493,7 +493,7 @@ export default function ClubhousePage() {
                 <CardContent className="pt-6">
                   {/* Title and Category */}
                   <div className="mb-4">
-                    <h3 className="font-bold text-lg text-gray-900 mb-2">{issue.title}</h3>
+                    <h3 className="font-bold text-lg text-foreground mb-2">{issue.title}</h3>
                     <div className="flex flex-wrap gap-2">
                       <Badge
                         style={{
@@ -526,14 +526,14 @@ export default function ClubhousePage() {
 
                   {/* Location */}
                   {issue.location && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                       <MapPin className="w-4 h-4" />
                       {issue.location}
                     </div>
                   )}
 
                   {/* Metadata */}
-                  <div className="space-y-2 mb-4 text-sm text-gray-600">
+                  <div className="space-y-2 mb-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4" />
                       {new Date(issue.created_at).toLocaleDateString()}
@@ -550,12 +550,12 @@ export default function ClubhousePage() {
                       </div>
                     )}
                     {issue.assigned_to && (
-                      <div className="text-gray-700">
+                      <div className="text-muted-foreground">
                         <span className="font-semibold">Assigned to:</span> {issue.assigned_to}
                       </div>
                     )}
                     {issue.estimated_cost != null && (
-                      <div className="text-gray-700">
+                      <div className="text-muted-foreground">
                         <span className="font-semibold">Est. Cost:</span> ${Number(issue.estimated_cost).toFixed(2)}
                       </div>
                     )}
@@ -567,15 +567,15 @@ export default function ClubhousePage() {
                       {/* Description */}
                       {issue.description && (
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-2">Description</h4>
-                          <p className="text-gray-600 text-sm">{issue.description}</p>
+                          <h4 className="font-semibold text-foreground mb-2">Description</h4>
+                          <p className="text-muted-foreground text-sm">{issue.description}</p>
                         </div>
                       )}
 
                       {/* All Photos */}
                       {issue.photos && issue.photos.length > 0 && (
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-2">
+                          <h4 className="font-semibold text-foreground mb-2">
                             Photos ({issue.photos.length})
                           </h4>
                           <div className="grid grid-cols-2 gap-2">
@@ -594,8 +594,8 @@ export default function ClubhousePage() {
                       {/* Repair Notes */}
                       {issue.repair_notes && (
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-2">Repair Notes</h4>
-                          <p className="text-gray-600 text-sm">{issue.repair_notes}</p>
+                          <h4 className="font-semibold text-foreground mb-2">Repair Notes</h4>
+                          <p className="text-muted-foreground text-sm">{issue.repair_notes}</p>
                         </div>
                       )}
 
@@ -832,7 +832,7 @@ export default function ClubhousePage() {
                 Estimated Cost
               </Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                 <Input
                   id="estimatedCost"
                   name="estimatedCost"
@@ -851,7 +851,7 @@ export default function ClubhousePage() {
             {/* Photo Upload */}
             <div>
               <Label className="font-semibold mb-2 block">Photos</Label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
+              <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-muted-foreground transition-colors">
                 <input
                   type="file"
                   accept="image/*"
@@ -867,13 +867,13 @@ export default function ClubhousePage() {
                 >
                   {uploadingPhoto ? (
                     <>
-                      <Loader2 className="w-6 h-6 text-gray-400 animate-spin mb-2" />
-                      <span className="text-sm text-gray-600">Uploading...</span>
+                      <Loader2 className="w-6 h-6 text-muted-foreground animate-spin mb-2" />
+                      <span className="text-sm text-muted-foreground">Uploading...</span>
                     </>
                   ) : (
                     <>
-                      <Camera className="w-6 h-6 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-600">Click to upload or take photo</span>
+                      <Camera className="w-6 h-6 text-muted-foreground mb-2" />
+                      <span className="text-sm text-muted-foreground">Click to upload or take photo</span>
                     </>
                   )}
                 </label>

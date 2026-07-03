@@ -102,7 +102,7 @@ const zoneTypeColors: Record<string, string> = {
   spray: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300",
   drip: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   bubbler: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
-  manual: "bg-gray-100 text-gray-800 dark:bg-gray-900/40 dark:text-gray-300",
+  manual: "bg-muted text-muted-foreground",
 };
 
 const areaColors: Record<string, string> = {
