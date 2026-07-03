@@ -5,7 +5,7 @@
 // duties per area, My Day tasks, and this week's events. Everything else
 // is one tap away through the workspace doors.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 import { useOperations } from "@/lib/operations/use-operations";
 import { isInSeason, ymdLocal } from "@/lib/operations/engine";
 import type { DutyArea } from "@/lib/operations/types";
+import { directSelectList } from "@/lib/supabase/rest";
+import { evaluateCerts, type Certification, type EvaluatedCert } from "@/lib/people/certs";
 import { useMyDay } from "@/lib/my-day/use-my-day";
 import { useCalendar } from "@/lib/calendar/use-calendar";
 import { kindMeta } from "@/lib/calendar/types";
@@ -44,6 +46,33 @@ export default function TodayPage() {
   const myDay = useMyDay();
   const calendar = useCalendar();
   const [showScheduled, setShowScheduled] = useState(false);
+
+  // Expiring certifications ride the alarm section (Phase 5). Light fetch —
+  // only active certs, evaluated client-side.
+  const [certAlarms, setCertAlarms] = useState<EvaluatedCert[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    directSelectList<Certification>("certifications", {
+      columns: "*",
+      filters: ["is_active=eq.true", "expires_date=not.is.null"],
+      limit: 200,
+      label: "today.certs",
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setCertAlarms(
+          evaluateCerts(rows, new Date()).filter(
+            (e) => e.status === "expired" || e.status === "expiring",
+          ),
+        );
+      })
+      .catch(() => {
+        // Non-critical — Today still renders without cert alarms.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const now = new Date();
   const dateLabel = now.toLocaleDateString("en-US", {
@@ -122,7 +151,7 @@ export default function TodayPage() {
       ) : (
         <>
           {/* Alarms */}
-          {alarms.length > 0 && (
+          {(alarms.length > 0 || certAlarms.length > 0) && (
             <section className="mb-6 gk-animate-in gk-animate-in-2">
               <p className="gk-section-label mb-2 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 text-warning" />
@@ -135,6 +164,38 @@ export default function TodayPage() {
                     item={e}
                     onComplete={() => ops.completeObligation(e)}
                   />
+                ))}
+                {certAlarms.map(({ cert, status, daysUntil }) => (
+                  <Link
+                    key={cert.id}
+                    href="/certifications"
+                    className="gk-card flex items-center gap-3 px-4 py-3 hover:border-primary/30 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium truncate">
+                          {cert.cert_name} — {cert.holder}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[11px] font-semibold px-1.5 py-0.5 rounded-md border",
+                            status === "expired"
+                              ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : "bg-warning/15 text-warning-foreground border-warning/40",
+                          )}
+                        >
+                          {status === "expired"
+                            ? `Expired ${-(daysUntil ?? 0)} day${daysUntil === -1 ? "" : "s"} ago`
+                            : daysUntil === 0
+                              ? "Expires today"
+                              : `Expires in ${daysUntil} days`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Certification · renew before it lapses
+                      </p>
+                    </div>
+                  </Link>
                 ))}
               </div>
             </section>

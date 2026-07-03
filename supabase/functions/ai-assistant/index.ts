@@ -441,6 +441,29 @@ const TOOLS = [
     },
   },
   {
+    name: "add_certification",
+    description:
+      "Track a certification or license with its expiry (food handler, cash handling, pesticide applicator...). Expiring certs alarm on Today 60 days out. CONFIRM holder, name, and expiry before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        holder: { type: "string", description: "Who holds it (person's name)" },
+        cert_name: { type: "string", description: "e.g. Food Handler, IL Pesticide Applicator" },
+        license_number: { type: "string" },
+        issued_date: { type: "string", description: "YYYY-MM-DD" },
+        expires_date: { type: "string", description: "YYYY-MM-DD (omit if it never expires)" },
+        notes: { type: "string" },
+      },
+      required: ["holder", "cert_name"],
+    },
+  },
+  {
+    name: "list_certifications",
+    description:
+      "List tracked certifications/licenses with holders and expiry dates.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
     name: "log_restaurant_purchase",
     description:
       "Record a restaurant/F&B purchase (US Foods invoice etc.) — this is what feeds the restaurant's spend on the P&L. CONFIRM vendor, date, and amount before calling.",
@@ -1216,6 +1239,46 @@ async function executeTool(
         return `✅ ${pr.internal_order ?? pr.vendor1_name}: actual $${amount} recorded (submitted $${submitted}, variance ${diff >= 0 ? "+" : ""}$${diff}).`;
       }
 
+      case "add_certification": {
+        const { data, error } = await supabase
+          .from("certifications")
+          .insert({
+            holder: String(input.holder).trim(),
+            cert_name: String(input.cert_name).trim(),
+            license_number: input.license_number || null,
+            issued_date: isYmd(input.issued_date) ? input.issued_date : null,
+            expires_date: isYmd(input.expires_date) ? input.expires_date : null,
+            notes: input.notes || null,
+          })
+          .select("holder, cert_name, expires_date")
+          .single();
+        if (error) return `Error adding certification: ${error.message}`;
+        return `✅ Tracking: ${data.cert_name} — ${data.holder}${
+          data.expires_date
+            ? `, expires ${data.expires_date} (Today will warn 60 days out)`
+            : " (no expiry)"
+        }.`;
+      }
+
+      case "list_certifications": {
+        const { data, error } = await supabase
+          .from("certifications")
+          .select("holder, cert_name, license_number, expires_date")
+          .eq("is_active", true)
+          .order("expires_date", { ascending: true, nullsFirst: false });
+        if (error) return `Error listing certifications: ${error.message}`;
+        if (!data?.length) return "No certifications tracked yet.";
+        return (
+          "Tracked certifications:\n" +
+          data
+            .map(
+              (c) =>
+                `• ${c.cert_name} — ${c.holder}${c.license_number ? ` (#${c.license_number})` : ""}${c.expires_date ? ` — expires ${c.expires_date}` : " — no expiry"}`,
+            )
+            .join("\n")
+        );
+      }
+
       case "log_restaurant_purchase": {
         const amount = numOrNull(input.amount);
         if (amount === null || amount <= 0) return "amount must be a positive number of dollars.";
@@ -1318,7 +1381,7 @@ const WORKSPACE_CONTEXT: Record<string, string> = {
   money:
     "The user is in the MONEY workspace. Most relevant: add_revenue_entry, record_pr_actual (receipt reconciliation), log_fuel_refill, get_budget_summary, list_obligations (revenue rollup, spend totals).",
   people:
-    "The user is in the PEOPLE & PAPERWORK workspace. Most relevant: search_staff, get_schedule, create_task for paperwork items.",
+    "The user is in the PEOPLE & PAPERWORK workspace. Most relevant: search_staff, get_schedule, add_certification/list_certifications (food handler, cash handling, pesticide license expiry tracking), create_task for paperwork items.",
 };
 
 function buildSystemPrompt(workspace?: string): string {
@@ -1343,7 +1406,7 @@ HOW TO HANDLE REQUESTS:
 5. When they ask about data, LOOK IT UP with the search tools first. Don't guess.
 
 CONFIRM BEFORE WRITING — for anything involving MONEY or the SCHEDULE:
-The tools schedule_tournament, schedule_event, log_fuel_refill, add_revenue_entry, log_restaurant_purchase, record_pr_actual, add_duty, and update_duty are ask-once-verify-then-commit:
+The tools schedule_tournament, schedule_event, log_fuel_refill, add_revenue_entry, log_restaurant_purchase, record_pr_actual, add_duty, update_duty, and add_certification are ask-once-verify-then-commit:
   a. Gather the details from what the user said, filling sensible defaults.
   b. REPLY FIRST with the exact values you intend to save (every field), phrased as a short confirmation question ("Save it? / anything to change?").
   c. Call the tool ONLY AFTER the user confirms in their next message.

@@ -175,6 +175,7 @@ const ENVIRONMENTAL: AppEntry = { href: "/environmental", label: "Environmental 
 const REPORT_ISSUE: AppEntry = { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700", group: GROUPS.course };
 
 const ASSETS: AppEntry = { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
+const IMPORT_ASSETS: AppEntry = { href: "/assets/import", label: "Import Assets", icon: FilePlus, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
 const ORDER_LIST: AppEntry = { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const PURCHASE_REQUESTS: AppEntry = { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const PR_AUDIT: AppEntry = { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
@@ -195,6 +196,7 @@ const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "
 const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
 
 const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
+const CERTIFICATIONS: AppEntry = { href: "/certifications", label: "Certifications", icon: GraduationCap, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP_DUTIES: AppEntry = { href: "/pro-shop-schedule/duties", label: "Shop Duties", icon: ListChecks, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 
@@ -321,6 +323,7 @@ export const HUB_MONEY: AppEntry = {
     REPORTS,
     BOARD_REPORT,
     ASSETS,
+    IMPORT_ASSETS,
   ],
 };
 
@@ -330,7 +333,7 @@ export const HUB_PEOPLE: AppEntry = {
   icon: Users,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [STAFF, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
+  children: [STAFF, CERTIFICATIONS, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
 };
 
 /** Hub lookup by route, so the hub pages can render their own card grid. */
