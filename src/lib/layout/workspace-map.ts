@@ -103,9 +103,9 @@ export const WORKSPACE_PROMPTS: Record<WorkspaceKey, string[]> = {
     "What tasks are open right now?",
   ],
   restaurant: [
+    "Log a US Foods invoice",
     "Record yesterday's food and beverage revenue",
     "Schedule a party in the restaurant",
-    "Add a Friday fryer-cleaning duty",
     "Mark the fire extinguisher checks done",
   ],
   pro_shop: [

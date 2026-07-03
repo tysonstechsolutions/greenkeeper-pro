@@ -73,7 +73,7 @@ describe("computeAreaPnl", () => {
       spend("2026-07-01", "25581", 200), // course
       spend("2026-07-01", "20086", 50), // pro_shop
     ];
-    const out = computeAreaPnl(revenue, spendRows, TODAY);
+    const out = computeAreaPnl(revenue, spendRows, [], TODAY);
     const month = Object.fromEntries(out.month.map((r) => [r.area, r]));
     expect(month.course.revenue).toBe(1200);
     expect(month.course.spend).toBe(200);
@@ -90,7 +90,7 @@ describe("computeAreaPnl", () => {
       rev("2026-07-01", "greens_fees", 100),
       rev("2025-09-01", "greens_fees", 9999), // BEFORE Oct 1 2025 → outside FY26
     ];
-    const out = computeAreaPnl(revenue, [], TODAY);
+    const out = computeAreaPnl(revenue, [], [], TODAY);
     const month = Object.fromEntries(out.month.map((r) => [r.area, r]));
     const fy = Object.fromEntries(out.fiscalYear.map((r) => [r.area, r]));
     expect(month.course.revenue).toBe(100);
@@ -103,28 +103,46 @@ describe("computeAreaPnl", () => {
       rev("2026-10-01", "greens_fees", 100),
       rev("2026-09-01", "greens_fees", 400), // FY26 — must not count
     ];
-    const out = computeAreaPnl(revenue, [], octToday);
+    const out = computeAreaPnl(revenue, [], [], octToday);
     const fy = Object.fromEntries(out.fiscalYear.map((r) => [r.area, r]));
     expect(fy.course.revenue).toBe(100);
     expect(out.fiscalYearLabel).toBe("FY27 to date");
   });
 
   it("unknown cost centers land in a visible unassigned bucket", () => {
-    const out = computeAreaPnl([], [spend("2026-07-01", "77777", 42)], TODAY);
+    const out = computeAreaPnl([], [spend("2026-07-01", "77777", 42)], [], TODAY);
     const unassigned = out.month.find((r) => r.area === "unassigned");
     expect(unassigned).toBeDefined();
     expect(unassigned!.spend).toBe(42);
   });
 
   it("hides the unassigned bucket when everything mapped", () => {
-    const out = computeAreaPnl([rev("2026-07-01", "greens_fees", 10)], [], TODAY);
+    const out = computeAreaPnl([rev("2026-07-01", "greens_fees", 10)], [], [], TODAY);
     expect(out.month.some((r) => r.area === "unassigned")).toBe(false);
+  });
+
+  it("restaurant purchases land in the restaurant Out column", () => {
+    const out = computeAreaPnl(
+      [rev("2026-07-01", "food_beverage", 900)],
+      [],
+      [
+        { month: "2026-07-01", total: 350 },
+        { month: "2026-06-01", total: 500 }, // prior month — FY only
+        { month: "2025-09-01", total: 9999 }, // pre-FY26 — excluded
+      ],
+      TODAY,
+    );
+    const month = Object.fromEntries(out.month.map((r) => [r.area, r]));
+    const fy = Object.fromEntries(out.fiscalYear.map((r) => [r.area, r]));
+    expect(month.restaurant.spend).toBe(350);
+    expect(month.restaurant.net).toBe(550);
+    expect(fy.restaurant.spend).toBe(850);
   });
 
   it("tolerates string numerics from PostgREST without NaN", () => {
     // NUMERIC columns arrive as strings through PostgREST.
     const revenue = [rev("2026-07-01", "greens_fees", "59.97" as unknown as number)];
-    const out = computeAreaPnl(revenue, [], TODAY);
+    const out = computeAreaPnl(revenue, [], [], TODAY);
     const month = Object.fromEntries(out.month.map((r) => [r.area, r]));
     expect(month.course.revenue).toBe(59.97);
     for (const r of out.month) {
@@ -133,7 +151,7 @@ describe("computeAreaPnl", () => {
   });
 
   it("labels the windows", () => {
-    const out = computeAreaPnl([], [], TODAY);
+    const out = computeAreaPnl([], [], [], TODAY);
     expect(out.monthLabel).toBe("July 2026");
     expect(out.fiscalYearLabel).toBe("FY26 to date");
   });

@@ -441,6 +441,21 @@ const TOOLS = [
     },
   },
   {
+    name: "log_restaurant_purchase",
+    description:
+      "Record a restaurant/F&B purchase (US Foods invoice etc.) — this is what feeds the restaurant's spend on the P&L. CONFIRM vendor, date, and amount before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        purchase_date: { type: "string", description: "YYYY-MM-DD (default today)" },
+        vendor: { type: "string", description: "Default US Foods" },
+        amount: { type: "number", description: "Invoice total in dollars" },
+        notes: { type: "string" },
+      },
+      required: ["amount"],
+    },
+  },
+  {
     name: "add_duty",
     description:
       "Add a standing weekly duty to the operating rhythm (shows on Today). CONFIRM title, area, and days before calling.",
@@ -1201,6 +1216,27 @@ async function executeTool(
         return `✅ ${pr.internal_order ?? pr.vendor1_name}: actual $${amount} recorded (submitted $${submitted}, variance ${diff >= 0 ? "+" : ""}$${diff}).`;
       }
 
+      case "log_restaurant_purchase": {
+        const amount = numOrNull(input.amount);
+        if (amount === null || amount <= 0) return "amount must be a positive number of dollars.";
+        const purchaseDate = isYmd(input.purchase_date)
+          ? input.purchase_date
+          : new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabase
+          .from("restaurant_purchases")
+          .insert({
+            purchase_date: purchaseDate,
+            vendor: input.vendor || "US Foods",
+            amount: Math.round(amount * 100) / 100,
+            notes: input.notes || null,
+            created_by: userId,
+          })
+          .select("purchase_date, vendor, amount")
+          .single();
+        if (error) return `Error logging purchase: ${error.message}`;
+        return `✅ Purchase logged: ${data.vendor} $${data.amount} on ${data.purchase_date}. It's in the restaurant's monthly spend.`;
+      }
+
       case "add_duty": {
         const days = Array.isArray(input.days)
           ? input.days.filter((d: unknown) =>
@@ -1276,7 +1312,7 @@ const WORKSPACE_CONTEXT: Record<string, string> = {
   course:
     "The user is in the COURSE & RANGE workspace — turf and grounds. Most relevant: tasks, report_course_issue, equipment, chemicals, log_fuel_refill.",
   restaurant:
-    "The user is in the RESTAURANT workspace — food & beverage. Most relevant: add_revenue_entry (category food_beverage or events), schedule_event (category fb_event — parties, Hot Dog Monday specials), add_duty/update_duty for cleaning routines, complete_obligation (fire extinguishers, inventory count).",
+    "The user is in the RESTAURANT workspace — food & beverage. Most relevant: add_revenue_entry (category food_beverage or events), log_restaurant_purchase (US Foods invoices), schedule_event (category fb_event — parties, Hot Dog Monday specials), add_duty/update_duty for cleaning routines, complete_obligation (fire extinguishers, inventory count).",
   pro_shop:
     "The user is in the PRO SHOP workspace. Most relevant: schedule_tournament (tournaments, leagues, outings), add_revenue_entry (category pro_shop), complete_obligation (pro shop inventory count).",
   money:
@@ -1307,7 +1343,7 @@ HOW TO HANDLE REQUESTS:
 5. When they ask about data, LOOK IT UP with the search tools first. Don't guess.
 
 CONFIRM BEFORE WRITING — for anything involving MONEY or the SCHEDULE:
-The tools schedule_tournament, schedule_event, log_fuel_refill, add_revenue_entry, record_pr_actual, add_duty, and update_duty are ask-once-verify-then-commit:
+The tools schedule_tournament, schedule_event, log_fuel_refill, add_revenue_entry, log_restaurant_purchase, record_pr_actual, add_duty, and update_duty are ask-once-verify-then-commit:
   a. Gather the details from what the user said, filling sensible defaults.
   b. REPLY FIRST with the exact values you intend to save (every field), phrased as a short confirmation question ("Save it? / anything to change?").
   c. Call the tool ONLY AFTER the user confirms in their next message.

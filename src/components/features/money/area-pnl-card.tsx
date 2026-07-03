@@ -13,6 +13,7 @@ import {
   fiscalYearStart,
   monthKey,
   type AreaPnlRow,
+  type RestaurantSpendRow,
   type RevenueRollupRow,
   type SpendRollupRow,
 } from "@/lib/money/area-pnl";
@@ -95,6 +96,7 @@ function PnlTable({ title, rows }: { title: string; rows: AreaPnlRow[] }) {
 export function AreaPnlCard() {
   const [revenue, setRevenue] = useState<RevenueRollupRow[] | null>(null);
   const [spend, setSpend] = useState<SpendRollupRow[] | null>(null);
+  const [restaurantSpend, setRestaurantSpend] = useState<RestaurantSpendRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -105,7 +107,7 @@ export function AreaPnlCard() {
         // 12 months × a handful of categories/cost-centers, so these can
         // never hit the PostgREST max_rows truncation cliff.
         const fyMonth = monthKey(fiscalYearStart(new Date()));
-        const [rev, spendRows] = await Promise.all([
+        const [rev, spendRows, restSpend] = await Promise.all([
           directSelectList<RevenueRollupRow>("revenue_monthly_rollup", {
             columns: "month,category,total",
             filters: [`month=gte.${fyMonth}`],
@@ -120,10 +122,18 @@ export function AreaPnlCard() {
             limit: 500,
             label: "areaPnl.spend",
           }),
+          directSelectList<RestaurantSpendRow>("restaurant_spend_monthly_rollup", {
+            columns: "month,total",
+            filters: [`month=gte.${fyMonth}`],
+            orderBy: [{ column: "month", ascending: true }],
+            limit: 500,
+            label: "areaPnl.restaurantSpend",
+          }),
         ]);
         if (cancelled) return;
         setRevenue(rev);
         setSpend(spendRows);
+        setRestaurantSpend(restSpend);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -134,8 +144,11 @@ export function AreaPnlCard() {
   }, []);
 
   const pnl = useMemo(
-    () => (revenue && spend ? computeAreaPnl(revenue, spend, new Date()) : null),
-    [revenue, spend],
+    () =>
+      revenue && spend && restaurantSpend
+        ? computeAreaPnl(revenue, spend, restaurantSpend, new Date())
+        : null,
+    [revenue, spend, restaurantSpend],
   );
 
   const fyNet = pnl ? pnl.fiscalYear.reduce((s, r) => s + r.net, 0) : 0;
@@ -182,10 +195,9 @@ export function AreaPnlCard() {
       )}
 
       <p className="text-[11px] text-muted-foreground mt-3">
-        Spend counts PRs that are sent, approved, or received, by cost-center
-        code — and uses the reconciled receipt amount when one is recorded.
-        Restaurant purchases (US Foods) aren&apos;t on PRs yet, so its
-        &ldquo;Out&rdquo; column runs low until those land in Phase 4.
+        Spend counts PRs (sent/approved/received) by cost-center code — using
+        the reconciled receipt amount when one is recorded — plus logged
+        restaurant purchases (US Foods invoices on the Restaurant page).
       </p>
     </div>
   );

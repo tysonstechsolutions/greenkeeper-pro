@@ -188,6 +188,12 @@ const SOLE_SOURCE: AppEntry = { href: "/sole-source", label: "Sole Source", icon
 const WORK_ORDERS: AppEntry = { href: "/work-orders", label: "Work Orders", icon: Wrench, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const DOCUMENTS: AppEntry = { href: "/documents", label: "Documents", icon: FolderOpen, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 
+// Phase 4 — Restaurant & Pro Shop modules.
+const RESTAURANT_INVENTORY: AppEntry = { href: "/restaurant/inventory", label: "Inventory Count", icon: ClipboardCheck, color: "from-amber-500 to-orange-600", group: GROUPS.money };
+const PRO_SHOP_INVENTORY: AppEntry = { href: "/pro-shop/inventory", label: "Inventory Count", icon: ClipboardCheck, color: "from-indigo-500 to-blue-600", group: GROUPS.money };
+const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "Purchases", icon: ShoppingCart, color: "from-amber-500 to-orange-600", group: GROUPS.money };
+const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
+
 const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP_DUTIES: AppEntry = { href: "/pro-shop-schedule/duties", label: "Shop Duties", icon: ListChecks, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
@@ -284,7 +290,7 @@ export const HUB_RESTAURANT: AppEntry = {
   icon: UtensilsCrossed,
   color: "from-amber-500 to-orange-600",
   group: GROUPS.workspaces,
-  children: [REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+  children: [RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
 };
 
 export const HUB_PRO_SHOP: AppEntry = {
@@ -293,7 +299,7 @@ export const HUB_PRO_SHOP: AppEntry = {
   icon: Store,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [PRO_SHOP, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
+  children: [PRO_SHOP, PRO_SHOP_INVENTORY, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
 };
 
 export const HUB_MONEY: AppEntry = {

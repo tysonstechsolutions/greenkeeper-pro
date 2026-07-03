@@ -28,6 +28,13 @@ export interface SpendRollupRow {
   total: number;
 }
 
+/** One row of restaurant_spend_monthly_rollup (US Foods invoices — the
+ *  restaurant's spend has no PR/cost-center trail). */
+export interface RestaurantSpendRow {
+  month: string;
+  total: number;
+}
+
 export type PnlBucket = MoneyArea | "unassigned";
 
 export interface AreaPnlRow {
@@ -72,6 +79,7 @@ function accumulate(
   buckets: Map<PnlBucket, { revenue: number; spend: number }>,
   revenue: RevenueRollupRow[],
   spend: SpendRollupRow[],
+  restaurantSpend: RestaurantSpendRow[],
   fromMonth: string,
   toMonth: string,
 ): void {
@@ -82,6 +90,10 @@ function accumulate(
   for (const s of spend) {
     if (s.month < fromMonth || s.month > toMonth) continue;
     buckets.get(areaForCostCenter(s.cost_ctr))!.spend += Number(s.total) || 0;
+  }
+  for (const s of restaurantSpend) {
+    if (s.month < fromMonth || s.month > toMonth) continue;
+    buckets.get("restaurant")!.spend += Number(s.total) || 0;
   }
 }
 
@@ -104,15 +116,16 @@ function toRows(
 export function computeAreaPnl(
   revenue: RevenueRollupRow[],
   spend: SpendRollupRow[],
+  restaurantSpend: RestaurantSpendRow[],
   today: Date,
 ): AreaPnl {
   const thisMonth = monthKey(today);
   const fyMonth = monthKey(fiscalYearStart(today));
 
   const monthBuckets = emptyBuckets();
-  accumulate(monthBuckets, revenue, spend, thisMonth, thisMonth);
+  accumulate(monthBuckets, revenue, spend, restaurantSpend, thisMonth, thisMonth);
   const fyBuckets = emptyBuckets();
-  accumulate(fyBuckets, revenue, spend, fyMonth, thisMonth);
+  accumulate(fyBuckets, revenue, spend, restaurantSpend, fyMonth, thisMonth);
 
   const fyStartYear = fiscalYearStart(today).getFullYear();
   return {
