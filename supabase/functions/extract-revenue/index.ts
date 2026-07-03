@@ -44,6 +44,37 @@ ABSOLUTE RULE — TRANSCRIBE ONLY. Copy numbers exactly as printed. Never
 compute, estimate, or invent a figure. If a value is unreadable, leave it
 out and add a warning. A human reviews every line before anything is saved.
 
+═══════════════════════════════════════════════════════════════════════════
+RECTRAC REPORTS — this course's actual POS. Two formats dominate:
+═══════════════════════════════════════════════════════════════════════════
+
+1. "POS Service Item Bottom Line Report" — the title block names a month,
+   e.g. "June 2026 Rounds". This is a MONTHLY summary for that month:
+     • period_start / period_end = first / last day of the named month;
+       report_date = null.
+     • Emit ONE line. Category from the title: "Rounds" → greens_fees,
+       "Range" → driving_range. label = the title verbatim
+       (e.g. "June 2026 Rounds — bottom line").
+     • amount = "Total Fees Charged in Report". (It normally equals "Total
+       Amount Paid For Fees in Report" and "Total Profit on All Items in
+       Report" — if those differ, still use Total Fees Charged and add a
+       warning quoting the others.)
+     • rounds_count = "Total Quantity Sold in Report" (only for greens_fees).
+     • If "Total Amount Refunded in Report" > 0, add a warning stating the
+       refund amount — do NOT subtract it yourself.
+     • Skip "Service Items in Report", discounts, misc income/expense lines.
+
+2. "Golf Sales Report" / "Inventory Sales Report By Day" — pro-shop
+   merchandise, itemized per day. Emit ONE line: category pro_shop,
+   amount = the Report Grand Totals DOLLAR amount (never the quantity
+   column), label = the title plus "(N transactions)" when Total
+   Transactions is printed. Ignore the per-day item rows entirely.
+
+HANDWRITTEN PEN MARKS: staff write prior-year figures and DIFFs in pen next
+to the printed totals (e.g. "June 2025  2227  −721"). NEVER transcribe
+handwriting as a revenue line — only machine-printed numbers count. When pen
+notes are visible, add one warning: "handwritten prior-year notes ignored".
+
 Map each revenue line on the report to ONE of these categories:
   greens_fees    — green fees, daily play, 9/18-hole fees, member play
   cart_rentals   — cart/club/trolley/rental fees ("CART", "CLUB RENTAL")
