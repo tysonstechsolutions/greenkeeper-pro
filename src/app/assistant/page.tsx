@@ -19,6 +19,12 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/client";
 import { callApi } from "@/lib/api/client";
+import {
+  isWorkspaceKey,
+  WORKSPACE_LABELS,
+  WORKSPACE_PROMPTS,
+  type WorkspaceKey,
+} from "@/lib/layout/workspace-map";
 import ReactMarkdown from "react-markdown";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -69,10 +75,24 @@ export default function AssistantPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [examples] = useState(() => getRandomPrompts(4));
+  const [examples, setExamples] = useState(() => getRandomPrompts(4));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Workspace context (?ws= from the chat bubble / workspace pages). Read
+  // post-hydration — this is a statically exported client page, so
+  // window.location is the source of truth for query params.
+  const [workspace, setWorkspace] = useState<WorkspaceKey | null>(null);
+  const workspaceRef = useRef<WorkspaceKey | null>(null);
+  useEffect(() => {
+    const ws = new URLSearchParams(window.location.search).get("ws");
+    if (isWorkspaceKey(ws)) {
+      setWorkspace(ws);
+      workspaceRef.current = ws;
+      setExamples(WORKSPACE_PROMPTS[ws]);
+    }
+  }, []);
 
   // Stop-generating support
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -298,6 +318,7 @@ export default function AssistantPage() {
               history,
               photoStoragePath: photoStoragePath || undefined,
               photoPublicUrl: photoPublicUrl || undefined,
+              workspace: workspaceRef.current || undefined,
             },
           }),
           abortPromise,
@@ -505,7 +526,9 @@ export default function AssistantPage() {
         <div className="flex-1">
           <h1 className="font-semibold">GreenKeeper AI</h1>
           <p className="text-xs text-muted-foreground">
-            Tell me what needs to happen and I&apos;ll do it
+            {workspace
+              ? `${WORKSPACE_LABELS[workspace]} — tell me what needs to happen`
+              : "Tell me what needs to happen and I'll do it"}
           </p>
         </div>
         {messages.length > 0 && (

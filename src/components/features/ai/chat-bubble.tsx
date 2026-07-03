@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { stripTrailingSlash } from "@/lib/utils/page-title";
+import { workspaceForPath } from "@/lib/layout/workspace-map";
 
 /**
  * Routes (and their subroutes) whose own UI conflicts with the floating
@@ -50,9 +51,13 @@ export function ChatBubble() {
 
   if (!allowed) return null;
 
+  // Carry the workspace into the chat so the assistant opens with the
+  // right context and area-specific suggestion chips.
+  const ws = workspaceForPath(path);
+
   return (
     <Link
-      href="/assistant"
+      href={ws ? `/assistant?ws=${ws}` : "/assistant"}
       data-chat-bubble
       className="fixed bottom-28 right-4 md:bottom-6 md:right-6 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
       aria-label="Open AI Assistant"

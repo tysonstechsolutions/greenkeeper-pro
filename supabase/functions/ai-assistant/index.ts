@@ -306,12 +306,201 @@ const TOOLS = [
       required: ["equipment_id"],
     },
   },
+  // ── Operation Blueprint Phase 3: per-area intake tools ────────────────────
+  {
+    name: "schedule_tournament",
+    description:
+      "Schedule a golf event — tournament, outing, league, charity, military event, or practice round. CONFIRM the details with the user before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Event name" },
+        event_date: { type: "string", description: "YYYY-MM-DD" },
+        event_end_date: { type: "string", description: "YYYY-MM-DD, only for multi-day events" },
+        event_type: {
+          type: "string",
+          enum: ["tournament", "outing", "league", "charity", "military", "practice_round", "other"],
+        },
+        expected_players: { type: "number" },
+        format: { type: "string", description: "e.g. Scramble, Stroke Play, Best Ball" },
+        shotgun_start: { type: "boolean" },
+        first_tee_time: { type: "string", description: "HH:MM (24h)" },
+        contact_name: { type: "string" },
+        contact_phone: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["name", "event_date"],
+    },
+  },
+  {
+    name: "schedule_event",
+    description:
+      "Put a non-golf item on the internal calendar: an F&B event/party, appointment, meeting, deadline, or anything dated. CONFIRM the details with the user before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" },
+        event_date: { type: "string", description: "YYYY-MM-DD" },
+        category: {
+          type: "string",
+          enum: ["fb_event", "appointment", "meeting", "deadline", "other"],
+        },
+        start_time: { type: "string", description: "HH:MM (24h)" },
+        expected_guests: { type: "number" },
+        location: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: ["title", "event_date"],
+    },
+  },
+  {
+    name: "log_fuel_refill",
+    description:
+      "Record a fuel delivery/refill (Reladyne). CONFIRM tank, gallons, and cost with the user before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tank: { type: "string", description: "e.g. Diesel, Gasoline, Used cooking oil" },
+        refill_date: { type: "string", description: "YYYY-MM-DD (default today)" },
+        gallons: { type: "number" },
+        cost: { type: "number", description: "Dollar amount" },
+        vendor: { type: "string", description: "Default Reladyne" },
+        sent_to_business_office: {
+          type: "boolean",
+          description: "True if the signed receipt already went to the business office",
+        },
+        notes: { type: "string" },
+      },
+      required: ["tank"],
+    },
+  },
+  {
+    name: "add_revenue_entry",
+    description:
+      "Record revenue for a day or a whole month (e.g. from a RecTrac report the user reads out). CONFIRM date, category, and amount before calling. Amounts are DOLLARS.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        entry_date: {
+          type: "string",
+          description: "YYYY-MM-DD. For a monthly report use the LAST day of that month.",
+        },
+        category: {
+          type: "string",
+          enum: [
+            "greens_fees",
+            "cart_rentals",
+            "pro_shop",
+            "food_beverage",
+            "events",
+            "memberships",
+            "driving_range",
+            "other",
+          ],
+        },
+        amount: { type: "number" },
+        rounds_count: { type: "number", description: "Rounds played — greens_fees only" },
+        description: { type: "string", description: "e.g. 'RecTrac July 2026 Rounds report'" },
+      },
+      required: ["entry_date", "category", "amount"],
+    },
+  },
+  {
+    name: "list_obligations",
+    description:
+      "List the recurring obligations (tank inspections, inventory counts, 889 renewals...) with their cadence and whether the current period is already completed.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "complete_obligation",
+    description:
+      "Mark a recurring obligation as completed for the current period. Use the slug from list_obligations. Undoable, so no confirmation needed.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        slug: { type: "string", description: "Obligation slug from list_obligations" },
+        note: { type: "string" },
+      },
+      required: ["slug"],
+    },
+  },
+  {
+    name: "record_pr_actual",
+    description:
+      "Record the ACTUAL cost from the business office's receipt against a purchase request (reconciliation). Search by internal order number (FY26-GC-0012) or vendor name. CONFIRM the amount and which PR before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        pr_search: {
+          type: "string",
+          description: "Internal order number or vendor name fragment",
+        },
+        actual_amount: { type: "number", description: "Dollar amount from the receipt" },
+      },
+      required: ["pr_search", "actual_amount"],
+    },
+  },
+  {
+    name: "add_duty",
+    description:
+      "Add a standing weekly duty to the operating rhythm (shows on Today). CONFIRM title, area, and days before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string" },
+        area: { type: "string", enum: ["course", "restaurant", "pro_shop"] },
+        days: {
+          type: "array",
+          items: { type: "string", enum: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] },
+          description: "Weekdays the duty recurs on",
+        },
+        season: { type: "string", enum: ["in_season", "year_round"] },
+        note: { type: "string" },
+      },
+      required: ["title", "area", "days"],
+    },
+  },
+  {
+    name: "update_duty",
+    description:
+      "Change or retire a standing weekly duty — move its days, edit the note, or deactivate it. Finds the duty by a title fragment. CONFIRM before calling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title_match: { type: "string", description: "Part of the duty's title" },
+        days: {
+          type: "array",
+          items: { type: "string", enum: ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] },
+        },
+        is_active: { type: "boolean", description: "False retires the duty" },
+        note: { type: "string" },
+      },
+      required: ["title_match"],
+    },
+  },
 ];
 
 // ── Tool execution ──────────────────────────────────────────────────────────
 
 // deno-lint-ignore no-explicit-any
 type ToolInput = Record<string, any>;
+
+function isYmd(v: unknown): v is string {
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function numOrNull(v: unknown): number | null {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+/** Period key for obligations — mirrors src/lib/operations/engine.ts. */
+function periodKeyFor(cadence: string, d: Date): string {
+  const y = d.getFullYear();
+  if (cadence === "monthly") return `${y}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  if (cadence === "quarterly") return `${y}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+  return `${y}`;
+}
 
 async function executeTool(
   toolName: string,
@@ -813,6 +1002,262 @@ async function executeTool(
         return `✅ Equipment updated!\n• ${data.name}\n• Status: ${data.status}\n• Condition: ${data.condition_status}`;
       }
 
+      // ── Phase 3 intake tools ────────────────────────────────────────────
+
+      case "schedule_tournament": {
+        if (!isYmd(input.event_date)) return "event_date must be YYYY-MM-DD.";
+        const { data, error } = await supabase
+          .from("tournaments")
+          .insert({
+            name: String(input.name).trim(),
+            event_date: input.event_date,
+            event_end_date: isYmd(input.event_end_date) ? input.event_end_date : null,
+            event_type: input.event_type || "tournament",
+            expected_players: numOrNull(input.expected_players),
+            format: input.format || null,
+            shotgun_start: Boolean(input.shotgun_start),
+            first_tee_time: input.first_tee_time || null,
+            contact_name: input.contact_name || null,
+            contact_phone: input.contact_phone || null,
+            notes: input.notes || null,
+            created_by: userId,
+          })
+          .select("id, name, event_date, event_type")
+          .single();
+        if (error) return `Error scheduling event: ${error.message}`;
+        return `✅ Scheduled: ${data.name} (${data.event_type}) on ${data.event_date}. It's on the calendar and the Tournaments page.`;
+      }
+
+      case "schedule_event": {
+        if (!isYmd(input.event_date)) return "event_date must be YYYY-MM-DD.";
+        const { data, error } = await supabase
+          .from("calendar_events")
+          .insert({
+            title: String(input.title).trim(),
+            event_date: input.event_date,
+            category: input.category || "other",
+            start_time: input.start_time || null,
+            expected_guests: numOrNull(input.expected_guests),
+            location: input.location || null,
+            notes: input.notes || null,
+            created_by: userId,
+          })
+          .select("id, title, event_date, category")
+          .single();
+        if (error) return `Error adding calendar event: ${error.message}`;
+        return `✅ On the calendar: ${data.title} (${data.category}) on ${data.event_date}.`;
+      }
+
+      case "log_fuel_refill": {
+        const refillDate = isYmd(input.refill_date)
+          ? input.refill_date
+          : new Date().toISOString().slice(0, 10);
+        const { data, error } = await supabase
+          .from("fuel_refills")
+          .insert({
+            tank: String(input.tank).trim(),
+            refill_date: refillDate,
+            gallons: numOrNull(input.gallons),
+            cost: numOrNull(input.cost),
+            vendor: input.vendor || "Reladyne",
+            sent_to_business_office: Boolean(input.sent_to_business_office),
+            notes: input.notes || null,
+            created_by: userId,
+          })
+          .select("tank, refill_date, gallons, cost, sent_to_business_office")
+          .single();
+        if (error) return `Error logging refill: ${error.message}`;
+        return `✅ Refill logged: ${data.tank} on ${data.refill_date}${
+          data.gallons ? ` — ${data.gallons} gal` : ""
+        }${data.cost ? ` / $${data.cost}` : ""}. Receipt ${
+          data.sent_to_business_office ? "marked sent to the business office" : "NOT yet sent to the business office — flag it on /fuel when it goes out"
+        }.`;
+      }
+
+      case "add_revenue_entry": {
+        if (!isYmd(input.entry_date)) return "entry_date must be YYYY-MM-DD.";
+        const amount = numOrNull(input.amount);
+        if (amount === null) return "amount must be a number of dollars.";
+        const { data, error } = await supabase
+          .from("revenue_entries")
+          .insert({
+            entry_date: input.entry_date,
+            category: input.category,
+            amount,
+            rounds_count:
+              input.category === "greens_fees" ? numOrNull(input.rounds_count) : null,
+            description: input.description || null,
+            source: "manual",
+            created_by: userId,
+          })
+          .select("entry_date, category, amount, rounds_count")
+          .single();
+        if (error) return `Error recording revenue: ${error.message}`;
+        return `✅ Revenue recorded: $${data.amount} ${data.category} on ${data.entry_date}${
+          data.rounds_count ? ` (${data.rounds_count} rounds)` : ""
+        }.`;
+      }
+
+      case "list_obligations": {
+        const { data: obs, error } = await supabase
+          .from("obligations")
+          .select("slug, title, workspace, cadence, due_day, due_month, lead_days, notes")
+          .eq("is_active", true)
+          .order("sort_order");
+        if (error) return `Error loading obligations: ${error.message}`;
+        if (!obs?.length) return "No active obligations.";
+
+        const now = new Date();
+        const keys = [
+          periodKeyFor("monthly", now),
+          periodKeyFor("quarterly", now),
+          periodKeyFor("annual", now),
+        ];
+        const { data: comps } = await supabase
+          .from("obligation_completions")
+          .select("obligation_id, period")
+          .in("period", keys);
+        const { data: obIds } = await supabase
+          .from("obligations")
+          .select("id, slug")
+          .eq("is_active", true);
+        const idBySlug = new Map((obIds ?? []).map((o) => [o.id, o.slug]));
+        const doneSlugs = new Set(
+          (comps ?? []).map((c) => idBySlug.get(c.obligation_id)).filter(Boolean),
+        );
+
+        const lines = obs.map((o) => {
+          const due =
+            o.cadence === "monthly"
+              ? `day ${o.due_day === -1 ? "end-of-month" : o.due_day} monthly`
+              : o.cadence === "annual"
+                ? `${o.due_month}/${o.due_day === -1 ? "end" : o.due_day} yearly`
+                : `quarterly (month ${o.due_month}, day ${o.due_day})`;
+          return `• [${o.slug}] ${o.title} — ${due}, ${o.workspace}${
+            doneSlugs.has(o.slug) ? " — ✅ done this period" : " — not yet done this period"
+          }${o.notes ? ` (${o.notes})` : ""}`;
+        });
+        return `Active obligations:\n${lines.join("\n")}`;
+      }
+
+      case "complete_obligation": {
+        const { data: ob, error } = await supabase
+          .from("obligations")
+          .select("id, slug, title, cadence")
+          .eq("slug", String(input.slug).trim())
+          .single();
+        if (error || !ob) return `No obligation with slug "${input.slug}". Use list_obligations first.`;
+        const period = periodKeyFor(ob.cadence, new Date());
+        const { error: insErr } = await supabase.from("obligation_completions").insert({
+          obligation_id: ob.id,
+          period,
+          completed_by: userId,
+          note: input.note || null,
+        });
+        if (insErr) {
+          if (insErr.code === "23505") {
+            return `${ob.title} was already recorded as done for ${period}.`;
+          }
+          return `Error completing obligation: ${insErr.message}`;
+        }
+        return `✅ ${ob.title} marked done for ${period}.`;
+      }
+
+      case "record_pr_actual": {
+        const amount = numOrNull(input.actual_amount);
+        if (amount === null) return "actual_amount must be a number of dollars.";
+        const term = String(input.pr_search).trim();
+        const { data: prs, error } = await supabase
+          .from("purchase_requests")
+          .select("id, internal_order, vendor1_name, ige_amount, status, actual_amount")
+          .in("status", ["approved", "received"])
+          .or(`internal_order.ilike.%${term}%,vendor1_name.ilike.%${term}%`)
+          .order("date_prepared", { ascending: false })
+          .limit(5);
+        if (error) return `Error searching PRs: ${error.message}`;
+        if (!prs?.length) {
+          return `No approved/received PR matches "${term}". Ask the user for the internal order number (FY26-GC-####).`;
+        }
+        if (prs.length > 1) {
+          const list = prs
+            .map(
+              (p) =>
+                `• ${p.internal_order ?? "no order #"} — ${p.vendor1_name ?? "?"} — submitted $${p.ige_amount}${p.actual_amount != null ? ` (already reconciled at $${p.actual_amount})` : ""}`,
+            )
+            .join("\n");
+          return `Multiple PRs match "${term}" — ask the user which one:\n${list}`;
+        }
+        const pr = prs[0];
+        const { error: upErr } = await supabase
+          .from("purchase_requests")
+          .update({
+            actual_amount: Math.round(amount * 100) / 100,
+            reconciled_at: new Date().toISOString(),
+          })
+          .eq("id", pr.id);
+        if (upErr) return `Error recording actual: ${upErr.message}`;
+        const submitted = Number(pr.ige_amount) || 0;
+        const diff = Math.round((amount - submitted) * 100) / 100;
+        return `✅ ${pr.internal_order ?? pr.vendor1_name}: actual $${amount} recorded (submitted $${submitted}, variance ${diff >= 0 ? "+" : ""}$${diff}).`;
+      }
+
+      case "add_duty": {
+        const days = Array.isArray(input.days)
+          ? input.days.filter((d: unknown) =>
+              ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].includes(String(d)),
+            )
+          : [];
+        if (days.length === 0) return "days must include at least one weekday (mon..sun).";
+        const { data, error } = await supabase
+          .from("operation_duties")
+          .insert({
+            title: String(input.title).trim(),
+            area: input.area,
+            days,
+            season: input.season || "in_season",
+            note: input.note || null,
+          })
+          .select("title, area, days")
+          .single();
+        if (error) return `Error adding duty: ${error.message}`;
+        return `✅ Duty added: "${data.title}" (${data.area}) on ${(data.days as string[]).join(", ")}. It shows on Today on those days.`;
+      }
+
+      case "update_duty": {
+        const term = String(input.title_match).trim();
+        const { data: duties, error } = await supabase
+          .from("operation_duties")
+          .select("id, title, area, days, is_active")
+          .ilike("title", `%${term}%`)
+          .limit(5);
+        if (error) return `Error searching duties: ${error.message}`;
+        if (!duties?.length) return `No duty title matches "${term}".`;
+        if (duties.length > 1) {
+          return `Multiple duties match "${term}" — ask which one:\n${duties
+            .map((d) => `• ${d.title} (${d.area}${d.is_active ? "" : ", retired"})`)
+            .join("\n")}`;
+        }
+        // deno-lint-ignore no-explicit-any
+        const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+        if (Array.isArray(input.days)) {
+          const days = input.days.filter((d: unknown) =>
+            ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].includes(String(d)),
+          );
+          if (days.length > 0) patch.days = days;
+        }
+        if (typeof input.is_active === "boolean") patch.is_active = input.is_active;
+        if (typeof input.note === "string") patch.note = input.note;
+        if (Object.keys(patch).length === 1) return "Nothing to change.";
+        const { data, error: upErr } = await supabase
+          .from("operation_duties")
+          .update(patch)
+          .eq("id", duties[0].id)
+          .select("title, days, is_active")
+          .single();
+        if (upErr) return `Error updating duty: ${upErr.message}`;
+        return `✅ Duty updated: "${data.title}" — days ${(data.days as string[]).join(", ")}${data.is_active ? "" : " (retired)"}.`;
+      }
+
       default:
         return `Unknown tool: ${toolName}`;
     }
@@ -825,34 +1270,64 @@ async function executeTool(
 
 // ── System prompt ───────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are the AI assistant for GreenKeeper Pro, a golf course management app used at Veterans Memorial Golf Course, Naval Station Great Lakes, Illinois.
+const WORKSPACE_CONTEXT: Record<string, string> = {
+  today:
+    "The user is on TODAY — the operating-rhythm home. Most relevant: list_obligations, complete_obligation, add_duty/update_duty, create_task.",
+  course:
+    "The user is in the COURSE & RANGE workspace — turf and grounds. Most relevant: tasks, report_course_issue, equipment, chemicals, log_fuel_refill.",
+  restaurant:
+    "The user is in the RESTAURANT workspace — food & beverage. Most relevant: add_revenue_entry (category food_beverage or events), schedule_event (category fb_event — parties, Hot Dog Monday specials), add_duty/update_duty for cleaning routines, complete_obligation (fire extinguishers, inventory count).",
+  pro_shop:
+    "The user is in the PRO SHOP workspace. Most relevant: schedule_tournament (tournaments, leagues, outings), add_revenue_entry (category pro_shop), complete_obligation (pro shop inventory count).",
+  money:
+    "The user is in the MONEY workspace. Most relevant: add_revenue_entry, record_pr_actual (receipt reconciliation), log_fuel_refill, get_budget_summary, list_obligations (revenue rollup, spend totals).",
+  people:
+    "The user is in the PEOPLE & PAPERWORK workspace. Most relevant: search_staff, get_schedule, create_task for paperwork items.",
+};
+
+function buildSystemPrompt(workspace?: string): string {
+  const workspaceBlurb = workspace && WORKSPACE_CONTEXT[workspace]
+    ? `\nCURRENT WORKSPACE: ${WORKSPACE_CONTEXT[workspace]}\n`
+    : "";
+
+  return `You are the AI assistant for GreenKeeper Pro, a golf course management app used at Veterans Memorial Golf Course, Naval Station Great Lakes, Illinois.
 
 You are the superintendent's right-hand tool. When they tell you something needs to happen, DO IT — don't tell them to go to another page. You have full read and write access.
-
+${workspaceBlurb}
 CAPABILITIES:
-- Search and look up: tasks, equipment, chemicals, weather, budget, staff, schedules, order items
-- Create: tasks, order items, course/parking/clubhouse issues
-- Update: tasks (status, priority, notes), order items (status, vendor), equipment (status, condition)
+- Search and look up: tasks, equipment, chemicals, weather, budget, staff, schedules, order items, recurring obligations
+- Create: tasks, order items, course/parking/clubhouse issues, tournaments/leagues, calendar events, fuel refills, revenue entries, weekly duties
+- Update: tasks, order items, equipment, duties, obligation completions, PR receipt reconciliation
 
 HOW TO HANDLE REQUESTS:
 1. When someone says something needs to be done (e.g., "we need to fix the sprinkler on 7"), CREATE A TASK for it immediately.
 2. When someone says they need something ordered (e.g., "we need more bunker sand"), ADD IT TO THE ORDER LIST immediately.
 3. When someone reports a problem (e.g., "there's a pothole by the cart barn"), REPORT THE ISSUE immediately.
-4. When someone says to mark something done, UPDATE THE TASK STATUS to completed.
+4. When someone says to mark something done, UPDATE THE TASK STATUS to completed — and when it's a recurring obligation ("tank inspections are done"), use complete_obligation.
 5. When they ask about data, LOOK IT UP with the search tools first. Don't guess.
 
+CONFIRM BEFORE WRITING — for anything involving MONEY or the SCHEDULE:
+The tools schedule_tournament, schedule_event, log_fuel_refill, add_revenue_entry, record_pr_actual, add_duty, and update_duty are ask-once-verify-then-commit:
+  a. Gather the details from what the user said, filling sensible defaults.
+  b. REPLY FIRST with the exact values you intend to save (every field), phrased as a short confirmation question ("Save it? / anything to change?").
+  c. Call the tool ONLY AFTER the user confirms in their next message.
+  d. If they correct a value, restate and reconfirm only what changed.
+Task, order-list, and issue tools keep acting immediately (the crew relies on that speed). complete_obligation also acts immediately — it's undoable on Today.
+
 IMPORTANT RULES:
-1. Always use tools to look up or write real data. Never make up information.
+1. Always use tools to look up or write real data. Never make up information — and NEVER guess dollar amounts or dates; ask.
 2. Keep answers concise — this is used on a phone.
 3. When you create or update something, confirm what you did with the details.
 4. If you need to find a task/item before updating it, search first, then update.
 5. For chemical/pesticide questions, mention Illinois RUP compliance requirements when relevant.
 6. When the user says "today", use the current date.
 7. Use the report_course_issue tool for problems on the course — it automatically routes to the right table (parking_lot_issues, clubhouse_issues, or tasks).
+8. Monthly RecTrac report totals go in as ONE revenue entry dated the LAST day of that month ("Rounds" reports → greens_fees with rounds_count; "Golf Sales" → pro_shop).
 
 Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
 
 The user's role and name will be provided with each message.`;
+}
 
 // ── Claude API helper ───────────────────────────────────────────────────────
 
@@ -860,6 +1335,7 @@ async function callClaude(
   apiKey: string,
   // deno-lint-ignore no-explicit-any
   messages: any[],
+  systemPrompt: string,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -875,7 +1351,7 @@ async function callClaude(
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: TOOLS,
         messages,
       }),
@@ -926,6 +1402,7 @@ Deno.serve(async (req) => {
       message?: unknown;
       history?: unknown;
       photoStoragePath?: unknown;
+      workspace?: unknown;
     };
 
     const message = typeof body.message === "string" ? body.message : "";
@@ -933,6 +1410,9 @@ Deno.serve(async (req) => {
     const photoStoragePath = typeof body.photoStoragePath === "string"
       ? body.photoStoragePath
       : undefined;
+    // Which workspace the chat was opened from — scopes the system prompt.
+    const workspace = typeof body.workspace === "string" ? body.workspace : undefined;
+    const systemPrompt = buildSystemPrompt(workspace);
 
     if (!message || message.trim().length === 0) {
       return jsonError("Message is required", 400);
@@ -964,7 +1444,7 @@ Deno.serve(async (req) => {
     ];
 
     // ── First Claude call (may return tool_use) ─────────────────────────
-    let claudeResponse = await callClaude(apiKey, messages);
+    let claudeResponse = await callClaude(apiKey, messages, systemPrompt);
     if (!claudeResponse.ok) {
       const errText = await claudeResponse.text();
       console.error(`Claude API error ${claudeResponse.status}:`, errText);
@@ -1016,7 +1496,7 @@ Deno.serve(async (req) => {
         content: toolResults as any,
       });
 
-      claudeResponse = await callClaude(apiKey, messages);
+      claudeResponse = await callClaude(apiKey, messages, systemPrompt);
       if (!claudeResponse.ok) {
         console.error(`Claude API error on tool round ${rounds}:`, claudeResponse.status);
         return jsonError("AI service error during tool processing.", 502);
