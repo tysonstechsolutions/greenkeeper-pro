@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -16,10 +16,21 @@ import {
   ChevronLeft,
   CheckCircle,
   Sparkles,
+  Receipt,
+  Camera,
+  ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
+import { directPatchRow, publicStorageUrl } from "@/lib/supabase/rest";
+import { uploadPhoto } from "@/lib/supabase/storage";
+import {
+  prVariance,
+  formatVariance,
+  prSubmittedTotal,
+  VARIANCE_BADGE_CLASSES,
+} from "@/lib/pr-reconciliation";
 import { isCcFeeItem } from "@/lib/pr-cc-fee";
 import {
   generatePurchaseRequestReport,
@@ -533,13 +544,275 @@ function SowWizardModal({
   );
 }
 
+// ── Reconciliation card ───────────────────────────────────────────────────────
+//
+// Shown once a PR is approved/received: the business office's receipt often
+// comes back with a DIFFERENT actual cost than the submitted total, and this
+// is where the superintendent records it (plus an optional receipt photo).
+
+function ReconciliationCard({
+  pr,
+  submittedTotal,
+  userId,
+  onSaved,
+}: {
+  pr: PurchaseRequest;
+  submittedTotal: number;
+  userId: string | null;
+  onSaved: (patch: Partial<PurchaseRequest>) => void;
+}) {
+  const reconciled = pr.reconciled_at != null && pr.actual_amount != null;
+  const [editing, setEditing] = useState(!reconciled);
+  const [amount, setAmount] = useState(
+    pr.actual_amount != null ? String(pr.actual_amount) : "",
+  );
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const inputCls =
+    "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40";
+
+  function clearFile() {
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleSave() {
+    const parsed = Number(amount);
+    if (!amount.trim() || !Number.isFinite(parsed) || parsed < 0) {
+      setError("Enter the actual dollar amount shown on the receipt.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setWarning(null);
+    try {
+      // Receipt photo is BEST-EFFORT: the dollar amount is the record that
+      // matters and must never be blocked by a flaky photo upload.
+      let receiptPath = pr.receipt_path;
+      let uploadWarning: string | null = null;
+      if (file) {
+        try {
+          if (!userId) throw new Error("not signed in");
+          const { storagePath } = await uploadPhoto(file, userId);
+          receiptPath = storagePath;
+        } catch {
+          uploadWarning =
+            "Amount saved — the receipt photo didn't upload. You can add it again later with Edit.";
+        }
+      }
+      const patch: Partial<PurchaseRequest> = {
+        actual_amount: Math.round(parsed * 100) / 100,
+        receipt_path: receiptPath,
+        reconciled_at: new Date().toISOString(),
+      };
+      await directPatchRow(
+        "purchase_requests",
+        "id",
+        pr.id,
+        patch,
+        "purchase-requests.reconcile",
+      );
+      onSaved(patch);
+      clearFile();
+      setWarning(uploadWarning);
+      setEditing(false);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save reconciliation.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="mt-3 rounded-xl border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h2 className="font-semibold text-sm flex items-center gap-1.5">
+          <Receipt className="w-4 h-4 text-muted-foreground" />
+          Reconciliation
+        </h2>
+        {reconciled && !editing && (
+          <button
+            type="button"
+            onClick={() => {
+              setAmount(
+                pr.actual_amount != null ? String(pr.actual_amount) : "",
+              );
+              setEditing(true);
+            }}
+            className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <Edit className="w-3 h-3" />
+            Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            The business office&apos;s receipt often shows a different actual
+            cost than the {formatMoney(submittedTotal)} submitted. Enter what
+            was really paid once the receipt comes back.
+          </p>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Actual amount from receipt
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                $
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className={`${inputCls} pl-7`}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="flex flex-1 min-w-0 items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:bg-muted cursor-pointer transition-colors">
+              <Camera className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                {file
+                  ? file.name
+                  : pr.receipt_path
+                    ? "Replace receipt photo (optional)"
+                    : "Add receipt photo (optional)"}
+              </span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            {file && (
+              <button
+                type="button"
+                onClick={clearFile}
+                aria-label="Remove selected photo"
+                className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 dark:text-red-400">{error}</p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            {reconciled && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(false);
+                  setFile(null);
+                  setError(null);
+                }}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 transition-all"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 active:scale-[0.98] transition-all"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Save Actual Cost
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      ) : (
+        (() => {
+          const v = prVariance(submittedTotal, Number(pr.actual_amount) || 0);
+          return (
+            <div>
+              {warning && (
+                <div className="mb-2.5 rounded-lg border border-warning/40 bg-warning/10 p-2.5 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-warning-foreground shrink-0 mt-0.5" />
+                  <p className="text-xs text-warning-foreground">{warning}</p>
+                </div>
+              )}
+              <dl className="grid grid-cols-2 gap-y-2 gap-x-3 text-sm">
+                <Detail
+                  label="Submitted Total"
+                  value={formatMoney(v.submitted)}
+                />
+                <Detail label="Actual (Receipt)" value={formatMoney(v.actual)} />
+              </dl>
+              <div className="mt-2.5 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  Variance
+                </span>
+                <span
+                  className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md border ${VARIANCE_BADGE_CLASSES[v.tone]}`}
+                >
+                  {formatVariance(v)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Reconciled {formatDate(pr.reconciled_at)}
+                </p>
+                {pr.receipt_path && (
+                  <a
+                    href={publicStorageUrl("photos", pr.receipt_path)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View receipt
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })()
+      )}
+    </section>
+  );
+}
+
 // ── Main view component ───────────────────────────────────────────────────────
 
 function ViewPurchaseRequestInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
-  const { profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
 
   const isManagement =
     profile?.role === "super" ||
@@ -823,6 +1096,19 @@ function ViewPurchaseRequestInner() {
             )}
           </div>
         </div>
+
+        {/* Reconciliation — approved/received PRs get their receipt's actual
+            cost recorded here (it often differs from the submitted total). */}
+        {(pr.status === "approved" || pr.status === "received") && (
+          <ReconciliationCard
+            pr={pr}
+            submittedTotal={prSubmittedTotal(pr)}
+            userId={user?.id ?? null}
+            onSaved={(patch) =>
+              setPr((prev) => (prev ? { ...prev, ...patch } : prev))
+            }
+          />
+        )}
 
         {/* Action buttons */}
         <div className="mt-3 flex flex-col gap-2">

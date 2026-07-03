@@ -24,6 +24,7 @@ import {
   Building2,
   X,
   Undo2,
+  Receipt,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
@@ -34,6 +35,13 @@ import {
 } from "@/lib/supabase/rest";
 import type { PurchaseRequest } from "@/types/database";
 import { PrStageTracker } from "@/components/features/purchase-requests/pr-stage-tracker";
+import {
+  prVariance,
+  formatVariance,
+  prNeedsReceipt,
+  prSubmittedTotal,
+  VARIANCE_BADGE_CLASSES,
+} from "@/lib/pr-reconciliation";
 
 function formatDate(iso: string): string {
   const anchored = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
@@ -670,6 +678,16 @@ export default function PurchaseRequestsListPage() {
                   ? STATUS_FLOW[pr.sow_status] ?? STATUS_FLOW.submitted
                   : null;
               const SowNextIcon = sowMeta?.nextIcon ?? null;
+              // Reconciliation: variance once the receipt's actual cost is
+              // recorded; "needs receipt" while a received PR still lacks it.
+              const variance =
+                pr.actual_amount != null
+                  ? prVariance(
+                      // Same source as the detail card — never two variances.
+                      prSubmittedTotal(pr),
+                      Number(pr.actual_amount),
+                    )
+                  : null;
               return (
                 <li
                   key={pr.id}
@@ -711,6 +729,20 @@ export default function PurchaseRequestsListPage() {
                       <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                     </div>
                     <PrStageTracker status={pr.status} className="mt-3" />
+                    {prNeedsReceipt(pr) && (
+                      <p className="mt-2 mr-2 inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning-foreground">
+                        <Receipt className="w-3 h-3" />
+                        Needs receipt
+                      </p>
+                    )}
+                    {variance && (
+                      <p
+                        className={`mt-2 mr-2 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${VARIANCE_BADGE_CLASSES[variance.tone]}`}
+                      >
+                        <Receipt className="w-3 h-3" />
+                        {formatVariance(variance)}
+                      </p>
+                    )}
                     {sowMeta && (
                       <p className="mt-2 inline-flex items-center gap-1 text-[11px] text-violet-600 dark:text-violet-400">
                         <FileSignature className="w-3 h-3" />

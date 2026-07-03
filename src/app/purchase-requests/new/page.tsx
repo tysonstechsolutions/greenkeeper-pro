@@ -1742,6 +1742,11 @@ function NewPurchaseRequestPageInner() {
         sow_storage_path: null,
         sow_status: null,
         status: "draft",
+        // A preview never has reconciliation data — that only exists once
+        // the business office's receipt comes back.
+        actual_amount: null,
+        receipt_path: null,
+        reconciled_at: null,
         created_by: user?.id ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

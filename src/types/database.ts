@@ -1715,6 +1715,13 @@ export interface PurchaseRequest {
 
   status: "draft" | "submitted" | "sent" | "approved" | "received";
 
+  // Reconciliation (added in 20260702 migration). The business office's
+  // receipt often shows a different actual cost than the submitted total —
+  // these capture what was really paid once the receipt comes back.
+  actual_amount: number | null;
+  receipt_path: string | null;
+  reconciled_at: string | null;
+
   created_by: string | null;
   created_at: string;
   updated_at: string;

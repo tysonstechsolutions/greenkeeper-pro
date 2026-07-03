@@ -28,6 +28,7 @@ const TITLES: Record<string, string> = {
   "/course-map": "Course Map",
   "/environmental": "Environmental",
   "/financial-watch": "Financial Watch",
+  "/fuel": "Fuel Log",
   // /equipment is now an internal/legacy URL — operational data lives on
   // /assets/view. Title still reads "Assets" so the header is consistent
   // even if a deep link lands the user there.

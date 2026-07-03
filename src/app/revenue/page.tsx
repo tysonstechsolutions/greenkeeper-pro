@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard, GM_ROLES } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
+import { UploadReportCard } from "./upload-report";
 
 // ── Types ──
 interface RevenueEntry {
@@ -255,6 +256,14 @@ export default function RevenuePage() {
           icon={DollarSign}
           title="Revenue Tracking"
           description="Enter and track daily revenue"
+        />
+
+        {/* ── Upload a POS/register report (AI-transcribed, human-verified) ── */}
+        <UploadReportCard
+          userId={user?.id ?? null}
+          onSaved={() => {
+            Promise.all([fetchEntries(), fetchSummary()]);
+          }}
         />
 
         {/* ── Quick Entry Form ── */}

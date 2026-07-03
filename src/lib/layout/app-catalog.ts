@@ -36,6 +36,7 @@ import {
   Activity,
   ListChecks,
   Package,
+  Fuel,
   Sunrise,
   UtensilsCrossed,
   Store,
@@ -178,6 +179,9 @@ const ORDER_LIST: AppEntry = { href: "/order-list", label: "Order List", icon: S
 const PURCHASE_REQUESTS: AppEntry = { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const PR_AUDIT: AppEntry = { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
 const VENDORS: AppEntry = { href: "/vendors", label: "Vendors", icon: Phone, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
+// Fuel refill log — Reladyne deliveries. Money-side (spend tracking) but the
+// tanks physically live on the course, so it appears in both hubs.
+const FUEL: AppEntry = { href: "/fuel", label: "Fuel Log", icon: Fuel, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 
 const SOW: AppEntry = { href: "/sow", label: "Statement of Work", icon: ClipboardSignature, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const SOLE_SOURCE: AppEntry = { href: "/sole-source", label: "Sole Source", icon: Scale, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
@@ -226,6 +230,7 @@ export const HUB_COURSE: AppEntry = {
     CLUBHOUSE,
     WORK_ORDERS,
     ENVIRONMENTAL,
+    FUEL,
     PHOTOS,
     VOICE_LOG,
     WEATHER,
@@ -304,6 +309,7 @@ export const HUB_MONEY: AppEntry = {
     PURCHASE_REQUESTS,
     PR_AUDIT,
     ORDER_LIST,
+    FUEL,
     VENDORS,
     CAPITAL_PROJECTS,
     REPORTS,

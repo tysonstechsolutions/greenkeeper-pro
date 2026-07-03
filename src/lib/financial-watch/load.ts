@@ -63,12 +63,19 @@ export async function loadFinancialWatch(now: Date): Promise<FinancialWatch> {
         limit: 2000,
         label: "financial-watch.budgetItems",
       }),
+      // NOTE: the project's PostgREST max_rows caps ANY response at 1000
+      // rows regardless of these limits. Ordering newest-first means that
+      // if daily POS uploads ever push a window past 1000 rows, truncation
+      // sheds the OLDEST rows (skewing only the year-over-year comparison)
+      // instead of silently eating the current month. The real fix is
+      // monthly rollup views like the per-area P&L uses (area-pnl.ts).
       directSelectList<RawExpense>("expenses", {
         columns: "amount,expense_date,status,budget_item_id,vendor,description",
         filters: [
           `expense_date=gte.${calendarYear}-01-01`,
           `expense_date=lte.${calendarYear}-12-31`,
         ],
+        orderBy: [{ column: "expense_date", ascending: false }],
         limit: 10000,
         label: "financial-watch.expenses",
       }),
@@ -78,6 +85,7 @@ export async function loadFinancialWatch(now: Date): Promise<FinancialWatch> {
           `entry_date=gte.${priorYear}-01-01`,
           `entry_date=lte.${calendarYear}-12-31`,
         ],
+        orderBy: [{ column: "entry_date", ascending: false }],
         limit: 20000,
         label: "financial-watch.revenue",
       }),
