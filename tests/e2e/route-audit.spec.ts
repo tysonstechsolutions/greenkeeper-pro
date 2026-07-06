@@ -103,13 +103,8 @@ for (const route of ROUTES) {
           const bottomNav = document.querySelector(
             "[data-bottom-nav]",
           ) as HTMLElement | null;
-          const chatBubble = document.querySelector(
-            "[data-chat-bubble]",
-          ) as HTMLElement | null;
 
           const navRect = bottomNav?.getBoundingClientRect();
-          const headerRect = header?.getBoundingClientRect();
-          const bubbleRect = chatBubble?.getBoundingClientRect();
 
           const navZ = bottomNav
             ? parseInt(getComputedStyle(bottomNav).zIndex || "0", 10) || 0
@@ -141,12 +136,9 @@ for (const route of ROUTES) {
             for (const el of allFixed) {
               if (
                 el === bottomNav ||
-                el === chatBubble ||
                 (header && header.contains(el)) ||
                 el.hasAttribute("data-bottom-nav") ||
-                el.hasAttribute("data-chat-bubble") ||
-                el.closest("[data-bottom-nav]") ||
-                el.closest("[data-chat-bubble]")
+                el.closest("[data-bottom-nav]")
               )
                 continue;
 
@@ -181,60 +173,16 @@ for (const route of ROUTES) {
             }
           }
 
-          // ── 2. Page-level fixed elements clashing with chat bubble ──
-          if (bubbleRect && bubbleRect.width > 0) {
-            for (const el of allFixed) {
-              if (
-                el === bottomNav ||
-                el === chatBubble ||
-                el.hasAttribute("data-bottom-nav") ||
-                el.hasAttribute("data-chat-bubble") ||
-                el.closest("[data-bottom-nav]") ||
-                el.closest("[data-chat-bubble]") ||
-                (header && header.contains(el))
-              )
-                continue;
+          // (The floating chat bubble overlap check was removed with the
+          // bubble itself — the AI entry point is now the in-flow AssistantBar
+          // under the header, which can't collide with fixed elements.)
 
-              const r = el.getBoundingClientRect();
-              if (r.width === 0 || r.height === 0) continue;
-
-              // Only care about overlap with the small bubble circle
-              const intersects =
-                r.bottom > bubbleRect.top &&
-                r.top < bubbleRect.bottom &&
-                r.right > bubbleRect.left &&
-                r.left < bubbleRect.right;
-
-              if (intersects) {
-                // Exclude full-screen overlays (modals/sheets — expected to
-                // cover the bubble; the bubble's z-40 is below modal z-50).
-                const fillsViewport =
-                  r.width >= window.innerWidth - 4 &&
-                  r.height >= window.innerHeight - 4;
-                if (fillsViewport) continue;
-
-                out.overlap.push({
-                  type: "overlaps_chat_bubble",
-                  el: summarize(el),
-                  rect: {
-                    top: Math.round(r.top),
-                    bottom: Math.round(r.bottom),
-                    left: Math.round(r.left),
-                    right: Math.round(r.right),
-                  },
-                });
-              }
-            }
-          }
-
-          // ── 3. Off-viewport fixed elements (might indicate broken layout) ──
+          // ── 2. Off-viewport fixed elements (might indicate broken layout) ──
           for (const el of allFixed) {
             if (
               el === bottomNav ||
-              el === chatBubble ||
               el === header ||
               el.hasAttribute("data-bottom-nav") ||
-              el.hasAttribute("data-chat-bubble") ||
               el.hasAttribute("data-app-header")
             )
               continue;

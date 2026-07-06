@@ -8,7 +8,7 @@ import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
 import { OnlineStatus } from "@/components/ui/online-status";
 import { PwaInstallCapture } from "@/lib/hooks/usePwaInstall";
-import { ChatBubble } from "@/components/features/ai/chat-bubble";
+import { AssistantBar } from "@/components/features/ai/assistant-bar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { DebugOverlay } from "@/components/debug-overlay";
 import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
@@ -80,6 +80,11 @@ export function AppShell({ children }: AppShellProps) {
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
 
+        {/* Inline AI chat bar — pinned under the header on every page so the
+            user can ask the assistant without leaving the page they're on.
+            Replaces the old floating chat bubble → /assistant flow. */}
+        {user && <AssistantBar />}
+
         {/* Page content — wrapped in an ErrorBoundary so a crash inside one
             page doesn't leave the whole shell wedged with invisible broken
             event handlers. The boundary resets on route change via `key`. */}
@@ -90,9 +95,6 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Mobile Bottom Nav */}
       <BottomNav />
-
-      {/* Floating AI Chat Bubble */}
-      {user && <ChatBubble />}
 
       {/* Capture the PWA install prompt (no auto-popup — the install entry
           point now lives in Settings → Install App). Renders nothing. */}

@@ -71,7 +71,7 @@ const TITLES: Record<string, string> = {
  * Normalize pathnames that Next.js with `trailingSlash: true` can hand us
  * (e.g. "/dashboard/", "/tasks//", "/") to a canonical "/<segment>" form.
  * Exported so other route-matching code (AppShell.isPublicRoute,
- * ChatBubble's FAB list) can use the same rule.
+ * AssistantBar's route check) can use the same rule.
  */
 export function stripTrailingSlash(pathname: string): string {
   if (!pathname || pathname === "/") return "/";
