@@ -378,7 +378,7 @@ export default function StaffPage() {
       </div>
 
       {/* Pro shop & golf ops (separate lightweight roster) */}
-      <ProShopRosterCard />
+      <ProShopRosterCard profileNames={profiles} onImported={fetchStaff} />
 
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
