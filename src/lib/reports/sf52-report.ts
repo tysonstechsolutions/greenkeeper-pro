@@ -113,17 +113,49 @@ export async function generateSf52Report(
   }
 }
 
+const FILE_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/** "07JUL26" — the date stamp the office puts on recruitment SF-52 filenames. */
+function fileDate(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}${FILE_MONTHS[d.getMonth()]}${String(d.getFullYear()).slice(2)}`;
+}
+
 /**
- * Filename convention from the office's own saved SF-52s
- * (e.g. "SF52_Resignation_Damian_Golf Mechanic.pdf"):
- * parts joined by underscores, spaces kept inside each part.
+ * Filename conventions from the office's own saved SF-52s:
+ *  - employee actions: "SF52_Resignation_Damian_Golf Mechanic.pdf"
+ *    (action _ last name _ position title)
+ *  - recruitments (vacancy, no employee):
+ *    "SF52_Recruitment_NA-08 Mechanic_07JUL26.pdf"
+ *    (action _ plan-grade + title _ date created)
+ * Parts joined by underscores, spaces kept inside each part.
  */
-export function sf52Filename(action: string, lastName: string, positionTitle: string): string {
+export function sf52Filename(args: {
+  action: string;
+  positionTitle: string;
+  lastName?: string;
+  /** Recruitment naming: no last name; plan-grade prefix + date suffix. */
+  vacancy?: boolean;
+  payPlan?: string;
+  grade?: string;
+  now?: Date;
+}): string {
   const clean = (s: string) =>
     (s || "")
       .replace(/[\\/:*?"<>|_]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-  const parts = ["SF52", clean(action), clean(lastName), clean(positionTitle)].filter(Boolean);
-  return `${parts.join("_")}.pdf`;
+  const parts = args.vacancy
+    ? [
+        "SF52",
+        clean(args.action),
+        [
+          [clean(args.payPlan ?? ""), clean(args.grade ?? "")].filter(Boolean).join("-"),
+          clean(args.positionTitle),
+        ]
+          .filter(Boolean)
+          .join(" "),
+        fileDate(args.now ?? new Date()),
+      ]
+    : ["SF52", clean(args.action), clean(args.lastName ?? ""), clean(args.positionTitle)];
+  return `${parts.filter(Boolean).join("_")}.pdf`;
 }

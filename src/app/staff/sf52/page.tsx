@@ -207,7 +207,14 @@ function Sf52Content() {
 
   async function buildPdf(): Promise<{ blob: Blob; filename: string; data: Sf52Data }> {
     const data = buildSf52Data(action, pd, form);
-    const filename = sf52Filename(action.box1, lastName, positionTitle);
+    const filename = sf52Filename({
+      action: action.box1,
+      positionTitle,
+      lastName,
+      vacancy: action.key === "recruitment",
+      payPlan: form.toPayPlan,
+      grade: form.toPayBand,
+    });
     const { blob } = await generateSf52Report(data, filename);
     return { blob, filename, data };
   }

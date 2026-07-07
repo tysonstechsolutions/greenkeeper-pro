@@ -234,12 +234,34 @@ describe("recruitment presets (N92's 2026-07 position table)", () => {
 });
 
 describe("sf52Filename", () => {
-  it("matches the office's saved-file convention (spaces kept, no month)", () => {
-    expect(sf52Filename("Resignation", "Damian", "Golf Mechanic")).toBe(
+  const jul7 = new Date("2026-07-07T12:00:00");
+
+  it("employee actions: action _ last name _ title (spaces kept)", () => {
+    expect(sf52Filename({ action: "Resignation", lastName: "Damian", positionTitle: "Golf Mechanic" })).toBe(
       "SF52_Resignation_Damian_Golf Mechanic.pdf",
     );
-    expect(sf52Filename("Recruitment", "Smith", "Rec Aide / Cart Barn")).toBe(
-      "SF52_Recruitment_Smith_Rec Aide Cart Barn.pdf",
+    expect(
+      sf52Filename({ action: "Resignation", lastName: "Melyon", positionTitle: "Restaurant Manager" }),
+    ).toBe("SF52_Resignation_Melyon_Restaurant Manager.pdf");
+    // Illegal filename characters are folded to spaces.
+    expect(
+      sf52Filename({ action: "Transfer", lastName: "Smith", positionTitle: "Rec Aide / Cart Barn" }),
+    ).toBe("SF52_Transfer_Smith_Rec Aide Cart Barn.pdf");
+  });
+
+  it("recruitments: action _ plan-grade title _ date (the office's vacancy naming)", () => {
+    expect(
+      sf52Filename({ action: "Recruitment", positionTitle: "Mechanic", vacancy: true, payPlan: "NA", grade: "08", now: jul7 }),
+    ).toBe("SF52_Recruitment_NA-08 Mechanic_07JUL26.pdf");
+    expect(
+      sf52Filename({ action: "Recruitment", positionTitle: "Laborer", vacancy: true, payPlan: "NA", grade: "03", now: jul7 }),
+    ).toBe("SF52_Recruitment_NA-03 Laborer_07JUL26.pdf");
+    expect(
+      sf52Filename({ action: "Recruitment", positionTitle: "Restaurant Manager", vacancy: true, payPlan: "NF", grade: "03", now: jul7 }),
+    ).toBe("SF52_Recruitment_NF-03 Restaurant Manager_07JUL26.pdf");
+    // No plan/grade typed — no dangling prefix.
+    expect(sf52Filename({ action: "Recruitment", positionTitle: "Mechanic", vacancy: true, now: jul7 })).toBe(
+      "SF52_Recruitment_Mechanic_07JUL26.pdf",
     );
   });
 });
