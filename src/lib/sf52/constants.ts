@@ -15,6 +15,9 @@ export const SF52_FACILITY = {
   dutyStationCode: "00128",
   /** Box 39 — Duty Station. */
   dutyStation: "Great Lakes, IL 60088",
+  /** Box 3 — For Additional Information Call (name and phone). */
+  preparerName: "Tyson Bruce, General Manager",
+  preparerPhone: "847-688-4593",
   /** Box 5 — Action Requested By (typed name/title; signed later with a CAC). */
   requestedBy: "Tyson Bruce, Golf Course Manager",
   /** Box 6 — Action Authorized By (typed name/title). */

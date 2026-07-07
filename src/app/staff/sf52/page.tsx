@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuth } from "@/lib/hooks/useAuth";
 import { useProfiles } from "@/lib/hooks/useProfiles";
 import { directSelectRow } from "@/lib/supabase/rest";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
@@ -47,7 +46,6 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 function Sf52Content() {
   const router = useRouter();
   const params = useSearchParams();
-  const { profile } = useAuth();
   const { profiles } = useProfiles();
 
   const [actionKey, setActionKey] = useState("recruitment");
@@ -248,8 +246,8 @@ function Sf52Content() {
               <p className="text-xs text-muted-foreground">{action.effectiveDateHint}</p>
             </div>
             <div className="space-y-1.5">
-              <Label>For more info, call (box 3 — optional)</Label>
-              <Input value={form.preparerName} onChange={(e) => update("preparerName", e.target.value)} placeholder={profile?.full_name || "Name"} />
+              <Label>For more info, call (box 3)</Label>
+              <Input value={form.preparerName} onChange={(e) => update("preparerName", e.target.value)} placeholder="Name, title" />
               <Input value={form.preparerPhone} onChange={(e) => update("preparerPhone", e.target.value)} placeholder="Phone" />
             </div>
             <div className="space-y-1.5">

@@ -99,6 +99,8 @@ describe("generateSf52Report", () => {
     expect(values.EffectiveDate).toBe("07/20/26"); // Part B-4 / Part E-2 shared field
     expect(values.ActionReqBy).toBe("Tyson Bruce, Golf Course Manager");
     expect(values.ActionAuthBy).toBe("Brian Weeks, MWR/N92 IPD");
+    expect(values.AddntlInfo).toBe("Tyson Bruce, General Manager"); // box 3 default
+    expect(values.PhoneNo).toBe("847-688-4593");
     expect(values.PayPlan1).toBe("NA");
     expect(values.OccCode1).toBe("3502");
     expect(values.GL1).toBe("03");
