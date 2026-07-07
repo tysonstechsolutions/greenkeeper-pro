@@ -11,6 +11,7 @@ import {
   type Sf52FormInputs,
 } from "@/lib/sf52/actions";
 import { lookupPayRate, formatPayRate } from "@/lib/sf52/payscale";
+import { RECRUITMENT_PRESETS } from "@/lib/sf52/recruitment-presets";
 import type { PersonnelDetails } from "@/types/database";
 
 // The generator fetches the fillable form from /templates/ (client-side in
@@ -186,6 +187,48 @@ describe("payscale", () => {
     expect(lookupPayRate("NF", 2, 1)).toBeNull();
     expect(lookupPayRate("NA", 16, 1)).toBeNull();
   });
+});
+
+describe("recruitment presets (N92's 2026-07 position table)", () => {
+  it("matches the provided position/pay details", () => {
+    const byKey = Object.fromEntries(RECRUITMENT_PRESETS.map((p) => [p.key, p]));
+    expect(byKey.mechanic).toMatchObject({ title: "Mechanic", payPlan: "NA", occSeries: "5823", grade: "08", step: "01", hourlyRate: "23.37", salaryRange: "$23.37" });
+    expect(byKey.laborer).toMatchObject({ title: "Laborer", payPlan: "NA", occSeries: "3502", grade: "03", step: "01", hourlyRate: "19.05", salaryRange: "$19.05" });
+    expect(byKey.restaurant_manager).toMatchObject({ title: "Restaurant Manager", payPlan: "NF", occSeries: "1101", grade: "03", step: "", hourlyRate: "", salaryRange: "$55K-$60K", orgUnit: "Restaurant" });
+    // NA rates agree with the 2026 wage schedule.
+    expect(formatPayRate(lookupPayRate("NA", 8, 1)!)).toBe(byKey.mechanic.hourlyRate);
+    expect(formatPayRate(lookupPayRate("NA", 3, 1)!)).toBe(byKey.laborer.hourlyRate);
+  });
+
+  it("a Restaurant Manager recruitment fills NF boxes, no salary box, range in Part D", async () => {
+    const action = getSf52Action("recruitment");
+    const p = RECRUITMENT_PRESETS.find((x) => x.key === "restaurant_manager")!;
+    const data = buildSf52Data(
+      action,
+      null,
+      inputs({
+        box1: action.box1,
+        toPositionTitle: p.title,
+        toPayPlan: p.payPlan,
+        toOccSeries: p.occSeries,
+        toPayBand: p.grade,
+        toStep: p.step,
+        toHourlyRate: p.hourlyRate,
+        proposedSalaryRange: p.salaryRange,
+        orgUnit: p.orgUnit,
+      }),
+    );
+    const { blob } = await generateSf52Report(data, "test.pdf");
+    const { values } = await readFields(blob);
+    expect(values.ToPositionTitleNo).toBe("Restaurant Manager");
+    expect(values.PayPlan2).toBe("NF");
+    expect(values.OccCode2).toBe("1101");
+    expect(values.GL2).toBe("03");
+    expect(values["Step-Rate2"]).toBeUndefined(); // NF has no step
+    expect(values.TotalSal2).toBeUndefined(); // range goes in Part D instead
+    expect(values.ProposedSalaryRange).toBe("$55K-$60K");
+    expect(values.ToPositionLocation).toBe("NAVSTA Great Lakes\rVMGC\rBLDG 8400\rRestaurant\r");
+  }, 60000);
 });
 
 describe("sf52Filename", () => {

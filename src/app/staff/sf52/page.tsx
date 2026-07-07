@@ -22,6 +22,7 @@ import {
   type Sf52FormInputs,
 } from "@/lib/sf52/actions";
 import { SF52_FACILITY } from "@/lib/sf52/constants";
+import { RECRUITMENT_PRESETS } from "@/lib/sf52/recruitment-presets";
 import {
   PAY_PLANS,
   PAY_SCALE_STEPS,
@@ -62,6 +63,26 @@ function Sf52Content() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [presetKey, setPresetKey] = useState("");
+
+  /** One-tap standard recruitment package (N92's position/pay table). */
+  function applyPreset(key: string) {
+    setPresetKey(key);
+    const p = RECRUITMENT_PRESETS.find((x) => x.key === key);
+    if (!p) return;
+    setForm((f) => ({
+      ...f,
+      toPositionTitle: p.title,
+      toPositionNumber: "",
+      toPayPlan: p.payPlan,
+      toOccSeries: p.occSeries,
+      toPayBand: p.grade,
+      toStep: p.step,
+      toHourlyRate: p.hourlyRate,
+      proposedSalaryRange: p.salaryRange,
+      orgUnit: p.orgUnit,
+    }));
+  }
 
   const employees = useMemo(
     () => [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name)),
@@ -76,6 +97,7 @@ function Sf52Content() {
       box1: a.box1,
       reasonForResign: a.extra === "E" && !f.reasonForResign ? REASON_SKELETON : f.reasonForResign,
     }));
+    setPresetKey("");
     setDone(false);
   }, [actionKey]);
 
@@ -245,9 +267,24 @@ function Sf52Content() {
         {/* TO position (new values) */}
         {action.fillTo && (
           <Section title={action.key === "recruitment" ? "Position to fill (TO)" : "New position / pay (TO)"}>
+            {action.key === "recruitment" && (
+              <div className="space-y-1.5 mb-3">
+                <Label>Standard position</Label>
+                <select
+                  value={presetKey}
+                  onChange={(e) => applyPreset(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="">— pick to auto-fill, or type below —</option>
+                  {RECRUITMENT_PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>Position title</Label><Input value={form.toPositionTitle} onChange={(e) => update("toPositionTitle", e.target.value)} /></div>
-              <div className="space-y-1.5"><Label>Position number (optional)</Label><Input value={form.toPositionNumber} onChange={(e) => update("toPositionNumber", e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Org unit (box 22 last line)</Label><Input value={form.orgUnit} onChange={(e) => update("orgUnit", e.target.value)} placeholder="Maintenance" /></div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-3">
               <div className="space-y-1.5">

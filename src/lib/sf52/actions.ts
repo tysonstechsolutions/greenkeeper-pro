@@ -10,7 +10,7 @@
  */
 import type { PersonnelDetails } from "@/types/database";
 import type { Sf52Data } from "@/lib/reports/sf52-report";
-import { SF52_FACILITY } from "./constants";
+import { SF52_FACILITY, sf52OrganizationFor } from "./constants";
 
 export type Sf52Extra = "D" | "E" | "F" | "none";
 
@@ -63,6 +63,8 @@ export interface Sf52FormInputs {
   toPayBand: string;
   toStep: string;
   toHourlyRate: string;
+  /** Last line of the box 14/22 organization block (Maintenance, Restaurant…). */
+  orgUnit: string;
   // Part D (recruitment)
   numRecruitments: string;
   areasOfConsideration: string;
@@ -93,6 +95,7 @@ export const EMPTY_SF52_INPUTS: Sf52FormInputs = {
   toPayBand: "",
   toStep: "",
   toHourlyRate: "",
+  orgUnit: SF52_FACILITY.defaultOrgUnit,
   numRecruitments: "1",
   areasOfConsideration: "All Areas",
   proposedSalaryRange: "",
@@ -164,7 +167,7 @@ export function buildSf52Data(
     d.fromGrade = pd.pay_band || "";
     d.fromStep = pd.step || "";
     d.fromTotalSalary = pd.hourly_rate || "";
-    d.fromPositionLocation = SF52_FACILITY.organization;
+    d.fromPositionLocation = sf52OrganizationFor(f.orgUnit);
   }
 
   if (action.fillTo) {
@@ -174,7 +177,7 @@ export function buildSf52Data(
     d.toGrade = f.toPayBand;
     d.toStep = f.toStep;
     d.toTotalSalary = f.toHourlyRate;
-    d.toPositionLocation = SF52_FACILITY.organization;
+    d.toPositionLocation = sf52OrganizationFor(f.orgUnit);
   }
 
   if (action.extra === "D") {
