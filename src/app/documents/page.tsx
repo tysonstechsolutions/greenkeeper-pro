@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   FolderOpen,
   FileText,
@@ -9,6 +10,7 @@ import {
   Trash2,
   ExternalLink,
   RefreshCw,
+  PencilLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +23,14 @@ import {
   docTypeLabel,
   type CreatedDocument,
 } from "@/lib/documents/saved-documents";
+
+/** Docs that store their form data can be reopened for editing. */
+function editHref(d: CreatedDocument): string | null {
+  if (d.doc_type === "sf52" && d.meta && typeof d.meta === "object" && "form" in d.meta) {
+    return `/staff/sf52?doc=${d.id}`;
+  }
+  return null;
+}
 
 function fmt(s: string): string {
   const dt = new Date(s);
@@ -161,6 +171,17 @@ export default function DocumentsPage() {
                     <span className="font-medium">{docTypeLabel(d.doc_type)}</span> · {fmt(d.created_at)}
                   </p>
                 </div>
+                {(() => {
+                  const href = editHref(d);
+                  return href ? (
+                    <Link
+                      href={href}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm hover:bg-muted/60"
+                    >
+                      <PencilLine className="w-4 h-4" /> Edit
+                    </Link>
+                  ) : null;
+                })()}
                 {url && (
                   <a
                     href={url}

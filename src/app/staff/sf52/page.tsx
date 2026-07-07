@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Loader2, Download, FileText, AlertTriangle, CheckCircle } from "lucide-react";
+import { ArrowLeft, Loader2, Download, Eye, FileText, AlertTriangle, CheckCircle, PencilLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/hooks/useProfiles";
 import { directSelectRow } from "@/lib/supabase/rest";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
-import { generateSf52Report, sf52Filename } from "@/lib/reports/sf52-report";
-import { saveCreatedDocument } from "@/lib/documents/saved-documents";
+import { generateSf52Report, sf52Filename, type Sf52Data } from "@/lib/reports/sf52-report";
+import {
+  saveCreatedDocument,
+  getCreatedDocument,
+  updateCreatedDocument,
+  type CreatedDocument,
+} from "@/lib/documents/saved-documents";
+import { buildSf52DocMeta, parseSf52DocMeta } from "@/lib/sf52/doc-meta";
+import { FilePreviewOverlay, type PreviewSource } from "@/components/pr-audit/file-preview";
 import {
   SF52_ACTIONS,
   getSf52Action,
@@ -59,9 +66,43 @@ function Sf52Content() {
   const update = (k: keyof Sf52FormInputs, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const [busy, setBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [presetKey, setPresetKey] = useState("");
+  const [preview, setPreview] = useState<PreviewSource | null>(null);
+  // When editing a saved SF-52 (?doc=<id>), saving updates this row in place.
+  const [savedDoc, setSavedDoc] = useState<CreatedDocument | null>(null);
+  // Restoring a saved doc sets action/employee/form together — these flags
+  // stop the action-change and employee-load effects from clobbering the
+  // restored inputs with their defaults.
+  const restoreRef = useRef<{ skipActionReset?: boolean; skipEmployeeSeed?: boolean }>({});
+
+  // Reopen a saved SF-52 for editing.
+  useEffect(() => {
+    const docId = params.get("doc");
+    if (!docId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const doc = await getCreatedDocument(docId);
+        if (cancelled || !doc) return;
+        const saved = parseSf52DocMeta(doc.meta);
+        if (!saved) return;
+        restoreRef.current = { skipActionReset: true, skipEmployeeSeed: !!saved.employeeId };
+        setActionKey(saved.actionKey);
+        setEmployeeId(saved.employeeId);
+        setForm(saved.inputs);
+        setSavedDoc(doc);
+      } catch {
+        /* doc gone or unreadable — fall back to a fresh form */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** One-tap standard recruitment package (N92's position/pay table). */
   function applyPreset(key: string) {
@@ -89,6 +130,10 @@ function Sf52Content() {
 
   // Reset box-1 text (and the Part E skeleton) when the action changes.
   useEffect(() => {
+    if (restoreRef.current.skipActionReset) {
+      restoreRef.current.skipActionReset = false;
+      return;
+    }
     const a = getSf52Action(actionKey);
     setForm((f) => ({
       ...f,
@@ -115,6 +160,12 @@ function Sf52Content() {
       const details = row?.personnel_details || null;
       setPd(details);
       setEmployeeName(row?.full_name || "");
+      if (restoreRef.current.skipEmployeeSeed) {
+        // Restoring a saved SF-52 — keep its saved inputs, just load the
+        // employee record behind them.
+        restoreRef.current.skipEmployeeSeed = false;
+        return;
+      }
       setForm((f) => ({
         ...f,
         toPositionTitle: details?.position_title || "",
@@ -154,22 +205,50 @@ function Sf52Content() {
   const lastName = pd?.name_last || employeeName.split(/\s+/).slice(-1)[0] || "Employee";
   const positionTitle = pd?.position_title || form.toPositionTitle || "Position";
 
+  async function buildPdf(): Promise<{ blob: Blob; filename: string; data: Sf52Data }> {
+    const data = buildSf52Data(action, pd, form);
+    const filename = sf52Filename(action.box1, lastName, positionTitle);
+    const { blob } = await generateSf52Report(data, filename);
+    return { blob, filename, data };
+  }
+
+  /** Render the filled form without downloading or saving anything. */
+  async function handlePreview() {
+    setPreviewBusy(true);
+    setError(null);
+    try {
+      const { blob, filename } = await buildPdf();
+      setPreview({ blob, kind: "pdf", filename });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to build the preview.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
   async function handleGenerate() {
     setBusy(true);
     setError(null);
     setDone(false);
     try {
-      const data = buildSf52Data(action, pd, form);
-      const filename = sf52Filename(action.box1, lastName, positionTitle);
-      const { blob } = await generateSf52Report(data, filename);
+      const { blob, filename } = await buildPdf();
       await saveBlobToDevice({ blob, filename, shareTitle: filename });
-      await saveCreatedDocument({
-        docType: "sf52",
-        title: `SF-52 — ${action.label}${employeeName ? ` — ${employeeName}` : ""}`,
-        blob,
-        filename,
-        meta: { action: action.key, employee_id: employeeId || null },
-      });
+      const title = `SF-52 — ${action.label}${employeeName ? ` — ${employeeName}` : ""}`;
+      const meta = buildSf52DocMeta({ actionKey, employeeId, inputs: form });
+      if (savedDoc) {
+        // Editing a saved SF-52 — replace it instead of adding a duplicate.
+        await updateCreatedDocument(savedDoc, { title, blob, filename, meta });
+        const refreshed = await getCreatedDocument(savedDoc.id);
+        if (refreshed) setSavedDoc(refreshed);
+      } else {
+        const id = await saveCreatedDocument({ docType: "sf52", title, blob, filename, meta });
+        // Hold onto the saved row so re-generating after more tweaks updates
+        // the same document rather than piling up copies.
+        if (id) {
+          const created = await getCreatedDocument(id);
+          if (created) setSavedDoc(created);
+        }
+      }
       setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate the SF-52.");
@@ -194,6 +273,16 @@ function Sf52Content() {
       </div>
 
       <div className="space-y-5">
+        {savedDoc && (
+          <div className="rounded-lg border border-blue-300/60 bg-blue-500/5 p-3 text-sm flex items-start gap-2">
+            <PencilLine className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+            <span>
+              Editing the saved copy of <span className="font-medium">{savedDoc.title}</span> — saving
+              updates it in Documents instead of adding a new one.
+            </span>
+          </div>
+        )}
+
         {/* Action + employee */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -422,15 +511,29 @@ function Sf52Content() {
         )}
         {done && (
           <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800 flex items-start gap-2">
-            <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> SF-52 downloaded and saved to Documents.
+            <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            SF-52 downloaded and saved to Documents. Keep tweaking and saving — it updates the same copy.
           </div>
         )}
 
-        <Button onClick={handleGenerate} disabled={busy || !canGenerate} className="gap-2 bg-[#1B4332] hover:bg-[#2D6A4F]">
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {busy ? "Generating…" : "Generate & Download SF-52"}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            onClick={handlePreview}
+            disabled={previewBusy || busy || !canGenerate}
+            className="gap-2"
+          >
+            {previewBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+            {previewBusy ? "Building…" : "Preview"}
+          </Button>
+          <Button onClick={handleGenerate} disabled={busy || previewBusy || !canGenerate} className="gap-2 bg-[#1B4332] hover:bg-[#2D6A4F]">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {busy ? "Saving…" : savedDoc ? "Save changes & Download" : "Generate & Download SF-52"}
+          </Button>
+        </div>
       </div>
+
+      <FilePreviewOverlay source={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }
