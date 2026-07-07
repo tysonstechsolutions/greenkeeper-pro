@@ -5,6 +5,8 @@
  * Per the SF-52 Desk Guide each action drives which side of Part B is filled
  * (FROM = current position, TO = new position) and which extra section is used
  * (D = recruitment, E = resignation, F = remarks for everything else).
+ * Formatting conventions (dates, name commas, plain titles) follow the
+ * office's own filled SF-52s.
  */
 import type { PersonnelDetails } from "@/types/database";
 import type { Sf52Data } from "@/lib/reports/sf52-report";
@@ -22,7 +24,7 @@ export interface Sf52ActionDef {
   /** Fill the TO (new) position from the editable "new values" inputs. */
   fillTo: boolean;
   extra: Sf52Extra;
-  /** Recruitment: append ", vice <former employee>" to box 1. */
+  /** Recruitment: the departing employee's name goes in box 43 ("Vice"). */
   usesVice?: boolean;
   effectiveDateHint: string;
 }
@@ -46,7 +48,9 @@ export function getSf52Action(key: string): Sf52ActionDef {
 
 /** All the fields a user types in when creating an SF-52. */
 export interface Sf52FormInputs {
-  proposedEffectiveDate: string;
+  proposedEffectiveDate: string; // yyyy-mm-dd from the date input
+  requestedBy: string;
+  authorizedBy: string;
   preparerName: string;
   preparerPhone: string;
   box1: string;
@@ -68,8 +72,7 @@ export interface Sf52FormInputs {
   conflictingReasons: string; // "" | "yes" | "no"
   // Part E (resignation)
   reasonForResign: string;
-  resignEffectiveDate: string;
-  dateSigned: string;
+  dateSigned: string; // yyyy-mm-dd
   forwardingAddress: string;
   // Part F (other actions)
   partFRemarks: string;
@@ -77,6 +80,8 @@ export interface Sf52FormInputs {
 
 export const EMPTY_SF52_INPUTS: Sf52FormInputs = {
   proposedEffectiveDate: "",
+  requestedBy: SF52_FACILITY.requestedBy,
+  authorizedBy: SF52_FACILITY.authorizedBy,
   preparerName: "",
   preparerPhone: "",
   box1: "",
@@ -88,33 +93,40 @@ export const EMPTY_SF52_INPUTS: Sf52FormInputs = {
   toPayBand: "",
   toStep: "",
   toHourlyRate: "",
-  numRecruitments: "",
-  areasOfConsideration: "",
+  numRecruitments: "1",
+  areasOfConsideration: "All Areas",
   proposedSalaryRange: "",
-  relocationAuth: "",
+  relocationAuth: "No",
   otherNotes: "",
   conflictingReasons: "",
   reasonForResign: "",
-  resignEffectiveDate: "",
   dateSigned: "",
   forwardingAddress: "",
   partFRemarks: "",
 };
 
-/** "Last, First Middle" for the SF-52 Name box. */
-export function composeSf52Name(pd?: PersonnelDetails | null): string {
-  if (!pd) return "";
-  const last = (pd.name_last || "").trim();
-  const fm = [pd.name_first, pd.name_middle].map((s) => (s || "").trim()).filter(Boolean).join(" ");
-  return [last, fm].filter(Boolean).join(", ");
+/** "05/29/26" — dates as the office writes them on the form. */
+export function toSf52Date(isoOrText: string): string {
+  const m = (isoOrText || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return (isoOrText || "").trim();
+  return `${m[2]}/${m[3]}/${m[1].slice(2)}`;
 }
 
-/** "Title / PD# Number" for the FROM/TO position-title boxes. */
+/** "Last, First, Middle" — comma-separated like the office's copies. */
+export function composeSf52Name(pd?: PersonnelDetails | null): string {
+  if (!pd) return "";
+  return [pd.name_last, pd.name_first, pd.name_middle]
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** Plain "Title Number" (no PD# prefix — the office writes bare titles). */
 function positionTitleNo(title?: string | null, num?: string | null): string {
-  const t = (title || "").trim();
-  const n = (num || "").trim();
-  if (t && n) return `${t} / PD# ${n}`;
-  return t || (n ? `PD# ${n}` : "");
+  return [title, num]
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** Compose the filled SF-52 from the action, the employee record, and inputs. */
@@ -123,13 +135,14 @@ export function buildSf52Data(
   pd: PersonnelDetails | null,
   f: Sf52FormInputs,
 ): Sf52Data {
-  const box1 =
-    action.usesVice && f.vice.trim() ? `${f.box1}, vice ${f.vice.trim()}` : f.box1;
+  const effective = toSf52Date(f.proposedEffectiveDate);
   const d: Sf52Data = {
-    actionsRequested: box1,
+    actionsRequested: f.box1,
     addlInfoName: f.preparerName,
     addlInfoPhone: f.preparerPhone,
-    proposedEffectiveDate: f.proposedEffectiveDate,
+    proposedEffectiveDate: effective,
+    actionReqBy: f.requestedBy,
+    actionAuthBy: f.authorizedBy,
     // Employee/position data (boxes 32, 33, 35, 36, 38, 39) — always the same
     // regardless of action, drawn from the employee record + facility.
     workSchedule: pd?.work_schedule || "",
@@ -151,7 +164,6 @@ export function buildSf52Data(
     d.fromGrade = pd.pay_band || "";
     d.fromStep = pd.step || "";
     d.fromTotalSalary = pd.hourly_rate || "";
-    d.fromPayBasis = SF52_FACILITY.payBasis;
     d.fromPositionLocation = SF52_FACILITY.organization;
   }
 
@@ -162,7 +174,6 @@ export function buildSf52Data(
     d.toGrade = f.toPayBand;
     d.toStep = f.toStep;
     d.toTotalSalary = f.toHourlyRate;
-    d.toPayBasis = SF52_FACILITY.payBasis;
     d.toPositionLocation = SF52_FACILITY.organization;
   }
 
@@ -173,9 +184,11 @@ export function buildSf52Data(
     d.relocationAuth = f.relocationAuth;
     d.otherNotes = f.otherNotes;
   } else if (action.extra === "E") {
+    // Part B box 4 and Part E box 2 are one shared field on the form; the
+    // office fills it (= the resignation date) on resignations only.
+    d.effectiveDate = effective;
     d.reasonForResign = f.reasonForResign;
-    d.partEEffectiveDate = f.resignEffectiveDate || f.proposedEffectiveDate;
-    d.dateSigned = f.dateSigned;
+    d.dateSigned = toSf52Date(f.dateSigned);
     d.forwardingAddress = f.forwardingAddress;
     if (f.conflictingReasons === "yes" || f.conflictingReasons === "no") {
       d.conflictingReasons = f.conflictingReasons;
