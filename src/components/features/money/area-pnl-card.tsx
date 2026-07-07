@@ -19,17 +19,33 @@ import {
 } from "@/lib/money/area-pnl";
 import { AREA_LABELS } from "@/lib/money/areas";
 
-// Full cents — rounding In/Out/Net independently to whole dollars can make
-// a row visibly fail its own arithmetic (In − Out ≠ Net by $1).
+// Whole dollars — full cents made the three numeric columns so wide they bled
+// together and forced a horizontal scrollbar on phones. Each underlying figure
+// is rounded ONCE and Net is derived from the rounded In/Out, so every row
+// (and the Total row) still visibly satisfies In − Out = Net.
 function money(n: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(n);
+    maximumFractionDigits: 0,
+  }).format(Math.round(n) || 0); // `|| 0` keeps -0 from printing as -$0
+}
+
+const numCell = "py-1.5 pl-2 sm:pl-3 text-right tabular-nums whitespace-nowrap";
+
+function netColor(net: number): string {
+  return net > 0 ? "text-success" : net < 0 ? "text-destructive" : "";
 }
 
 function PnlTable({ title, rows }: { title: string; rows: AreaPnlRow[] }) {
-  const totals = rows.reduce(
+  // Round once per figure, then derive nets/totals from the rounded values so
+  // the printed table is arithmetically consistent in both directions.
+  const display = rows.map((r) => {
+    const revenue = Math.round(r.revenue) || 0;
+    const spend = Math.round(r.spend) || 0;
+    return { area: r.area, revenue, spend, net: revenue - spend };
+  });
+  const totals = display.reduce(
     (t, r) => ({
       revenue: t.revenue + r.revenue,
       spend: t.spend + r.spend,
@@ -40,55 +56,39 @@ function PnlTable({ title, rows }: { title: string; rows: AreaPnlRow[] }) {
   return (
     <div className="flex-1 min-w-0">
       <p className="text-xs font-semibold text-muted-foreground mb-1.5">{title}</p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              <th className="text-left font-medium py-1">Area</th>
-              <th className="text-right font-medium py-1">In</th>
-              <th className="text-right font-medium py-1">Out</th>
-              <th className="text-right font-medium py-1">Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.area} className="border-t border-border/50">
-                <td
-                  className={cn(
-                    "py-1.5 pr-2",
-                    r.area === "unassigned" && "text-warning-foreground",
-                  )}
-                >
-                  {AREA_LABELS[r.area]}
-                </td>
-                <td className="py-1.5 text-right tabular-nums">{money(r.revenue)}</td>
-                <td className="py-1.5 text-right tabular-nums">{money(r.spend)}</td>
-                <td
-                  className={cn(
-                    "py-1.5 text-right tabular-nums font-semibold",
-                    r.net > 0 ? "text-success" : r.net < 0 ? "text-destructive" : "",
-                  )}
-                >
-                  {money(r.net)}
-                </td>
-              </tr>
-            ))}
-            <tr className="border-t border-border font-semibold">
-              <td className="py-1.5">Total</td>
-              <td className="py-1.5 text-right tabular-nums">{money(totals.revenue)}</td>
-              <td className="py-1.5 text-right tabular-nums">{money(totals.spend)}</td>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            <th className="text-left font-medium py-1">Area</th>
+            <th className="text-right font-medium py-1 pl-2 sm:pl-3">In</th>
+            <th className="text-right font-medium py-1 pl-2 sm:pl-3">Out</th>
+            <th className="text-right font-medium py-1 pl-2 sm:pl-3">Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          {display.map((r) => (
+            <tr key={r.area} className="border-t border-border/50">
               <td
                 className={cn(
-                  "py-1.5 text-right tabular-nums",
-                  totals.net > 0 ? "text-success" : totals.net < 0 ? "text-destructive" : "",
+                  "py-1.5 pr-1 leading-tight",
+                  r.area === "unassigned" && "text-warning-foreground",
                 )}
               >
-                {money(totals.net)}
+                {AREA_LABELS[r.area]}
               </td>
+              <td className={numCell}>{money(r.revenue)}</td>
+              <td className={numCell}>{money(r.spend)}</td>
+              <td className={cn(numCell, "font-semibold", netColor(r.net))}>{money(r.net)}</td>
             </tr>
-          </tbody>
-        </table>
-      </div>
+          ))}
+          <tr className="border-t border-border font-semibold">
+            <td className="py-1.5 pr-1">Total</td>
+            <td className={numCell}>{money(totals.revenue)}</td>
+            <td className={numCell}>{money(totals.spend)}</td>
+            <td className={cn(numCell, netColor(totals.net))}>{money(totals.net)}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
