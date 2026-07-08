@@ -80,6 +80,11 @@ import {
   type ExtractedQuote,
   type ClarificationOption,
 } from "@/lib/quote/extraction";
+import {
+  checkQuoteForIncludedTax,
+  isTaxChargingVendor,
+  type QuoteTaxRejection,
+} from "@/lib/quote/tax-check";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 function todayIso(): string {
@@ -710,15 +715,6 @@ async function uploadQuoteFiles(
   return uploads;
 }
 
-/**
- * Vendors whose ONLINE checkout can't apply the org's tax exemption, so the
- * purchase card is charged sales tax (reclaimed from the vendor later). Only
- * for these vendors is an extracted "Sales Tax" line kept on the PR; every
- * other vendor stays tax-exempt and the tax line is dropped. Add more
- * vendors here as needed — no edge-function redeploy required.
- */
-const TAX_CHARGING_VENDORS: readonly RegExp[] = [/\bmenards\b/i];
-
 /** Max number of pages a single quote can carry (UI + bundle stay sane). */
 const MAX_QUOTE_PAGES = 10;
 /** How many quote pages to read with the vision endpoint at once. Small so a
@@ -929,8 +925,15 @@ function NewPurchaseRequestPageInner() {
   const [previewing, setPreviewing] = useState(false);
   /** Object URL for the in-app PDF preview overlay. */
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  // Lock body scroll while the full-screen PDF preview is open.
-  useBodyScrollLock(!!previewUrl);
+  // Set when an uploaded quote was rejected because it includes sales tax
+  // (the org is tax-exempt). Renders a blocking popup explaining why; the
+  // rejected pages are un-staged so they never attach to the PR.
+  const [taxRejection, setTaxRejection] = useState<
+    (QuoteTaxRejection & { vendorName: string }) | null
+  >(null);
+  // Lock body scroll while the full-screen PDF preview or the quote-rejected
+  // popup is open.
+  useBodyScrollLock(!!previewUrl || !!taxRejection);
   const [error, setError] = useState<string | null>(null);
   // Tick-counter so the spinner can show seconds elapsed during save —
   // gives the user feedback when the supabase-js auth lock or the
@@ -1414,12 +1417,12 @@ function NewPurchaseRequestPageInner() {
     const source = pageCount > 1 ? `${pageCount} pages of the quote` : "the quote";
 
     // Sales tax only belongs on PRs for vendors whose online checkout can't
-    // apply the exemption (currently just Menards). For any other vendor,
-    // drop the tax line the extractor may have captured — the vendor name
-    // comes from the merged extraction (the cart page) or the form, so this
-    // works even when the tax sits on an unbranded order-summary page.
+    // apply the exemption (currently just Menards). Any other vendor's taxed
+    // quote was already REJECTED before this function ran (see
+    // handleQuoteFiles); this filter stays as a backstop so a $0.00 tax row
+    // never lands on the form either.
     const vendorText = `${result.vendor?.name ?? ""} ${v1.name ?? ""}`;
-    const keepTax = TAX_CHARGING_VENDORS.some((re) => re.test(vendorText));
+    const keepTax = isTaxChargingVendor(vendorText);
     const incomingItems = (result.items ?? []).filter(
       (it) => keepTax || !isSalesTaxItem(it),
     );
@@ -1511,6 +1514,7 @@ function NewPurchaseRequestPageInner() {
     setExtractClarifications([]);
     setClarificationChoices({});
     setExtractInfo(null);
+    setTaxRejection(null);
     setError(null);
 
     // New cancellation handle — replaces any prior in-flight upload's flag.
@@ -1605,7 +1609,30 @@ function NewPurchaseRequestPageInner() {
         return;
       }
 
-      applyExtractedQuote(combineExtractions(results), extraWarnings, results.length);
+      const combined = combineExtractions(results);
+
+      // Quotes must be tax-free (the org is tax-exempt). A quote that
+      // includes sales tax is rejected outright: the pages staged in step 2
+      // are pulled back out so they never attach to the PR, the form is left
+      // untouched, and a popup tells the user exactly why so they can get a
+      // corrected quote from the vendor. Menards is the documented exception
+      // (its online checkout charges tax that the vendor refunds later).
+      const rejection = checkQuoteForIncludedTax(combined, v1.name ?? "");
+      if (rejection) {
+        const stagedSet = new Set(stagedFiles);
+        setQuoteFiles((prev) => prev.filter((f) => !stagedSet.has(f)));
+        setTaxRejection({
+          ...rejection,
+          vendorName: (combined.vendor?.name || v1.name || "").trim(),
+        });
+        recordBreadcrumb(
+          "warn",
+          `[quote-upload] rejected: quote includes $${rejection.taxAmount.toFixed(2)} tax (${rejection.taxLines.join(", ")})`,
+        );
+        return;
+      }
+
+      applyExtractedQuote(combined, extraWarnings, results.length);
     } catch (err) {
       if (cancel.cancelled) return;
       const msg =
@@ -3514,6 +3541,56 @@ function NewPurchaseRequestPageInner() {
             Inline preview blocked? Use{" "}
             <span className="font-semibold">Open in new tab</span> above.
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Quote rejected: tax included ── */}
+    {taxRejection && (
+      <div
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Quote rejected"
+      >
+        <div
+          className="absolute inset-0 bg-black/50"
+          onClick={() => setTaxRejection(null)}
+        />
+        <div className="relative w-full sm:max-w-md bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-full bg-red-100 dark:bg-red-500/20 shrink-0">
+              <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-semibold text-base">Quote rejected</h2>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                This quote
+                {taxRejection.vendorName
+                  ? ` from ${taxRejection.vendorName}`
+                  : ""}{" "}
+                includes{" "}
+                <span className="font-semibold text-foreground">
+                  ${taxRejection.taxAmount.toFixed(2)} of tax
+                </span>{" "}
+                ({taxRejection.taxLines.join(", ")}). The course is
+                tax-exempt, so quotes can&apos;t include taxes.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Ask the vendor for a corrected quote with the tax removed,
+                then upload the new quote. The rejected pages were{" "}
+                <span className="font-semibold text-foreground">not</span>{" "}
+                attached to this PR.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTaxRejection(null)}
+            className="w-full px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            Got it
+          </button>
         </div>
       </div>
     )}
