@@ -35,17 +35,31 @@ const sendMessage = vi.fn();
 const stopGenerating = vi.fn();
 const clearChat = vi.fn();
 const loadRecentConversation = vi.fn();
+const selectSpreadsheet = vi.fn();
 let mockChat: {
   messages: AssistantMessage[];
   loading: boolean;
   uploading: boolean;
   toolActivity: string | null;
   pendingPhoto: null;
+  pendingSpreadsheet: {
+    file: File;
+    data: {
+      name: string;
+      text: string;
+      rowCount: number;
+      sheetCount: number;
+      truncated: boolean;
+    };
+  } | null;
+  attachError: string | null;
   sendMessage: typeof sendMessage;
   stopGenerating: typeof stopGenerating;
   clearChat: typeof clearChat;
   selectPhoto: () => void;
   clearPendingPhoto: () => void;
+  selectSpreadsheet: typeof selectSpreadsheet;
+  clearPendingSpreadsheet: () => void;
   loadRecentConversation: typeof loadRecentConversation;
 };
 
@@ -59,17 +73,22 @@ beforeEach(() => {
   sendMessage.mockClear();
   stopGenerating.mockClear();
   loadRecentConversation.mockClear();
+  selectSpreadsheet.mockClear();
   mockChat = {
     messages: [],
     loading: false,
     uploading: false,
     toolActivity: null,
     pendingPhoto: null,
+    pendingSpreadsheet: null,
+    attachError: null,
     sendMessage,
     stopGenerating,
     clearChat,
     selectPhoto: vi.fn(),
     clearPendingPhoto: vi.fn(),
+    selectSpreadsheet,
+    clearPendingSpreadsheet: vi.fn(),
     loadRecentConversation,
   };
 });
@@ -135,6 +154,38 @@ describe("AssistantBar", () => {
     // Send button is disabled with no text — clicking fires nothing
     await user.click(screen.getByLabelText("Send"));
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("has an attach-spreadsheet button wired to the hidden file input", () => {
+    render(<AssistantBar />);
+    expect(screen.getByLabelText("Attach spreadsheet")).toBeInTheDocument();
+  });
+
+  it("shows the pending spreadsheet chip and enables Send without text", async () => {
+    mockChat.pendingSpreadsheet = {
+      file: new File(["a,b"], "usf-order.xlsx"),
+      data: {
+        name: "usf-order.xlsx",
+        text: "a,b",
+        rowCount: 42,
+        sheetCount: 1,
+        truncated: false,
+      },
+    };
+    const { user } = render(<AssistantBar />);
+    await user.click(screen.getByLabelText("Ask the AI assistant"));
+    expect(screen.getByText("usf-order.xlsx")).toBeInTheDocument();
+    expect(screen.getByText(/42 rows/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Send")).toBeEnabled();
+    await user.click(screen.getByLabelText("Send"));
+    expect(sendMessage).toHaveBeenCalledWith("");
+  });
+
+  it("surfaces attachment errors in the panel", async () => {
+    mockChat.attachError = "broken.xlsx has no readable rows — is it a valid spreadsheet?";
+    const { user } = render(<AssistantBar />);
+    await user.click(screen.getByLabelText("Ask the AI assistant"));
+    expect(screen.getByText(/no readable rows/)).toBeInTheDocument();
   });
 
   it("shows the conversation and a Clear button when messages exist", async () => {

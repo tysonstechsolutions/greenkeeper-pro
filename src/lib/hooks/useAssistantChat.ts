@@ -6,6 +6,12 @@ import { uploadPhoto } from "@/lib/supabase/storage";
 import { createClient } from "@/lib/supabase/client";
 import { callApi } from "@/lib/api/client";
 import type { WorkspaceKey } from "@/lib/layout/workspace-map";
+import {
+  buildSpreadsheetBlock,
+  isSpreadsheetFile,
+  spreadsheetToText,
+  type SpreadsheetText,
+} from "@/lib/ai/spreadsheet-attachment";
 
 // Shared chat state machine for the AI assistant. Drives both the
 // top-of-screen AssistantBar (inline, stay-on-page) and the full
@@ -17,6 +23,14 @@ export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
   imageUrl?: string;
+  /** Filename chip shown on the bubble (spreadsheet attachments). */
+  attachmentName?: string;
+  /**
+   * What was actually sent to the AI when it differs from the displayed
+   * content (a spreadsheet's CSV is inlined into the message). Used when
+   * building history so follow-up questions still see the data.
+   */
+  apiContent?: string;
   error?: boolean;
   timestamp: Date;
 }
@@ -24,6 +38,11 @@ export interface AssistantMessage {
 export interface PendingPhoto {
   file: File;
   previewUrl: string;
+}
+
+export interface PendingSpreadsheet {
+  file: File;
+  data: SpreadsheetText;
 }
 
 /**
@@ -38,6 +57,11 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
   const [uploading, setUploading] = useState(false);
   const [toolActivity, setToolActivity] = useState<string | null>(null);
   const [pendingPhoto, setPendingPhoto] = useState<PendingPhoto | null>(null);
+  const [pendingSpreadsheet, setPendingSpreadsheet] =
+    useState<PendingSpreadsheet | null>(null);
+  // Why the last attachment attempt was refused (too big, unreadable, wrong
+  // type). Cleared on the next attach or send.
+  const [attachError, setAttachError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
 
   // Refs so the sendMessage callback always sees current values without
@@ -66,6 +90,11 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
   useEffect(() => {
     pendingPhotoRef.current = pendingPhoto;
   }, [pendingPhoto]);
+
+  const pendingSpreadsheetRef = useRef<PendingSpreadsheet | null>(null);
+  useEffect(() => {
+    pendingSpreadsheetRef.current = pendingSpreadsheet;
+  }, [pendingSpreadsheet]);
 
   // Stop-generating support
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -134,8 +163,15 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
 
   /** Attach a photo (validated); replaces any existing pending photo. */
   const selectPhoto = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    if (file.size > 20 * 1024 * 1024) return; // 20MB max
+    setAttachError(null);
+    if (!file.type.startsWith("image/")) {
+      setAttachError(`${file.name} isn't an image.`);
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setAttachError(`${file.name} is too large (max 20MB).`);
+      return;
+    }
 
     // Side effects stay OUTSIDE the setState updater (updaters must be pure —
     // StrictMode double-invokes them).
@@ -148,6 +184,34 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
     const prev = pendingPhotoRef.current;
     if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
     setPendingPhoto(null);
+  }, []);
+
+  /**
+   * Attach a spreadsheet (xlsx/xls/csv/tsv): parsed to CSV text on the
+   * device, then inlined into the message at send time — the AI reads the
+   * actual cell data, not a picture of it. Replaces any pending spreadsheet;
+   * parse problems land in `attachError`.
+   */
+  const selectSpreadsheet = useCallback(async (file: File) => {
+    setAttachError(null);
+    if (!isSpreadsheetFile(file)) {
+      setAttachError(
+        `${file.name} isn't a spreadsheet — attach an .xlsx, .xls, .csv, or .tsv file.`,
+      );
+      return;
+    }
+    try {
+      const data = await spreadsheetToText(file);
+      setPendingSpreadsheet({ file, data });
+    } catch (err) {
+      setAttachError(
+        err instanceof Error ? err.message : `Couldn't read ${file.name}.`,
+      );
+    }
+  }, []);
+
+  const clearPendingSpreadsheet = useCallback(() => {
+    setPendingSpreadsheet(null);
   }, []);
 
   /**
@@ -201,8 +265,10 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
   const sendMessage = useCallback(
     async (text: string) => {
       const photo = pendingPhotoRef.current;
+      const spreadsheet = pendingSpreadsheetRef.current;
       const trimmed = text.trim();
-      if ((!trimmed && !photo) || loadingRef.current) return;
+      if ((!trimmed && !photo && !spreadsheet) || loadingRef.current) return;
+      setAttachError(null);
 
       let photoStoragePath: string | undefined;
       let photoPublicUrl: string | undefined;
@@ -232,7 +298,33 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
         setUploading(false);
       }
 
-      const displayText = trimmed || "(Photo attached)";
+      const displayText =
+        trimmed ||
+        (photo && spreadsheet
+          ? "(Photo + spreadsheet attached)"
+          : photo
+            ? "(Photo attached)"
+            : `(Spreadsheet attached: ${spreadsheet?.data.name})`);
+
+      // What actually goes to the AI: the typed text plus attachment blocks.
+      // Built up front so the user message can carry it as `apiContent` —
+      // follow-up sends then include the spreadsheet data in history.
+      let messageForApi = trimmed;
+      if (photoStoragePath) {
+        messageForApi = messageForApi
+          ? `${messageForApi}\n\n[Photo attached: ${photoStoragePath}]`
+          : `[Photo attached: ${photoStoragePath}]`;
+      }
+      if (spreadsheet) {
+        // The deployed edge function rejects messages over 12k characters —
+        // clamp the sheet text to whatever room the typed note left.
+        const block = buildSpreadsheetBlock(
+          spreadsheet.data,
+          11_800 - messageForApi.length,
+        );
+        messageForApi = messageForApi ? `${messageForApi}\n\n${block}` : block;
+      }
+
       // The sent bubble prefers the durable storage URL so the blob preview
       // can be revoked instead of leaking for the session's lifetime.
       const userMsg: AssistantMessage = {
@@ -240,16 +332,20 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
         role: "user",
         content: displayText,
         imageUrl: photoPublicUrl ?? photo?.previewUrl,
+        attachmentName: spreadsheet?.data.name,
+        apiContent: spreadsheet ? messageForApi : undefined,
         timestamp: new Date(),
       };
 
-      // Build history from PRIOR messages only (skip errors).
+      // Build history from PRIOR messages only (skip errors). User turns
+      // prefer apiContent so an earlier spreadsheet stays visible to the AI.
       const history = messagesRef.current
         .filter((m) => !m.error)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) => ({ role: m.role, content: m.apiContent ?? m.content }));
 
       setMessages((prev) => [...prev, userMsg]);
       setPendingPhoto(null);
+      setPendingSpreadsheet(null);
       if (photo && photoPublicUrl) URL.revokeObjectURL(photo.previewUrl);
 
       // Placeholder assistant message we'll fill in.
@@ -281,13 +377,6 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
       };
 
       try {
-        let messageForApi = trimmed;
-        if (photoStoragePath) {
-          messageForApi = trimmed
-            ? `${trimmed}\n\n[Photo attached: ${photoStoragePath}]`
-            : `[Photo attached: ${photoStoragePath}]`;
-        }
-
         setToolActivity("Thinking…");
 
         // Abort path: wire the AbortController to a rejection we can catch.
@@ -366,6 +455,8 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
     setMessages([]);
     setConversationId(null);
     clearPendingPhoto();
+    setPendingSpreadsheet(null);
+    setAttachError(null);
   }, [clearPendingPhoto]);
 
   return {
@@ -374,11 +465,15 @@ export function useAssistantChat(workspace: WorkspaceKey | null) {
     uploading,
     toolActivity,
     pendingPhoto,
+    pendingSpreadsheet,
+    attachError,
     sendMessage,
     stopGenerating,
     clearChat,
     selectPhoto,
     clearPendingPhoto,
+    selectSpreadsheet,
+    clearPendingSpreadsheet,
     loadRecentConversation,
   };
 }

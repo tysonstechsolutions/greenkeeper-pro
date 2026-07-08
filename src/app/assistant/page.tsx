@@ -11,12 +11,15 @@ import {
   X,
   Image as ImageIcon,
   Square,
+  Paperclip,
+  FileSpreadsheet,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useAssistantChat } from "@/lib/hooks/useAssistantChat";
 import { ChatMessages } from "@/components/features/ai/chat-messages";
 import { canUseAssistant, getRandomPrompts } from "@/lib/ai/assistant-prompts";
+import { SPREADSHEET_ACCEPT } from "@/lib/ai/spreadsheet-attachment";
 import {
   isWorkspaceKey,
   WORKSPACE_LABELS,
@@ -51,16 +54,21 @@ export default function AssistantPage() {
     uploading,
     toolActivity,
     pendingPhoto,
+    pendingSpreadsheet,
+    attachError,
     sendMessage,
     stopGenerating,
     clearChat,
     selectPhoto,
     clearPendingPhoto,
+    selectSpreadsheet,
+    clearPendingSpreadsheet,
   } = useAssistantChat(workspace);
 
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sheetInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -76,8 +84,16 @@ export default function AssistantPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleSpreadsheetSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void selectSpreadsheet(file);
+    // Reset file input so same file can be re-selected
+    if (sheetInputRef.current) sheetInputRef.current.value = "";
+  };
+
   const send = (text: string) => {
-    if ((!text.trim() && !pendingPhoto) || loading) return;
+    if ((!text.trim() && !pendingPhoto && !pendingSpreadsheet) || loading)
+      return;
     sendMessage(text);
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
@@ -210,15 +226,61 @@ export default function AssistantPage() {
         </div>
       )}
 
+      {/* Spreadsheet preview strip */}
+      {pendingSpreadsheet && (
+        <div className="border-t border-border/50 px-4 pt-3">
+          <div className="flex items-center gap-3 p-2 rounded-xl bg-muted/50 border border-border">
+            <div className="w-14 h-14 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <FileSpreadsheet className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {pendingSpreadsheet.data.name}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {pendingSpreadsheet.data.rowCount} rows
+                {pendingSpreadsheet.data.sheetCount > 1
+                  ? ` across ${pendingSpreadsheet.data.sheetCount} sheets`
+                  : ""}
+                {pendingSpreadsheet.data.truncated
+                  ? " — large file, first rows only"
+                  : ""}
+              </p>
+            </div>
+            <button
+              onClick={clearPendingSpreadsheet}
+              className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center shrink-0 transition-colors"
+              aria-label="Remove spreadsheet"
+            >
+              <X className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Attachment problem (bad type, too big, unreadable) */}
+      {attachError && (
+        <p className="px-4 pt-2 text-xs text-red-600 dark:text-red-400">
+          {attachError}
+        </p>
+      )}
+
       {/* Input area */}
       <div className="border-t border-border/50 p-4 pb-24 md:pb-4">
-        {/* Hidden file input */}
+        {/* Hidden file inputs */}
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           onChange={handlePhotoSelect}
+          className="hidden"
+        />
+        <input
+          ref={sheetInputRef}
+          type="file"
+          accept={SPREADSHEET_ACCEPT}
+          onChange={handleSpreadsheetSelect}
           className="hidden"
         />
 
@@ -234,12 +296,29 @@ export default function AssistantPage() {
             <Camera className="w-5 h-5 text-muted-foreground" />
           </button>
 
+          {/* Spreadsheet button */}
+          <button
+            type="button"
+            onClick={() => sheetInputRef.current?.click()}
+            disabled={loading}
+            className="w-11 h-11 rounded-xl border border-border bg-card flex items-center justify-center hover:bg-muted/50 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+            aria-label="Attach spreadsheet"
+          >
+            <Paperclip className="w-5 h-5 text-muted-foreground" />
+          </button>
+
           <textarea
             ref={inputRef}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder={pendingPhoto ? "Add a note about the photo..." : "Tell me what needs to happen..."}
+            placeholder={
+              pendingPhoto
+                ? "Add a note about the photo..."
+                : pendingSpreadsheet
+                  ? "Ask about the spreadsheet..."
+                  : "Tell me what needs to happen..."
+            }
             rows={1}
             disabled={loading}
             className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 placeholder:text-muted-foreground/50"
@@ -256,7 +335,7 @@ export default function AssistantPage() {
           ) : (
             <button
               type="submit"
-              disabled={!input.trim() && !pendingPhoto}
+              disabled={!input.trim() && !pendingPhoto && !pendingSpreadsheet}
               className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 shrink-0"
             >
               <Send className="w-5 h-5" />
@@ -264,7 +343,8 @@ export default function AssistantPage() {
           )}
         </form>
         <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-          Tap 📷 to attach a photo — it&apos;ll be saved with any task or issue I create
+          📷 attaches a photo · 📎 attaches an Excel/CSV file (invoices,
+          orders) — I read the actual numbers
         </p>
       </div>
     </div>

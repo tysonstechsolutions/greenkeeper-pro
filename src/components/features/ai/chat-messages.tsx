@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Bot, AlertCircle, Loader2 } from "lucide-react";
+import { Bot, AlertCircle, Loader2, FileSpreadsheet } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { AssistantMessage } from "@/lib/hooks/useAssistantChat";
 
@@ -83,6 +83,20 @@ export function ChatMessages({
                   alt="Attached photo"
                   className="max-h-48 w-auto rounded-lg"
                 />
+              </div>
+            )}
+
+            {/* User spreadsheet attachment */}
+            {msg.attachmentName && (
+              <div
+                className={`mb-2 flex items-center gap-1.5 text-xs rounded-lg px-2 py-1.5 ${
+                  msg.role === "user"
+                    ? "bg-primary-foreground/10 text-primary-foreground/90"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{msg.attachmentName}</span>
               </div>
             )}
 
