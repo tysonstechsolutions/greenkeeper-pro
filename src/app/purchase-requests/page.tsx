@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -347,8 +347,17 @@ export default function PurchaseRequestsListPage() {
     profile?.role === "director" ||
     profile?.role === "gm";
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
+  // True while a status change / delete is committing. Native confirm() dialogs
+  // blur then re-focus the window, which fires useRefreshOnFocus mid-action — we
+  // skip that refetch so a stale read can't clobber the optimistic update (which
+  // made the reviewer click "advance" two or three times before it stuck).
+  const mutatingRef = useRef(false);
+
+  const fetchRequests = useCallback(async (opts?: { background?: boolean }) => {
+    const background = opts?.background ?? false;
+    // Background refreshes (tab re-focus) keep the current list on screen so the
+    // page doesn't collapse to skeletons and lose the reviewer's scroll spot.
+    if (!background) setLoading(true);
     try {
       const data = await directSelectList<PurchaseRequest>("purchase_requests", {
         columns: "*",
@@ -359,9 +368,9 @@ export default function PurchaseRequestsListPage() {
       setRequests(data);
     } catch (err) {
       console.error("[purchase-requests] fetch failed:", err);
-      setRequests([]);
+      if (!background) setRequests([]);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
@@ -370,7 +379,12 @@ export default function PurchaseRequestsListPage() {
     fetchRequests();
   }, [isAllowed, fetchRequests]);
 
-  useRefreshOnFocus(fetchRequests, isAllowed);
+  const refreshOnFocus = useCallback(() => {
+    if (mutatingRef.current) return;
+    void fetchRequests({ background: true });
+  }, [fetchRequests]);
+
+  useRefreshOnFocus(refreshOnFocus, isAllowed);
 
   // ── Money stats ─────────────────────────────────────────────────────────────
 
@@ -429,6 +443,8 @@ export default function PurchaseRequestsListPage() {
       ) {
         return;
       }
+      // Set before the first await so the confirm-dismiss focus refetch is skipped.
+      mutatingRef.current = true;
       setAdvancingId(`${id}:${column}`);
       try {
         await directPatchRow(
@@ -447,6 +463,7 @@ export default function PurchaseRequestsListPage() {
         );
       } finally {
         setAdvancingId(null);
+        mutatingRef.current = false;
       }
     },
     [],
@@ -458,6 +475,8 @@ export default function PurchaseRequestsListPage() {
       if (!confirm(`Delete the purchase request for ${label}? This can't be undone.`)) {
         return;
       }
+      // Set before the first await so the confirm-dismiss focus refetch is skipped.
+      mutatingRef.current = true;
       setDeletingId(id);
       try {
         await directDeleteRow(
@@ -466,13 +485,13 @@ export default function PurchaseRequestsListPage() {
           id,
           "purchase-requests.delete",
         );
+        setRequests((prev) => prev.filter((r) => r.id !== id));
       } catch (err) {
-        setDeletingId(null);
         alert(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`);
-        return;
+      } finally {
+        setDeletingId(null);
+        mutatingRef.current = false;
       }
-      setDeletingId(null);
-      setRequests((prev) => prev.filter((r) => r.id !== id));
     },
     [],
   );
