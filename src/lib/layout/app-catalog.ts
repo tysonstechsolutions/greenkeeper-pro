@@ -59,8 +59,9 @@ import {
 // Routes deleted entirely: /priority, /plan, /spray-window, /drone,
 //   /water-usage, /feedback, /compliance, /checklists, /inspections,
 //   /work-order (singular, superseded by /work-orders), /messages, /polls,
-//   /chemicals, /equipment-checkout, and /equipment (list — operational data
-//   now lives on /assets; the /equipment/view detail route remains).
+//   /chemicals, and /equipment-checkout. The old equipment list is retired,
+//   while /equipment is the read-only readiness dashboard and /equipment/view
+//   remains the unit-detail route.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface AppEntry {
@@ -170,6 +171,7 @@ const PHOTOS: AppEntry = { href: "/photos", label: "Photos", icon: Camera, color
 const VOICE_LOG: AppEntry = { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-teal-500 to-cyan-600", group: GROUPS.course };
 const ENVIRONMENTAL: AppEntry = { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-teal-600 to-emerald-700", group: GROUPS.course };
 const REPORT_ISSUE: AppEntry = { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700", group: GROUPS.course };
+const EQUIPMENT: AppEntry = { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-amber-500 to-yellow-600", group: GROUPS.course };
 
 const ASSETS: AppEntry = { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const IMPORT_ASSETS: AppEntry = { href: "/assets/import", label: "Import Assets", icon: FilePlus, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
@@ -230,6 +232,7 @@ export const HUB_COURSE: AppEntry = {
   group: GROUPS.workspaces,
   children: [
     TURF_DASHBOARD,
+    EQUIPMENT,
     COURSE_MAP,
     SPRINKLER_MAP,
     PARKING,

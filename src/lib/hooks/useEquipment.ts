@@ -337,7 +337,7 @@ export function useEquipment(): UseEquipmentReturn {
           filters: rawFilters,
           or,
           orderBy: [{ column: "name", ascending: true }],
-          limit: 100, // Limit equipment list
+          limit: 500, // Covers the full non-retired fleet (117 units today).
           label: "fetchEquipment",
         });
 
