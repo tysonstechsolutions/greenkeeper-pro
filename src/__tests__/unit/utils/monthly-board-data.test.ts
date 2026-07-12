@@ -57,7 +57,10 @@ function mockSupabase(overrides: Record<string, unknown> = {}) {
     return new Proxy(chain, proxyHandler);
   });
 
-  return { from } as unknown as Parameters<typeof fetchMonthlyBoardData>[0];
+  return {
+    supabase: { from } as unknown as Parameters<typeof fetchMonthlyBoardData>[0],
+    from,
+  };
 }
 
 // ── Tests ──
@@ -84,7 +87,7 @@ describe("getMonthDateRange", () => {
 
 describe("fetchMonthlyBoardData", () => {
   it("returns zeroed/null data when all queries return empty", async () => {
-    const supabase = mockSupabase();
+    const { supabase, from } = mockSupabase({ schedules: { data: [] } });
     const result = await fetchMonthlyBoardData(supabase, {
       month: 3,
       year: 2026,
@@ -99,14 +102,41 @@ describe("fetchMonthlyBoardData", () => {
     expect(result.tasks.totalCreated).toBe(0);
     expect(result.tasks.completionRate).toBe(0);
     expect(result.labor.totalScheduledShifts).toBe(0);
+    expect(result.labor.totalCrewMembers).toBe(0);
+    expect(from).toHaveBeenCalledWith("schedules");
+    expect(from).not.toHaveBeenCalledWith("schedule");
     expect(result.weather.avgHighF).toBeNull();
     expect(result.budget.totalExpenses).toBeNull();
   });
 
+  it("counts scheduled shifts and unique crew members from schedules", async () => {
+    const { supabase, from } = mockSupabase({
+      schedules: {
+        data: [
+          { id: "shift-1", user_id: "crew-1" },
+          { id: "shift-2", user_id: "crew-2" },
+          { id: "shift-3", user_id: "crew-1" },
+        ],
+      },
+    });
+
+    const result = await fetchMonthlyBoardData(supabase, {
+      month: 3,
+      year: 2026,
+    });
+
+    expect(result.labor).toEqual({
+      totalScheduledShifts: 3,
+      totalCrewMembers: 2,
+    });
+    expect(from).toHaveBeenCalledWith("schedules");
+    expect(from).not.toHaveBeenCalledWith("schedule");
+  });
+
   it("handles query errors gracefully (returns 0/null)", async () => {
-    const supabase = mockSupabase({
+    const { supabase } = mockSupabase({
       tasks: { error: new Error("connection refused"), data: null },
-      schedule: { error: new Error("table missing"), data: null },
+      schedules: { error: new Error("connection refused"), data: null },
       weather_logs: { error: new Error("timeout"), data: null },
     });
 
@@ -129,7 +159,7 @@ describe("fetchMonthlyBoardData", () => {
       { id: "4", status: "pending", due_date: "2026-04-20", completed_at: null },
     ];
 
-    const supabase = mockSupabase({
+    const { supabase } = mockSupabase({
       tasks: { data: taskRows, error: null },
     });
 

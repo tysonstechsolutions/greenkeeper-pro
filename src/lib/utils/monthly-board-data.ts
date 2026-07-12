@@ -87,7 +87,7 @@ async function fetchLabor(
 ) {
   try {
     const { data, error } = await supabase
-      .from("schedule")
+      .from("schedules")
       .select("id, user_id")
       .gte("schedule_date", startDate)
       .lte("schedule_date", endDate);
