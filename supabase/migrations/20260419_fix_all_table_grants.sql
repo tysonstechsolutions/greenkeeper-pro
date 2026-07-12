@@ -1,4 +1,10 @@
 -- =====================================================================
+-- ⚠⚠ SUPERSEDED FOR THE anon ROLE — DO NOT RE-RUN AS-IS (2026-07-11) ⚠⚠
+-- 20260711_phase0b_b1_anon_lockdown.sql deliberately REVOKES every anon
+-- table grant and anon default privilege this file creates (Phase 0A found
+-- the anon key could read plaintext PINs and staff profiles). If this file
+-- is ever re-applied, re-apply the B1 lockdown immediately afterwards.
+-- =====================================================================
 -- Nuclear fix: grant sensible default privileges on every public table
 -- for the three Supabase roles (anon / authenticated / service_role).
 --

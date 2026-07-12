@@ -1,0 +1,567 @@
+{
+ "captured": "2026-07-11",
+ "project": "mbgublyqnyghmvqfooao",
+ "purpose": "pre-B1 anon table grants (rollback reference)",
+ "grants": [
+  {
+   "table_name": "activity_log",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "ai_conversations",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "ai_library",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "ai_messages",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "app_settings",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "asset_damage_records",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "ast_inspections",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "budget_items",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "buffer_zones",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "calendar_events",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "capital_projects",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "certifications",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "channel_members",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "channels",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "chemical_applications",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "chemical_products",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "clubhouse_issues",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "cost_center_budgets",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "course_observations",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "course_zones",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "courses",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "created_documents",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "daily_goals",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "daily_steps",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "diagnostics",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "drone_flights",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "duty_completions",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "environmental_logs",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "equipment",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "equipment_checkouts",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "equipment_inspections",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "equipment_logs",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "equipment_parts",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "equipment_service_records",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "expenses",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "fuel_refills",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "fy26_assets",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "green_measurements",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "green_observations",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "hole_gps_calibrations",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "hole_observations",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "improvement_plan_items",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "improvement_plans",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "inspection_checklists",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "inspection_items",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "inventory_count_lines",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "inventory_counts",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "inventory_items",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "invites",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "irrigation_logs",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "irrigation_satellite_stations",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "irrigation_sprinkler_issues",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "irrigation_sprinklers",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "irrigation_valves",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "irrigation_zones",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "knowledge_articles",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "knowledge_read_log",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "messages",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "notifications",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "obligation_completions",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "obligations",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "onboarding_documents",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "operation_duties",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "order_items",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "parking_lot_issues",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "photos",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "pin_codes",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pin_positions",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "plan_goals",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "poll_comments",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "poll_options",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "poll_votes",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "polls",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pr_audits",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pr_categories",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pr_codes",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pr_spend_monthly_rollup",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pro_shop_duties",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pro_shop_schedules",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pro_shop_shifts",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pro_shop_staff",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "pro_shop_time_off",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "profiles",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "purchase_requests",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "push_subscriptions",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "restaurant_purchases",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "restaurant_spend_monthly_rollup",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "revenue_entries",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "revenue_monthly_rollup",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "schedules",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "shift_swap_posts",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "staff_concerns",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "staff_documents",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "staff_one_on_ones",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "staff_records",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "task_series",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "task_templates",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "tasks",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "time_off_requests",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "tournament_checklist_items",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "tournaments",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "translation_cache",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "untracked_assets",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "vendors",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "vmgc_conversations",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "vmgc_issues",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "vmgc_purchases",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "water_meter_readings",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "water_usage_targets",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "watering_plans",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  },
+  {
+   "table_name": "weather_logs",
+   "grantee": "anon",
+   "privs": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+  },
+  {
+   "table_name": "work_orders",
+   "grantee": "anon",
+   "privs": "REFERENCES,SELECT,TRIGGER,TRUNCATE"
+  }
+ ]
+}
