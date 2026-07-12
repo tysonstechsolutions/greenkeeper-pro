@@ -755,3 +755,62 @@ export async function directStorageDelete(
     clearTimeout(timer);
   }
 }
+
+/**
+ * Create a short-lived signed URL for an object in a PRIVATE bucket via direct
+ * fetch. Mirrors supabase.storage.from(bucket).createSignedUrl(path, expiresIn).
+ * Used for reading private files (e.g. staff-documents) without ever handing
+ * out a permanent public URL. Returns an absolute, time-limited URL. Throws on
+ * non-2xx or if not signed in.
+ */
+export async function directCreateSignedUrl(
+  bucket: string,
+  path: string,
+  expiresInSeconds: number,
+  label: string,
+): Promise<string> {
+  const url = buildUrl(`storage/v1/object/sign/${bucket}/${path}`);
+  const timeoutMs = 15_000;
+
+  const accessToken = await resolveDirectAccessToken();
+  if (!accessToken) {
+    recordBreadcrumb("error", `${label}: no access token for signed URL`);
+    throw new Error(
+      "You're not signed in. Please close and reopen the app to sign in again.",
+    );
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new DOMException("timeout", "TimeoutError"));
+  }, timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ expiresIn: expiresInSeconds }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(no body)");
+      recordBreadcrumb("error", `${label}: sign HTTP ${res.status} — ${text.slice(0, 160)}`);
+      throw new Error(`Storage sign HTTP ${res.status}: ${text}`);
+    }
+
+    // Response: { signedURL: "/object/sign/<bucket>/<path>?token=..." } (relative
+    // to the storage v1 root). Prefix it to get an absolute URL.
+    const body = (await res.json()) as { signedURL?: string; signedUrl?: string };
+    const signed = body.signedURL ?? body.signedUrl;
+    if (!signed) throw new Error("Storage sign: no signedURL in response");
+    const base = SUPABASE_URL.replace(/\/+$/, "");
+    return `${base}/storage/v1${signed.startsWith("/") ? "" : "/"}${signed}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}

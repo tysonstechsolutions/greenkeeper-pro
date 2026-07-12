@@ -40,6 +40,7 @@ import {
   DOC_CATEGORY_ORDER,
   type StaffRecordType,
   type StaffConcern,
+  type StaffDocument,
 } from "@/lib/staff/types";
 import type { UserRole, Certification as Cert, PersonnelDetails } from "@/types/database";
 
@@ -121,6 +122,7 @@ function ProfileContent() {
     addRecord,
     deleteRecord,
     addDocument,
+    getDocumentUrl,
     deleteDocument,
     concerns,
     addConcern,
@@ -271,6 +273,21 @@ function ProfileContent() {
       setDocError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
       setUploadingDoc(false);
+    }
+  };
+
+  // Open a staff document via a short-lived signed URL (private bucket).
+  const [openingDocId, setOpeningDocId] = useState<string | null>(null);
+  const handleOpenDoc = async (d: StaffDocument) => {
+    setDocError(null);
+    setOpeningDocId(d.id);
+    try {
+      const url = await getDocumentUrl(d);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : "Couldn't open this document.");
+    } finally {
+      setOpeningDocId(null);
     }
   };
 
@@ -690,8 +707,16 @@ function ProfileContent() {
                     <p className="text-sm font-medium truncate">{d.name}</p>
                     <p className="text-xs text-muted-foreground">{DOC_CATEGORY_LABELS[d.category] || d.category} · {fmtDate(d.created_at)}</p>
                   </div>
-                  {d.url && (
-                    <a href={d.url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground"><ExternalLink className="w-4 h-4" /></a>
+                  {d.storage_path && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDoc(d)}
+                      disabled={openingDocId === d.id}
+                      title="Open document"
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    >
+                      {openingDocId === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+                    </button>
                   )}
                   <button onClick={() => deleteDocument(d)} className="text-red-600 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
                 </div>
