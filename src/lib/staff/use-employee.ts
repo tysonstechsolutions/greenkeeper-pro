@@ -9,12 +9,15 @@ import {
   directDeleteRow,
   directStorageUpload,
   directStorageDelete,
-  publicStorageUrl,
+  directCreateSignedUrl,
   getCachedUserId,
 } from "@/lib/supabase/rest";
 import type { FullProfile, StaffRecord, StaffRecordType, StaffDocument, StaffConcern } from "./types";
 
 const BUCKET = "staff-documents";
+// staff-documents is a PRIVATE bucket (Phase 0B/B2). Files are read via
+// short-lived signed URLs, never a permanent public URL.
+const SIGNED_URL_TTL_SECONDS = 300;
 
 export function useEmployee(employeeId: string) {
   const [profile, setProfile] = useState<FullProfile | null>(null);
@@ -143,7 +146,7 @@ export function useEmployee(employeeId: string) {
       const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${employeeId}/${Date.now()}-${safe}`;
       await directStorageUpload(BUCKET, path, file, "staff.documents.upload");
-      const url = publicStorageUrl(BUCKET, path);
+      // Private bucket: persist the storage PATH, never a permanent public URL.
       await directInsertRow(
         "staff_documents",
         {
@@ -151,7 +154,7 @@ export function useEmployee(employeeId: string) {
           name: name.trim() || file.name,
           category,
           storage_path: path,
-          url,
+          url: null,
           file_type: file.type || null,
           uploaded_by: getCachedUserId(),
         },
@@ -161,6 +164,23 @@ export function useEmployee(employeeId: string) {
     },
     [employeeId, load],
   );
+
+  /**
+   * Resolve a short-lived signed URL for viewing/downloading a staff document.
+   * staff-documents is private, so this is how the UI opens a file. Throws a
+   * clear error if the document has no stored path or the request fails.
+   */
+  const getDocumentUrl = useCallback(async (doc: StaffDocument): Promise<string> => {
+    if (!doc.storage_path) {
+      throw new Error("This document has no stored file to open.");
+    }
+    return directCreateSignedUrl(
+      BUCKET,
+      doc.storage_path,
+      SIGNED_URL_TTL_SECONDS,
+      "staff.documents.signedUrl",
+    );
+  }, []);
 
   const deleteDocument = useCallback(
     async (doc: StaffDocument) => {
@@ -281,6 +301,7 @@ export function useEmployee(employeeId: string) {
     updateRecord,
     deleteRecord,
     addDocument,
+    getDocumentUrl,
     deleteDocument,
     concerns,
     addConcern,
