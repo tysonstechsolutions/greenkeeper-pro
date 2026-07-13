@@ -21,6 +21,13 @@ export class BriefingApprovalRequiredError extends Error {
   }
 }
 
+export class BriefingSaveFailedError extends Error {
+  constructor() {
+    super("The approved PDF could not be saved to Documents. Please try again.");
+    this.name = "BriefingSaveFailedError";
+  }
+}
+
 export interface ApprovedBriefingDocument {
   docType: "leadership_briefing";
   title: string;
@@ -84,6 +91,7 @@ export async function saveApprovedBriefing(
     filename: details.filename,
     meta: details.meta,
   });
+  if (documentId === null) throw new BriefingSaveFailedError();
   return { documentId, pdf };
 }
 

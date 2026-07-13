@@ -101,6 +101,7 @@ export function LeadershipBriefingReview({
     if (!briefing || !approved) return;
     setExporting(true);
     setError(null);
+    setNotice(null);
     try {
       await onExport(briefing, approved);
       setNotice("Approved PDF export is ready.");
@@ -117,6 +118,7 @@ export function LeadershipBriefingReview({
     if (!briefing || !approved) return;
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       await onSave(briefing, approved);
       setNotice("Approved PDF saved to Documents.");
@@ -190,18 +192,22 @@ export function LeadershipBriefingReview({
       </Card>
 
       {error ? (
-        <Card className="border-destructive/50">
+        <Card className="border-destructive/50" role="alert">
           <CardContent className="pt-6 text-sm text-destructive">{error}</CardContent>
         </Card>
       ) : null}
       {notice ? (
-        <Card className="border-primary/30 bg-primary/5">
+        <Card className="border-primary/30 bg-primary/5" role="status" aria-live="polite">
           <CardContent className="pt-6 text-sm text-primary">{notice}</CardContent>
         </Card>
       ) : null}
 
       {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-center gap-2 py-16 text-muted-foreground"
+        >
           <Loader2 className="h-5 w-5 animate-spin" />
           Loading briefing preview…
         </div>
@@ -426,7 +432,7 @@ function WorkOrders({ briefing }: { briefing: BriefingData }) {
 
 function AdditionalAvailability({ briefing }: { briefing: BriefingData }) {
   return (
-    <SectionCard title="Additional data availability" description="These areas remain explicit when source rows are absent." section={briefing.projects}>
+    <SectionCard title="Additional data availability" description="These areas remain explicit when source rows are absent.">
       <div className="grid gap-4 md:grid-cols-3">
         <FactBlock fact={briefing.restaurant.data.recordCount} label="Restaurant records" render={String} />
         <FactBlock fact={briefing.proShop.data.recordCount} label="Pro shop inventory records" render={String} />
@@ -511,7 +517,7 @@ function SectionCard({
 }: {
   title: string;
   description: string;
-  section: { availabilityLabel: string; source: Array<{ label: string }> };
+  section?: { availabilityLabel: string; source: Array<{ label: string }> };
   children: ReactNode;
 }) {
   return (
@@ -523,9 +529,13 @@ function SectionCard({
               <CardTitle className="text-lg">{title}</CardTitle>
               <CardDescription>{description}</CardDescription>
             </div>
-            <Badge variant="outline">{section.availabilityLabel}</Badge>
+            {section ? <Badge variant="outline">{section.availabilityLabel}</Badge> : null}
           </div>
-          <p className="text-xs text-muted-foreground">Sources: {section.source.map((source) => source.label).join(", ")}</p>
+          {section ? (
+            <p className="text-xs text-muted-foreground">
+              Sources: {section.source.map((source) => source.label).join(", ")}
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">{children}</CardContent>
       </Card>

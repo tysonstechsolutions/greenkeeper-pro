@@ -1,11 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   generate: vi.fn(() => ({
     blob: new Blob(["approved"], { type: "application/pdf" }),
     filename: "gm-leadership-briefing-2026-Q3.pdf",
   })),
-  saveCreatedDocument: vi.fn(async () => "created-briefing-id"),
+  saveCreatedDocument: vi.fn(async (): Promise<string | null> => "created-briefing-id"),
   saveBlobToDevice: vi.fn(async () => undefined),
 }));
 
@@ -23,6 +23,7 @@ vi.mock("@/lib/utils/download-blob", () => ({
 import { buildBriefing } from "@/lib/briefing/engine";
 import {
   BriefingApprovalRequiredError,
+  BriefingSaveFailedError,
   approvedBriefingDocumentDetails,
   exportApprovedBriefing,
   saveApprovedBriefing,
@@ -54,6 +55,16 @@ function briefing() {
 }
 
 describe("approved leadership briefing documents", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.generate.mockReturnValue({
+      blob: new Blob(["approved"], { type: "application/pdf" }),
+      filename: "gm-leadership-briefing-2026-Q3.pdf",
+    });
+    mocks.saveCreatedDocument.mockResolvedValue("created-briefing-id");
+    mocks.saveBlobToDevice.mockResolvedValue(undefined);
+  });
+
   it("requires explicit approval before final PDF export or save", async () => {
     const data = briefing();
 
@@ -91,6 +102,14 @@ describe("approved leadership briefing documents", () => {
           approval_required: true,
         }),
       }),
+    );
+  });
+
+  it("reports a failed save when the shared persistence workflow returns no document id", async () => {
+    mocks.saveCreatedDocument.mockResolvedValueOnce(null);
+
+    await expect(saveApprovedBriefing(briefing(), true)).rejects.toBeInstanceOf(
+      BriefingSaveFailedError,
     );
   });
 

@@ -74,9 +74,6 @@ export function generateLeadershipBriefingReport(
   ) => {
     const lines = doc.splitTextToSize(text, contentWidth) as string[];
     const lineHeight = options.size && options.size < 8 ? 3.8 : BODY_LINE;
-    doc.setFont("helvetica", options.bold ? "bold" : "normal");
-    doc.setFontSize(options.size ?? 8.5);
-    doc.setTextColor(...(options.color ?? TEXT));
     let offset = 0;
     while (offset < lines.length) {
       // A single list/detail block may legitimately be longer than one page.
@@ -88,6 +85,12 @@ export function generateLeadershipBriefingReport(
         continue;
       }
       const batch = lines.slice(offset, offset + availableLines);
+      // drawHeader() resets jsPDF's active font state for each page. Reapply
+      // the requested body style for every batch so continuation text remains
+      // visible after nextPage().
+      doc.setFont("helvetica", options.bold ? "bold" : "normal");
+      doc.setFontSize(options.size ?? 8.5);
+      doc.setTextColor(...(options.color ?? TEXT));
       doc.text(batch, MARGIN, y);
       y += batch.length * lineHeight;
       offset += batch.length;

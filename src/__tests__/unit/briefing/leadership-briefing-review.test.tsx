@@ -49,12 +49,18 @@ function briefingFor(selection: BriefingReviewSelection, populated = true): Brie
   });
 }
 
-function renderReview(populated = true) {
+function renderReview({
+  populated = true,
+  onExport = vi.fn(async () => undefined),
+  onSave = vi.fn(async () => undefined),
+}: {
+  populated?: boolean;
+  onExport?: (briefing: BriefingData, approved: boolean) => Promise<void>;
+  onSave?: (briefing: BriefingData, approved: boolean) => Promise<void>;
+} = {}) {
   const loadBriefing = vi.fn(async (selection: BriefingReviewSelection) =>
     briefingFor(selection, populated),
   );
-  const onExport = vi.fn(async () => undefined);
-  const onSave = vi.fn(async () => undefined);
   render(
     <LeadershipBriefingReview
       initialAnchor="2026-09-30"
@@ -103,7 +109,7 @@ describe("LeadershipBriefingReview", () => {
   });
 
   it("renders unavailable values as engine-provided availability states, never as zero", async () => {
-    renderReview(true);
+    renderReview();
     await screen.findByLabelText("Briefing preview");
 
     expect(screen.getAllByText("Not recorded").length).toBeGreaterThan(0);
@@ -142,10 +148,30 @@ describe("LeadershipBriefingReview", () => {
   });
 
   it("does not fabricate a zero-valued financial display for fully empty sources", async () => {
-    renderReview(false);
+    renderReview({ populated: false });
     await screen.findByLabelText("Briefing preview");
 
     expect(screen.getAllByText("Not recorded").length).toBeGreaterThan(0);
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+  });
+
+  it("announces a save failure without retaining a saved-success message", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(async () => {
+      throw new Error("The approved PDF could not be saved to Documents. Please try again.");
+    });
+    renderReview({ onSave });
+    await screen.findByLabelText("Briefing preview");
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve briefing for final PDF" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save approved PDF" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The approved PDF could not be saved to Documents. Please try again.",
+    );
+    expect(screen.queryByText("Approved PDF saved to Documents.")).not.toBeInTheDocument();
+    expect(onSave).toHaveBeenCalledWith(expect.anything(), true);
   });
 });
