@@ -207,7 +207,14 @@ export default function EquipmentReadinessPage() {
         title="Equipment Readiness"
         description="Read-only fleet status from tracked equipment and service records."
         icon={Wrench}
-      />
+      >
+        <Link
+          href="/equipment/completeness"
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          Data completeness & collection queue
+        </Link>
+      </PageHeader>
 
       {error && (
         <Card className="mb-6 border-destructive">

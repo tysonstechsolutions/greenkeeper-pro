@@ -49,6 +49,7 @@ const inspectionTypeLabels: Record<InspectionType, string> = {
   pre: "Pre-Op Inspection",
   post: "Post-Op Inspection",
   cleaning: "Cleaning Inspection",
+  triage: "Triage Inspection",
 };
 
 const inspectionStatusColors: Record<InspectionStatus, string> = {
