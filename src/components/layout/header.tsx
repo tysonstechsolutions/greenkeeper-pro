@@ -36,6 +36,7 @@ import { useScrollDirection } from "@/lib/hooks/useScrollDirection";
 import { APP_CONFIG } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import type { NotificationType } from "@/types/database";
+import { GlobalAppSearch } from "./global-app-search";
 
 const notificationIcons: Record<NotificationType, React.ReactNode> = {
   task_assigned: <CheckSquare className="w-4 h-4 text-blue-500" />,
@@ -187,6 +188,8 @@ export function Header() {
           {pageTitle}
         </span>
       </div>
+
+      <GlobalAppSearch />
 
       {/* Right: Weather + Notifications + Profile */}
       <div className="flex items-center gap-1">

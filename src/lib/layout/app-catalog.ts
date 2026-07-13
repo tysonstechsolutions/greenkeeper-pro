@@ -69,6 +69,8 @@ export interface AppEntry {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Extra words that make this destination discoverable in global search. */
+  keywords?: readonly string[];
   /** Tailwind gradient for the mobile grid icon tile. */
   color: string;
   /** Pinned items sit in the sidebar's top section and are never reordered. */
@@ -215,7 +217,14 @@ const BOARD_REPORT: AppEntry = { href: "/reports/monthly-board", label: "Board R
 const REVENUE: AppEntry = { href: "/revenue", label: "Revenue", icon: Landmark, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const CAPITAL_PROJECTS: AppEntry = { href: "/capital-projects", label: "Capital Projects", icon: HardHat, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
 const TOURNAMENTS: AppEntry = { href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
-const ONBOARDING: AppEntry = { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
+const ONBOARDING: AppEntry = {
+  href: "/onboarding",
+  label: "Onboarding & SOPs",
+  icon: GraduationCap,
+  color: "from-violet-500 to-purple-600",
+  group: GROUPS.reference,
+  keywords: ["1x1", "1 x 1", "one-on-one", "one on one", "check-in", "coaching worksheet"],
+};
 const SF52: AppEntry = { href: "/staff/sf52", label: "SF-52", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const DD200: AppEntry = { href: "/dd-forms/200", label: "DD-200 (Property Loss)", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const DD2212: AppEntry = { href: "/dd-forms/2212", label: "2212 (Disposition)", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
@@ -439,4 +448,25 @@ export function resolveCatalogKey({
 
 export function getCatalog(flags: RoleFlags): AppEntry[] {
   return APP_CATALOG[resolveCatalogKey(flags)];
+}
+
+/**
+ * Expand workspace hubs into the actual destinations they contain while
+ * retaining the hub itself. Routes repeated across workspaces are returned
+ * once, in their first catalog position.
+ */
+export function flattenCatalog(items: AppEntry[]): AppEntry[] {
+  const flattened: AppEntry[] = [];
+  const seen = new Set<string>();
+
+  const visit = (item: AppEntry) => {
+    if (!seen.has(item.href)) {
+      seen.add(item.href);
+      flattened.push(item);
+    }
+    item.children?.forEach(visit);
+  };
+
+  items.forEach(visit);
+  return flattened;
 }
