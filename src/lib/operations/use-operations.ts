@@ -8,17 +8,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   directDeleteByFilter,
   directInsertRow,
+  directPatchRow,
+  directRpc,
   directSelectList,
 } from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
-  dutiesForDate,
+  assignmentForDate,
+  dutiesForTodayFromOccurrences,
+} from "./duties";
+import {
   evaluateObligations,
   periodKey,
   ymdLocal,
 } from "./engine";
 import type {
   DutyCompletion,
+  DutyAssignment,
+  DutyTaskOccurrence,
+  DutyTodayItem,
   EvaluatedObligation,
   Obligation,
   ObligationCompletion,
@@ -32,7 +40,7 @@ export interface UseOperations {
   /** All active obligations evaluated against today, display-sorted. */
   evaluated: EvaluatedObligation[];
   /** Duties that run today, with per-duty done state. */
-  dutiesToday: { duty: OperationDuty; done: boolean }[];
+  dutiesToday: DutyTodayItem[];
   allDuties: OperationDuty[];
   completeObligation: (e: EvaluatedObligation, note?: string) => Promise<void>;
   /** Undo a completion recorded for the given period. */
@@ -49,6 +57,8 @@ export function useOperations(): UseOperations {
   const [completions, setCompletions] = useState<ObligationCompletion[]>([]);
   const [duties, setDuties] = useState<OperationDuty[]>([]);
   const [dutyDone, setDutyDone] = useState<DutyCompletion[]>([]);
+  const [dutyAssignments, setDutyAssignments] = useState<DutyAssignment[]>([]);
+  const [dutyOccurrences, setDutyOccurrences] = useState<DutyTaskOccurrence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -75,6 +85,14 @@ export function useOperations(): UseOperations {
     (async () => {
       try {
         setLoading(true);
+        // Safe rollout: deterministic materialization is additive. If the new
+        // RPC has not reached an environment yet, legacy duty check-offs still
+        // load below.
+        await directRpc<number>(
+          "materialize_duty_occurrences",
+          { p_from: today, p_through: today },
+          "operations.materializeDuties",
+        ).catch(() => null);
         const [obs, comps, duts, done] = await Promise.all([
           directSelectList<Obligation>("obligations", {
             columns: "*",
@@ -111,6 +129,46 @@ export function useOperations(): UseOperations {
         setCompletions(comps);
         setDuties(duts);
         setDutyDone(done);
+
+        // Phase 1A ownership/occurrence reads are isolated so the Today page
+        // remains usable during a migration rollout.
+        try {
+          const [assignmentRows, occurrenceRows] = await Promise.all([
+            directSelectList<DutyAssignment>("duty_assignments", {
+              columns:
+                "*,primary:profiles!duty_assignments_primary_profile_id_fkey(id,full_name,role,department,role_group)," +
+                "backup:profiles!duty_assignments_backup_profile_id_fkey(id,full_name,role,department,role_group)," +
+                "contractor:vendors!duty_assignments_contractor_vendor_id_fkey(id,name,company)",
+              filters: [
+                `effective_from=lte.${today}`,
+              ],
+              or: `effective_through.is.null,effective_through.gte.${today}`,
+              limit: 1000,
+              label: "operations.dutyAssignments",
+            }),
+            directSelectList<DutyTaskOccurrence>("tasks", {
+              columns:
+                "id,duty_id,duty_assignment_id,series_id,occurrence_key,original_due_date," +
+                "due_date,assigned_to,status,completed_at,completed_by,verified_at,verified_by",
+              filters: [
+                "duty_id=not.is.null",
+                `due_date=eq.${today}`,
+                "status=not.eq.cancelled",
+              ],
+              limit: 1000,
+              label: "operations.dutyOccurrences",
+            }),
+          ]);
+          if (!cancelled) {
+            setDutyAssignments(assignmentRows);
+            setDutyOccurrences(occurrenceRows);
+          }
+        } catch {
+          if (!cancelled) {
+            setDutyAssignments([]);
+            setDutyOccurrences([]);
+          }
+        }
         setError(null);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -121,7 +179,7 @@ export function useOperations(): UseOperations {
     return () => {
       cancelled = true;
     };
-  }, [ready, nonce]);
+  }, [ready, nonce, today]);
 
   // `today` is deliberately in these deps: it's not read inside, but its
   // midnight flip is what forces re-evaluation against the new date.
@@ -138,11 +196,25 @@ export function useOperations(): UseOperations {
     const doneIds = new Set(
       dutyDone.filter((d) => d.duty_date === today).map((d) => d.duty_id),
     );
-    return dutiesForDate(duties, new Date()).map((duty) => ({
-      duty,
-      done: doneIds.has(duty.id),
-    }));
-  }, [duties, dutyDone, today]);
+    const todayDuties = dutiesForTodayFromOccurrences(duties, dutyOccurrences, today);
+    return todayDuties.map((duty): DutyTodayItem => {
+      const occurrence = dutyOccurrences.find((item) => item.duty_id === duty.id) ?? null;
+      const assignment = occurrence?.duty_assignment_id
+        ? dutyAssignments.find((item) => item.id === occurrence.duty_assignment_id) ?? null
+        : assignmentForDate(dutyAssignments, duty.id, today);
+      return {
+        duty,
+        occurrence,
+        assignment,
+        done: occurrence
+          ? occurrence.status === "completed" || occurrence.status === "verified"
+          : doneIds.has(duty.id),
+        primaryName: assignment?.primary?.full_name ?? null,
+        backupName: assignment?.backup?.full_name ?? null,
+        contractorName: assignment?.contractor?.name ?? null,
+      };
+    });
+  }, [duties, dutyDone, dutyOccurrences, dutyAssignments, today]);
 
   // In-flight guards: a double-tap must not fire a second insert for the
   // same row (the UNIQUE constraints would 409) or race a delete.
@@ -207,6 +279,36 @@ export function useOperations(): UseOperations {
       busyDuties.current.add(dutyId);
       try {
         const date = ymdLocal(new Date());
+        const occurrence = dutyOccurrences.find((item) => item.duty_id === dutyId) ?? null;
+        if (occurrence) {
+          if (!done && occurrence.status === "verified") {
+            throw new Error("Verified work cannot be reopened from Today.");
+          }
+          const now = done ? new Date().toISOString() : null;
+          await directPatchRow(
+            "tasks",
+            "id",
+            occurrence.id,
+            {
+              status: done ? "completed" : "pending",
+              completed_at: now,
+              completed_by: done ? profile?.id ?? null : null,
+              updated_at: new Date().toISOString(),
+            },
+            "operations.dutyOccurrenceStatus",
+          );
+          setDutyOccurrences((previous) => previous.map((item) =>
+            item.id === occurrence.id
+              ? {
+                  ...item,
+                  status: done ? "completed" : "pending",
+                  completed_at: now,
+                  completed_by: done ? profile?.id ?? null : null,
+                }
+              : item,
+          ));
+          return;
+        }
         if (done) {
           const row = await directInsertRow<DutyCompletion>(
             "duty_completions",
@@ -229,7 +331,7 @@ export function useOperations(): UseOperations {
         busyDuties.current.delete(dutyId);
       }
     },
-    [profile?.id, reload],
+    [dutyOccurrences, profile?.id, reload],
   );
 
   return {

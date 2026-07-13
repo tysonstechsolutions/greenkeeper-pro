@@ -512,6 +512,23 @@
   opacity: 0.8;
 }
 
+/* Native select styling for dense operational forms. */
+.gk-input {
+  width: 100%;
+  min-height: 2.25rem;
+  border: 1px solid var(--input);
+  border-radius: 0.375rem;
+  background: transparent;
+  padding: 0.375rem 0.75rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+
+.gk-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* Thin separator line between major page sections */
 .gk-divider {
   border: none;

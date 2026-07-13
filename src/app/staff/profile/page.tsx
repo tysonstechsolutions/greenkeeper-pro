@@ -32,6 +32,10 @@ import { callApi } from "@/lib/api/client";
 import { useProfiles, roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { useEmployee } from "@/lib/staff/use-employee";
 import {
+  DUTY_DEPARTMENT_LABELS,
+  DUTY_ROLE_GROUP_LABELS,
+} from "@/lib/operations/duties";
+import {
   RECORD_TYPE_LABELS,
   RECORD_TYPE_COLORS,
   RECORD_TYPES_WITH_HOURS,
@@ -43,6 +47,7 @@ import {
   type StaffDocument,
 } from "@/lib/staff/types";
 import type { UserRole, Certification as Cert, PersonnelDetails } from "@/types/database";
+import type { DutyDepartment, DutyRoleGroup } from "@/lib/operations/types";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "super", label: "Superintendent" },
@@ -54,6 +59,15 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "pro", label: "Pro Shop" },
   { value: "director", label: "Director" },
   { value: "gm", label: "General Manager" },
+];
+
+const EMPLOYEE_DUTY_ROLE_GROUPS: DutyRoleGroup[] = [
+  "recreation_aide",
+  "golf_operations_assistant",
+  "maintenance_staff",
+  "restaurant_staff",
+  "pro_shop_staff",
+  "general_manager",
 ];
 
 const RECORD_TYPE_OPTIONS: StaffRecordType[] = [
@@ -141,6 +155,8 @@ function ProfileContent() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState<UserRole>("crew");
+  const [department, setDepartment] = useState<DutyDepartment | "">("");
+  const [roleGroup, setRoleGroup] = useState<DutyRoleGroup | "">("");
   const [hireDate, setHireDate] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [supervisorId, setSupervisorId] = useState("");
@@ -162,6 +178,8 @@ function ProfileContent() {
     setEmail(profile.email || "");
     setPhone(profile.phone || "");
     setRole(profile.role);
+    setDepartment(profile.department || "");
+    setRoleGroup(profile.role_group || "");
     setHireDate(profile.hire_date || "");
     setIsActive(profile.is_active);
     setSupervisorId(profile.supervisor_id || "");
@@ -191,6 +209,8 @@ function ProfileContent() {
         email: email.trim(),
         phone: phone.trim() || null,
         role,
+        department: department || null,
+        role_group: roleGroup || null,
         hire_date: hireDate || null,
         is_active: isActive,
         supervisor_id: supervisorId || null,
@@ -531,6 +551,35 @@ function ProfileContent() {
                   <option key={p.id} value={p.id}>{p.full_name} ({roleLabels[p.role]})</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+            <div>
+              <p className="text-sm font-medium">Daily operations classification</p>
+              <p className="text-xs text-muted-foreground">
+                Used for duty ownership. Golf Operations is separate from the Pro Shop; leave unknown values as Not recorded.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="department">Department</Label>
+                <select id="department" value={department} onChange={(e) => setDepartment(e.target.value as DutyDepartment | "")} className="gk-input">
+                  <option value="">Not recorded</option>
+                  {Object.entries(DUTY_DEPARTMENT_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="roleGroup">Duty role group</Label>
+                <select id="roleGroup" value={roleGroup} onChange={(e) => setRoleGroup(e.target.value as DutyRoleGroup | "")} className="gk-input">
+                  <option value="">Not recorded</option>
+                  {EMPLOYEE_DUTY_ROLE_GROUPS.map((value) => (
+                    <option key={value} value={value}>{DUTY_ROLE_GROUP_LABELS[value]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

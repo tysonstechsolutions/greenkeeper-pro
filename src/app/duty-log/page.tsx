@@ -15,6 +15,10 @@ const AREA_LABELS: Record<DutyArea | "all", string> = {
   course: "Course & Range",
   restaurant: "Restaurant",
   pro_shop: "Pro Shop",
+  golf_operations: "Golf Operations",
+  administration: "Administration",
+  external: "Contractors",
+  unassigned: "Unassigned",
 };
 
 interface CompletionRow extends DutyCompletion {

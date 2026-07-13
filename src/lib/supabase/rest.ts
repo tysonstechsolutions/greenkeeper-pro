@@ -319,6 +319,19 @@ async function directFetch(
 
 // ── Public API ──────────────────────────────────────────────────────────
 
+/** Call a PostgREST RPC through the same timeout-safe direct transport. */
+export async function directRpc<T = unknown>(
+  functionName: string,
+  args: Record<string, unknown>,
+  label: string,
+): Promise<T> {
+  const path = `rest/v1/rpc/${encodeURIComponent(functionName)}`;
+  return await directFetch("POST", path, args, {
+    label,
+    headers: { Prefer: "return=representation" },
+  }) as T;
+}
+
 /**
  * PATCH a single row identified by the column/value pair. Mirrors
  * `supabase.from(table).update(patch).eq(idColumn, idValue)`.

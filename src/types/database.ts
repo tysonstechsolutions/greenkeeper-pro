@@ -314,6 +314,10 @@ export interface Profile {
   full_name: string;
   display_name: string | null;
   role: UserRole;
+  /** Operational grouping used by Daily Operations duty assignment. */
+  department?: import("@/lib/operations/types").DutyDepartment | null;
+  /** Specific work group; golf-operations roles remain distinct from pro shop. */
+  role_group?: import("@/lib/operations/types").DutyRoleGroup | null;
   phone: string | null;
   avatar_url: string | null;
   hire_date: string | null;
