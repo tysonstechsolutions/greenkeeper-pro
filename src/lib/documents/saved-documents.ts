@@ -38,6 +38,7 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   dd200: "DD-200 (Property Loss)",
   dd2212: "NAVCOMPT 2212 (Disposition)",
   onboarding_packet: "Onboarding Packet",
+  leadership_briefing: "GM Leadership Briefing",
   work_order: "Work Order",
   other: "Document",
 };

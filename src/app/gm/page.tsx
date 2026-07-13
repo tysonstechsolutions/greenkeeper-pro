@@ -56,6 +56,7 @@ export default function GmDashboardPage() {
 
   const tools = [
     { href: "/budget", label: "Budget", icon: Wallet },
+    { href: "/reports/briefing", label: "Leadership Briefing", icon: BarChart3 },
     { href: "/purchase-requests", label: "Purchase Requests", icon: FileText },
     { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck },
     { href: "/revenue", label: "Revenue", icon: Landmark },
