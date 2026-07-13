@@ -519,9 +519,25 @@ export interface Equipment {
   last_inspection_date: string | null;
   last_inspected_by: string | null;
   fuel_type: FuelType;
+  // Phase B triage (data-incomplete mode). Human-set only; supplementary to
+  // `status`, which stays the source of truth. NULL = not triaged.
+  triage_status: EquipmentTriageStatus | null;
+  down_since: string | null; // date first reported down (current episode)
   created_at: string;
   updated_at: string;
 }
+
+/** Phase B equipment triage workflow states (see src/lib/equipment/triage.ts). */
+export type EquipmentTriageStatus =
+  | 'unknown_problem'
+  | 'needs_inspection'
+  | 'diagnosed'
+  | 'waiting_on_parts'
+  | 'waiting_on_vendor'
+  | 'repair_in_progress'
+  | 'ready_for_testing'
+  | 'returned_to_service'
+  | 'replacement_candidate';
 
 export type EquipmentPartStatus = 'needed' | 'ordered' | 'received';
 
