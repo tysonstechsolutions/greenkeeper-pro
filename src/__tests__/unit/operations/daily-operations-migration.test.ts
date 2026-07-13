@@ -7,6 +7,14 @@ const migration = readFileSync(
   "utf8",
 );
 
+const existingSeriesFollowUp = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260713210000_daily_operations_phase1a_existing_series.sql",
+  ),
+  "utf8",
+);
+
 describe("daily operations Phase 1A migration contract", () => {
   it("keeps all approved role groups distinct", () => {
     for (const roleGroup of [
@@ -42,5 +50,13 @@ describe("daily operations Phase 1A migration contract", () => {
     expect(migration).toContain("Phase 1A migration: ownership not recorded");
     expect(migration).toContain("ELSE 'unassigned'");
     expect(migration).not.toContain("estimated_minutes = 0");
+  });
+
+  it("fires the series trigger for duties that predate Phase 1A", () => {
+    expect(migration).toContain("AFTER INSERT OR UPDATE OF");
+    expect(existingSeriesFollowUp).toContain("title = od.title");
+    expect(existingSeriesFollowUp).toContain(
+      "public.materialize_duty_occurrences(CURRENT_DATE, CURRENT_DATE + 60)",
+    );
   });
 });
