@@ -68,13 +68,15 @@ import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useEquipmentParts } from "@/lib/hooks/useEquipmentParts";
 import { useEquipmentServiceRecords } from "@/lib/hooks/useEquipmentServiceRecords";
 import { useAssetDisposal } from "@/lib/hooks/useAssetDisposal";
+import { useOrderItems } from "@/lib/hooks/useOrderItems";
+import { EquipmentPhaseBWorkflows } from "@/components/features/equipment/phase-b-workflows";
 import type { DisposalStatus } from "@/types/database";
 import {
   directSelectList,
   directPatchByFilter,
   directPatchRowReturning,
 } from "@/lib/supabase/rest";
-import type { Equipment, EquipmentInspection, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
+import type { Equipment, EquipmentInspection, EquipmentPart, EquipmentType, EquipmentStatus, EquipmentCondition, FuelType } from "@/types/database";
 import { downloadEquipmentReport } from "@/lib/reports/equipment-report";
 import { downloadNavcompt2212Report } from "@/lib/reports/navcompt-2212-report";
 import { parseAppDate } from "@/lib/utils/date-format";
@@ -121,6 +123,7 @@ function PageContent() {
   } = useEquipmentParts();
   const { records: serviceRecords, fetchRecords: fetchServiceRecords, addRecord: addServiceRecord, deleteRecord: deleteServiceRecord } = useEquipmentServiceRecords();
   const { disposal, fetchDisposal, createDisposal, advanceStep } = useAssetDisposal();
+  const { createItem: createOrderItem } = useOrderItems();
 
   const [equipment, setEquipment] = useState<EquipmentWithLogs | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -376,8 +379,8 @@ function PageContent() {
   };
 
   // Handle photo upload
-  const handlePhotoUpload = async (file: File) => {
-    if (!equipment) return;
+  const handlePhotoUpload = async (file: File): Promise<string | null> => {
+    if (!equipment) return null;
     setUploadingPhoto(true);
     try {
       const url = await uploadEquipmentPhoto(file, equipmentId);
@@ -386,11 +389,52 @@ function PageContent() {
         const updated = await updateEquipment(equipmentId, { photos: updatedPhotos });
         if (updated) {
           setEquipment({ ...equipment, photos: updatedPhotos });
+          return url;
         }
       }
+      return null;
     } finally {
       setUploadingPhoto(false);
     }
+  };
+
+  // Phase B creates an order-list row only after a person presses this action.
+  // It intentionally carries no estimated part price into a recorded repair cost.
+  const handleAddPartToOrderList = async (part: EquipmentPart) => {
+    if (!equipment) return;
+    const created = await createOrderItem({
+      name: part.name,
+      description: part.description || undefined,
+      category: "general",
+      priority: "normal",
+      quantity: String(part.quantity),
+      notes: [
+        `Equipment: ${equipment.name}`,
+        part.part_number ? `Part #: ${part.part_number}` : null,
+      ].filter(Boolean).join("\n"),
+    });
+    if (!created) {
+      setSaveError("Failed to add this part to the order list.");
+      return;
+    }
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2000);
+  };
+
+  const handleAddRecordedPartsNoteToOrderList = async () => {
+    if (!equipment?.parts_needed) return;
+    const created = await createOrderItem({
+      name: equipment.parts_needed,
+      category: "general",
+      priority: "normal",
+      notes: `Equipment: ${equipment.name}`,
+    });
+    if (!created) {
+      setSaveError("Failed to add this recorded parts note to the order list.");
+      return;
+    }
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2000);
   };
 
   // Handle report download
@@ -423,6 +467,7 @@ function PageContent() {
 
   // Handle equipment update
   const handleEditSubmit = async () => {
+    if (!equipment) return;
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -447,6 +492,12 @@ function PageContent() {
         current_hours: editForm.current_hours ? parseFloat(editForm.current_hours) : null,
         service_interval_hours: editForm.service_interval_hours ? parseFloat(editForm.service_interval_hours) : null,
       };
+
+      // Returning a unit to operational status is deliberate. Clear only the
+      // current down episode date; triage remains a separate human annotation.
+      if (editForm.status === "operational" && equipment.status !== "operational") {
+        updateData.down_since = null;
+      }
 
       const updated = await updateEquipment(equipmentId, updateData);
       if (updated) {
@@ -1024,6 +1075,18 @@ function PageContent() {
         </CardContent>
       </Card>
 
+      <EquipmentPhaseBWorkflows
+        equipment={equipment}
+        parts={parts}
+        serviceRecords={serviceRecords}
+        logs={equipment.logs ?? []}
+        canEdit={canEdit}
+        userId={user?.id}
+        onEquipmentPatched={(patch) => setEquipment((current) => current ? { ...current, ...patch } : current)}
+        onLogCreated={(log) => setEquipment((current) => current ? { ...current, logs: [log, ...(current.logs ?? [])] } : current)}
+        onUploadPhoto={handlePhotoUpload}
+      />
+
       {/* Parts Needed Card */}
       <Card>
         <CardHeader>
@@ -1194,6 +1257,9 @@ function PageContent() {
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {part.status === "needed" && (
                         <>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-primary" onClick={() => void handleAddPartToOrderList(part)}>
+                            Add to order list
+                          </Button>
                           <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" onClick={async () => {
                             clearPartsError();
                             const { error: err } = await updatePart(part.id, { status: "ordered" });
@@ -1247,8 +1313,16 @@ function PageContent() {
                 </div>
               ))}
             </div>
+          ) : equipment.parts_needed ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+              <div>
+                <p className="text-sm font-medium">Recorded parts note</p>
+                <p className="mt-1 text-sm text-muted-foreground">{equipment.parts_needed}</p>
+              </div>
+              {canEdit && <Button variant="outline" size="sm" onClick={() => void handleAddRecordedPartsNoteToOrderList()}>Add to order list</Button>}
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No parts needed</p>
+            <p className="text-sm text-muted-foreground text-center py-4">No parts recorded</p>
           )}
         </CardContent>
       </Card>

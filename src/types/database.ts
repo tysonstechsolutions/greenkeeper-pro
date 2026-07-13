@@ -112,7 +112,10 @@ export type EquipmentCondition = 'good' | 'fair' | 'needs_repair' | 'beyond_repa
 
 export type FuelType = 'gasoline' | 'diesel' | 'electric' | 'hybrid' | 'manual' | 'other';
 
-export type InspectionType = 'pre' | 'post' | 'cleaning';
+// `triage` was added by the applied Phase B foundation migration. It is a
+// current-observation workflow and remains distinct from pre/post operation
+// inspections.
+export type InspectionType = 'pre' | 'post' | 'cleaning' | 'triage';
 
 export type InspectionStatus = 'pass' | 'fail' | 'needs_attention';
 

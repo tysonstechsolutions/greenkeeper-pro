@@ -23,6 +23,9 @@ import { directSelectList } from "@/lib/supabase/rest";
 import { evaluateCerts, type Certification, type EvaluatedCert } from "@/lib/people/certs";
 import { useMyDay } from "@/lib/my-day/use-my-day";
 import { useCalendar } from "@/lib/calendar/use-calendar";
+import { useEquipment } from "@/lib/hooks/useEquipment";
+import { getReadinessBuckets } from "@/lib/equipment/readiness";
+import { isTriageAttention, triageLabel, triageOrder } from "@/lib/equipment/triage";
 import { kindMeta } from "@/lib/calendar/types";
 import {
   HUB_COURSE,
@@ -45,6 +48,7 @@ export default function TodayPage() {
   const ops = useOperations();
   const myDay = useMyDay();
   const calendar = useCalendar();
+  const { equipment: equipmentUnits } = useEquipment();
   const [showScheduled, setShowScheduled] = useState(false);
 
   // Expiring certifications ride the alarm section (Phase 5). Light fetch —
@@ -103,6 +107,19 @@ export default function TodayPage() {
   const myDayItems = useMemo(
     () => [...myDay.view.overdue, ...myDay.view.today].slice(0, 8),
     [myDay.view],
+  );
+
+  // Down units need a short, actionable presence on Today. Status and triage
+  // remain separate: no diagnosis is inferred for an untriaged down unit.
+  const equipmentAttention = useMemo(
+    () => equipmentUnits
+      .filter((unit) => (
+        isTriageAttention(unit.triage_status)
+        || (getReadinessBuckets(unit).includes("down") && !unit.triage_status)
+      ))
+      .sort((a, b) => triageOrder(a.triage_status) - triageOrder(b.triage_status) || a.name.localeCompare(b.name))
+      .slice(0, 6),
+    [equipmentUnits],
   );
 
   // This week's events (exclude My Day 'task' deadlines — shown above).
@@ -195,6 +212,31 @@ export default function TodayPage() {
                         Certification · renew before it lapses
                       </p>
                     </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {equipmentAttention.length > 0 && (
+            <section className="mb-6 gk-animate-in gk-animate-in-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="gk-section-label flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-warning" />
+                  Equipment attention
+                </p>
+                <Link href="/equipment" className="inline-link text-xs font-medium text-primary py-1">Open equipment</Link>
+              </div>
+              <div className="gk-card divide-y divide-border/50">
+                {equipmentAttention.map((unit) => (
+                  <Link
+                    key={unit.id}
+                    href={`/equipment/view?id=${encodeURIComponent(unit.id)}`}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-sm">{unit.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{triageLabel(unit.triage_status)}</span>
                   </Link>
                 ))}
               </div>
