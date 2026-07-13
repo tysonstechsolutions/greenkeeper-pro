@@ -2,7 +2,7 @@
 
 // TODAY — the operating-rhythm home (Operation Blueprint Phase 1).
 // One screen answers "what do I need to do?": alarms coming due, today's
-// duties per area, My Day tasks, and this week's events. Everything else
+// delegated duties, My Day tasks, and this week's events. Everything else
 // is one tap away through the workspace doors.
 
 import { useEffect, useMemo, useState } from "react";
@@ -10,7 +10,6 @@ import Link from "next/link";
 import {
   AlertTriangle,
   CalendarDays,
-  Check,
   ChevronDown,
   ListChecks,
   Loader2,
@@ -18,7 +17,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useOperations } from "@/lib/operations/use-operations";
 import { isInSeason, ymdLocal } from "@/lib/operations/engine";
-import type { DutyArea } from "@/lib/operations/types";
 import { directSelectList } from "@/lib/supabase/rest";
 import { evaluateCerts, type Certification, type EvaluatedCert } from "@/lib/people/certs";
 import { useMyDay } from "@/lib/my-day/use-my-day";
@@ -35,14 +33,9 @@ import {
   HUB_RESTAURANT,
 } from "@/lib/layout/app-catalog";
 import { ObligationRow } from "@/components/features/operations/obligation-row";
+import { DutyRhythm } from "@/components/features/operations/duty-rhythm";
 
 const WORKSPACES = [HUB_COURSE, HUB_RESTAURANT, HUB_PRO_SHOP, HUB_MONEY, HUB_PEOPLE];
-
-const AREA_LABELS: Record<DutyArea, string> = {
-  course: "Course & Range",
-  restaurant: "Restaurant",
-  pro_shop: "Pro Shop",
-};
 
 export default function TodayPage() {
   const ops = useOperations();
@@ -93,16 +86,6 @@ export default function TodayPage() {
   );
 
   const dutiesToday = ops.dutiesToday;
-  const dutiesByArea = useMemo(() => {
-    const groups = new Map<DutyArea, typeof dutiesToday>();
-    for (const d of dutiesToday) {
-      const list = groups.get(d.duty.area) ?? [];
-      list.push(d);
-      groups.set(d.duty.area, list);
-    }
-    return groups;
-  }, [dutiesToday]);
-
   // My Day: overdue rolls into today (same rule as /my-day).
   const myDayItems = useMemo(
     () => [...myDay.view.overdue, ...myDay.view.today].slice(0, 8),
@@ -243,57 +226,10 @@ export default function TodayPage() {
             </section>
           )}
 
-          {/* Duties by area */}
-          {dutiesByArea.size > 0 && (
-            <section className="mb-6 gk-animate-in gk-animate-in-3">
-              <p className="gk-section-label mb-2">The day&apos;s rhythm</p>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {(Object.keys(AREA_LABELS) as DutyArea[]).map((areaKey) => {
-                  const list = dutiesByArea.get(areaKey);
-                  if (!list?.length) return null;
-                  const doneCount = list.filter((d) => d.done).length;
-                  return (
-                    <div key={areaKey} className="gk-card overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/60 bg-muted/40">
-                        <span className="text-xs font-semibold">{AREA_LABELS[areaKey]}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {doneCount}/{list.length}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-border/50">
-                        {list.map(({ duty, done }) => (
-                          <button
-                            key={duty.id}
-                            onClick={() => ops.toggleDuty(duty.id, !done)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/40 active:bg-muted/60 transition-colors"
-                          >
-                            <span
-                              className={cn(
-                                "w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors",
-                                done
-                                  ? "bg-primary border-primary text-primary-foreground"
-                                  : "border-input",
-                              )}
-                            >
-                              {done && <Check className="w-3.5 h-3.5" />}
-                            </span>
-                            <span
-                              className={cn(
-                                "text-sm leading-snug",
-                                done && "line-through text-muted-foreground",
-                              )}
-                            >
-                              {duty.title}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+          <DutyRhythm
+            items={dutiesToday}
+            onToggle={(dutyId, done) => void ops.toggleDuty(dutyId, done)}
+          />
 
           {/* My Day tasks */}
           {myDayItems.length > 0 && (
