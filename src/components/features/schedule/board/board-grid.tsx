@@ -12,7 +12,9 @@ import { BoardCell } from "./board-cell";
 
 // Role grouping order. Same as ROLE_SORT in the hook — duplicated here so
 // we can iterate group-by-group for the section headers.
-const ROLE_GROUP_ORDER: UserRole[] = [
+type BoardGroup = UserRole | "contractor";
+
+const ROLE_GROUP_ORDER: BoardGroup[] = [
   "super",
   "gm",
   "director",
@@ -22,6 +24,7 @@ const ROLE_GROUP_ORDER: UserRole[] = [
   "mechanic",
   "crew",
   "seasonal",
+  "contractor",
 ];
 
 function isToday(dateString: string): boolean {
@@ -66,11 +69,12 @@ export function BoardGrid({
 }: BoardGridProps) {
   // Group crew by role for the section headers.
   const groupedCrew = useMemo(() => {
-    const byRole = new Map<UserRole, ScheduleBoard["crew"]>();
+    const byRole = new Map<BoardGroup, ScheduleBoard["crew"]>();
     for (const p of board.crew) {
-      const arr = byRole.get(p.role) ?? [];
+      const group: BoardGroup = p.isExternal ? "contractor" : p.role;
+      const arr = byRole.get(group) ?? [];
       arr.push(p);
-      byRole.set(p.role, arr);
+      byRole.set(group, arr);
     }
     return ROLE_GROUP_ORDER.flatMap((role) => {
       const members = byRole.get(role);
@@ -135,7 +139,7 @@ export function BoardGrid({
             {/* Role section header */}
             <div className={cn("grid border-b border-border bg-muted/40", gridTemplate)}>
               <div className="px-3 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider col-span-8">
-                {roleLabels[role]}
+                {role === "contractor" ? "Contractors" : roleLabels[role]}
               </div>
             </div>
 
@@ -151,7 +155,7 @@ export function BoardGrid({
                       {member.display_name || member.full_name}
                     </div>
                     <div className="text-[10px] text-muted-foreground/80 truncate">
-                      {roleLabels[member.role]}
+                      {member.isExternal ? "Contractor duty owner" : roleLabels[member.role]}
                     </div>
                   </div>
                 </div>
@@ -170,7 +174,7 @@ export function BoardGrid({
                       isTimeOff={cell.isTimeOff}
                       isToday={isToday(date)}
                       onShiftClick={
-                        onShiftClick ? () => onShiftClick(member.id, date) : undefined
+                        onShiftClick && !member.isExternal ? () => onShiftClick(member.id, date) : undefined
                       }
                       onTaskClick={
                         onTaskClick
@@ -181,19 +185,19 @@ export function BoardGrid({
                           : undefined
                       }
                       onAddTaskClick={
-                        onAddTaskClick
+                        onAddTaskClick && !member.isExternal
                           ? () => onAddTaskClick(member.id, date)
                           : undefined
                       }
-                      onTaskDragStart={onTaskDragStart}
-                      onTaskDragEnd={onTaskDragEnd}
+                      onTaskDragStart={member.isExternal ? undefined : onTaskDragStart}
+                      onTaskDragEnd={member.isExternal ? undefined : onTaskDragEnd}
                       onCellDragOver={
-                        onCellDragOver
+                        onCellDragOver && !member.isExternal
                           ? (e) => onCellDragOver(member.id, date, e)
                           : undefined
                       }
                       onCellDrop={
-                        onCellDrop ? (e) => onCellDrop(member.id, date, e) : undefined
+                        onCellDrop && !member.isExternal ? (e) => onCellDrop(member.id, date, e) : undefined
                       }
                       isDropTarget={dropTargetKey === cellKey}
                       draggingTaskId={draggingTaskId ?? null}

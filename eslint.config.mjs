@@ -32,6 +32,9 @@ const eslintConfig = defineConfig([
     "android/app/build/**",
     "android/app/src/main/assets/public/**",
     "android/build/**",
+    // Vendored pdf.js worker. This generated/minified runtime is served as a
+    // static asset and is not maintained as application source.
+    "public/vendor/pdf.worker.min.mjs",
     // Standalone Node.js utility scripts (CommonJS, not part of the app).
     "scripts/**",
   ]),

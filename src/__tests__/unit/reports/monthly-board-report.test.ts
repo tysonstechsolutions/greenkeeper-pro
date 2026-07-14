@@ -45,8 +45,7 @@ function mockSupabase(overrides: Record<string, unknown> = {}) {
       count: tableOverride?.count ?? 0,
     };
 
-    let proxy: object;
-    proxy = new Proxy({}, {
+    const proxy = new Proxy({}, {
       get(_target, prop) {
         if (prop === "then") {
           return (resolve: (value: typeof result) => void) =>

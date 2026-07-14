@@ -35,6 +35,7 @@ export default function MyDayPage() {
     view,
     loading,
     error,
+    dutyTasks,
     toggleStep,
     addSmart,
     bulkAdd,
@@ -160,10 +161,25 @@ export default function MyDayPage() {
 
       {note && <p className="text-xs text-muted-foreground mb-3">{note}</p>}
 
-      {loading && view.today.length === 0 && view.overdue.length === 0 && (
-        <p className="text-sm text-muted-foreground py-8 text-center">Loading your day…</p>
+      {loading && view.today.length === 0 && view.overdue.length === 0 && dutyTasks.length === 0 && (
+        <p className="text-sm text-muted-foreground py-8 text-center" role="status" aria-live="polite">Loading your day…</p>
       )}
-      {error && <p className="text-sm text-red-600 py-2">{error}</p>}
+      {error && <p className="text-sm text-red-600 py-2" role="alert">{error}</p>}
+
+      {dutyTasks.length > 0 && (
+        <section className="mb-4">
+          <p className="gk-section-label mb-2">Assigned duty work · {dutyTasks.length}</p>
+          <div className="space-y-1.5">
+            {dutyTasks.map((task) => (
+              <Link key={task.id} href={`/tasks/view?id=${task.id}`} className="gk-card flex items-center gap-3 px-3 py-2.5 hover:border-primary/30">
+                <ListChecks className="h-4 w-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{task.title}</span><span className="block text-xs text-muted-foreground">{task.due_date < todayLocal() ? `Overdue · ${task.due_date}` : `Due ${task.due_date}`} · {task.status.replace("_", " ")}</span></span>
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {!loading && (
         <Section
@@ -191,6 +207,7 @@ export default function MyDayPage() {
         view.today.length === 0 &&
         view.overdue.length === 0 &&
         view.backlog.length === 0 &&
+        dutyTasks.length === 0 &&
         recurringSeries.length === 0 && (
           <div className="gk-card p-6 text-center mt-2">
             <p className="text-sm font-medium">All caught up.</p>

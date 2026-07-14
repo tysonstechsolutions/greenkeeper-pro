@@ -731,6 +731,16 @@ function TaskCard({
                 </span>
               </div>
             )}
+            {!task.assigned_user && task.duty_owner_type === "contractor" && (
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-[10px] font-medium text-primary">C</span>
+                </div>
+                <span className="truncate max-w-[180px]">
+                  Contractor: {task.duty_contractor_name || "Not recorded"}
+                </span>
+              </div>
+            )}
 
             {/* Time */}
             {task.due_time && (

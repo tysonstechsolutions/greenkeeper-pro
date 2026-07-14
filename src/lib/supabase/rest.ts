@@ -426,6 +426,8 @@ export interface DirectListOptions {
   filters?: string[];
   orderBy?: DirectListOrder[];
   limit?: number;
+  /** Zero-based PostgREST offset. Prefer directSelectAll for complete reads. */
+  offset?: number;
   /** PostgREST `or=(x.eq.1,y.eq.2)` filter — pass the inside parens string. */
   or?: string;
   label: string;
@@ -444,6 +446,7 @@ export async function directSelectList<T = unknown>(
     filters = [],
     orderBy = [],
     limit,
+    offset,
     or,
     label,
   } = options;
@@ -452,18 +455,58 @@ export async function directSelectList<T = unknown>(
   qs.push(`select=${encodeURIComponent(columns)}`);
   for (const f of filters) qs.push(f);
   if (or) qs.push(`or=(${or})`);
+  const orderClauses: string[] = [];
   for (const o of orderBy) {
     const dir = o.ascending === false ? "desc" : "asc";
     let clause = `${encodeURIComponent(o.column)}.${dir}`;
     if (o.nullsFirst === true) clause += ".nullsfirst";
     else if (o.nullsFirst === false) clause += ".nullslast";
-    qs.push(`order=${clause}`);
+    orderClauses.push(clause);
   }
+  if (orderClauses.length > 0) qs.push(`order=${orderClauses.join(",")}`);
   if (typeof limit === "number") qs.push(`limit=${limit}`);
+  if (typeof offset === "number") qs.push(`offset=${offset}`);
 
   const path = `rest/v1/${table}?${qs.join("&")}`;
   const result = (await directFetch("GET", path, null, { label })) as T[] | null;
   return Array.isArray(result) ? result : [];
+}
+
+/**
+ * Fetch every row visible to the current actor using deterministic PostgREST
+ * pages. Operational views use this instead of silent 50/100/500-row caps.
+ * Callers should provide a stable order (ideally ending in a unique column).
+ */
+export async function directSelectAll<T = unknown>(
+  table: string,
+  options: Omit<DirectListOptions, "limit" | "offset"> & { pageSize?: number },
+): Promise<T[]> {
+  const { pageSize = 500, ...listOptions } = options;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 1000) {
+    throw new Error("directSelectAll pageSize must be between 1 and 1000");
+  }
+
+  return collectAllPages<T>(async (offset, size) => {
+    return directSelectList<T>(table, {
+      ...listOptions,
+      limit: size,
+      offset,
+      label: `${listOptions.label}.page${Math.floor(offset / pageSize) + 1}`,
+    });
+  }, pageSize);
+}
+
+/** Pure paging loop used by directSelectAll and its >100-row regression test. */
+export async function collectAllPages<T>(
+  fetchPage: (offset: number, pageSize: number) => Promise<T[]>,
+  pageSize: number,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await fetchPage(offset, pageSize);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }
 
 /**

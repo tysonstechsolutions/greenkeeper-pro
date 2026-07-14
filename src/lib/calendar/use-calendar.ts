@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  directSelectList,
+  directSelectAll,
+  directRpc,
   directInsertRow,
   directPatchRow,
   directDeleteRow,
@@ -30,11 +31,24 @@ interface DailyGoalRow {
   recurrence_active: boolean;
 }
 
+interface DutyTaskRow {
+  id: string;
+  duty_id: string;
+  title: string;
+  due_date: string;
+  original_due_date: string;
+  status: string;
+  duty_owner_type: "employee" | "contractor" | "unassigned" | null;
+  duty_primary_name: string | null;
+  duty_contractor_name: string | null;
+}
+
 export function useCalendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [meetings, setMeetings] = useState<OneOnOneMeeting[]>([]);
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
   const [goals, setGoals] = useState<DailyGoalRow[]>([]);
+  const [dutyTasks, setDutyTasks] = useState<DutyTaskRow[]>([]);
   const [people, setPeople] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,36 +57,44 @@ export function useCalendar() {
     setLoading(true);
     setError(null);
     try {
-      const [evs, mtgs, tourns, gls, profs] = await Promise.all([
-        directSelectList<CalendarEvent>("calendar_events", {
+      const [evs, mtgs, tourns, gls, profs, duties] = await Promise.all([
+        directSelectAll<CalendarEvent>("calendar_events", {
           columns: "*",
-          orderBy: [{ column: "event_date", ascending: true }],
+          orderBy: [{ column: "event_date", ascending: true }, { column: "id" }],
           label: "calendar.events",
         }),
-        directSelectList<OneOnOneMeeting>("staff_one_on_ones", {
+        directSelectAll<OneOnOneMeeting>("staff_one_on_ones", {
           columns: "*",
-          orderBy: [{ column: "scheduled_on", ascending: true }],
+          orderBy: [{ column: "scheduled_on", ascending: true }, { column: "id" }],
           label: "calendar.oneonones",
         }),
-        directSelectList<TournamentRow>("tournaments", {
+        directSelectAll<TournamentRow>("tournaments", {
           columns: "id,name,event_date,event_end_date,event_type,first_tee_time",
-          orderBy: [{ column: "event_date", ascending: true }],
+          orderBy: [{ column: "event_date", ascending: true }, { column: "id" }],
           label: "calendar.tournaments",
         }),
-        directSelectList<DailyGoalRow>("daily_goals", {
+        directSelectAll<DailyGoalRow>("daily_goals", {
           columns: "id,title,deadline,status,recurrence,recurrence_active",
-          orderBy: [{ column: "deadline", ascending: true, nullsFirst: false }],
+          orderBy: [{ column: "deadline", ascending: true, nullsFirst: false }, { column: "id" }],
           label: "calendar.goals",
         }),
-        directSelectList<{ id: string; full_name: string }>("profiles", {
+        directSelectAll<{ id: string; full_name: string }>("profiles", {
           columns: "id,full_name",
+          orderBy: [{ column: "id" }],
           label: "calendar.profiles",
+        }),
+        directSelectAll<DutyTaskRow>("tasks", {
+          columns: "id,duty_id,title,due_date,original_due_date,status,duty_owner_type,duty_primary_name,duty_contractor_name",
+          filters: ["duty_id=not.is.null", "status=not.eq.cancelled"],
+          orderBy: [{ column: "due_date" }, { column: "id" }],
+          label: "calendar.dutyTasks",
         }),
       ]);
       setEvents(evs);
       setMeetings(mtgs);
       setTournaments(tourns);
       setGoals(gls);
+      setDutyTasks(duties);
       const map: Record<string, string> = {};
       for (const p of profs) map[p.id] = p.full_name;
       setPeople(map);
@@ -146,8 +168,25 @@ export function useCalendar() {
         recurring: repeats,
       });
     }
+    for (const task of dutyTasks) {
+      const owner = task.duty_owner_type === "contractor"
+        ? `Contractor: ${task.duty_contractor_name || "Not recorded"}`
+        : task.duty_primary_name || "Unassigned";
+      out.push({
+        source: "duty_task",
+        sourceId: task.id,
+        dutyId: task.duty_id,
+        kind: "task",
+        title: task.title,
+        date: task.due_date,
+        endDate: null,
+        time: null,
+        href: `/tasks/view?id=${task.id}`,
+        subtitle: `${owner} · ${task.status.replace("_", " ")}${task.original_due_date !== task.due_date ? ` · moved from ${task.original_due_date}` : ""}`,
+      });
+    }
     return out;
-  }, [tournaments, meetings, events, goals, people]);
+  }, [tournaments, meetings, events, goals, dutyTasks, people]);
 
   // ── calendar_events ──
   const addCalendarEvent = useCallback(
@@ -257,6 +296,14 @@ export function useCalendar() {
             ? { deadline: newDate, anchor_deadline: newDate }
             : { deadline: newDate };
         await directPatchRow("daily_goals", "id", item.sourceId, patch, "calendar.reschedule.goal");
+      } else if (item.source === "duty_task") {
+        const reason = window.prompt("Why is this occurrence moving?")?.trim();
+        if (!reason) return;
+        await directRpc("move_duty_occurrence", {
+          p_task_id: item.sourceId,
+          p_new_due_date: newDate,
+          p_reason: reason,
+        }, "calendar.reschedule.dutyOccurrence");
       } else {
         await directPatchRow("calendar_events", "id", item.sourceId, { event_date: newDate }, "calendar.reschedule.event");
       }

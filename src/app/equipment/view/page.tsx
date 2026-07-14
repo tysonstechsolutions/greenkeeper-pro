@@ -528,19 +528,25 @@ function PageContent() {
   const handleInspectionSubmit = async () => {
     if (!equipment || !user) return;
 
+    // Map the inspection form to the canonical `equipment_inspections` contract.
+    // `overall_status` carries the reviewer's pass/fail/needs_attention verdict
+    // (previously discarded), `inspected_by` records the actor, and the checklist,
+    // meter reading, and fuel/oil levels are preserved instead of dropped.
+    const parsedHours = parseFloat(engineHours);
     const inspectionData: CreateInspectionData = {
       equipment_id: equipmentId,
       inspection_type: currentInspectionType,
-      condition_status: editForm.condition_status as EquipmentCondition,
-      notes: inspectionNotes,
-      checklist_items: inspectionItems.reduce(
-        (acc, item) => {
-          acc[item.id] = item.status === "ok";
-          return acc;
-        },
-        {} as Record<string, boolean>
-      ),
-      inspector_id: user.id,
+      inspected_by: user.id,
+      overall_status: inspectionOverall,
+      notes: inspectionNotes.trim() || null,
+      checklist_items: inspectionItems.map((item) => ({
+        item: item.text,
+        status: item.status,
+        notes: item.notes.trim() || undefined,
+      })),
+      engine_hours: Number.isFinite(parsedHours) ? parsedHours : null,
+      fuel_level: fuelLevel,
+      oil_level: oilLevel,
     };
 
     const inspection = await createInspection(inspectionData);

@@ -124,9 +124,18 @@ describe("duty recurrence", () => {
     expect(dutiesForTodayFromOccurrences([monthly], [moved], "2026-08-16")).toEqual([monthly]);
   });
 
+  it("does not duplicate a Today duty when an occurrence list repeats a task", () => {
+    const value = duty({ recurrence_rule: { cadence: "daily", interval: 1 } });
+    const row = occurrence({ due_date: "2026-07-13" });
+
+    expect(dutiesForTodayFromOccurrences([value], [row, { ...row }], "2026-07-13")).toEqual([value]);
+  });
+
   it("respects effective and seasonal boundaries", () => {
     const value = duty({
       season: "in_season",
+      seasonal_start_mmdd: "03-20",
+      seasonal_end_mmdd: "10-15",
       active_from: "2026-03-20",
       active_through: "2026-10-15",
       recurrence_rule: { cadence: "daily", interval: 1 },
@@ -135,6 +144,53 @@ describe("duty recurrence", () => {
     expect(dutyRunsOn(value, "2026-03-20")).toBe(true);
     expect(dutyRunsOn(value, "2026-10-15")).toBe(true);
     expect(dutyRunsOn(value, "2026-10-16")).toBe(false);
+  });
+
+  it("does not invent missing operating-season boundaries", () => {
+    const value = duty({
+      season: "in_season",
+      seasonal_start_mmdd: null,
+      seasonal_end_mmdd: null,
+      recurrence_rule: { cadence: "daily", interval: 1 },
+    });
+    expect(dutyRunsOn(value, "2026-07-13")).toBe(false);
+  });
+
+  it("supports a recorded season that crosses New Year", () => {
+    const value = duty({
+      season: "in_season",
+      seasonal_start_mmdd: "11-01",
+      seasonal_end_mmdd: "03-15",
+      active_from: "2026-01-01",
+      recurrence_rule: { cadence: "daily", interval: 1 },
+    });
+    expect(dutyRunsOn(value, "2026-01-10")).toBe(true);
+    expect(dutyRunsOn(value, "2026-07-10")).toBe(false);
+    expect(dutyRunsOn(value, "2026-12-10")).toBe(true);
+  });
+
+  it("keeps weekly intervals stable across daylight-saving transitions", () => {
+    const value = duty({
+      active_from: "2026-03-02",
+      recurrence_rule: { cadence: "weekly", interval: 1, weekdays: ["mon"] },
+    });
+    expect(dutyRunsOn(value, "2026-03-09")).toBe(true);
+    expect(dutyRunsOn(value, "2026-11-02")).toBe(true);
+  });
+
+  it("handles leap-day and month-end recurrence without fabricated dates", () => {
+    const leapDay = duty({
+      active_from: "2024-02-29",
+      recurrence_rule: { cadence: "annual", interval: 1, day_of_month: 29, months: [2] },
+    });
+    const monthEnd = duty({
+      active_from: "2026-01-31",
+      recurrence_rule: { cadence: "monthly", interval: 1, day_of_month: -1 },
+    });
+    expect(dutyRunsOn(leapDay, "2028-02-29")).toBe(true);
+    expect(dutyRunsOn(leapDay, "2027-02-28")).toBe(true);
+    expect(dutyRunsOn(monthEnd, "2026-02-28")).toBe(true);
+    expect(dutyRunsOn(monthEnd, "2028-02-29")).toBe(true);
   });
 });
 

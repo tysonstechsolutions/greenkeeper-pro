@@ -44,7 +44,8 @@ export type CalendarSource =
   | "tournament"
   | "one_on_one"
   | "calendar_event"
-  | "daily_goal";
+  | "daily_goal"
+  | "duty_task";
 
 /** Normalized item the calendar view renders (from any of the 3 sources). */
 export interface CalendarItem {
@@ -60,6 +61,8 @@ export interface CalendarItem {
   subtitle: string | null;
   /** True for a recurring My Day task — the reschedule flow offers this-one vs series. */
   recurring?: boolean;
+  /** Canonical duty source for a duty-backed task occurrence. */
+  dutyId?: string | null;
 }
 
 /** Per-kind label + Tailwind colors for chips/dots. */

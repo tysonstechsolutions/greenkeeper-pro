@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DutiesPage from "@/app/operations/duties/page";
@@ -7,6 +7,11 @@ import type { DutyAssignment, OperationDuty } from "@/lib/operations/types";
 const mocks = vi.hoisted(() => ({
   saveDuty: vi.fn(),
   reassignAll: vi.fn(),
+  previewCoverage: vi.fn(),
+  setTemporaryCoverage: vi.fn(),
+  previewRecurrence: vi.fn(),
+  changeFutureRecurrence: vi.fn(),
+  linkLegacyRoster: vi.fn(),
 }));
 
 const duty: OperationDuty = {
@@ -61,6 +66,10 @@ vi.mock("@/lib/operations/use-duty-management", () => ({
     duties: [duty],
     assignments: [assignment],
     currentAssignments: [assignment],
+    coverages: [],
+    recurrenceVersions: [],
+    auditEvents: [],
+    legacyRoster: [],
     people: [
       { id: "dj", full_name: "DJ", department: "food_and_beverage", role_group: "restaurant_staff" },
       { id: "devin", full_name: "Devin", department: "pro_shop", role_group: "pro_shop_staff" },
@@ -73,11 +82,17 @@ vi.mock("@/lib/operations/use-duty-management", () => ({
     reload: vi.fn(),
     saveDuty: mocks.saveDuty,
     reassignAll: mocks.reassignAll,
+    previewCoverage: mocks.previewCoverage,
+    setTemporaryCoverage: mocks.setTemporaryCoverage,
+    previewRecurrence: mocks.previewRecurrence,
+    changeFutureRecurrence: mocks.changeFutureRecurrence,
+    linkLegacyRoster: mocks.linkLegacyRoster,
   }),
 }));
 
 describe("DutiesPage", () => {
   beforeEach(() => {
+    vi.stubGlobal("scrollTo", vi.fn());
     mocks.saveDuty.mockReset().mockResolvedValue(duty);
     mocks.reassignAll.mockReset().mockResolvedValue([
       { duty_id: duty.id, assignment_id: "assignment-2", role_changed: "primary" },
@@ -97,16 +112,14 @@ describe("DutiesPage", () => {
     const user = userEvent.setup();
     render(<DutiesPage />);
 
-    await user.selectOptions(
-      screen.getByLabelText("Employee leaving or changing roles"),
-      "dj",
-    );
-    expect(screen.getByText("1 affected assignment")).toBeInTheDocument();
-    expect(screen.getByText(/Monthly extinguisher verification · primary/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Employee changing roles"), "dj");
+    expect(screen.getByText("1 assignment(s) affected.")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Replacement"), "devin");
-    await user.type(screen.getByLabelText("Reason"), "Department transfer");
-    await user.click(screen.getByRole("button", { name: "Confirm reassignment" }));
+    const heading = screen.getByText("Reassign active duties");
+    const card = heading.parentElement?.parentElement as HTMLElement;
+    await user.selectOptions(within(card).getByLabelText("Replacement"), "devin");
+    await user.type(within(card).getByLabelText("Reason"), "Department transfer");
+    await user.click(within(card).getByRole("button", { name: "Confirm reassignment" }));
 
     expect(mocks.reassignAll).toHaveBeenCalledWith(expect.objectContaining({
       fromProfileId: "dj",
@@ -117,13 +130,16 @@ describe("DutiesPage", () => {
     expect(await screen.findByText("1 active duty assignment updated.")).toBeInTheDocument();
   });
 
-  it("preserves the recurrence anchor and import provenance when editing ownership", async () => {
+  it("preserves recurrence anchor and import provenance through the atomic writer", async () => {
     const user = userEvent.setup();
     render(<DutiesPage />);
 
     await user.click(screen.getByRole("button", { name: "Edit Monthly extinguisher verification" }));
-    await user.type(screen.getByLabelText("Assignment or change reason"), "Backup review");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.type(
+      screen.getByLabelText("Ownership reason (required only when ownership changes)"),
+      "Backup review",
+    );
+    await user.click(screen.getByRole("button", { name: "Save definition" }));
 
     expect(mocks.saveDuty).toHaveBeenCalledWith(expect.objectContaining({
       id: duty.id,
@@ -134,5 +150,14 @@ describe("DutiesPage", () => {
       }),
       assignmentReason: "Backup review",
     }));
+  });
+
+  it("does not assume operating-season dates", async () => {
+    const user = userEvent.setup();
+    render(<DutiesPage />);
+    await user.selectOptions(screen.getByLabelText("Season"), "in_season");
+    expect(screen.getByText(/no seasonal occurrences are generated/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Seasonal start (MM-DD)")).toHaveValue("");
+    expect(screen.getByLabelText("Seasonal end (MM-DD)")).toHaveValue("");
   });
 });

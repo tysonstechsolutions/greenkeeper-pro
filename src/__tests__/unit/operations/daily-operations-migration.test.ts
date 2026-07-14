@@ -15,6 +15,14 @@ const existingSeriesFollowUp = readFileSync(
   "utf8",
 );
 
+const correctiveMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260713230000_daily_operations_phase1a_corrective.sql",
+  ),
+  "utf8",
+);
+
 describe("daily operations Phase 1A migration contract", () => {
   it("keeps all approved role groups distinct", () => {
     for (const roleGroup of [
@@ -58,5 +66,81 @@ describe("daily operations Phase 1A migration contract", () => {
     expect(existingSeriesFollowUp).toContain(
       "public.materialize_duty_occurrences(CURRENT_DATE, CURRENT_DATE + 60)",
     );
+  });
+});
+
+describe("daily operations Phase 1A corrective security contract", () => {
+  it("replaces every tasks policy before installing least-privilege policies", () => {
+    expect(correctiveMigration).toContain("FOR p IN SELECT policyname FROM pg_policies");
+    expect(correctiveMigration).toContain("CREATE POLICY tasks_select_authorized");
+    expect(correctiveMigration).toContain("CREATE POLICY tasks_update_authorized");
+    expect(correctiveMigration).toContain("AND assigned_by = (SELECT auth.uid())");
+    expect(correctiveMigration).toContain("AND duty_id IS NULL");
+    expect(correctiveMigration).toContain("Completed and verified tasks are protected history");
+  });
+
+  it("uses atomic manager commands and retires direct competing writers", () => {
+    expect(correctiveMigration).toContain("public.save_operation_duty(");
+    expect(correctiveMigration).toContain("public.set_temporary_duty_coverage(");
+    expect(correctiveMigration).toContain("public.change_future_duty_recurrence(");
+    expect(correctiveMigration).toContain(
+      "REVOKE INSERT, UPDATE, DELETE ON public.operation_duties FROM authenticated",
+    );
+    expect(correctiveMigration).toContain(
+      "REVOKE INSERT, UPDATE, DELETE ON public.pro_shop_duties FROM authenticated",
+    );
+  });
+
+  it("keeps evidence validation and duty-management history behind explicit commands", () => {
+    expect(correctiveMigration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.record_task_evidence[\s\S]*?LANGUAGE plpgsql SECURITY DEFINER SET search_path = public/,
+    );
+    expect(correctiveMigration).not.toContain("CREATE POLICY task_evidence_items_insert_authorized");
+    expect(correctiveMigration).not.toContain("CREATE POLICY task_evidence_items_update_authorized");
+    expect(correctiveMigration).toContain(
+      "REVOKE INSERT, UPDATE, DELETE ON public.task_evidence_items FROM authenticated",
+    );
+    expect(correctiveMigration).toContain("REVOKE ALL PRIVILEGES ON TABLE");
+    expect(correctiveMigration).toContain("public.tasks,");
+    expect(correctiveMigration).toContain("public.task_evidence_items,");
+    expect(correctiveMigration).toContain("FROM PUBLIC, anon");
+    expect(correctiveMigration).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO authenticated");
+    expect(correctiveMigration).toContain("duty_audit_events_select_managers");
+    expect(correctiveMigration).toContain("duty_recurrence_versions_select_managers");
+    expect(correctiveMigration).toContain("duty_temporary_coverages_select_managers");
+    expect(correctiveMigration).toContain("NEW.assigned_by := v_actor");
+    expect(correctiveMigration).toContain("Phase 1A post-migration assertions failed");
+    expect(correctiveMigration).toContain("anonymous table access remains");
+  });
+
+  it("allows an individual GM profile without a synthetic superintendent identity", () => {
+    expect(correctiveMigration).toContain("DROP CONSTRAINT IF EXISTS profiles_role_check");
+    expect(correctiveMigration).toContain("'seasonal','pro','gm'");
+  });
+
+  it("restricts occurrence generation to trusted service jobs", () => {
+    expect(correctiveMigration).toContain(
+      "REVOKE ALL ON FUNCTION public.materialize_duty_occurrences(DATE, DATE) FROM PUBLIC, authenticated",
+    );
+    expect(correctiveMigration).toContain(
+      "GRANT EXECUTE ON FUNCTION public.materialize_duty_occurrences(DATE, DATE) TO service_role",
+    );
+  });
+
+  it("preserves moved and protected occurrences during recurrence revisions", () => {
+    expect(correctiveMigration).toContain(
+      "WHEN t.due_date IS DISTINCT FROM t.original_due_date THEN 'preserve'",
+    );
+    expect(correctiveMigration).toContain(
+      "AND t.due_date IS NOT DISTINCT FROM t.original_due_date",
+    );
+    expect(correctiveMigration).toContain("WHEN t.status <> 'pending' THEN 'preserve'");
+  });
+
+  it("does not invent missing seasonal dates or evidence facts", () => {
+    expect(correctiveMigration).toContain("IF v_start IS NULL OR v_end IS NULL THEN");
+    expect(correctiveMigration).not.toContain("COALESCE(p_start_mmdd, '03-20')");
+    expect(correctiveMigration).not.toContain("estimated_minutes = 0");
+    expect(correctiveMigration).toContain("evidence_requirement_state");
   });
 });

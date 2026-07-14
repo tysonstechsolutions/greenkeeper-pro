@@ -1,8 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { resolveAccessToken } from "@/lib/api/client";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   directDeleteByFilter,
   directDeleteRow,
@@ -10,6 +8,8 @@ import {
   directInsertRows,
   directPatchByFilter,
   directPatchRow,
+  directRpc,
+  directSelectAll,
   directSelectList,
 } from "@/lib/supabase/rest";
 import {
@@ -88,10 +88,13 @@ export const SUN_DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] 
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
-export type CrewProfile = Pick<
+export interface CrewProfile extends Pick<
   Profile,
   "id" | "full_name" | "display_name" | "role" | "avatar_url" | "phone"
->;
+> {
+  /** Read-only virtual row for contractor-owned duty occurrences. */
+  isExternal?: boolean;
+}
 
 export interface BoardCell {
   shift: Schedule | null;
@@ -191,7 +194,6 @@ const cellKey = (userId: string, date: string) => `${userId}|${date}`;
  */
 export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
   const { profile } = useAuth();
-  const supabase = useMemo(() => createClient(), []);
 
   const [board, setBoard] = useState<ScheduleBoard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -211,22 +213,11 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       const weekEnd = dates[6];
 
       // Profiles via raw REST (matches useProfiles' wedge-resistant pattern).
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-      const token = await resolveAccessToken(supabase, supabaseUrl, anonKey);
-
-      const profilesUrl =
-        `${supabaseUrl}/rest/v1/profiles` +
-        `?select=${encodeURIComponent(PROFILE_COLUMNS)}` +
-        `&is_active=eq.true` +
-        `&order=role.asc,full_name.asc` +
-        `&limit=200`;
-
-      const fetchProfilesPromise = fetch(profilesUrl, {
-        headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
-      }).then(async (r) => {
-        if (!r.ok) throw new Error(`profiles ${r.status}`);
-        return (await r.json()) as CrewProfile[];
+      const fetchProfilesPromise = directSelectAll<CrewProfile>("profiles", {
+        columns: PROFILE_COLUMNS,
+        filters: ["is_active=eq.true"],
+        orderBy: [{ column: "role" }, { column: "full_name" }, { column: "id" }],
+        label: "scheduleBoard.fetchProfiles",
       });
 
       // Shifts for the week. Use direct REST instead of supabase.from() —
@@ -234,13 +225,13 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       // post-save navigations, leaving the page stuck at "Loading…" until
       // a manual refresh. The `directSelectList` helper goes straight to
       // PostgREST with the cached JWT and sidesteps that path.
-      const fetchShiftsPromise = directSelectList<Schedule>("schedules", {
+      const fetchShiftsPromise = directSelectAll<Schedule>("schedules", {
         columns: "*",
         filters: [
           `schedule_date=gte.${encodeURIComponent(dates[0])}`,
           `schedule_date=lte.${encodeURIComponent(weekEnd)}`,
         ],
-        limit: 500,
+        orderBy: [{ column: "schedule_date" }, { column: "id" }],
         label: "scheduleBoard.fetchShifts",
       });
 
@@ -248,7 +239,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       // We pull these in two parallel queries and merge — combining them
       // into one filter expression with directSelectList's `or` clause is
       // possible but harder to read.
-      const fetchScheduledTasksPromise = directSelectList<TaskWithRelations>(
+      const fetchScheduledTasksPromise = directSelectAll<TaskWithRelations>(
         "tasks",
         {
           columns: TASK_COLUMNS,
@@ -261,15 +252,15 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
             { column: "due_date", ascending: true },
             { column: "priority", ascending: true },
             { column: "due_time", ascending: true, nullsFirst: false },
+            { column: "id" },
           ],
-          limit: 500,
           label: "scheduleBoard.fetchScheduledTasks",
         },
       );
 
       // Backlog = task templates (reusable). Drag a template onto a cell
       // to create a fresh task; the template stays for next time.
-      const fetchTemplatesPromise = directSelectList<TaskTemplate>(
+      const fetchTemplatesPromise = directSelectAll<TaskTemplate>(
         "task_templates",
         {
           columns: "*",
@@ -277,8 +268,8 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
           orderBy: [
             { column: "default_priority", ascending: true },
             { column: "name", ascending: true },
+            { column: "id" },
           ],
-          limit: 500,
           label: "scheduleBoard.fetchTemplates",
         },
       );
@@ -286,7 +277,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       // Approved time-off overlapping the week:
       //   start_date <= weekEnd AND end_date >= weekStart
       // Same wedge-resistant pattern as shifts above.
-      const fetchTimeOffPromise = directSelectList<TimeOffRequest>(
+      const fetchTimeOffPromise = directSelectAll<TimeOffRequest>(
         "time_off_requests",
         {
           columns: "*",
@@ -295,7 +286,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
             `start_date=lte.${encodeURIComponent(weekEnd)}`,
             `end_date=gte.${encodeURIComponent(dates[0])}`,
           ],
-          limit: 200,
+          orderBy: [{ column: "start_date" }, { column: "id" }],
           label: "scheduleBoard.fetchTimeOff",
         },
       );
@@ -334,11 +325,16 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       }
 
       for (const t of scheduledTasks) {
-        if (!t.assigned_to || !t.due_date) continue;
+        if (!t.due_date) continue;
         // Skip tasks whose due_date isn't in this week (defensive — query
         // already filtered, but assigned_to may have been stripped server-side).
         if (!dates.includes(t.due_date)) continue;
-        ensureCell(t.assigned_to, t.due_date).tasks.push(t);
+        const rowId = t.assigned_to ?? (
+          t.duty_owner_type === "contractor"
+            ? `contractor:${t.duty_contractor_vendor_id ?? t.duty_contractor_name ?? t.id}`
+            : null
+        );
+        if (rowId) ensureCell(rowId, t.due_date).tasks.push(t);
       }
 
       // Time-off: explode each request into per-day flags.
@@ -355,7 +351,26 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       }
 
       // Crew sorting: role rank then name (Spanish-aware compare).
-      const crew = [...profilesData].sort((a, b) => {
+      const contractorRows: CrewProfile[] = [];
+      const seenContractors = new Set<string>();
+      for (const task of scheduledTasks) {
+        if (task.duty_owner_type !== "contractor") continue;
+        const id = `contractor:${task.duty_contractor_vendor_id ?? task.duty_contractor_name ?? task.id}`;
+        if (seenContractors.has(id)) continue;
+        seenContractors.add(id);
+        contractorRows.push({
+          id,
+          full_name: task.duty_contractor_name || "Contractor not recorded",
+          display_name: task.duty_contractor_name || "Contractor not recorded",
+          role: "seasonal",
+          avatar_url: null,
+          phone: null,
+          isExternal: true,
+        });
+      }
+
+      const crew = [...profilesData, ...contractorRows].sort((a, b) => {
+        if (!!a.isExternal !== !!b.isExternal) return a.isExternal ? 1 : -1;
         const r = (ROLE_SORT[a.role] ?? 99) - (ROLE_SORT[b.role] ?? 99);
         if (r !== 0) return r;
         const an = a.display_name || a.full_name || "";
@@ -377,7 +392,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false);
     }
-  }, [weekStart, supabase]);
+  }, [weekStart]);
 
   useEffect(() => {
     void fetchBoard();
@@ -899,24 +914,20 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
 
       // Build the patch — completed/verified set the actor + timestamp,
       // matching what useTasks.completeTask / verifyTask do.
-      const patch: Record<string, unknown> = { status };
-      const now = new Date().toISOString();
-      if (status === "completed") {
-        patch.completed_by = profile.id;
-        patch.completed_at = now;
-      } else if (status === "verified") {
-        patch.verified_by = profile.id;
-        patch.verified_at = now;
+      let blockedReason: string | null = null;
+      if (status === "blocked") {
+        blockedReason = window.prompt("Why is this task blocked?")?.trim() || null;
+        if (!blockedReason) {
+          rollback();
+          return false;
+        }
       }
-
       try {
-        await directPatchRow(
-          "tasks",
-          "id",
-          taskId,
-          patch,
-          "scheduleBoard.setTaskStatus",
-        );
+        await directRpc("transition_task_status", {
+          p_task_id: taskId,
+          p_status: status,
+          p_blocked_reason: blockedReason,
+        }, "scheduleBoard.setTaskStatus");
         return true;
       } catch (err) {
         rollback();

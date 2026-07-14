@@ -1,27 +1,48 @@
 "use client";
 
 import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/lib/hooks/useAuth";
 
-/**
- * Access is fully open: the app auto-signs-in with a shared account in
- * useAuth (no PIN, no roles), so there is no auth gate anymore.
- *
- * We only bounce the now-defunct login routes back into the app so stale
- * links / bookmarks / the old service-worker shell don't dead-end on an
- * empty PIN screen.
- */
-const DEFUNCT_LOGIN_ROUTES = new Set(["/login", "/pin-login"]);
+const PUBLIC_ROUTES = new Set([
+  "/login",
+  "/pin-login",
+  "/join",
+  "/install",
+  "/offline",
+]);
 
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.has(pathname) || pathname.startsWith("/invite/");
+}
+
+/** Require an individual session for every operational route. */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, loading } = useAuth();
+  const isPublic = isPublicRoute(pathname);
 
   useEffect(() => {
-    if (pathname && DEFUNCT_LOGIN_ROUTES.has(pathname)) {
-      router.replace("/today");
+    if (!loading && !user && !isPublic) {
+      const returnTo = pathname.startsWith("/") ? pathname : "/today";
+      router.replace(`/pin-login?returnTo=${encodeURIComponent(returnTo)}`);
     }
-  }, [pathname, router]);
+  }, [isPublic, loading, pathname, router, user]);
+
+  if (!isPublic && (loading || !user)) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center gap-2 text-sm text-muted-foreground"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+        <span>{loading ? "Checking your sign-in…" : "Taking you to sign in…"}</span>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }
