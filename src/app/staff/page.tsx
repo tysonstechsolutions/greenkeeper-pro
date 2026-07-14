@@ -21,6 +21,7 @@ import {
   Shield,
   WifiOff,
   RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -358,6 +359,12 @@ export default function StaffPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link href="/staff/insights">
+            <Button variant="outline" className="gap-2">
+              <TrendingUp className="w-4 h-4" />
+              1:1 Insights
+            </Button>
+          </Link>
           <Link href="/staff/sf52">
             <Button variant="outline" className="gap-2">
               <FileText className="w-4 h-4" />

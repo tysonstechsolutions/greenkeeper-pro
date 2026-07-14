@@ -204,6 +204,7 @@ const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", ic
 const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["employees", "team", "people", "1:1", "one on one"] };
 const DUTY_OWNERSHIP: AppEntry = { href: "/operations/duties", label: "Duty Ownership", icon: UserRoundCog, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const CERTIFICATIONS: AppEntry = { href: "/certifications", label: "Certifications", icon: GraduationCap, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
+const ONEONONE_INSIGHTS: AppEntry = { href: "/staff/insights", label: "1:1 Insights", icon: BarChart3, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["one on one", "1:1", "themes", "morale", "concerns"] };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP_DUTIES: AppEntry = { href: "/pro-shop-schedule/duties", label: "Shop Duties", icon: ListChecks, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 
@@ -343,7 +344,7 @@ export const HUB_PEOPLE: AppEntry = {
   icon: Users,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [STAFF, DUTY_OWNERSHIP, CERTIFICATIONS, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
+  children: [STAFF, ONEONONE_INSIGHTS, DUTY_OWNERSHIP, CERTIFICATIONS, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
 };
 
 /** Hub lookup by route, so the hub pages can render their own card grid. */

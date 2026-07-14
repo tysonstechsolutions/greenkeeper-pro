@@ -305,6 +305,10 @@ export interface PersonnelDetails {
   avg_hours?: string | null; // average hours for a flex employee
   flsa?: string | null; // "E" (exempt) | "N" (nonexempt)
   cost_center?: string | null; // 5-digit home cost center
+  // Free-text scheduling preference (desired hours / availability). Updated
+  // from a 1:1 when the employee asks for more/fewer hours; shown on their
+  // profile so the schedule reflects what they want.
+  scheduling_preference?: string | null;
 }
 
 // Table row types

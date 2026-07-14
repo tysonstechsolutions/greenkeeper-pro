@@ -31,6 +31,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { callApi } from "@/lib/api/client";
 import { useProfiles, roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { useEmployee } from "@/lib/staff/use-employee";
+import { OneOnOnePanel } from "@/components/features/oneonone/one-on-one-panel";
 import {
   DUTY_DEPARTMENT_LABELS,
   DUTY_ROLE_GROUP_LABELS,
@@ -132,6 +133,7 @@ function ProfileContent() {
     documents,
     loading,
     error,
+    reload,
     saveProfile,
     addRecord,
     deleteRecord,
@@ -348,32 +350,18 @@ function ProfileContent() {
     }
   };
 
-  // ── Log a 1:1 ──
-  const [ooDate, setOoDate] = useState("");
-  const [ooDetails, setOoDetails] = useState("");
-  const [ooFollowUp, setOoFollowUp] = useState("");
-  const [addingOo, setAddingOo] = useState(false);
+  // The old free-text "Log a 1:1" was replaced by OneOnOnePanel (structured,
+  // AI-personalized sessions with action routing). Scheduling a 1:1 to the
+  // calendar and the follow-up (concern) tracker below still live here.
 
-  const handleAddOneOnOne = async () => {
-    if (!ooDetails.trim()) return;
-    setAddingOo(true);
-    try {
-      await addRecord({
-        type: "one_on_one",
-        event_date: ooDate || new Date().toISOString().slice(0, 10),
-        title: "1:1 Check-In",
-        details: ooDetails.trim(),
-        follow_up: ooFollowUp.trim() || null,
-      });
-      setOoDate("");
-      setOoDetails("");
-      setOoFollowUp("");
-    } finally {
-      setAddingOo(false);
-    }
+  /** Save a scheduling preference from a 1:1 onto the employee's profile. */
+  const saveSchedulingPreference = async (pref: string) => {
+    const nextPd = {
+      ...(profile?.personnel_details || {}),
+      scheduling_preference: pref,
+    };
+    await saveProfile({ personnel_details: nextPd });
   };
-
-  const oneOnOnes = useMemo(() => records.filter((r) => r.type === "one_on_one"), [records]);
 
   // ── Concerns ──
   const openConcerns = useMemo(() => concerns.filter((c) => c.status === "open"), [concerns]);
@@ -542,6 +530,15 @@ function ProfileContent() {
             <div className="space-y-1.5">
               <Label htmlFor="hireDate" className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Hire date</Label>
               <Input id="hireDate" type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="schedPref" className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Scheduling preference</Label>
+              <Input
+                id="schedPref"
+                value={pd.scheduling_preference ?? ""}
+                onChange={(e) => setPdField("scheduling_preference", e.target.value)}
+                placeholder="Desired hours / availability (e.g. wants ~40/wk, no Sundays)"
+              />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="supervisor" className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Reports to (supervisor)</Label>
@@ -852,14 +849,14 @@ function ProfileContent() {
             </Button>
           </div>
 
-          {/* Open concerns — raised in a 1:1, tracked across meetings */}
+          {/* Open follow-ups — anything to revisit next 1:1 (personal or formal) */}
           <div className="rounded-lg border border-border p-3 space-y-3">
-            <p className="text-sm font-medium">Open concerns</p>
+            <p className="text-sm font-medium">Open follow-ups</p>
             <p className="text-xs text-muted-foreground">
-              Raised in a 1:1 and tracked until reconciled. Each carries its history so you can follow up next time.
+              Anything to revisit — a personal thread or an issue they raised. Each carries its history and leads your next 1:1.
             </p>
             {openConcerns.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No open concerns.</p>
+              <p className="text-xs text-muted-foreground">No open follow-ups.</p>
             ) : (
               openConcerns.map((c) => (
                 <div key={c.id} className="rounded-lg border border-amber-300/70 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2">
@@ -869,7 +866,7 @@ function ProfileContent() {
                       onClick={() => reconcileConcern(c.id)}
                       className="text-xs text-green-700 dark:text-green-400 hover:underline shrink-0 flex items-center gap-1"
                     >
-                      <CheckCircle className="w-3.5 h-3.5" /> Reconcile
+                      <CheckCircle className="w-3.5 h-3.5" /> Resolve
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">Raised {fmtDate(c.opened_on)}</p>
@@ -888,7 +885,7 @@ function ProfileContent() {
                       rows={2}
                       value={concernNotes[c.id] || ""}
                       onChange={(e) => setConcernNotes((m) => ({ ...m, [c.id]: e.target.value }))}
-                      placeholder="How's it going? Still a concern, or a new approach they want?"
+                      placeholder="How's it going? Still open, or a new approach they want?"
                       className="flex-1"
                     />
                     <Button
@@ -903,11 +900,11 @@ function ProfileContent() {
               ))
             )}
             <div className="border-t border-border pt-3 space-y-2">
-              <Label className="text-xs">Raise a new concern</Label>
+              <Label className="text-xs">Add a follow-up</Label>
               <Input
                 value={newConcernTitle}
                 onChange={(e) => setNewConcernTitle(e.target.value)}
-                placeholder="The concern, in their words"
+                placeholder="What to follow up on, in their words"
               />
               <Textarea
                 rows={2}
@@ -916,37 +913,24 @@ function ProfileContent() {
                 placeholder="Optional first note"
               />
               <Button size="sm" className="gap-2" disabled={concernBusy || !newConcernTitle.trim()} onClick={handleAddConcern}>
-                <Plus className="w-4 h-4" /> Add concern
+                <Plus className="w-4 h-4" /> Add follow-up
               </Button>
             </div>
           </div>
 
-          <div className="rounded-lg border border-border p-3 space-y-3">
-            <p className="text-sm font-medium flex items-center gap-1.5"><Plus className="w-4 h-4" /> Log a 1:1</p>
-            <div className="space-y-1.5"><Label htmlFor="ooDate">Date</Label><Input id="ooDate" type="date" value={ooDate} onChange={(e) => setOoDate(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label htmlFor="ooDetails">What we talked about</Label><Textarea id="ooDetails" rows={4} value={ooDetails} onChange={(e) => setOoDetails(e.target.value)} placeholder="Notes from the conversation…" /></div>
-            <div className="space-y-1.5"><Label htmlFor="ooFollow">Action items / follow-up for next time</Label><Textarea id="ooFollow" rows={2} value={ooFollowUp} onChange={(e) => setOoFollowUp(e.target.value)} /></div>
-            <Button size="sm" className="gap-2 bg-[#1B4332] hover:bg-[#2D6A4F]" disabled={addingOo || !ooDetails.trim()} onClick={handleAddOneOnOne}>
-              {addingOo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Save 1:1
-            </Button>
-          </div>
-
-          <div className="space-y-2">
-            {oneOnOnes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No 1:1s logged yet. After your next meeting, jot the notes here so you have history to go off of.</p>
-            ) : (
-              oneOnOnes.map((r) => (
-                <div key={r.id} className="p-3 rounded-lg border space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">{fmtDate(r.event_date)}</span>
-                    <button onClick={() => deleteRecord(r.id)} className="text-red-600 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                  {r.details && <p className="text-sm whitespace-pre-line">{r.details}</p>}
-                  {r.follow_up && <p className="text-xs bg-muted/40 rounded p-2"><span className="font-medium">Action items:</span> {r.follow_up}</p>}
-                </div>
-              ))
-            )}
-          </div>
+          {/* Run a real 1:1 in-app — dynamic personalized questions, saved
+              answers, and AI-proposed actions you approve. */}
+          {profile && (
+            <OneOnOnePanel
+              employeeId={id}
+              employeeName={profile.full_name || "this employee"}
+              employeeRole={roleLabels[profile.role] || profile.role}
+              openFollowUps={openConcerns.map((c) => ({ title: c.title }))}
+              addFollowUp={addConcern}
+              saveSchedulingPreference={saveSchedulingPreference}
+              onChanged={reload}
+            />
+          )}
 
           {resolvedConcerns.length > 0 && (
             <div className="rounded-lg border border-border p-3 space-y-2">
@@ -955,7 +939,7 @@ function ProfileContent() {
                 className="text-sm font-medium flex items-center gap-1.5"
               >
                 {showResolved ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                Reconciled concerns ({resolvedConcerns.length})
+                Resolved follow-ups ({resolvedConcerns.length})
               </button>
               {showResolved && (
                 <div className="space-y-2">
@@ -968,7 +952,7 @@ function ProfileContent() {
                         </button>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        Raised {fmtDate(c.opened_on)} · Reconciled {fmtDate(c.reconciled_on)}
+                        Raised {fmtDate(c.opened_on)} · Resolved {fmtDate(c.reconciled_on)}
                       </p>
                       {c.updates.length > 0 && (
                         <div className="space-y-1 border-l-2 border-border pl-2">

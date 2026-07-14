@@ -49,6 +49,9 @@ const SLOW_DIRECT_ROUTES: ReadonlySet<string> = new Set<string>([
   "task-breakdown",
   "bulk-tasks",
   "dd-forms-ai",
+  "one-on-one-questions",
+  "one-on-one-digest",
+  "one-on-one-report",
 ]);
 const AUTH_TOKEN_TIMEOUT_MS = 5_000;
 
@@ -81,6 +84,9 @@ const EDGE_ROUTES: ReadonlySet<string> = new Set<string>([
   "task-breakdown",
   "bulk-tasks",
   "dd-forms-ai",
+  "one-on-one-questions",
+  "one-on-one-digest",
+  "one-on-one-report",
   // pin-signup returns plain JSON ({success, user, session?, error?}) and is
   // called through callApi by the add-staff sheet. pin-login is NOT here —
   // its session persistence is handled at its callsite via
