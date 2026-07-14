@@ -11,8 +11,11 @@ import type {
   EquipmentInspection,
   EquipmentCondition,
   FuelType,
+  FuelLevel,
+  OilLevel,
   InspectionType,
   InspectionStatus,
+  InspectionChecklistItem,
 } from "@/types/database";
 import {
   directSelectList,
@@ -274,11 +277,17 @@ export interface CreateLogData {
 export interface CreateInspectionData {
   equipment_id: string;
   inspection_type: InspectionType;
-  condition_status: EquipmentCondition;
-  notes?: string;
-  checklist_items?: Record<string, boolean>;
+  // Canonical `equipment_inspections` contract (see src/types/database.ts and the
+  // Phase B triage writer). The legacy fields `condition_status`, `inspector_id`,
+  // and `status` are NOT columns on this table and must never be written.
+  inspected_by: string;
+  overall_status: InspectionStatus;
+  checklist_items?: InspectionChecklistItem[];
+  notes?: string | null;
   photos?: string[];
-  inspector_id?: string;
+  engine_hours?: number | null;
+  fuel_level?: FuelLevel | null;
+  oil_level?: OilLevel | null;
 }
 
 export interface EquipmentWithLogs extends Equipment {
@@ -873,12 +882,14 @@ export function useEquipment(): UseEquipmentReturn {
         const inspectionData = {
           equipment_id: data.equipment_id,
           inspection_type: data.inspection_type,
-          condition_status: data.condition_status,
-          notes: data.notes,
-          checklist_items: data.checklist_items || {},
-          photos: data.photos || [],
-          inspector_id: data.inspector_id,
-          status: "completed" as InspectionStatus,
+          inspected_by: data.inspected_by,
+          overall_status: data.overall_status,
+          notes: data.notes ?? null,
+          checklist_items: data.checklist_items ?? [],
+          photos: data.photos ?? [],
+          engine_hours: data.engine_hours ?? null,
+          fuel_level: data.fuel_level ?? null,
+          oil_level: data.oil_level ?? null,
         };
 
         const newInspection = await directInsertRow<EquipmentInspection>(
