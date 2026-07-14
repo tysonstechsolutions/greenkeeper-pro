@@ -1768,6 +1768,13 @@ export interface PurchaseRequest {
   actual_amount: number | null;
   receipt_path: string | null;
   reconciled_at: string | null;
+  // AI-parsed receipt + deterministic match result, saved at reconcile time
+  // so the line-by-line comparison is recoverable later. See src/lib/pr/.
+  receipt_data?: {
+    extracted: import("@/lib/pr/receipt-extract").ExtractedReceipt;
+    match: import("@/lib/pr/receipt-match").ReceiptMatch;
+    receipt_filename?: string | null;
+  } | null;
 
   created_by: string | null;
   created_at: string;

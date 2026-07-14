@@ -32,6 +32,13 @@ import {
   VARIANCE_BADGE_CLASSES,
 } from "@/lib/pr-reconciliation";
 import { isCcFeeItem } from "@/lib/pr-cc-fee";
+import { extractReceipt, type ExtractedReceipt } from "@/lib/pr/receipt-extract";
+import {
+  matchReceiptToPr,
+  matchSummary,
+  type ReceiptMatch,
+  type MatchedLine,
+} from "@/lib/pr/receipt-match";
 import {
   generatePurchaseRequestReport,
   PurchaseRequestReportError,
@@ -544,6 +551,118 @@ function SowWizardModal({
   );
 }
 
+// ── Receipt match panel ───────────────────────────────────────────────────────
+//
+// Renders the deterministic line-by-line comparison of the AI-parsed receipt
+// against the PR's submitted items. Pure presentation — the verdict comes from
+// matchReceiptToPr() in src/lib/pr/receipt-match.ts.
+
+const LINE_STATUS_META: Record<
+  MatchedLine["status"],
+  { label: string; cls: string }
+> = {
+  match: { label: "Match", cls: "bg-success/10 text-success border-success/30" },
+  price_diff: {
+    label: "Price differs",
+    cls: "bg-warning/15 text-warning-foreground border-warning/40",
+  },
+  qty_diff: {
+    label: "Qty differs",
+    cls: "bg-warning/15 text-warning-foreground border-warning/40",
+  },
+  missing_on_receipt: {
+    label: "Missing",
+    cls: "bg-destructive/10 text-destructive border-destructive/30",
+  },
+  extra_on_receipt: {
+    label: "Extra",
+    cls: "bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30",
+  },
+};
+
+function ReceiptMatchPanel({
+  match,
+  extracted,
+  submittedTotal,
+}: {
+  match: ReceiptMatch;
+  extracted: ExtractedReceipt | null;
+  submittedTotal: number;
+}) {
+  const clean = match.differences === 0;
+  const total = match.receiptTotal;
+  const variance = total != null ? total - submittedTotal : null;
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2.5">
+      <div className="flex items-center gap-2">
+        {clean ? (
+          <CheckCircle className="w-4 h-4 text-success shrink-0" />
+        ) : (
+          <AlertTriangle className="w-4 h-4 text-warning-foreground shrink-0" />
+        )}
+        <span className="text-sm font-semibold">{matchSummary(match)}</span>
+      </div>
+
+      {(extracted?.vendor || total != null) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {extracted?.vendor && <span>Vendor: {extracted.vendor}</span>}
+          {extracted?.purchase_date && <span>Dated {extracted.purchase_date}</span>}
+          {total != null && (
+            <span>
+              Receipt total{" "}
+              <span className="font-semibold text-foreground">
+                {formatMoney(total)}
+              </span>
+              {variance != null && Math.abs(variance) > 0.01 && (
+                <span className={variance > 0 ? "text-destructive" : "text-success"}>
+                  {" "}
+                  ({variance > 0 ? "+" : "−"}
+                  {formatMoney(Math.abs(variance))} vs submitted)
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+      {match.lines.length > 0 && (
+        <ul className="space-y-1.5">
+          {match.lines.map((line, i) => {
+            const meta = LINE_STATUS_META[line.status];
+            return (
+              <li
+                key={i}
+                className="flex items-start justify-between gap-2 text-xs"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground truncate">
+                    {line.description}
+                  </p>
+                  <p className="text-muted-foreground">{line.note}</p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${meta.cls}`}
+                >
+                  {meta.label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {extracted?.warnings && extracted.warnings.length > 0 && (
+        <div className="rounded-lg border border-warning/40 bg-warning/10 p-2 text-xs text-warning-foreground">
+          {extracted.warnings.map((w, i) => (
+            <p key={i}>• {w}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Reconciliation card ───────────────────────────────────────────────────────
 //
 // Shown once a PR is approved/received: the business office's receipt often
@@ -572,12 +691,51 @@ function ReconciliationCard({
   const [warning, setWarning] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // AI receipt read + line-by-line match against the PR's submitted items.
+  const [parsing, setParsing] = useState(false);
+  const [extracted, setExtracted] = useState<ExtractedReceipt | null>(null);
+  const [match, setMatch] = useState<ReceiptMatch | null>(null);
+
   const inputCls =
     "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40";
 
   function clearFile() {
     setFile(null);
+    setExtracted(null);
+    setMatch(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  // Send the selected receipt to the AI, then compare it against the PR's
+  // line items. The parsed total pre-fills the actual amount so a clean
+  // receipt is one tap to save; the match panel flags any discrepancies.
+  async function handleReadReceipt() {
+    if (!file) return;
+    setParsing(true);
+    setError(null);
+    setWarning(null);
+    try {
+      const result = await extractReceipt(file);
+      setExtracted(result);
+      const prItems = Array.isArray(pr.items) ? pr.items : [];
+      setMatch(matchReceiptToPr(prItems, result));
+      if (result.total != null) {
+        setAmount(String(result.total));
+      }
+      if (result.total == null) {
+        setWarning(
+          "The AI couldn't read a clear total — enter the actual amount by hand from the receipt.",
+        );
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? `Couldn't read the receipt: ${err.message}`
+          : "Couldn't read the receipt. Enter the amount by hand.",
+      );
+    } finally {
+      setParsing(false);
+    }
   }
 
   async function handleSave() {
@@ -608,6 +766,17 @@ function ReconciliationCard({
         actual_amount: Math.round(parsed * 100) / 100,
         receipt_path: receiptPath,
         reconciled_at: new Date().toISOString(),
+        // Persist the AI parse + match so the line-by-line comparison is
+        // recoverable later without re-running the AI. Null when the amount
+        // was entered by hand with no AI read.
+        receipt_data:
+          extracted && match
+            ? {
+                extracted,
+                match,
+                receipt_filename: file?.name ?? pr.receipt_data?.receipt_filename ?? null,
+              }
+            : pr.receipt_data ?? null,
       };
       await directPatchRow(
         "purchase_requests",
@@ -630,7 +799,10 @@ function ReconciliationCard({
   }
 
   return (
-    <section className="mt-3 rounded-xl border border-border bg-card p-3">
+    <section
+      id="reconcile"
+      className="mt-3 rounded-xl border border-border bg-card p-3 scroll-mt-20"
+    >
       <div className="flex items-center justify-between gap-2 mb-2">
         <h2 className="font-semibold text-sm flex items-center gap-1.5">
           <Receipt className="w-4 h-4 text-muted-foreground" />
@@ -657,8 +829,9 @@ function ReconciliationCard({
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
             The business office&apos;s receipt often shows a different actual
-            cost than the {formatMoney(submittedTotal)} submitted. Enter what
-            was really paid once the receipt comes back.
+            cost than the {formatMoney(submittedTotal)} submitted. Upload the
+            receipt (PDF or photo) and the AI reads the total and checks it
+            line-by-line against this PR — or just enter the amount by hand.
           </p>
 
           <div>
@@ -689,28 +862,63 @@ function ReconciliationCard({
                 {file
                   ? file.name
                   : pr.receipt_path
-                    ? "Replace receipt photo (optional)"
-                    : "Add receipt photo (optional)"}
+                    ? "Replace receipt (PDF or photo)"
+                    : "Upload receipt (PDF or photo)"}
               </span>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="application/pdf,image/*"
                 className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  setFile(e.target.files?.[0] ?? null);
+                  setExtracted(null);
+                  setMatch(null);
+                }}
               />
             </label>
             {file && (
               <button
                 type="button"
                 onClick={clearFile}
-                aria-label="Remove selected photo"
+                aria-label="Remove selected receipt"
                 className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
+
+          {/* AI read — only offered once a file is chosen and not yet read. */}
+          {file && !extracted && (
+            <button
+              type="button"
+              onClick={handleReadReceipt}
+              disabled={parsing}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-primary/40 bg-primary/5 text-primary text-sm font-semibold hover:bg-primary/10 disabled:opacity-50 active:scale-[0.98] transition-all"
+            >
+              {parsing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Reading receipt…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Read receipt with AI
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Match verdict + per-line comparison. */}
+          {match && (
+            <ReceiptMatchPanel
+              match={match}
+              extracted={extracted}
+              submittedTotal={submittedTotal}
+            />
+          )}
 
           {error && (
             <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 flex items-start gap-2">
@@ -798,6 +1006,15 @@ function ReconciliationCard({
                   </a>
                 )}
               </div>
+              {pr.receipt_data?.match && (
+                <div className="mt-3">
+                  <ReceiptMatchPanel
+                    match={pr.receipt_data.match}
+                    extracted={pr.receipt_data.extracted}
+                    submittedTotal={submittedTotal}
+                  />
+                </div>
+              )}
             </div>
           );
         })()

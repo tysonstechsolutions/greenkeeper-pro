@@ -770,6 +770,16 @@ export default function PurchaseRequestsListPage() {
                     )}
                   </Link>
                   <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
+                    {prNeedsReceipt(pr) && (
+                      <Link
+                        href={`/purchase-requests/view?id=${pr.id}#reconcile`}
+                        aria-label="Upload receipt"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 text-warning-foreground bg-warning/15 hover:bg-warning/25 active:scale-[0.97] transition-all"
+                      >
+                        <Receipt className="w-3.5 h-3.5" />
+                        Upload receipt
+                      </Link>
+                    )}
                     {meta.next && NextIcon && meta.nextLabel && (
                       <button
                         type="button"
