@@ -91,6 +91,23 @@ describe("daily operations Phase 1A corrective security contract", () => {
     );
   });
 
+  it("keeps evidence validation and duty-management history behind explicit commands", () => {
+    expect(correctiveMigration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.record_task_evidence[\s\S]*?LANGUAGE plpgsql SECURITY DEFINER SET search_path = public/,
+    );
+    expect(correctiveMigration).not.toContain("CREATE POLICY task_evidence_items_insert_authorized");
+    expect(correctiveMigration).not.toContain("CREATE POLICY task_evidence_items_update_authorized");
+    expect(correctiveMigration).toContain(
+      "REVOKE INSERT, UPDATE, DELETE ON public.task_evidence_items FROM authenticated",
+    );
+    expect(correctiveMigration).toContain("duty_audit_events_select_managers");
+    expect(correctiveMigration).toContain("duty_recurrence_versions_select_managers");
+    expect(correctiveMigration).toContain("duty_temporary_coverages_select_managers");
+    expect(correctiveMigration).toContain("NEW.assigned_by := v_actor");
+    expect(correctiveMigration).toContain("Phase 1A post-migration assertions failed");
+    expect(correctiveMigration).toContain("anonymous table access remains");
+  });
+
   it("allows an individual GM profile without a synthetic superintendent identity", () => {
     expect(correctiveMigration).toContain("DROP CONSTRAINT IF EXISTS profiles_role_check");
     expect(correctiveMigration).toContain("'seasonal','pro','gm'");

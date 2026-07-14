@@ -40,9 +40,21 @@ type PdfjsModule = typeof import("pdfjs-dist");
 
 let pdfjsPromise: Promise<PdfjsModule> | null = null;
 
+/**
+ * The app runs this generator in the browser, where pdf.js's normal build is
+ * appropriate. Node 20 is still the CI test runtime, so use pdf.js's explicit
+ * legacy build there rather than relying on unsupported modern JS APIs.
+ */
+async function importPdfjs(): Promise<PdfjsModule> {
+  if (typeof window === "undefined") {
+    return (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfjsModule;
+  }
+  return import("pdfjs-dist");
+}
+
 /** Load pdf.js once; in the browser point it at the vendored worker. */
 function loadPdfjs(): Promise<PdfjsModule> {
-  pdfjsPromise ??= import("pdfjs-dist").then((pdfjs) => {
+  pdfjsPromise ??= importPdfjs().then((pdfjs) => {
     if (typeof window !== "undefined" && !pdfjs.GlobalWorkerOptions.workerSrc) {
       pdfjs.GlobalWorkerOptions.workerSrc = WORKER_URL;
     }

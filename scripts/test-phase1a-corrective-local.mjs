@@ -215,6 +215,10 @@ try {
   assert.equal(otherView.response.status, 200);
   assert.deepEqual(otherView.data, [], "unrelated employee must not see another employee's work");
 
+  const otherAuditView = await directRest(other.token, `duty_audit_events?select=id&duty_id=eq.${mainDuty.id}`);
+  assert.equal(otherAuditView.response.status, 200);
+  assert.deepEqual(otherAuditView.data, [], "unrelated employees must not read duty management history");
+
   const firstTask = expectData(await admin.from("tasks").select("*")
     .eq("duty_id", mainDuty.id).eq("original_due_date", "2026-07-13").single(), "load first occurrence");
   const inProgressTask = expectData(await admin.from("tasks").select("id")
@@ -256,6 +260,14 @@ try {
     body: { title: `${prefix}: unauthorized rewrite` },
   });
   assert.ok(structuralPatch.response.status >= 400, "employee structural PATCH must be rejected");
+
+  const forgedManagerUpdate = await directRest(manager.token, `tasks?id=eq.${firstTask.id}`, {
+    method: "PATCH",
+    body: { assigned_by: other.id },
+  });
+  assert.equal(forgedManagerUpdate.response.status, 200);
+  assert.equal(forgedManagerUpdate.data[0]?.assigned_by, manager.id,
+    "manager task edits must retain the authenticated actor as assigned_by");
 
   expectData(await employee.api.rpc("transition_task_status", {
     p_task_id: firstTask.id,
@@ -353,6 +365,18 @@ try {
     p_status: "completed",
     p_blocked_reason: null,
   }), "complete without required evidence");
+  const forgedEvidence = await directRest(employee.token, "task_evidence_items", {
+    method: "POST",
+    body: {
+      task_id: evidenceTask.id,
+      requirement_key: "check-record",
+      requirement_type: "record",
+      note: "Local integration forged direct evidence",
+      satisfied_by: employee.id,
+    },
+  });
+  assert.ok(forgedEvidence.response.status >= 400,
+    "evidence writes must use the validating record_task_evidence command");
   expectData(await employee.api.rpc("record_task_evidence", {
     p_task_id: evidenceTask.id,
     p_requirement_key: "check-record",

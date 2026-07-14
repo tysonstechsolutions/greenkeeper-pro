@@ -1394,6 +1394,12 @@ BEGIN
       AND OLD.assigned_crew = public.get_user_crew(v_actor));
   IF NOT v_authorized THEN RAISE EXCEPTION 'You may not update this task'; END IF;
 
+  -- Managers may edit an authorized task, but normal client access must never
+  -- be able to attribute that edit to a different authenticated person.
+  IF v_manager AND NEW.assigned_by IS DISTINCT FROM OLD.assigned_by THEN
+    NEW.assigned_by := v_actor;
+  END IF;
+
   IF OLD.status IN ('completed','verified') THEN
     IF NOT v_manager THEN RAISE EXCEPTION 'Completed and verified tasks are protected history'; END IF;
     IF (to_jsonb(NEW) - v_allowed_completed_fields)
@@ -1508,7 +1514,7 @@ BEGIN
   RETURNING id INTO v_id;
   RETURN v_id;
 END;
-$$ LANGUAGE plpgsql SECURITY INVOKER SET search_path = public;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ---------------------------------------------------------------------------
 -- RLS: replace, do not add to, permissive task policies
@@ -1576,12 +1582,12 @@ ALTER TABLE public.duty_recurrence_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.duty_temporary_coverages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.task_evidence_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY duty_audit_events_select_authenticated ON public.duty_audit_events
-  FOR SELECT TO authenticated USING (TRUE);
-CREATE POLICY duty_recurrence_versions_select_authenticated ON public.duty_recurrence_versions
-  FOR SELECT TO authenticated USING (TRUE);
-CREATE POLICY duty_temporary_coverages_select_authenticated ON public.duty_temporary_coverages
-  FOR SELECT TO authenticated USING (TRUE);
+CREATE POLICY duty_audit_events_select_managers ON public.duty_audit_events
+  FOR SELECT TO authenticated USING (public.can_manage_daily_operations());
+CREATE POLICY duty_recurrence_versions_select_managers ON public.duty_recurrence_versions
+  FOR SELECT TO authenticated USING (public.can_manage_daily_operations());
+CREATE POLICY duty_temporary_coverages_select_managers ON public.duty_temporary_coverages
+  FOR SELECT TO authenticated USING (public.can_manage_daily_operations());
 CREATE POLICY task_evidence_items_select_authorized ON public.task_evidence_items
   FOR SELECT TO authenticated USING (
     EXISTS (
@@ -1589,31 +1595,22 @@ CREATE POLICY task_evidence_items_select_authorized ON public.task_evidence_item
         AND (t.assigned_to = (SELECT auth.uid()) OR public.can_manage_tasks())
     )
   );
-CREATE POLICY task_evidence_items_insert_authorized ON public.task_evidence_items
-  FOR INSERT TO authenticated WITH CHECK (
-    satisfied_by = (SELECT auth.uid())
-    AND EXISTS (
-      SELECT 1 FROM public.tasks t WHERE t.id = task_id
-        AND (t.assigned_to = (SELECT auth.uid()) OR public.can_manage_tasks())
-    )
-  );
-CREATE POLICY task_evidence_items_update_authorized ON public.task_evidence_items
-  FOR UPDATE TO authenticated USING (
-    satisfied_by = (SELECT auth.uid()) OR public.can_manage_tasks()
-  ) WITH CHECK (
-    satisfied_by = (SELECT auth.uid()) OR public.can_manage_tasks()
-  );
 
 -- Canonical duties and assignments are writable only through the atomic RPCs.
+REVOKE INSERT, UPDATE, DELETE ON public.operation_duties FROM PUBLIC, anon;
 REVOKE INSERT, UPDATE, DELETE ON public.operation_duties FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.duty_assignments FROM PUBLIC, anon;
 REVOKE INSERT, UPDATE, DELETE ON public.duty_assignments FROM authenticated;
 GRANT SELECT ON public.operation_duties, public.duty_assignments TO authenticated;
 GRANT SELECT ON public.duty_audit_events, public.duty_recurrence_versions,
   public.duty_temporary_coverages TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.task_evidence_items TO authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.task_evidence_items FROM PUBLIC, anon;
+REVOKE INSERT, UPDATE, DELETE ON public.task_evidence_items FROM authenticated;
+GRANT SELECT ON public.task_evidence_items TO authenticated;
 
 -- Retire the competing legacy writer while retaining read/provenance access.
 DROP POLICY IF EXISTS "Authenticated can manage pro_shop_duties" ON public.pro_shop_duties;
+REVOKE INSERT, UPDATE, DELETE ON public.pro_shop_duties FROM PUBLIC, anon;
 REVOKE INSERT, UPDATE, DELETE ON public.pro_shop_duties FROM authenticated;
 GRANT SELECT ON public.pro_shop_duties TO authenticated;
 
@@ -1650,6 +1647,93 @@ GRANT EXECUTE ON FUNCTION public.link_pro_shop_staff_profile(UUID,UUID,TEXT) TO 
 GRANT EXECUTE ON FUNCTION public.get_task_execution_requirements(UUID[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.transition_task_status(UUID,TEXT,TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.record_task_evidence(UUID,TEXT,TEXT,TEXT,TEXT,TEXT) TO authenticated;
+
+-- Fail the transaction rather than leaving a partially hardened Phase 1A
+-- surface if the required RLS, grants, or temporal safeguards are absent.
+DO $$
+DECLARE
+  v_missing_constraints TEXT[];
+BEGIN
+  SELECT ARRAY_AGG(expected.name) INTO v_missing_constraints
+  FROM UNNEST(ARRAY[
+    'duty_assignments_no_overlap',
+    'duty_recurrence_versions_no_overlap',
+    'duty_temporary_coverages_no_overlap'
+  ]) AS expected(name)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM pg_constraint constraint_row WHERE constraint_row.conname = expected.name
+  );
+  IF v_missing_constraints IS NOT NULL THEN
+    RAISE EXCEPTION 'Phase 1A post-migration assertions failed: missing constraints %', v_missing_constraints;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_class relation_row
+    JOIN pg_namespace schema_row ON schema_row.oid = relation_row.relnamespace
+    WHERE schema_row.nspname = 'public'
+      AND relation_row.relname IN (
+        'duty_audit_events', 'duty_recurrence_versions',
+        'duty_temporary_coverages', 'task_evidence_items'
+      )
+      AND relation_row.relrowsecurity = FALSE
+  ) THEN
+    RAISE EXCEPTION 'Phase 1A post-migration assertions failed: a new table is missing RLS';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_policies policy_row
+    WHERE policy_row.schemaname = 'public' AND policy_row.tablename = 'tasks'
+      AND (
+        policy_row.policyname NOT IN (
+          'tasks_select_authorized', 'tasks_insert_supervisor',
+          'tasks_update_authorized', 'tasks_delete_manager'
+        )
+        OR CARDINALITY(policy_row.roles) <> 1
+        OR NOT (policy_row.roles @> ARRAY['authenticated']::name[])
+        OR LOWER(BTRIM(COALESCE(policy_row.qual, ''))) IN ('true', '(true)')
+        OR LOWER(BTRIM(COALESCE(policy_row.with_check, ''))) IN ('true', '(true)')
+      )
+  ) OR 4 <> (
+    SELECT COUNT(*) FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'tasks'
+  ) THEN
+    RAISE EXCEPTION 'Phase 1A post-migration assertions failed: tasks policies are not least privilege';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.role_table_grants grant_row
+    WHERE grant_row.table_schema = 'public'
+      AND grant_row.table_name IN (
+        'operation_duties', 'duty_assignments', 'task_evidence_items', 'pro_shop_duties'
+      )
+      AND grant_row.grantee IN ('PUBLIC', 'anon', 'authenticated')
+      AND grant_row.privilege_type IN ('INSERT', 'UPDATE', 'DELETE')
+  ) THEN
+    RAISE EXCEPTION 'Phase 1A post-migration assertions failed: a direct duty or evidence writer remains';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.role_table_grants grant_row
+    WHERE grant_row.table_schema = 'public'
+      AND grant_row.table_name IN (
+        'operation_duties', 'duty_assignments', 'duty_audit_events',
+        'duty_recurrence_versions', 'duty_temporary_coverages',
+        'task_evidence_items', 'tasks', 'pro_shop_duties'
+      )
+      AND grant_row.grantee = 'anon'
+  ) THEN
+    RAISE EXCEPTION 'Phase 1A post-migration assertions failed: anonymous table access remains';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_policies policy_row
+    WHERE policy_row.schemaname = 'public'
+      AND policy_row.tablename = 'pro_shop_duties'
+      AND policy_row.cmd IN ('ALL', 'INSERT', 'UPDATE', 'DELETE')
+  ) THEN
+    RAISE EXCEPTION 'Phase 1A post-migration assertions failed: legacy duty writer remains';
+  END IF;
+END $$;
 
 NOTIFY pgrst, 'reload schema';
 
