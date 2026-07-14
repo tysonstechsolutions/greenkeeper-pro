@@ -5,13 +5,36 @@ const url = process.env.PHASE1A_LOCAL_SUPABASE_URL ?? "http://127.0.0.1:54321";
 const anonKey = process.env.PHASE1A_LOCAL_SUPABASE_ANON_KEY
   ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYXNlLWRlbW8iLCJyb2xlIjoiYW5vbiIsImV4cCI6MTk4MzgxMjk5Nn0.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
 const serviceKey = process.env.PHASE1A_LOCAL_SUPABASE_SERVICE_ROLE_KEY;
+const PRODUCTION_PROJECT_REF = "mbgublyqnyghmvqfooao";
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+
+function assertLocalOnlyEnvironment() {
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!value || !/(SUPABASE|PROJECT_REF|DATABASE_URL)/i.test(name)) continue;
+    if (value.includes(PRODUCTION_PROJECT_REF)) {
+      throw new Error(`Refusing local integration validation: ${name} references the production project.`);
+    }
+    if (!/^(https?|postgres(?:ql)?):\/\//i.test(value)) continue;
+    let host;
+    try {
+      host = new URL(value).hostname;
+    } catch {
+      throw new Error(`Refusing local integration validation: ${name} is not a valid local connection URL.`);
+    }
+    if (!LOCAL_HOSTS.has(host)) {
+      throw new Error(`Refusing local integration validation: ${name} is not a localhost connection.`);
+    }
+  }
+}
+
+assertLocalOnlyEnvironment();
 
 if (!serviceKey) {
   throw new Error("PHASE1A_LOCAL_SUPABASE_SERVICE_ROLE_KEY is required for the disposable local integration database.");
 }
 
 const host = new URL(url).hostname;
-if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
+if (!LOCAL_HOSTS.has(host) || url.includes(PRODUCTION_PROJECT_REF)) {
   throw new Error(`Refusing to create integration fixtures outside localhost: ${host}`);
 }
 
@@ -43,14 +66,15 @@ function expectError(result, label) {
 }
 
 async function directRest(token, path, options = {}) {
+  const headers = {
+    apikey: anonKey,
+    "Content-Type": "application/json",
+    Prefer: options.prefer ?? "return=representation",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${url}/rest/v1/${path}`, {
     method: options.method ?? "GET",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Prefer: options.prefer ?? "return=representation",
-    },
+    headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const text = await response.text();
@@ -148,9 +172,19 @@ async function cleanup() {
 
 try {
   const manager = await createActor("Local GM", "gm");
+  const foreman = await createActor("Local Foreman", "foreman");
   const employee = await createActor("Local Primary", "crew");
   const backup = await createActor("Local Backup", "crew");
   const other = await createActor("Local Other", "crew");
+  const foremanCrew = `phase1a-local-crew-${suffix}`;
+  const databaseToday = new Date().toISOString().slice(0, 10);
+  expectData(await admin.from("schedules").upsert({
+    user_id: foreman.id,
+    schedule_date: databaseToday,
+    shift_type: "full",
+    crew_assignment: foremanCrew,
+    created_by: manager.id,
+  }, { onConflict: "user_id,schedule_date" }), "schedule local foreman for the current database day");
 
   assert.equal(expectData(await admin.rpc("duty_date_in_season", {
     p_date: "2026-07-13",
@@ -190,6 +224,24 @@ try {
     backupId: backup.id,
   });
 
+  const anonymousTaskView = await directRest(null, `tasks?select=id&duty_id=eq.${mainDuty.id}`);
+  assert.ok(anonymousTaskView.response.status >= 400 || anonymousTaskView.data?.length === 0,
+    "anonymous callers must not read protected Phase 1A occurrences");
+  const anonymousDutyWrite = await directRest(null, "operation_duties", {
+    method: "POST",
+    body: dutyPayload(`${prefix}: anonymous duty write`),
+  });
+  assert.ok(anonymousDutyWrite.response.status >= 400,
+    "anonymous callers must not mutate canonical duty data");
+  expectError(await client().rpc("set_duty_assignment", {
+    p_duty_id: mainDuty.id,
+    p_primary_profile_id: employee.id,
+    p_backup_profile_id: null,
+    p_contractor_vendor_id: null,
+    p_effective_date: "2026-08-01",
+    p_reason: "Anonymous calls must be rejected",
+  }), "anonymous duty-management RPC");
+
   const unauthorizedGeneration = await manager.api.rpc("materialize_duty_occurrences", {
     p_from: "2026-07-13",
     p_through: "2026-07-27",
@@ -223,6 +275,55 @@ try {
     .eq("duty_id", mainDuty.id).eq("original_due_date", "2026-07-13").single(), "load first occurrence");
   const inProgressTask = expectData(await admin.from("tasks").select("id")
     .eq("duty_id", mainDuty.id).eq("original_due_date", "2026-07-27").single(), "load future in-progress occurrence");
+  const foremanTask = expectData(await admin.from("tasks").insert({
+    title: `${prefix}: foreman crew occurrence`,
+    category: "grounds",
+    priority: "normal",
+    status: "pending",
+    assigned_to: employee.id,
+    assigned_by: manager.id,
+    assigned_crew: foremanCrew,
+    due_date: databaseToday,
+  }).select("id,status").single(), "create local foreman crew occurrence");
+
+  const foremanCrewView = await directRest(foreman.token, `tasks?select=id,status&id=eq.${foremanTask.id}`);
+  assert.equal(foremanCrewView.response.status, 200);
+  assert.equal(foremanCrewView.data.length, 1, "foreman should see the assigned crew occurrence");
+  const foremanUnscopedView = await directRest(foreman.token, `tasks?select=id&id=eq.${firstTask.id}`);
+  assert.equal(foremanUnscopedView.response.status, 200);
+  assert.deepEqual(foremanUnscopedView.data, [], "foreman must not see work outside the scheduled crew scope");
+  expectData(await foreman.api.rpc("transition_task_status", {
+    p_task_id: foremanTask.id,
+    p_status: "in_progress",
+    p_blocked_reason: null,
+  }), "foreman starts scheduled crew occurrence");
+  expectData(await foreman.api.rpc("transition_task_status", {
+    p_task_id: foremanTask.id,
+    p_status: "completed",
+    p_blocked_reason: null,
+  }), "foreman completes scheduled crew occurrence");
+  expectError(await foreman.api.rpc("transition_task_status", {
+    p_task_id: foremanTask.id,
+    p_status: "verified",
+    p_blocked_reason: null,
+  }), "foreman cannot verify crew completion");
+  expectError(await foreman.api.rpc("set_duty_assignment", {
+    p_duty_id: mainDuty.id,
+    p_primary_profile_id: employee.id,
+    p_backup_profile_id: null,
+    p_contractor_vendor_id: null,
+    p_effective_date: "2026-08-01",
+    p_reason: "Foremen are not duty managers",
+  }), "foreman GM-only assignment command");
+  expectError(await foreman.api.rpc("save_operation_duty", {
+    p_duty_id: null,
+    p_duty: dutyPayload(`${prefix}: foreman must not create duties`),
+    p_primary_profile_id: null,
+    p_backup_profile_id: null,
+    p_contractor_vendor_id: null,
+    p_assignment_effective_date: "2026-08-01",
+    p_assignment_reason: "Foremen are not duty managers",
+  }), "foreman GM-only duty save");
 
   const ownExecutionRequirements = expectData(await employee.api.rpc("get_task_execution_requirements", {
     p_task_ids: [firstTask.id],
@@ -283,6 +384,30 @@ try {
     .eq("id", firstTask.id).single(), "load completed occurrence");
   assert.equal(completed.status, "completed");
   assert.equal(completed.completed_by, employee.id, "completion actor must be the employee session");
+  expectError(await employee.api.rpc("transition_task_status", {
+    p_task_id: firstTask.id,
+    p_status: "verified",
+    p_blocked_reason: null,
+  }), "employee cannot verify their own completion");
+  const protectedHistoryPatch = await directRest(employee.token, `tasks?id=eq.${firstTask.id}`, {
+    method: "PATCH",
+    body: { notes: "Local integration attempted history rewrite" },
+  });
+  assert.ok(protectedHistoryPatch.response.status >= 400,
+    "employees must not edit protected completion history");
+  const protectedHistoryDelete = await directRest(employee.token, `tasks?id=eq.${firstTask.id}`, {
+    method: "DELETE",
+  });
+  assert.ok(protectedHistoryDelete.response.status >= 400 || protectedHistoryDelete.data?.length === 0,
+    "employees must not delete protected completion history");
+  expectError(await employee.api.rpc("set_duty_assignment", {
+    p_duty_id: mainDuty.id,
+    p_primary_profile_id: backup.id,
+    p_backup_profile_id: null,
+    p_contractor_vendor_id: null,
+    p_effective_date: "2026-08-01",
+    p_reason: "Employees are not duty managers",
+  }), "employee duty-management command");
   expectData(await employee.api.rpc("transition_task_status", {
     p_task_id: inProgressTask.id,
     p_status: "in_progress",
@@ -301,6 +426,15 @@ try {
     p_ends_on: "2026-07-20",
     p_reason: "Local integration temporary coverage",
   }), "set temporary coverage");
+  expectError(await manager.api.rpc("set_temporary_duty_coverage", {
+    p_duty_id: mainDuty.id,
+    p_primary_profile_id: employee.id,
+    p_backup_profile_id: null,
+    p_contractor_vendor_id: null,
+    p_starts_on: "2026-07-20",
+    p_ends_on: "2026-07-20",
+    p_reason: "Local integration deliberate overlap",
+  }), "overlapping temporary coverage");
   const covered = expectData(await admin.from("tasks")
     .select("id,assigned_to,duty_coverage_id,original_due_date,due_date,status")
     .eq("duty_id", mainDuty.id).eq("original_due_date", "2026-07-20").single(), "load covered occurrence");
@@ -345,6 +479,21 @@ try {
     .eq("duty_id", mainDuty.id).eq("original_due_date", "2026-07-24").single(), "load post-coverage occurrence");
   assert.equal(restored.assigned_to, employee.id, "permanent owner must resume after temporary coverage");
   assert.equal(restored.duty_coverage_id, null);
+
+  const reassignedAssignment = expectData(await manager.api.rpc("set_duty_assignment", {
+    p_duty_id: mainDuty.id,
+    p_primary_profile_id: backup.id,
+    p_backup_profile_id: employee.id,
+    p_contractor_vendor_id: null,
+    p_effective_date: "2026-08-01",
+    p_reason: "Local integration approved manager reassignment",
+  }), "manager assignment through approved command");
+  assert.ok(reassignedAssignment, "manager assignment command must return an assignment id");
+  const overlappingAssignments = expectData(await admin.from("duty_assignments")
+    .select("id,effective_from,effective_through")
+    .eq("duty_id", mainDuty.id), "load manager assignment history");
+  assert.equal(overlappingAssignments.filter((row) => row.effective_through === null).length, 1,
+    "manager assignment command must leave one current, non-overlapping assignment");
 
   const evidencePayload = dutyPayload(`${prefix}: evidence duty`, {
     evidence_requirements: [{ key: "check-record", type: "record", label: "Completed checklist record" }],
@@ -559,8 +708,10 @@ try {
   console.log(JSON.stringify({
     ok: true,
     checks: {
-      individualActors: 4,
+      individualActors: 5,
       rlsAndRpcAuthorization: true,
+      anonymousProtection: true,
+      foremanCrewScope: true,
       atomicSaveRollback: true,
       atomicReassignmentRollback: true,
       temporaryCoverageRestored: true,

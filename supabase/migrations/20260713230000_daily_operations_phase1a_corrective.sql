@@ -1597,6 +1597,20 @@ CREATE POLICY task_evidence_items_select_authorized ON public.task_evidence_item
   );
 
 -- Canonical duties and assignments are writable only through the atomic RPCs.
+-- No affected Phase 1A table may inherit the historical PUBLIC/anon grants.
+-- Intentional authenticated access is restored explicitly below and remains
+-- constrained by each table's RLS policies and approved RPCs.
+REVOKE ALL PRIVILEGES ON TABLE
+  public.tasks,
+  public.operation_duties,
+  public.duty_assignments,
+  public.duty_audit_events,
+  public.duty_recurrence_versions,
+  public.duty_temporary_coverages,
+  public.task_evidence_items,
+  public.pro_shop_duties
+FROM PUBLIC, anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.operation_duties FROM PUBLIC, anon;
 REVOKE INSERT, UPDATE, DELETE ON public.operation_duties FROM authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.duty_assignments FROM PUBLIC, anon;

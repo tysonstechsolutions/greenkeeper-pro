@@ -100,6 +100,11 @@ describe("daily operations Phase 1A corrective security contract", () => {
     expect(correctiveMigration).toContain(
       "REVOKE INSERT, UPDATE, DELETE ON public.task_evidence_items FROM authenticated",
     );
+    expect(correctiveMigration).toContain("REVOKE ALL PRIVILEGES ON TABLE");
+    expect(correctiveMigration).toContain("public.tasks,");
+    expect(correctiveMigration).toContain("public.task_evidence_items,");
+    expect(correctiveMigration).toContain("FROM PUBLIC, anon");
+    expect(correctiveMigration).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO authenticated");
     expect(correctiveMigration).toContain("duty_audit_events_select_managers");
     expect(correctiveMigration).toContain("duty_recurrence_versions_select_managers");
     expect(correctiveMigration).toContain("duty_temporary_coverages_select_managers");
