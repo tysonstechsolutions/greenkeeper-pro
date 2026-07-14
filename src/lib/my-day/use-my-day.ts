@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
-  directSelectList,
+  directSelectAll,
   directInsertRows,
   directPatchRow,
   directDeleteRow,
@@ -20,6 +20,7 @@ import {
   type RecurrenceFrequency,
 } from "./recurrence";
 import type { DailyGoal, DailyStep } from "./types";
+import type { Task } from "@/types/database";
 
 const DEFAULT_BUFFER_DAYS = 2;
 
@@ -56,6 +57,8 @@ export interface UseMyDay {
   view: DayView<DailyStep>;
   loading: boolean;
   error: string | null;
+  /** Canonical task occurrences assigned to the signed-in employee. */
+  dutyTasks: Task[];
   reload: () => void;
   toggleStep: (id: string, done: boolean) => Promise<void>;
   addQuickStep: (title: string, targetDate?: string | null) => Promise<void>;
@@ -96,11 +99,12 @@ function latestBySeries(goals: DailyGoal[]): Map<string, DailyGoal> {
 }
 
 export function useMyDay(): UseMyDay {
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const ready = !!session?.access_token;
 
   const [goals, setGoals] = useState<DailyGoal[]>([]);
   const [steps, setSteps] = useState<DailyStep[]>([]);
+  const [dutyTasks, setDutyTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -114,22 +118,32 @@ export function useMyDay(): UseMyDay {
 
     (async () => {
       try {
-        const [goalRows, stepRows] = await Promise.all([
-          directSelectList<DailyGoal>("daily_goals", {
+        const [goalRows, stepRows, dutyRows] = await Promise.all([
+          directSelectAll<DailyGoal>("daily_goals", {
             columns: "*",
-            orderBy: [{ column: "deadline", ascending: true, nullsFirst: false }],
-            limit: 2000,
+            orderBy: [{ column: "deadline", ascending: true, nullsFirst: false }, { column: "id" }],
             label: "my-day.goals",
           }),
-          directSelectList<DailyStep>("daily_steps", {
+          directSelectAll<DailyStep>("daily_steps", {
             columns: "*",
             orderBy: [
               { column: "target_date", ascending: true, nullsFirst: false },
               { column: "sort_order", ascending: true },
+              { column: "id" },
             ],
-            limit: 2000,
             label: "my-day.steps",
           }),
+          user ? directSelectAll<Task>("tasks", {
+            columns: "*",
+            filters: [
+              `assigned_to=eq.${encodeURIComponent(user.id)}`,
+              "duty_id=not.is.null",
+              `due_date=lte.${today}`,
+              "status=not.in.(cancelled,verified)",
+            ],
+            orderBy: [{ column: "due_date" }, { column: "priority" }, { column: "id" }],
+            label: "my-day.dutyTasks",
+          }) : Promise.resolve([]),
         ]);
         if (cancelled) return;
 
@@ -139,6 +153,7 @@ export function useMyDay(): UseMyDay {
 
         setGoals([...goalRows, ...newGoals]);
         setSteps([...stepRows, ...newSteps]);
+        setDutyTasks(dutyRows);
       } catch (err) {
         if (cancelled) return;
         console.error("[my-day] load failed:", err);
@@ -151,7 +166,7 @@ export function useMyDay(): UseMyDay {
     return () => {
       cancelled = true;
     };
-  }, [ready, nonce, today]);
+  }, [ready, nonce, today, user]);
 
   const view = useMemo(() => partitionDayView(steps, today), [steps, today]);
 
@@ -422,6 +437,7 @@ export function useMyDay(): UseMyDay {
     view,
     loading,
     error,
+    dutyTasks,
     reload,
     toggleStep,
     addQuickStep,

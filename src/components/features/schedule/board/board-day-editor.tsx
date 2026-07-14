@@ -98,7 +98,7 @@ export function BoardDayEditor({
       const cell = getBoardCell(board, c.id, date);
       if (isWorkingCell(cell) || cell.tasks.length > 0) set.add(c.id);
     }
-    return board.crew.filter((c) => set.has(c.id));
+    return board.crew.filter((c) => !c.isExternal && set.has(c.id));
   }, [board, date]);
 
   return (

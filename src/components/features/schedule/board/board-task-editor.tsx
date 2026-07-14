@@ -127,7 +127,10 @@ export function BoardTaskEditor({
     Array.isArray(task.hole_numbers) && task.hole_numbers.length > 0
       ? task.hole_numbers.join(", ")
       : null;
-  const assignedName = task.assigned_user?.full_name ?? "Unassigned";
+  const assignedName = task.assigned_user?.full_name
+    ?? (task.duty_owner_type === "contractor"
+      ? `Contractor: ${task.duty_contractor_name || "Not recorded"}`
+      : "Unassigned");
 
   return (
     <div className="flex flex-col h-full">

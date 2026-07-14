@@ -8,9 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   directDeleteByFilter,
   directInsertRow,
-  directPatchRow,
   directRpc,
-  directSelectList,
+  directSelectAll,
 } from "@/lib/supabase/rest";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
@@ -46,6 +45,11 @@ export interface UseOperations {
   /** Undo a completion recorded for the given period. */
   uncompleteObligation: (obligationId: string, period: string) => Promise<void>;
   toggleDuty: (dutyId: string, done: boolean) => Promise<void>;
+  transitionDuty: (
+    dutyId: string,
+    status: "in_progress" | "completed" | "blocked" | "verified",
+    blockedReason?: string,
+  ) => Promise<boolean>;
   today: string;
 }
 
@@ -85,42 +89,31 @@ export function useOperations(): UseOperations {
     (async () => {
       try {
         setLoading(true);
-        // Safe rollout: deterministic materialization is additive. If the new
-        // RPC has not reached an environment yet, legacy duty check-offs still
-        // load below.
-        await directRpc<number>(
-          "materialize_duty_occurrences",
-          { p_from: today, p_through: today },
-          "operations.materializeDuties",
-        ).catch(() => null);
         const [obs, comps, duts, done] = await Promise.all([
-          directSelectList<Obligation>("obligations", {
+          directSelectAll<Obligation>("obligations", {
             columns: "*",
             filters: ["is_active=eq.true"],
-            orderBy: [{ column: "sort_order", ascending: true }],
-            limit: 200,
+            orderBy: [{ column: "sort_order", ascending: true }, { column: "id" }],
             label: "operations.obligations",
           }),
           // Completions are one row per obligation per period — the table
           // grows by ~obligation-count rows a month, so fetching the recent
           // window is plenty.
-          directSelectList<ObligationCompletion>("obligation_completions", {
+          directSelectAll<ObligationCompletion>("obligation_completions", {
             columns: "*",
-            orderBy: [{ column: "completed_at", ascending: false }],
-            limit: 500,
+            orderBy: [{ column: "completed_at", ascending: false }, { column: "id" }],
             label: "operations.completions",
           }),
-          directSelectList<OperationDuty>("operation_duties", {
+          directSelectAll<OperationDuty>("operation_duties", {
             columns: "*",
             filters: ["is_active=eq.true"],
-            orderBy: [{ column: "sort_order", ascending: true }],
-            limit: 200,
+            orderBy: [{ column: "sort_order", ascending: true }, { column: "id" }],
             label: "operations.duties",
           }),
-          directSelectList<DutyCompletion>("duty_completions", {
+          directSelectAll<DutyCompletion>("duty_completions", {
             columns: "*",
             filters: [`duty_date=eq.${ymdLocal(new Date())}`],
-            limit: 200,
+            orderBy: [{ column: "id" }],
             label: "operations.dutyDone",
           }),
         ]);
@@ -134,7 +127,7 @@ export function useOperations(): UseOperations {
         // remains usable during a migration rollout.
         try {
           const [assignmentRows, occurrenceRows] = await Promise.all([
-            directSelectList<DutyAssignment>("duty_assignments", {
+            directSelectAll<DutyAssignment>("duty_assignments", {
               columns:
                 "*,primary:profiles!duty_assignments_primary_profile_id_fkey(id,full_name,role,department,role_group)," +
                 "backup:profiles!duty_assignments_backup_profile_id_fkey(id,full_name,role,department,role_group)," +
@@ -143,25 +136,43 @@ export function useOperations(): UseOperations {
                 `effective_from=lte.${today}`,
               ],
               or: `effective_through.is.null,effective_through.gte.${today}`,
-              limit: 1000,
+              orderBy: [{ column: "effective_from", ascending: false }, { column: "id" }],
               label: "operations.dutyAssignments",
             }),
-            directSelectList<DutyTaskOccurrence>("tasks", {
+            directSelectAll<DutyTaskOccurrence>("tasks", {
               columns:
                 "id,duty_id,duty_assignment_id,series_id,occurrence_key,original_due_date," +
-                "due_date,assigned_to,status,completed_at,completed_by,verified_at,verified_by",
+                "duty_coverage_id,duty_recurrence_version_id,due_date,assigned_to,status," +
+                "completed_at,completed_by,verified_at,verified_by,duty_department,duty_role_group," +
+                "duty_recurrence_rule,duty_instructions,estimated_minutes,equipment_needed," +
+                "duty_evidence_requirements,duty_evidence_requirement_state," +
+                "duty_verification_requirement_state,duty_equipment_requirement_state," +
+                "duty_owner_type,duty_primary_profile_id,duty_backup_profile_id," +
+                "duty_contractor_vendor_id,duty_primary_name,duty_backup_name," +
+                "duty_contractor_name,blocked_reason",
               filters: [
                 "duty_id=not.is.null",
                 `due_date=eq.${today}`,
                 "status=not.eq.cancelled",
               ],
-              limit: 1000,
+              orderBy: [{ column: "due_date" }, { column: "id" }],
               label: "operations.dutyOccurrences",
             }),
           ]);
           if (!cancelled) {
             setDutyAssignments(assignmentRows);
-            setDutyOccurrences(occurrenceRows);
+            const evidenceRows = occurrenceRows.length > 0
+              ? await directRpc<{ task_id: string; evidence_satisfied: boolean }[]>(
+                  "get_task_execution_requirements",
+                  { p_task_ids: occurrenceRows.map((row) => row.id) },
+                  "operations.evidenceStatus",
+                )
+              : [];
+            const evidenceByTask = new Map(evidenceRows.map((row) => [row.task_id, row.evidence_satisfied]));
+            setDutyOccurrences(occurrenceRows.map((row) => ({
+              ...row,
+              duty_evidence_satisfied: evidenceByTask.get(row.id) ?? null,
+            })));
           }
         } catch {
           if (!cancelled) {
@@ -273,66 +284,43 @@ export function useOperations(): UseOperations {
     [reload],
   );
 
-  const toggleDuty = useCallback(
-    async (dutyId: string, done: boolean) => {
-      if (busyDuties.current.has(dutyId)) return;
+  const transitionDuty = useCallback(
+    async (
+      dutyId: string,
+      status: "in_progress" | "completed" | "blocked" | "verified",
+      blockedReason?: string,
+    ): Promise<boolean> => {
+      if (busyDuties.current.has(dutyId)) return false;
       busyDuties.current.add(dutyId);
       try {
-        const date = ymdLocal(new Date());
         const occurrence = dutyOccurrences.find((item) => item.duty_id === dutyId) ?? null;
-        if (occurrence) {
-          if (!done && occurrence.status === "verified") {
-            throw new Error("Verified work cannot be reopened from Today.");
-          }
-          const now = done ? new Date().toISOString() : null;
-          await directPatchRow(
-            "tasks",
-            "id",
-            occurrence.id,
-            {
-              status: done ? "completed" : "pending",
-              completed_at: now,
-              completed_by: done ? profile?.id ?? null : null,
-              updated_at: new Date().toISOString(),
-            },
-            "operations.dutyOccurrenceStatus",
-          );
-          setDutyOccurrences((previous) => previous.map((item) =>
-            item.id === occurrence.id
-              ? {
-                  ...item,
-                  status: done ? "completed" : "pending",
-                  completed_at: now,
-                  completed_by: done ? profile?.id ?? null : null,
-                }
-              : item,
-          ));
-          return;
-        }
-        if (done) {
-          const row = await directInsertRow<DutyCompletion>(
-            "duty_completions",
-            { duty_id: dutyId, duty_date: date, completed_by: profile?.id ?? null },
-            "operations.dutyCheck",
-          );
-          setDutyDone((prev) => [...prev, row]);
-        } else {
-          await directDeleteByFilter(
-            "duty_completions",
-            [`duty_id=eq.${dutyId}`, `duty_date=eq.${date}`],
-            "operations.dutyUncheck",
-          );
-          setDutyDone((prev) => prev.filter((d) => !(d.duty_id === dutyId && d.duty_date === date)));
-        }
+        if (!occurrence) throw new Error("This duty has no executable task occurrence for today.");
+        const updated = await directRpc<DutyTaskOccurrence>("transition_task_status", {
+          p_task_id: occurrence.id,
+          p_status: status,
+          p_blocked_reason: status === "blocked" ? blockedReason?.trim() || null : null,
+        }, "operations.transitionDuty");
+        setDutyOccurrences((previous) => previous.map((item) => item.id === occurrence.id ? { ...item, ...updated } : item));
+        setError(null);
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         reload();
+        return false;
       } finally {
         busyDuties.current.delete(dutyId);
       }
     },
-    [dutyOccurrences, profile?.id, reload],
+    [dutyOccurrences, reload],
   );
+
+  const toggleDuty = useCallback(async (dutyId: string, done: boolean) => {
+    if (!done) {
+      setError("Completed duty work cannot be reopened from Today. Open the task for manager review.");
+      return;
+    }
+    await transitionDuty(dutyId, "completed");
+  }, [transitionDuty]);
 
   return {
     loading,
@@ -344,6 +332,7 @@ export function useOperations(): UseOperations {
     completeObligation,
     uncompleteObligation,
     toggleDuty,
+    transitionDuty,
     today,
   };
 }

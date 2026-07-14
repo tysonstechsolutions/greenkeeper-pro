@@ -1,13 +1,20 @@
+"use client";
+
 import Link from "next/link";
-import { Check, UserRoundCog } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Check, CircleAlert, ExternalLink, Play, ShieldCheck, UserRoundCog } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/hooks/useAuth";
 import {
+  DUTY_DEPARTMENT_LABELS,
   DUTY_ROLE_GROUP_LABELS,
   DUTY_ROLE_GROUP_ORDER,
+  dutyScheduleLabel,
 } from "@/lib/operations/duties";
-import type { DutyRoleGroup, DutyTodayItem } from "@/lib/operations/types";
+import type { DutyRoleGroup, DutyTodayItem, RequirementState } from "@/lib/operations/types";
 
 function legacyRoleGroup(item: DutyTodayItem): DutyRoleGroup {
+  if (item.occurrence?.duty_role_group) return item.occurrence.duty_role_group;
   if (item.duty.role_group) return item.duty.role_group;
   if (item.duty.area === "course") return "maintenance_staff";
   if (item.duty.area === "restaurant") return "restaurant_staff";
@@ -16,32 +23,52 @@ function legacyRoleGroup(item: DutyTodayItem): DutyRoleGroup {
 }
 
 function displayGroup(item: DutyTodayItem): DutyRoleGroup {
-  if (!item.primaryName && !item.contractorName) return "unassigned";
+  if (item.occurrence?.duty_owner_type === "contractor" || item.contractorName) return "contractor";
+  if (!item.primaryName) return "unassigned";
   return legacyRoleGroup(item);
+}
+
+function requirementLabel(state: RequirementState | null | undefined, details: string[]): string {
+  if (state === "not_required") return "Explicitly not required";
+  if (state === "required") return details.length ? `Required: ${details.join(", ")}` : "Required - details missing";
+  return "Not recorded";
 }
 
 export function DutyRhythm({
   items,
-  onToggle,
+  onTransition,
 }: {
   items: DutyTodayItem[];
-  onToggle: (dutyId: string, done: boolean) => void;
+  onTransition: (
+    dutyId: string,
+    status: "in_progress" | "completed" | "blocked" | "verified",
+    blockedReason?: string,
+  ) => Promise<boolean> | boolean;
 }) {
+  const { isManager } = useAuth();
   const grouped = new Map<DutyRoleGroup, DutyTodayItem[]>();
   for (const item of items) {
     const group = displayGroup(item);
     grouped.set(group, [...(grouped.get(group) ?? []), item]);
   }
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <section className="mb-6" aria-labelledby="duty-rhythm-heading">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p id="duty-rhythm-heading" className="gk-section-label">The day&apos;s delegated rhythm</p>
+          {isManager && <Link href="/operations/duties" className="text-xs font-medium text-primary">Manage duties</Link>}
+        </div>
+        <div className="gk-card p-4 text-sm text-muted-foreground">No duty occurrences are scheduled for today.</div>
+      </section>
+    );
+  }
 
   return (
-    <section className="mb-6 gk-animate-in gk-animate-in-3">
+    <section className="mb-6 gk-animate-in gk-animate-in-3" aria-labelledby="duty-rhythm-heading">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="gk-section-label">The day&apos;s delegated rhythm</p>
-        <Link href="/operations/duties" className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-          <UserRoundCog className="h-3.5 w-3.5" />Manage duties
-        </Link>
+        <p id="duty-rhythm-heading" className="gk-section-label">The day&apos;s delegated rhythm</p>
+        {isManager && <Link href="/operations/duties" className="inline-flex items-center gap-1 text-xs font-medium text-primary"><UserRoundCog className="h-3.5 w-3.5" />Manage duties</Link>}
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {DUTY_ROLE_GROUP_ORDER.map((group) => {
@@ -56,42 +83,49 @@ export function DutyRhythm({
               </div>
               <div className="divide-y divide-border/50">
                 {duties.map((item) => {
-                  const owner = item.primaryName ?? item.contractorName ?? "Unassigned";
-                  const target = legacyRoleGroup(item);
-                  const verified = item.occurrence?.status === "verified";
+                  const occurrence = item.occurrence;
+                  const owner = occurrence?.duty_contractor_name ?? occurrence?.duty_primary_name ?? item.contractorName ?? item.primaryName ?? "Unassigned";
+                  const originalDate = occurrence?.original_due_date;
+                  const currentDate = occurrence?.due_date;
+                  const status = occurrence?.status ?? "pending";
+                  const evidence = occurrence?.duty_evidence_requirements ?? item.duty.evidence_requirements ?? [];
+                  const evidenceState = occurrence?.duty_evidence_requirement_state ?? item.duty.evidence_requirement_state;
+                  const verificationState = occurrence?.duty_verification_requirement_state ?? item.duty.verification_requirement_state;
+                  const equipmentState = occurrence?.duty_equipment_requirement_state ?? item.duty.equipment_requirement_state;
+                  const equipment = occurrence?.equipment_needed ?? item.duty.equipment_needed ?? [];
+                  const canExecute = !!occurrence && !["completed", "verified", "cancelled"].includes(status);
+                  const canComplete = canExecute && (
+                    evidenceState !== "required" || occurrence?.duty_evidence_satisfied === true
+                  );
                   return (
-                    <button
-                      key={item.duty.id}
-                      type="button"
-                      onClick={() => onToggle(item.duty.id, !item.done)}
-                      disabled={verified}
-                      className="w-full px-4 py-3 text-left transition-colors hover:bg-muted/40 active:bg-muted/60 disabled:cursor-default disabled:opacity-80"
-                      aria-label={`${verified ? "Verified" : item.done ? "Reopen" : "Complete"} ${item.duty.title}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className={cn(
-                          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-                          item.done ? "border-primary bg-primary text-primary-foreground" : "border-input",
-                        )}>
-                          {item.done && <Check className="h-3.5 w-3.5" />}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className={cn("block text-sm font-medium leading-snug", item.done && "line-through text-muted-foreground")}>{item.duty.title}</span>
-                          <span className={cn("mt-1 block text-xs", owner === "Unassigned" ? "font-medium text-warning-foreground" : "text-muted-foreground")}>
-                            {owner}
-                            {item.duty.estimated_minutes == null ? " · Duration not recorded" : ` · ${item.duty.estimated_minutes} min`}
-                          </span>
-                          {group === "unassigned" && target !== "unassigned" && (
-                            <span className="mt-0.5 block text-xs text-muted-foreground">Target group: {DUTY_ROLE_GROUP_LABELS[target]}</span>
-                          )}
-                          {item.backupName && <span className="mt-0.5 block text-xs text-muted-foreground">Backup: {item.backupName}</span>}
-                          {item.duty.instructions && <span className="mt-1 block text-xs text-muted-foreground">{item.duty.instructions}</span>}
-                          {item.duty.evidence_requirements?.length ? <span className="mt-0.5 block text-xs text-muted-foreground">Evidence: {item.duty.evidence_requirements.join(", ")}</span> : null}
-                          {item.duty.manager_verification_required && <span className="mt-0.5 block text-xs font-medium text-primary">Manager verification required</span>}
-                          {verified && <span className="mt-0.5 block text-xs font-medium text-primary">Verified by manager</span>}
-                        </span>
+                    <article key={occurrence?.id ?? item.duty.id} className="space-y-3 px-4 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div><h3 className="text-sm font-semibold leading-snug">{item.duty.title}</h3><p className={owner === "Unassigned" ? "text-xs font-medium text-warning-foreground" : "text-xs text-muted-foreground"}>{occurrence?.duty_owner_type === "contractor" ? `Contractor: ${owner}` : owner}</p></div>
+                        <Badge variant="outline">{status.replace("_", " ")}</Badge>
                       </div>
-                    </button>
+                      <dl className="space-y-1 text-xs text-muted-foreground">
+                        <div><dt className="inline font-medium text-foreground">Backup: </dt><dd className="inline">{occurrence?.duty_backup_name ?? item.backupName ?? "Not recorded"}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Department: </dt><dd className="inline">{occurrence?.duty_department ? DUTY_DEPARTMENT_LABELS[occurrence.duty_department] : item.duty.department ? DUTY_DEPARTMENT_LABELS[item.duty.department] : "Not recorded"}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Role group: </dt><dd className="inline">{DUTY_ROLE_GROUP_LABELS[occurrence?.duty_role_group ?? legacyRoleGroup(item)]}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Schedule: </dt><dd className="inline">{dutyScheduleLabel({ ...item.duty, recurrence_rule: occurrence?.duty_recurrence_rule ?? item.duty.recurrence_rule })}</dd></div>
+                        {originalDate && currentDate && <div><dt className="inline font-medium text-foreground">Date: </dt><dd className="inline">{originalDate === currentDate ? currentDate : `${currentDate} (moved from ${originalDate})`}</dd></div>}
+                        <div><dt className="inline font-medium text-foreground">Duration: </dt><dd className="inline">{occurrence?.estimated_minutes == null ? "Not recorded" : `${occurrence.estimated_minutes} minutes`}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Instructions: </dt><dd className="inline">{occurrence?.duty_instructions || item.duty.instructions || "Not recorded"}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Equipment: </dt><dd className="inline">{requirementLabel(equipmentState, equipment)}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Evidence: </dt><dd className="inline">{requirementLabel(evidenceState, evidence.map((entry) => entry.label))}{evidenceState === "required" ? occurrence?.duty_evidence_satisfied === true ? " · satisfied" : " · missing" : ""}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Verification: </dt><dd className="inline">{requirementLabel(verificationState, [])}</dd></div>
+                      </dl>
+                      {status === "blocked" && occurrence?.blocked_reason && <p className="flex items-start gap-1 text-xs text-destructive"><CircleAlert className="mt-0.5 h-3.5 w-3.5" />{occurrence.blocked_reason}</p>}
+                      <div className="flex flex-wrap gap-2">
+                        {occurrence && <Button asChild variant="outline" size="sm"><Link href={`/tasks/view?id=${occurrence.id}`}><ExternalLink className="h-3.5 w-3.5" />Open</Link></Button>}
+                        <Button asChild variant="ghost" size="sm"><Link href={`/operations/duties?duty=${item.duty.id}`}>Duty</Link></Button>
+                        {canExecute && status !== "in_progress" && <Button size="sm" variant="outline" onClick={() => void onTransition(item.duty.id, "in_progress")}><Play className="h-3.5 w-3.5" />Start</Button>}
+                        {canComplete && <Button size="sm" onClick={() => void onTransition(item.duty.id, "completed")}><Check className="h-3.5 w-3.5" />Complete</Button>}
+                        {canExecute && !canComplete && <Button size="sm" disabled title="Record required evidence in the task before completing">Evidence missing</Button>}
+                        {canExecute && <Button size="sm" variant="outline" onClick={() => { const reason = window.prompt(`Why is ${item.duty.title} blocked?`); if (reason?.trim()) void onTransition(item.duty.id, "blocked", reason); }}>Block</Button>}
+                        {isManager && status === "completed" && verificationState === "required" && <Button size="sm" onClick={() => void onTransition(item.duty.id, "verified")}><ShieldCheck className="h-3.5 w-3.5" />Review</Button>}
+                      </div>
+                    </article>
                   );
                 })}
               </div>

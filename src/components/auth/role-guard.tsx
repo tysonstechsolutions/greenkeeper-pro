@@ -1,13 +1,9 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/hooks/useAuth";
 
-/**
- * Roles are DISABLED for now — the app runs on a single shared account and is
- * fully open (what you see is driven by the chosen view, not by who you are).
- * These guards are kept as pass-throughs so the 15+ existing call sites keep
- * working without edits; flip the bodies back if per-person roles return.
- */
 export type UserRole =
   | "super"
   | "asst_super"
@@ -19,7 +15,6 @@ export type UserRole =
   | "pro"
   | "gm";
 
-// Kept so existing imports resolve. Not used for gating while roles are off.
 export const MANAGEMENT_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "pro", "gm"];
 export const ADMIN_ROLES: UserRole[] = ["super", "asst_super", "director", "gm"];
 export const SUPER_ONLY: UserRole[] = ["super"];
@@ -34,29 +29,30 @@ interface RoleGuardProps {
   redirectTo?: string;
 }
 
-export function RoleGuard({ children }: RoleGuardProps) {
-  return <>{children}</>;
+/** UI affordance only; RLS and RPC authorization remain authoritative. */
+export function RoleGuard({ children, allowedRoles, fallback = null, redirectTo }: RoleGuardProps) {
+  const { profile, loading } = useAuth();
+  const router = useRouter();
+  const allowed = !!profile && allowedRoles.includes(profile.role as UserRole);
+
+  useEffect(() => {
+    if (!loading && !allowed && redirectTo) router.replace(redirectTo);
+  }, [allowed, loading, redirectTo, router]);
+
+  if (loading) return null;
+  return allowed ? <>{children}</> : <>{fallback}</>;
 }
 
-interface RoleHiddenProps {
-  children: ReactNode;
-  hiddenFromRoles: UserRole[];
+export function RoleHidden({ children, hiddenFromRoles }: { children: ReactNode; hiddenFromRoles: UserRole[] }) {
+  const { profile } = useAuth();
+  return profile && hiddenFromRoles.includes(profile.role as UserRole) ? null : <>{children}</>;
 }
 
-export function RoleHidden({ children }: RoleHiddenProps) {
-  return <>{children}</>;
+export function RoleVisible({ children, visibleToRoles }: { children: ReactNode; visibleToRoles: UserRole[] }) {
+  const { profile } = useAuth();
+  return profile && visibleToRoles.includes(profile.role as UserRole) ? <>{children}</> : null;
 }
 
-interface RoleVisibleProps {
-  children: ReactNode;
-  visibleToRoles: UserRole[];
-}
-
-export function RoleVisible({ children }: RoleVisibleProps) {
-  return <>{children}</>;
-}
-
-// Hook for checking role permissions — all permissive while roles are off.
 export function useRoleAccess(): {
   userRole: UserRole | undefined;
   hasRole: (roles: UserRole[]) => boolean;
@@ -67,14 +63,28 @@ export function useRoleAccess(): {
   isPro: () => boolean;
   isStaff: () => boolean;
 } {
+  const { profile } = useAuth();
+  const userRole = profile?.role as UserRole | undefined;
+  const rank: Record<UserRole, number> = {
+    seasonal: 0,
+    crew: 1,
+    mechanic: 2,
+    foreman: 3,
+    pro: 3,
+    asst_super: 4,
+    super: 5,
+    director: 5,
+    gm: 5,
+  };
+  const hasRole = (roles: UserRole[]) => !!userRole && roles.includes(userRole);
   return {
-    userRole: undefined as UserRole | undefined,
-    hasRole: () => true,
-    hasMinimumRole: () => true,
-    isManagement: () => true,
-    isAdmin: () => true,
-    isSuperintendent: () => true,
-    isPro: () => false,
-    isStaff: () => true,
+    userRole,
+    hasRole,
+    hasMinimumRole: (minimumRole) => !!userRole && rank[userRole] >= rank[minimumRole],
+    isManagement: () => hasRole(MANAGEMENT_ROLES),
+    isAdmin: () => hasRole(ADMIN_ROLES),
+    isSuperintendent: () => hasRole(["super", "asst_super", "director", "gm"]),
+    isPro: () => hasRole(["pro"]),
+    isStaff: () => hasRole(STAFF_ROLES),
   };
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowLeft,
@@ -54,6 +55,8 @@ import type {
   Photo,
   PhotoType,
 } from "@/types/database";
+import { directRpc } from "@/lib/supabase/rest";
+import type { DutyEvidenceRequirement } from "@/lib/operations/types";
 
 // Priority styles
 const priorityColors: Record<TaskPriority, string> = {
@@ -186,6 +189,7 @@ function PageContent() {
   const { getActiveREIs } = useChemicals();
 
   const [task, setTask] = useState<TaskWithRelations | null>(null);
+  const [evidenceMessage, setEvidenceMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -414,6 +418,26 @@ function PageContent() {
     }
   };
 
+  const handleRecordEvidence = async (requirement: DutyEvidenceRequirement) => {
+    if (!task) return;
+    const note = window.prompt(`Record evidence for "${requirement.label}". Add the factual note or reference:`)?.trim();
+    if (!note) return;
+    setEvidenceMessage(null);
+    try {
+      await directRpc("record_task_evidence", {
+        p_task_id: task.id,
+        p_requirement_key: requirement.key,
+        p_requirement_type: requirement.type,
+        p_note: note,
+        p_document_url: null,
+        p_external_reference: requirement.type === "external_reference" ? note : null,
+      }, "task.recordEvidence");
+      setEvidenceMessage(`Evidence recorded: ${requirement.label}`);
+    } catch (error) {
+      setEvidenceMessage(error instanceof Error ? error.message : "Evidence could not be recorded.");
+    }
+  };
+
   const handleBlockTask = async () => {
     if (!task) return;
     await handleStatusChange("blocked");
@@ -503,7 +527,7 @@ function PageContent() {
           </Button>
         );
       case "completed":
-        if (isManager || isSuper) {
+        if ((isManager || isSuper) && (!task.duty_id || task.duty_verification_requirement_state === "required")) {
           return (
             <Button
               onClick={handleVerifyTask}
@@ -649,8 +673,14 @@ function PageContent() {
 
         {/* Status and Priority row */}
         <div className="flex items-center gap-3 mt-4">
-          {/* Status dropdown */}
+          {/* Duty occurrences use the guarded execution actions below. The
+              free-form status menu remains manager-only for ordinary tasks. */}
           <div className="relative">
+            {task.duty_id || !isManager ? (
+              <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${statusColors[task.status].bg} ${statusColors[task.status].text}`}>
+                {statusLabels[task.status]}
+              </span>
+            ) : <>
             <button
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${statusColors[task.status].bg} ${statusColors[task.status].text}`}
@@ -683,6 +713,7 @@ function PageContent() {
                 </div>
               </>
             )}
+            </>}
           </div>
 
           {/* Priority badge */}
@@ -749,7 +780,9 @@ function PageContent() {
                   <p className="font-medium">
                     {task.assigned_user
                       ? task.assigned_user.full_name || "Unknown"
-                      : "Unassigned"}
+                      : task.duty_owner_type === "contractor"
+                        ? `Contractor: ${task.duty_contractor_name || "Not recorded"}`
+                        : "Unassigned"}
                   </p>
                   {task.assigned_user?.role && (
                     <p className="text-xs text-muted-foreground">
@@ -828,6 +861,29 @@ function PageContent() {
                       ))}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {task.duty_id && (!task.equipment_needed || task.equipment_needed.length === 0) && (
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center shrink-0"><Wrench className="w-5 h-5 text-orange-600" /></div>
+                  <div><p className="text-sm text-muted-foreground">Equipment</p><p className="font-medium">{task.duty_equipment_requirement_state === "not_required" ? "Explicitly not required" : "Not recorded"}</p></div>
+                </div>
+              )}
+
+              {task.duty_id && (
+                <div className="rounded-xl border bg-muted/20 p-3 text-sm space-y-2">
+                  <p><span className="font-medium">Instructions:</span> {task.duty_instructions || "Not recorded"}</p>
+                  <p><span className="font-medium">Original scheduled date:</span> {task.original_due_date || "Not recorded"}</p>
+                  <p><span className="font-medium">Current due date:</span> {task.due_date}</p>
+                  <p><span className="font-medium">Evidence:</span> {task.duty_evidence_requirement_state === "required" ? (task.duty_evidence_requirements?.map((item) => item.label).join(", ") || "Required - details missing") : task.duty_evidence_requirement_state === "not_required" ? "Explicitly not required" : "Not recorded"}</p>
+                  {task.duty_evidence_requirement_state === "required" && task.duty_evidence_requirements?.some((item) => !item.type.startsWith("photo")) && (
+                    <div className="flex flex-wrap gap-2">{task.duty_evidence_requirements.filter((item) => !item.type.startsWith("photo")).map((item) => <Button key={item.key} type="button" variant="outline" size="sm" onClick={() => void handleRecordEvidence(item)}>Record {item.label}</Button>)}</div>
+                  )}
+                  {evidenceMessage && <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{evidenceMessage}</p>}
+                  <p><span className="font-medium">Manager verification:</span> {task.duty_verification_requirement_state === "required" ? "Required" : task.duty_verification_requirement_state === "not_required" ? "Explicitly not required" : "Not recorded"}</p>
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><span>Duty {task.duty_id}</span><span>Occurrence {task.occurrence_key}</span><span>Series {task.series_id}</span></div>
+                  <Link href={`/operations/duties?duty=${task.duty_id}`} className="inline-link text-sm">Open duty definition</Link>
                 </div>
               )}
 

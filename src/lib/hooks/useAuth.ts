@@ -251,28 +251,8 @@ export function useAuthInternal(): UseAuthReturn {
           }
         }
 
-        // No existing session → auto-sign-in with the shared "open app"
-        // account. This replaces the PIN login: access is fully open, so the
-        // app silently authenticates as the shared super account on first
-        // load and every page's data loads with no login UI.
-        if (!initialSession?.user) {
-          const email = process.env.NEXT_PUBLIC_APP_EMAIL;
-          const password = process.env.NEXT_PUBLIC_APP_PASSWORD;
-          if (email && password) {
-            try {
-              const { data: signInData, error: signInErr } =
-                await supabase.auth.signInWithPassword({ email, password });
-              if (signInErr) {
-                console.error("[useAuth] auto sign-in failed:", signInErr.message);
-              } else if (signInData?.session) {
-                initialSession = signInData.session;
-              }
-            } catch (e) {
-              console.error("[useAuth] auto sign-in threw:", e);
-            }
-          }
-        }
-
+        // An absent session remains absent. AuthGate sends operational routes
+        // to PIN login, where a PIN establishes that employee's own session.
         if (!mountedRef.current) return;
 
         if (initialSession?.user) {
@@ -362,29 +342,9 @@ export function useAuthInternal(): UseAuthReturn {
     profileFetchedRef.current = false;
   };
 
-  // Role checks. Roles are disabled for now (single shared account). When no
-  // profile row resolves — e.g. a fresh computer where the profile fetch is
-  // slow, blocked, or the row is missing — fall back to a permissive "super"
-  // profile so nobody is locked out of role-gated pages ("Access Restricted").
-  // A real profile (the shared account is "super") is used as-is.
-  const effectiveProfile: Profile =
-    profile ?? {
-      id: user?.id ?? "shared-account",
-      email: user?.email ?? "",
-      full_name: user?.email ?? "Team Member",
-      display_name: null,
-      role: "super",
-      phone: null,
-      avatar_url: null,
-      hire_date: null,
-      certifications: [],
-      emergency_contact: null,
-      user_preferences: null,
-      is_active: true,
-      created_at: new Date(0).toISOString(),
-      updated_at: new Date(0).toISOString(),
-    };
-  const role = effectiveProfile.role as UserRole | undefined;
+  // Role and permission checks use only the authenticated user's profile.
+  // A missing profile never receives synthetic or elevated permissions.
+  const role = profile?.role as UserRole | undefined;
   const isSuper = role === "super";
   const isAsstSuper = role === "asst_super";
   const isForeman = role === "foreman";
@@ -406,7 +366,7 @@ export function useAuthInternal(): UseAuthReturn {
   return {
     user,
     session,
-    profile: effectiveProfile,
+    profile,
     loading,
     error,
     signOut,

@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOperations } from "@/lib/operations/use-operations";
 import { isInSeason, ymdLocal } from "@/lib/operations/engine";
-import { directSelectList } from "@/lib/supabase/rest";
+import { directSelectAll } from "@/lib/supabase/rest";
 import { evaluateCerts, type Certification, type EvaluatedCert } from "@/lib/people/certs";
 import { useMyDay } from "@/lib/my-day/use-my-day";
 import { useCalendar } from "@/lib/calendar/use-calendar";
@@ -49,10 +49,10 @@ export default function TodayPage() {
   const [certAlarms, setCertAlarms] = useState<EvaluatedCert[]>([]);
   useEffect(() => {
     let cancelled = false;
-    directSelectList<Certification>("certifications", {
+    directSelectAll<Certification>("certifications", {
       columns: "*",
       filters: ["is_active=eq.true", "expires_date=not.is.null"],
-      limit: 200,
+      orderBy: [{ column: "expires_date" }, { column: "id" }],
       label: "today.certs",
     })
       .then((rows) => {
@@ -145,11 +145,13 @@ export default function TodayPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
+        <div className="flex items-center justify-center py-16 text-muted-foreground" role="status" aria-live="polite">
           <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="sr-only">Loading today&apos;s operations</span>
         </div>
       ) : (
         <>
+          {ops.error && <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{ops.error}</div>}
           {/* Alarms */}
           {(alarms.length > 0 || certAlarms.length > 0) && (
             <section className="mb-6 gk-animate-in gk-animate-in-2">
@@ -228,7 +230,7 @@ export default function TodayPage() {
 
           <DutyRhythm
             items={dutiesToday}
-            onToggle={(dutyId, done) => void ops.toggleDuty(dutyId, done)}
+            onTransition={ops.transitionDuty}
           />
 
           {/* My Day tasks */}

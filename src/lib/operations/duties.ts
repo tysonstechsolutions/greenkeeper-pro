@@ -56,9 +56,12 @@ function parseDate(value: string): Date {
 }
 
 function daysBetween(anchor: string, value: string): number {
-  const a = parseDate(anchor);
-  const b = parseDate(value);
-  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+  const [anchorYear, anchorMonth, anchorDay] = anchor.split("-").map(Number);
+  const [valueYear, valueMonth, valueDay] = value.split("-").map(Number);
+  return Math.round(
+    (Date.UTC(valueYear, valueMonth - 1, valueDay)
+      - Date.UTC(anchorYear, anchorMonth - 1, anchorDay)) / 86_400_000,
+  );
 }
 
 function lastDayOfMonth(value: Date): number {
@@ -73,13 +76,15 @@ function normalizedRule(duty: OperationDuty): DutyRecurrenceRule {
   };
 }
 
-function inLegacySeason(value: Date): boolean {
-  const month = value.getMonth();
-  const day = value.getDate();
-  if (month < 2 || month > 9) return false;
-  if (month === 2 && day < 20) return false;
-  if (month === 9 && day > 15) return false;
-  return true;
+function inRecordedSeason(duty: OperationDuty, date: string): boolean {
+  if (duty.season === "year_round") return true;
+  const start = duty.seasonal_start_mmdd;
+  const end = duty.seasonal_end_mmdd;
+  if (!start || !end) return false;
+  const monthDay = date.slice(5);
+  return start <= end
+    ? monthDay >= start && monthDay <= end
+    : monthDay >= start || monthDay <= end;
 }
 
 /** Pure recurrence matcher shared by previews and unit tests. */
@@ -89,7 +94,7 @@ export function dutyRunsOn(duty: OperationDuty, date: string): boolean {
   if (duty.active_through && date > duty.active_through) return false;
 
   const value = parseDate(date);
-  if (duty.season === "in_season" && !inLegacySeason(value)) return false;
+  if (!inRecordedSeason(duty, date)) return false;
 
   const rule = normalizedRule(duty);
   const interval = Math.max(1, rule.interval || 1);

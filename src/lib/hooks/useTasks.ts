@@ -16,12 +16,12 @@ import { sendNotification } from "./useNotifications";
 import { translateSafe } from "@/lib/utils/translate";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import {
-  directSelectList,
+  directSelectAll,
   directSelectRow,
   directInsertRow,
-  directPatchRow,
   directPatchRowReturning,
   directDeleteRow,
+  directRpc,
 } from "@/lib/supabase/rest";
 
 // Extended task type with joined data
@@ -188,15 +188,15 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
       try {
         const { filters: rawFilters, or } = buildTaskFilters(filters);
-        const data = await directSelectList<TaskWithRelations>("tasks", {
+        const data = await directSelectAll<TaskWithRelations>("tasks", {
           columns: TASK_COLUMNS,
           filters: rawFilters,
           or,
           orderBy: [
             { column: "due_date", ascending: true },
             { column: "priority", ascending: true }, // critical=0, high=1, etc.
+            { column: "id" },
           ],
-          limit: 100, // Limit to prevent loading too many tasks
           label: "fetchTasks",
         });
 
@@ -217,7 +217,7 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
       if (!user) return [];
 
       try {
-        const data = await directSelectList<TaskWithRelations>("tasks", {
+        const data = await directSelectAll<TaskWithRelations>("tasks", {
           columns: TASK_COLUMNS,
           filters: [
             `assigned_to=eq.${encodeURIComponent(user.id)}`,
@@ -227,8 +227,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           orderBy: [
             { column: "priority", ascending: true },
             { column: "due_time", ascending: true, nullsFirst: false },
+            { column: "id" },
           ],
-          limit: 50, // Limit to prevent loading too many tasks
           label: "fetchMyTasks",
         });
 
@@ -245,7 +245,7 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
   const fetchTeamTasks = useCallback(
     async (date: string): Promise<TaskWithRelations[]> => {
       try {
-        const data = await directSelectList<TaskWithRelations>("tasks", {
+        const data = await directSelectAll<TaskWithRelations>("tasks", {
           columns: TASK_COLUMNS,
           filters: [
             `due_date=eq.${encodeURIComponent(date)}`,
@@ -255,8 +255,8 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
             { column: "priority", ascending: true },
             { column: "assigned_to", ascending: true, nullsFirst: false },
             { column: "due_time", ascending: true, nullsFirst: false },
+            { column: "id" },
           ],
-          limit: 100, // Limit to prevent loading too many tasks
           label: "fetchTeamTasks",
         });
 
@@ -376,13 +376,11 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
   const updateTaskStatus = useCallback(
     async (id: string, newStatus: TaskStatus): Promise<boolean> => {
       try {
-        await directPatchRow(
-          "tasks",
-          "id",
-          id,
-          { status: newStatus },
-          "updateTaskStatus",
-        );
+        await directRpc("transition_task_status", {
+          p_task_id: id,
+          p_status: newStatus,
+          p_blocked_reason: null,
+        }, "updateTaskStatus");
         return true;
       } catch (err) {
         console.error("Unexpected error updating task status:", err);
@@ -411,17 +409,11 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           "completeTask:fetch",
         );
 
-        await directPatchRow(
-          "tasks",
-          "id",
-          id,
-          {
-            status: "completed",
-            completed_at: new Date().toISOString(),
-            completed_by: user.id,
-          },
-          "completeTask:update",
-        );
+        await directRpc("transition_task_status", {
+          p_task_id: id,
+          p_status: "completed",
+          p_blocked_reason: null,
+        }, "completeTask:update");
 
         // Notify the person who assigned the task
         if (taskData?.assigned_by && taskData.assigned_by !== user.id) {
@@ -468,17 +460,11 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           "verifyTask:fetch",
         );
 
-        await directPatchRow(
-          "tasks",
-          "id",
-          id,
-          {
-            status: "verified",
-            verified_at: new Date().toISOString(),
-            verified_by: user.id,
-          },
-          "verifyTask:update",
-        );
+        await directRpc("transition_task_status", {
+          p_task_id: id,
+          p_status: "verified",
+          p_blocked_reason: null,
+        }, "verifyTask:update");
 
         // Notify the person who completed the task (or was assigned if different)
         const notifyUserId = taskData?.completed_by || taskData?.assigned_to;

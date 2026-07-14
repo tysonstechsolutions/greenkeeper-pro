@@ -87,7 +87,10 @@ export function BoardNewTaskSheet({
 }: BoardNewTaskSheetProps) {
   // Use board.dates fallback for the date and first crew member for assignee.
   const initialDate = defaultDate ?? board?.dates[0] ?? "";
-  const initialUserId = defaultUserId ?? board?.crew[0]?.id ?? "";
+  const assignableCrew = board?.crew.filter((member) => !member.isExternal) ?? [];
+  const initialUserId = defaultUserId && !defaultUserId.startsWith("contractor:")
+    ? defaultUserId
+    : assignableCrew[0]?.id ?? "";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -104,7 +107,7 @@ export function BoardNewTaskSheet({
           <NewTaskForm
             // Fresh form each time the sheet opens (key forces remount).
             key={`${initialUserId}|${initialDate}|${open}`}
-            crew={board.crew}
+            crew={assignableCrew}
             dates={board.dates}
             initialUserId={initialUserId}
             initialDate={initialDate}
