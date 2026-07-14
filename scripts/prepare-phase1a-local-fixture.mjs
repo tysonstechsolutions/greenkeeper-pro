@@ -2,10 +2,11 @@
 
 /**
  * Builds an unlinked, local-only migration fixture under a caller-selected
- * temporary directory. It preserves every source migration's SQL verbatim but
- * gives historical short/duplicate filenames deterministic 14-digit fixture
- * versions so the local CLI can replay their logical order. Repository files,
- * cloud links, and hosted migration ledgers are never changed.
+ * temporary directory. It preserves source migration SQL except for the small,
+ * recorded local-only compatibility transforms below, and gives historical
+ * short/duplicate filenames deterministic 14-digit fixture versions so the
+ * local CLI can replay their logical order. Repository files, cloud links, and
+ * hosted migration ledgers are never changed.
  *
  * Usage:
  *   node scripts/prepare-phase1a-local-fixture.mjs create --mode pre-corrective --out-dir C:\\tmp\\phase1a-matrix
@@ -20,6 +21,11 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceSupabase = join(repositoryRoot, "supabase");
 const sourceMigrations = join(sourceSupabase, "migrations");
 const sourceConfig = join(sourceSupabase, "config.toml");
+const localBootstrap = join(
+  sourceSupabase,
+  "local-bootstrap",
+  "20260406000001_historical_foundations.sql",
+);
 const productionProjectRef = "mbgublyqnyghmvqfooao";
 const correctiveMigration = "20260713230000_daily_operations_phase1a_corrective.sql";
 const focusedPreCorrectiveSources = new Set([
@@ -39,7 +45,16 @@ const focusedPreCorrectiveSources = new Set([
   "20260713190000_daily_operations_phase1a.sql",
   "20260713210000_daily_operations_phase1a_existing_series.sql",
 ]);
+const foundationalSources = new Set([
+  "001_initial_schema.sql",
+  "002_invites_table.sql",
+  "003_activity_log.sql",
+  "004_user_preferences.sql",
+  "005_missing_tables.sql",
+  "006_add_director_role.sql",
+]);
 const updatedAtCompatibilityMigration = "20260406000000_phase1a_fixture_updated_at_compat.sql";
+const localBootstrapMigration = "20260406000001_historical_foundations.sql";
 const updatedAtCompatibilitySql = `-- Temporary Phase 1A fixture compatibility only. The historical 20260407
 -- observation migrations install this trigger before the source chain defines it.
 -- This file is never written to the repository migration directory.
@@ -107,6 +122,12 @@ function sourceSortKey(name) {
   if (name === "20260407_hole_observations.sql") return [20260407, 3, name];
   if (name === "20260626_pro_shop_scheduler.sql") return [20260626, 1, name];
   if (name === "20260626_pro_shop_flex.sql") return [20260626, 2, name];
+  if (name === "20260608_pr_audit.sql") return [20260608, 1, name];
+  if (name === "20260608_pr_audit_codes.sql") return [20260608, 2, name];
+  if (name === "20260608_pr_audit_lifecycle.sql") return [20260608, 3, name];
+  if (name === "20260608_pr_audit_monthly_budget.sql") return [20260608, 4, name];
+  if (name === "20260701_my_day_recurrence.sql") return [20260701, 1, name];
+  if (name === "20260701_daily_goal_anchor.sql") return [20260701, 2, name];
   const match = /^(\d{14}|\d{8}|\d{3})/.exec(name);
   if (!match) return [99999999, 0, name];
   const value = match[1].length === 3 ? 20000101 : Number(match[1].slice(0, 8));
@@ -126,7 +147,11 @@ function fixtureName(sourceName, counts) {
 function sourceFiles() {
   return readdirSync(sourceMigrations)
     .filter((name) => name.endsWith(".sql"))
-    .sort((left, right) => sourceSortKey(left).join("|").localeCompare(sourceSortKey(right).join("|")));
+    .sort((left, right) => {
+      const [leftDate, leftOrder, leftName] = sourceSortKey(left);
+      const [rightDate, rightOrder, rightName] = sourceSortKey(right);
+      return leftDate - rightDate || leftOrder - rightOrder || leftName.localeCompare(rightName);
+    });
 }
 
 function writeConfig(targetSupabase) {
@@ -136,10 +161,44 @@ function writeConfig(targetSupabase) {
   writeFileSync(join(targetSupabase, "config.toml"), config, "utf8");
 }
 
+function sourceSqlForFixture(sourceName) {
+  const source = readFileSync(join(sourceMigrations, sourceName), "utf8");
+  if (sourceName === "20260419_seed_sops_knowledge_articles.sql") {
+    return {
+      source: "-- Local fixture omission: this content-only seed references a production profile UUID.\n-- Empty local auth fixtures must not fabricate employees.\n",
+      transforms: ["omitted historical SOP content seed that references an unavailable production identity"],
+    };
+  }
+  if (sourceName !== "20260419_add_pin_codes.sql") return { source, transforms: [] };
+
+  const pinSeed = /-- ={60,}\r?\n-- Seed PINs for existing crew members\r?\n-- ={60,}\r?\nINSERT INTO pin_codes[\s\S]*?ON CONFLICT \(user_id\) DO NOTHING;\r?\n?/;
+  if (!pinSeed.test(source)) {
+    fail("could not locate the historical pin seed block for local omission");
+  }
+  return {
+    source: source.replace(
+      pinSeed,
+      "-- Local fixture omission: this historical seed references four production user UUIDs.\n-- Empty local auth fixtures must not fabricate employees or PINs.\n",
+    ),
+    transforms: ["omitted historical PIN seed that references unavailable production identities"],
+  };
+}
+
+function copySourceMigration(sourceName, target) {
+  const { source, transforms } = sourceSqlForFixture(sourceName);
+  if (transforms.length === 0) {
+    copyFileSync(join(sourceMigrations, sourceName), target);
+  } else {
+    writeFileSync(target, source, "utf8");
+  }
+  return transforms;
+}
+
 function createFixture(outDir, mode) {
   if (!existsSync(sourceConfig)) fail("repository local Supabase config is missing");
-  if (!["pre-corrective", "all", "focused-pre-corrective"].includes(mode)) {
-    fail("mode must be pre-corrective, all, or focused-pre-corrective");
+  if (!existsSync(localBootstrap)) fail("repository local historical bootstrap is missing");
+  if (!["pre-corrective", "all", "focused-pre-corrective", "foundational-compat", "production-shaped"].includes(mode)) {
+    fail("mode must be pre-corrective, all, focused-pre-corrective, foundational-compat, or production-shaped");
   }
   const targetSupabase = join(outDir, "supabase");
   const targetMigrations = join(targetSupabase, "migrations");
@@ -159,15 +218,33 @@ function createFixture(outDir, mode) {
       reason: "temporary compatibility for pre-existing historical trigger ordering defect",
     });
     writeFileSync(join(targetMigrations, updatedAtCompatibilityMigration), updatedAtCompatibilitySql, "utf8");
+    manifest.push({
+      sourceName: "supabase/local-bootstrap/20260406000001_historical_foundations.sql",
+      targetName: localBootstrapMigration,
+      included: true,
+      reason: "temporary local reconstruction of missing historical foundational tables",
+    });
+    copyFileSync(localBootstrap, join(targetMigrations, localBootstrapMigration));
   }
   const fixtureSources = mode === "focused-pre-corrective"
     ? sourceFiles().filter((sourceName) => focusedPreCorrectiveSources.has(sourceName))
-    : sourceFiles();
+    : mode === "foundational-compat"
+      ? sourceFiles().filter((sourceName) => foundationalSources.has(sourceName))
+      : sourceFiles();
   for (const sourceName of fixtureSources) {
     const targetName = fixtureName(sourceName, counts);
-    const included = mode === "all" || sourceName !== correctiveMigration;
-    manifest.push({ sourceName, targetName, included });
-    if (included) copyFileSync(join(sourceMigrations, sourceName), join(targetMigrations, targetName));
+    const preexistingGreen = mode === "production-shaped" && sourceName === "20260407_green_observations.sql";
+    const included = !preexistingGreen && (mode === "all" || mode === "production-shaped" || mode === "foundational-compat" || sourceName !== correctiveMigration);
+    const transforms = included
+      ? copySourceMigration(sourceName, join(targetMigrations, targetName))
+      : [];
+    manifest.push({
+      sourceName,
+      targetName,
+      included,
+      ...(preexistingGreen ? { reason: "local compatibility fixture pre-creates the production-shaped green_observations table" } : {}),
+      ...(transforms.length > 0 ? { transforms } : {}),
+    });
   }
   writeFileSync(join(outDir, "phase1a-fixture-manifest.json"), `${JSON.stringify({ mode, manifest }, null, 2)}\n`, "utf8");
   return { targetMigrations, manifest };
@@ -193,7 +270,7 @@ function appendCorrective(outDir) {
 function main() {
   assertLocalOnlyEnvironment();
   if (process.argv.slice(2).includes("--help")) {
-    console.log("Usage: node scripts/prepare-phase1a-local-fixture.mjs <create|append-corrective> --out-dir <temporary-directory> [--mode pre-corrective|all|focused-pre-corrective]");
+    console.log("Usage: node scripts/prepare-phase1a-local-fixture.mjs <create|append-corrective> --out-dir <temporary-directory> [--mode pre-corrective|all|focused-pre-corrective|foundational-compat|production-shaped]");
     return;
   }
   const { command, options } = parseArgs(process.argv.slice(2));
