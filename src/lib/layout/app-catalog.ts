@@ -87,6 +87,12 @@ export interface AppEntry {
    * them so the menu has fewer top-level entries.
    */
   children?: AppEntry[];
+  /**
+   * Extra search terms for the global command palette (⌘K). The label is
+   * always searched; keywords let shorthand ("PR", "PTO") and synonyms match
+   * an entry that wouldn't otherwise contain the typed text.
+   */
+  keywords?: string[];
 }
 
 // ── Section labels ─────────────────────────────────────────────────────────
@@ -156,9 +162,9 @@ const TODAY: AppEntry = { href: "/today", label: "Today", icon: Sunrise, color: 
 // Dashboard re-homed inside Course & Range for the leadership view (other
 // views keep the pinned DASHBOARD above).
 const TURF_DASHBOARD: AppEntry = { ...DASHBOARD, pinned: false, label: "Turf Dashboard", group: GROUPS.course };
-const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true };
-const MY_DAY: AppEntry = { href: "/my-day", label: "My Day", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true };
-const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, color: "from-amber-500 to-yellow-600", pinned: true };
+const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["time off", "pto", "vacation", "shifts", "crew"] };
+const MY_DAY: AppEntry = { href: "/my-day", label: "My Day", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["to do", "todo", "tasks", "checklist"] };
+const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, color: "from-amber-500 to-yellow-600", pinned: true, keywords: ["new pr", "purchase request", "buy", "order"] };
 
 const CALENDAR: AppEntry = { href: "/calendar", label: "Calendar", icon: CalendarDays, color: "from-sky-500 to-blue-600", group: GROUPS.planning };
 const WEATHER: AppEntry = { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600", group: GROUPS.planning };
@@ -177,7 +183,7 @@ const EQUIPMENT: AppEntry = { href: "/equipment", label: "Equipment", icon: Wren
 const ASSETS: AppEntry = { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const IMPORT_ASSETS: AppEntry = { href: "/assets/import", label: "Import Assets", icon: FilePlus, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
 const ORDER_LIST: AppEntry = { href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
-const PURCHASE_REQUESTS: AppEntry = { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
+const PURCHASE_REQUESTS: AppEntry = { href: "/purchase-requests", label: "Purchase Requests", icon: FileText, color: "from-amber-500 to-yellow-600", group: GROUPS.money, keywords: ["pr", "prs", "receipt", "reconcile"] };
 const PR_AUDIT: AppEntry = { href: "/pr-audit", label: "PR Audit", icon: ClipboardCheck, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
 const VENDORS: AppEntry = { href: "/vendors", label: "Vendors", icon: Phone, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
 // Fuel refill log — Reladyne deliveries. Money-side (spend tracking) but the
@@ -195,7 +201,7 @@ const PRO_SHOP_INVENTORY: AppEntry = { href: "/pro-shop/inventory", label: "Inve
 const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "Purchases", icon: ShoppingCart, color: "from-amber-500 to-orange-600", group: GROUPS.money };
 const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
 
-const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
+const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["employees", "team", "people", "1:1", "one on one"] };
 const DUTY_OWNERSHIP: AppEntry = { href: "/operations/duties", label: "Duty Ownership", icon: UserRoundCog, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const CERTIFICATIONS: AppEntry = { href: "/certifications", label: "Certifications", icon: GraduationCap, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
@@ -439,4 +445,31 @@ export function resolveCatalogKey({
 
 export function getCatalog(flags: RoleFlags): AppEntry[] {
   return APP_CATALOG[resolveCatalogKey(flags)];
+}
+
+/**
+ * Every unique navigable entry across ALL role catalogs plus hub children,
+ * deduped by href — the page/tool index for the global search palette (⌘K).
+ * Hubs themselves are included (they're real landing pages) alongside their
+ * members, so both "Money" and "Purchase Requests" are findable. Because the
+ * app runs as one unified view, searching every role's catalog just means the
+ * palette can reach everything regardless of how a tool is normally menued.
+ */
+export function getAllSearchableEntries(): AppEntry[] {
+  const seen = new Set<string>();
+  const out: AppEntry[] = [];
+  const visit = (entries: AppEntry[]) => {
+    for (const entry of entries) {
+      if (!seen.has(entry.href)) {
+        seen.add(entry.href);
+        out.push(entry);
+      }
+      if (entry.children) visit(entry.children);
+    }
+  };
+  for (const key of Object.keys(APP_CATALOG) as CatalogKey[]) {
+    visit(APP_CATALOG[key]);
+  }
+  visit(Object.values(HUBS));
+  return out;
 }

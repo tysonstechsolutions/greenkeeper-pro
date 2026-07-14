@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Sidebar } from "./sidebar";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
+import { GlobalSearch } from "@/components/features/search/global-search";
 import { OnlineStatus } from "@/components/ui/online-status";
 import { PwaInstallCapture } from "@/lib/hooks/usePwaInstall";
 import { AssistantBar } from "@/components/features/ai/assistant-bar";
@@ -33,9 +34,25 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const isPublic = isPublicRoute(pathname);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // Auto-scroll focused inputs above the virtual keyboard on mobile
   useKeyboardScroll();
+
+  // Global search shortcut — ⌘K (Mac) / Ctrl+K. Available on every app page
+  // (skipped on public routes, which don't mount this branch). Also toggles
+  // closed so a second press dismisses it.
+  useEffect(() => {
+    if (isPublic) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isPublic]);
 
   // Navigation breadcrumb — every pathname change becomes a log entry the
   // debug panel can surface. Catches silent nav failures (click registered,
@@ -78,7 +95,7 @@ export function AppShell({ children }: AppShellProps) {
 
       {/* Main content area */}
       <div className="flex flex-col flex-1 min-w-0">
-        <Header />
+        <Header onOpenSearch={() => setSearchOpen(true)} />
 
         {/* Inline AI chat bar — pinned under the header on every page so the
             user can ask the assistant without leaving the page they're on.
@@ -92,6 +109,9 @@ export function AppShell({ children }: AppShellProps) {
           <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
         </main>
       </div>
+
+      {/* Global command palette (⌘K) — mounted once, available app-wide. */}
+      {user && <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />}
 
       {/* Mobile Bottom Nav */}
       <BottomNav />

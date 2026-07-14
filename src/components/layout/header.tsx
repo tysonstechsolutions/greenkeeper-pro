@@ -18,6 +18,7 @@ import {
   Wrench,
   Clock,
   Wind,
+  Search,
 } from "lucide-react";
 import { getPageTitle, stripTrailingSlash } from "@/lib/utils/page-title";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,12 @@ const notificationIcons: Record<NotificationType, React.ReactNode> = {
 // Notification polling interval — sourced from shared config
 const NOTIFICATION_POLL_INTERVAL = APP_CONFIG.notificationPollInterval;
 
-export function Header() {
+interface HeaderProps {
+  /** Opens the global search palette (⌘K). Wired from AppShell. */
+  onOpenSearch?: () => void;
+}
+
+export function Header({ onOpenSearch }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, loading, refreshProfile } = useAuth();
@@ -188,8 +194,32 @@ export function Header() {
         </span>
       </div>
 
-      {/* Right: Weather + Notifications + Profile */}
+      {/* Right: Search + Weather + Notifications + Profile */}
       <div className="flex items-center gap-1">
+        {/* Global search — icon on mobile, a hint pill on desktop. Opens the
+            ⌘K command palette mounted in AppShell. */}
+        {onOpenSearch && (
+          <>
+            <button
+              onClick={onOpenSearch}
+              aria-label="Search"
+              className="md:hidden w-9 h-9 flex items-center justify-center rounded-full hover:bg-muted/60 active:bg-muted/80 transition-colors"
+            >
+              <Search className="w-[18px] h-[18px] text-muted-foreground" />
+            </button>
+            <button
+              onClick={onOpenSearch}
+              className="hidden md:flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full bg-muted/60 hover:bg-muted transition-colors text-sm text-muted-foreground"
+            >
+              <Search className="w-4 h-4" />
+              <span>Search</span>
+              <kbd className="ml-1 rounded border border-border/70 bg-background/60 px-1.5 py-0.5 text-[10px] font-medium">
+                ⌘K
+              </kbd>
+            </button>
+          </>
+        )}
+
         {/* Mobile weather — compact inline chip */}
         {weatherAvailable && (
           <Link
