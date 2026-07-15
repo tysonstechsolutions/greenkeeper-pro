@@ -1,6 +1,6 @@
 // Operating-rhythm types — mirror the 20260702_operating_rhythm.sql tables.
 
-export type ObligationCadence = "monthly" | "quarterly" | "annual";
+export type ObligationCadence = "weekly" | "monthly" | "quarterly" | "annual";
 export type ObligationWorkspace =
   | "course"
   | "restaurant"
@@ -69,10 +69,17 @@ export interface Obligation {
   detail: string | null;
   workspace: ObligationWorkspace;
   cadence: ObligationCadence;
-  /** 1..28, or -1 = last day of the due month. */
+  /** 1..28, or -1 = last day of the due month. Ignored when cadence=weekly. */
   due_day: number;
   /** annual: calendar month 1..12; quarterly: month within quarter 1..3. */
   due_month: number | null;
+  /**
+   * weekly only: 0=Sun .. 6=Sat, the day it's due within the Sun–Sat week.
+   * Defaults to Monday. Null for every other cadence.
+   */
+  due_weekday?: number | null;
+  /** Who is accountable. NULL = nobody, which is itself a gap worth showing. */
+  owner_profile_id?: string | null;
   lead_days: number;
   delegable: boolean;
   link_href: string | null;

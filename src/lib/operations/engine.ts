@@ -33,9 +33,24 @@ export function diffDays(a: Date, b: Date): number {
 
 // ── Periods ─────────────────────────────────────────────────────────────────
 
-/** Period key containing `d`: '2026-07' | '2026-Q3' | '2026'. */
+/** The Sunday that starts the week containing `d`. Pay periods run Sun–Sat. */
+export function weekStart(d: Date): Date {
+  const s = atMidnight(d);
+  s.setDate(s.getDate() - s.getDay()); // getDay(): 0 = Sunday
+  return s;
+}
+
+/**
+ * Period key containing `d`: 'W2026-07-12' | '2026-07' | '2026-Q3' | '2026'.
+ *
+ * Weekly keys are the week's Sunday rather than an ISO week number: ISO weeks
+ * start Monday and their year can disagree with the calendar year at the
+ * boundary (Dec 29 2025 is ISO 2026-W01), which would silently mis-file a
+ * completion. A date is unambiguous and sorts correctly.
+ */
 export function periodKey(cadence: ObligationCadence, d: Date): string {
   const y = d.getFullYear();
+  if (cadence === "weekly") return `W${ymdLocal(weekStart(d))}`;
   if (cadence === "monthly") return `${y}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   if (cadence === "quarterly") return `${y}-Q${Math.floor(d.getMonth() / 3) + 1}`;
   return `${y}`;
@@ -45,6 +60,12 @@ export function periodKey(cadence: ObligationCadence, d: Date): string {
  *  Anchored mid-period so month-length differences can't skew the result. */
 function periodAnchor(cadence: ObligationCadence, d: Date, offset: number): Date {
   const y = d.getFullYear();
+  if (cadence === "weekly") {
+    // Anchor on the week's Sunday; offset in whole weeks.
+    const s = weekStart(d);
+    s.setDate(s.getDate() + offset * 7);
+    return s;
+  }
   if (cadence === "monthly") return new Date(y, d.getMonth() + offset, 15);
   if (cadence === "quarterly") return new Date(y, Math.floor(d.getMonth() / 3) * 3 + offset * 3, 15);
   return new Date(y + offset, 6, 1);
@@ -53,6 +74,15 @@ function periodAnchor(cadence: ObligationCadence, d: Date, offset: number): Date
 /** The obligation's due date within the period containing `anchor`. */
 function dueDateInPeriod(ob: Obligation, anchor: Date): Date {
   const y = anchor.getFullYear();
+  // Weekly: due on `due_weekday` within the Sun–Sat week that `anchor` starts.
+  // Defaults to Monday (1) — the Sun–Sat pay period closes and the timecard
+  // fix is due first thing Monday.
+  if (ob.cadence === "weekly") {
+    const due = weekStart(anchor);
+    const weekday = Math.min(Math.max(ob.due_weekday ?? 1, 0), 6);
+    due.setDate(due.getDate() + weekday);
+    return due;
+  }
   let month0: number;
   if (ob.cadence === "monthly") {
     month0 = anchor.getMonth();
@@ -98,6 +128,11 @@ export function evaluateObligation(
   const horizon = new Date(t0);
   horizon.setDate(horizon.getDate() + Math.max(ob.lead_days, 0));
 
+  // NOTE: occurrences start at the period CONTAINING created_at, so a period
+  // that ended before the obligation existed never becomes debt. But an
+  // obligation added mid-period still owes that period's work — seeded Jul 15
+  // with due_day 1, July is genuinely still owed and shows overdue rather than
+  // being skipped to August. That is deliberate; see the engine tests.
   const occurrences: { period: string; due: Date }[] = [];
   let anchor = periodAnchor(ob.cadence, created, 0);
   for (let i = 0; i < MAX_OCCURRENCES; i++) {

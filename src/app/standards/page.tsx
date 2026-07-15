@@ -10,7 +10,9 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { useStandards } from "@/lib/standards/use-standards";
+import { useStandards, type StandardOwnerOption } from "@/lib/standards/use-standards";
+import { roleLabels } from "@/lib/hooks/useProfiles";
+import type { UserRole } from "@/types/database";
 import {
   STATUS_LABELS,
   SOURCE_LABELS,
@@ -58,7 +60,17 @@ function Percent({ value }: { value: number | null }) {
 }
 
 export default function StandardsPage() {
-  const { score, needsAction, withStatus, unowned, loading, error } = useStandards();
+  const {
+    score,
+    needsAction,
+    withStatus,
+    delegated,
+    people,
+    peopleById,
+    delegate,
+    loading,
+    error,
+  } = useStandards();
   const [openSection, setOpenSection] = useState<string | null>(null);
 
   const bySection = useMemo(() => {
@@ -201,7 +213,15 @@ export default function StandardsPage() {
                       No standards recorded in this area.
                     </p>
                   ) : (
-                    items.map((s) => <StandardRow key={s.standard.id} item={s} />)
+                    items.map((s) => (
+                      <StandardRow
+                        key={s.standard.id}
+                        item={s}
+                        people={people}
+                        peopleById={peopleById}
+                        onDelegate={delegate}
+                      />
+                    ))
                   )}
                 </div>
               )}
@@ -217,7 +237,14 @@ export default function StandardsPage() {
         </h2>
         <div className="rounded-xl border border-border bg-card divide-y divide-border/60">
           {needsAction.slice(0, 15).map((s) => (
-            <StandardRow key={s.standard.id} item={s} showWhy />
+            <StandardRow
+              key={s.standard.id}
+              item={s}
+              people={people}
+              peopleById={peopleById}
+              onDelegate={delegate}
+              showWhy
+            />
           ))}
         </div>
         {needsAction.length > 15 && (
@@ -227,12 +254,11 @@ export default function StandardsPage() {
         )}
       </div>
 
-      {unowned.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {unowned.length} standard{unowned.length === 1 ? "" : "s"} still need an
-          owner assigned before the work can reach anyone.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        {delegated.length > 0
+          ? `${delegated.length} of ${score.totalStandards} standards are delegated to someone else. The rest are yours.`
+          : `All ${score.totalStandards} standards are yours. Open any one to delegate it.`}
+      </p>
     </div>
   );
 }
@@ -261,13 +287,34 @@ function Stat({
 
 function StandardRow({
   item,
+  people,
+  peopleById,
+  onDelegate,
   showWhy = false,
 }: {
   item: StandardWithStatus;
+  people: StandardOwnerOption[];
+  peopleById: Map<string, StandardOwnerOption>;
+  onDelegate: (standardId: string, profileId: string | null) => Promise<void>;
   showWhy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [delegateError, setDelegateError] = useState<string | null>(null);
   const s = item.standard;
+  const owner = s.owner_profile_id ? peopleById.get(s.owner_profile_id) : null;
+
+  async function handleDelegate(value: string) {
+    setSaving(true);
+    setDelegateError(null);
+    try {
+      await onDelegate(s.id, value || null);
+    } catch (e) {
+      setDelegateError(e instanceof Error ? e.message : "Couldn't change the owner.");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <div className="p-3">
       <button
@@ -318,17 +365,47 @@ function StandardRow({
               </ul>
             </div>
           )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground pt-1">
-            <span>
-              Owner:{" "}
-              {s.owner_profile_id ? (
-                "Assigned"
+          {/* Delegation. This is yours by default — hand it to someone if you
+              think they can carry it. The assessment's suggested role is shown
+              as a hint, not an automatic assignment. */}
+          <div className="rounded-lg border border-border bg-muted/30 p-2 space-y-1">
+            <label
+              htmlFor={`owner-${s.id}`}
+              className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              Who owns this
+            </label>
+            <select
+              id={`owner-${s.id}`}
+              value={s.owner_profile_id ?? ""}
+              disabled={saving}
+              onChange={(e) => handleDelegate(e.target.value)}
+              className="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs disabled:opacity-50"
+            >
+              <option value="">— Nobody (unassigned) —</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name ?? "Unnamed"}
+                  {p.role ? ` · ${roleLabels[p.role as UserRole] ?? p.role}` : ""}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              {owner ? (
+                <>Currently: {owner.full_name}</>
               ) : (
                 <span className="text-warning-foreground font-medium">
-                  {s.owner_role ? `${s.owner_role} (not assigned to a person)` : "Nobody"}
+                  Nobody owns this — it reaches no one.
                 </span>
               )}
-            </span>
+              {s.owner_role ? ` · assessment suggested: ${s.owner_role}` : ""}
+            </p>
+            {delegateError && (
+              <p className="text-[11px] text-destructive">{delegateError}</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground pt-1">
             {s.timeline && <span>Timeline: {s.timeline}</span>}
             {s.cost_estimate > 0 && (
               <span>Est. cost: ${s.cost_estimate.toLocaleString()}</span>

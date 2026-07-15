@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { directSelectList } from "@/lib/supabase/rest";
+import { directSelectList, directPatchRow, getCachedUserId } from "@/lib/supabase/rest";
 import { currentStatusOf, scoreProgram, rankStandards } from "./scoring";
 import type {
   CorrectiveAction,
@@ -23,12 +23,20 @@ import type {
  * evaluation history grows past a few thousand rows this should become a
  * `standard_current_status` view (PostgREST caps at max_rows=1000).
  */
+/** A person a standard can be delegated to. */
+export interface StandardOwnerOption {
+  id: string;
+  full_name: string | null;
+  role: string | null;
+}
+
 export function useStandards() {
   const [standards, setStandards] = useState<ProgramStandard[]>([]);
   const [sections, setSections] = useState<StandardSection[]>([]);
   const [subsections, setSubsections] = useState<StandardSubsection[]>([]);
   const [evaluations, setEvaluations] = useState<StandardEvaluation[]>([]);
   const [actions, setActions] = useState<CorrectiveAction[]>([]);
+  const [people, setPeople] = useState<StandardOwnerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +44,7 @@ export function useStandards() {
     setLoading(true);
     setError(null);
     try {
-      const [std, sec, sub, evals, acts] = await Promise.all([
+      const [std, sec, sub, evals, acts, ppl] = await Promise.all([
         directSelectList<ProgramStandard>("program_standards", {
           filters: ["is_active=eq.true"],
           orderBy: [{ column: "code", ascending: true }],
@@ -59,12 +67,19 @@ export function useStandards() {
           filters: ["status=in.(proposed,active,awaiting_verification)"],
           label: "standards.actions",
         }),
+        directSelectList<StandardOwnerOption>("profiles", {
+          columns: "id,full_name,role",
+          filters: ["is_active=eq.true"],
+          orderBy: [{ column: "full_name", ascending: true }],
+          label: "standards.people",
+        }),
       ]);
       setStandards(std);
       setSections(sec);
       setSubsections(sub);
       setEvaluations(evals);
       setActions(acts);
+      setPeople(ppl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load standards.");
     } finally {
@@ -75,6 +90,43 @@ export function useStandards() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /**
+   * Delegate a standard to someone (or take it back with `null`).
+   *
+   * Optimistic: the row updates locally first so the picker feels instant, and
+   * rolls back on failure rather than lying about who owns the work.
+   */
+  const delegate = useCallback(
+    async (standardId: string, profileId: string | null) => {
+      const previous = standards;
+      setStandards((prev) =>
+        prev.map((s) =>
+          s.id === standardId ? { ...s, owner_profile_id: profileId } : s,
+        ),
+      );
+      try {
+        await directPatchRow(
+          "program_standards",
+          "id",
+          standardId,
+          { owner_profile_id: profileId, updated_by: getCachedUserId() },
+          "standards.delegate",
+        );
+      } catch (e) {
+        setStandards(previous); // don't leave a false owner on screen
+        throw e instanceof Error ? e : new Error("Couldn't change the owner.");
+      }
+    },
+    [standards],
+  );
+
+  /** id -> display name, for rendering owners without a second query. */
+  const peopleById = useMemo(() => {
+    const m = new Map<string, StandardOwnerOption>();
+    for (const p of people) m.set(p.id, p);
+    return m;
+  }, [people]);
 
   /** Standards joined to their newest evaluation + any open corrective action. */
   const withStatus = useMemo<StandardWithStatus[]>(() => {
@@ -123,6 +175,14 @@ export function useStandards() {
     [withStatus],
   );
 
+  /** Standards delegated to someone other than the signed-in GM. */
+  const delegated = useMemo(() => {
+    const me = getCachedUserId();
+    return withStatus.filter(
+      (s) => s.standard.owner_profile_id && s.standard.owner_profile_id !== me,
+    );
+  }, [withStatus]);
+
   return {
     standards,
     sections,
@@ -131,6 +191,10 @@ export function useStandards() {
     score,
     needsAction,
     unowned,
+    delegated,
+    people,
+    peopleById,
+    delegate,
     actions,
     loading,
     error,
