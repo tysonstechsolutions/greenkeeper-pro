@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { stripTrailingSlash } from "@/lib/utils/page-title";
 
 const PUBLIC_ROUTES = new Set([
   "/login",
@@ -14,7 +15,11 @@ const PUBLIC_ROUTES = new Set([
 ]);
 
 function isPublicRoute(pathname: string): boolean {
-  return PUBLIC_ROUTES.has(pathname) || pathname.startsWith("/invite/");
+  // next.config sets trailingSlash: true, so usePathname() can report
+  // "/pin-login/" — normalize before matching or the PIN page itself gets
+  // gated and the redirect loops forever on a fresh device.
+  const normalized = stripTrailingSlash(pathname);
+  return PUBLIC_ROUTES.has(normalized) || normalized.startsWith("/invite/");
 }
 
 /** Require an individual session for every operational route. */

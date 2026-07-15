@@ -44,7 +44,9 @@ Produce ONLY JSON, no prose, no markdown fences:
   "actions": [                       // concrete things to route; [] if none clearly warranted
     {
       "type": "task" | "hours_pref" | "time_off" | "follow_up" | "profile" | "calendar",
-      "label": string,               // one-line human summary the GM will approve
+      "label": string,               // REQUIRED on EVERY action, never blank: a one-line human
+                                     // summary the GM approves at a glance, e.g.
+                                     // "Ask how Mateo's baseball tournament went"
 
       // type "task" — something for the GM to do:
       "title": string,
@@ -78,7 +80,7 @@ Rules for actions — be conservative and only include an action the answers cle
 - "time_off": only when they name a specific date or range they want off. Use the provided "today" to resolve relative dates ("next Friday"); if you cannot pin an exact date, use a "follow_up" instead of guessing.
 - "follow_up": for anything worth asking about next time — a personal thread ("ask how his son's season went") OR an unresolved concern (pay, friction, frustration). Prefer a follow_up over inventing a hard action.
 - "profile": OPTIONAL — you may add a profile-type action for a notable personal fact, but personal facts should mainly go in "profile_updates". Do not duplicate the same fact as both.
-- Keep every "label" short and plain so the GM can approve at a glance.`;
+- Keep every "label" short and plain so the GM can approve at a glance. Every action MUST have a non-empty "label" — an action without one is useless to the GM.`;
 
 interface AnthropicTextBlock {
   type: "text";

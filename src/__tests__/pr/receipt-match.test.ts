@@ -82,6 +82,23 @@ describe("matchReceiptToPr", () => {
     expect(extra?.description).toMatch(/shipping/i);
   });
 
+  // Mirrors a real PR (belt + 3% card fee) reconciled against a NAPA receipt
+  // that came back higher — the exact shape extract-receipt returns.
+  it("flags both lines when the vendor charged more than quoted", () => {
+    const pr = [prItem("Pump Belt 1/2x56", 1, 45), prItem("3% Credit Card Fee", 1, 1.35)];
+    const r = receipt(
+      [
+        { description: "Pump Belt 1/2x56", qty: 1, unit_price: 49 },
+        { description: "3% Credit Card Fee", qty: 1, unit_price: 1.47 },
+      ],
+      50.47,
+    );
+    const m = matchReceiptToPr(pr, r);
+    expect(m.differences).toBe(2);
+    expect(m.lines.every((l) => l.status === "price_diff")).toBe(true);
+    expect(m.receiptTotal).toBe(50.47);
+  });
+
   it("flags a quantity difference when price is unchanged", () => {
     const pr = [prItem("Golf tees box", 3, 5)];
     const r = receipt([{ description: "Golf tees box", qty: 5, unit_price: 5 }]);

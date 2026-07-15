@@ -5,15 +5,20 @@ import { useRouter } from "next/navigation";
 import { Users, FileText, Phone, CornerDownLeft } from "lucide-react";
 import {
   Command,
-  CommandDialog,
   CommandInput,
   CommandList,
   CommandEmpty,
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { getAllSearchableEntries } from "@/lib/layout/app-catalog";
-import { createClient } from "@/lib/supabase/client";
+import { directSelectList } from "@/lib/supabase/rest";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -82,35 +87,44 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     let cancelled = false;
     (async () => {
       try {
-        const supabase = createClient();
-        const [staffRes, prRes, vendorRes] = await Promise.all([
-          supabase.from("profiles").select("id, full_name, role").order("full_name"),
-          supabase
-            .from("purchase_requests")
-            .select("id, pr_sequence_number, date_prepared, vendor1_name, requestor_name")
-            .order("created_at", { ascending: false })
-            .limit(150),
-          supabase.from("vendors").select("id, name, company").order("name"),
+        // Raw REST (directSelectList), NOT supabase-js: the supabase-js query
+        // path sits on the navigator.locks auth lock and can hang forever in
+        // this WebView — see the notes in src/lib/api/client.ts. Every other
+        // data path in the app uses these helpers for the same reason.
+        const [staffRows, prRows, vendorRows] = await Promise.all([
+          directSelectList<{
+            id: string;
+            full_name: string | null;
+            role: string | null;
+          }>("profiles", {
+            columns: "id,full_name,role",
+            orderBy: [{ column: "full_name", ascending: true }],
+            label: "search.staff",
+          }),
+          directSelectList<{
+            id: string;
+            pr_sequence_number: number | null;
+            date_prepared: string;
+            vendor1_name: string | null;
+            requestor_name: string | null;
+          }>("purchase_requests", {
+            columns:
+              "id,pr_sequence_number,date_prepared,vendor1_name,requestor_name",
+            orderBy: [{ column: "created_at", ascending: false }],
+            limit: 150,
+            label: "search.prs",
+          }),
+          directSelectList<{
+            id: string;
+            name: string;
+            company: string | null;
+          }>("vendors", {
+            columns: "id,name,company",
+            orderBy: [{ column: "name", ascending: true }],
+            label: "search.vendors",
+          }),
         ]);
         if (cancelled) return;
-
-        const staffRows = (staffRes.data ?? []) as {
-          id: string;
-          full_name: string | null;
-          role: string | null;
-        }[];
-        const prRows = (prRes.data ?? []) as {
-          id: string;
-          pr_sequence_number: number | null;
-          date_prepared: string;
-          vendor1_name: string | null;
-          requestor_name: string | null;
-        }[];
-        const vendorRows = (vendorRes.data ?? []) as {
-          id: string;
-          name: string;
-          company: string | null;
-        }[];
 
         setStaff(
           staffRows
@@ -186,13 +200,20 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   };
 
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={handleOpenChange}
-      title="Search"
-      description="Jump to any page, tool, staff member, purchase request, or vendor."
-    >
-      <Command shouldFilter={false} className="rounded-xl!">
+    // Built on the app's Dialog directly (not ui/command's CommandDialog):
+    // that wrapper was unused dead code and doesn't drive this Base UI dialog's
+    // controlled `open` — the palette would never close. Every other dialog in
+    // the app uses this Dialog/DialogContent pattern.
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="top-[15%] translate-y-0 overflow-hidden rounded-xl! p-0 gap-0 sm:max-w-lg"
+        showCloseButton={false}
+      >
+        <DialogTitle className="sr-only">Search</DialogTitle>
+        <DialogDescription className="sr-only">
+          Jump to any page, tool, staff member, purchase request, or vendor.
+        </DialogDescription>
+        <Command shouldFilter={false} className="rounded-xl!">
         <CommandInput
           placeholder="Search pages, staff, PRs, vendors…"
           value={query}
@@ -284,10 +305,11 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
             </CommandGroup>
           )}
         </CommandList>
-        <div className="flex items-center justify-end gap-1 border-t border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
-          <CornerDownLeft className="size-3" /> to open
-        </div>
-      </Command>
-    </CommandDialog>
+          <div className="flex items-center justify-end gap-1 border-t border-border/60 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <CornerDownLeft className="size-3" /> to open
+          </div>
+        </Command>
+      </DialogContent>
+    </Dialog>
   );
 }

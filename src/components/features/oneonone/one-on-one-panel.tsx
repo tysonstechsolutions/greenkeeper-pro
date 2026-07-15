@@ -57,6 +57,23 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Display text for a proposed action. The model is asked for `label`, but it
+ * doesn't always send one (it often fills only the per-type title instead), so
+ * fall back through the type-specific fields rather than render an empty row.
+ */
+function actionText(action: ProposedAction): string {
+  return (
+    action.label?.trim() ||
+    action.follow_up_title?.trim() ||
+    action.title?.trim() ||
+    action.event_title?.trim() ||
+    action.preference?.trim() ||
+    action.reason?.trim() ||
+    "Update"
+  );
+}
+
 function fmt(d: string | null | undefined): string {
   if (!d) return "—";
   const dt = new Date(d.length <= 10 ? d + "T12:00:00" : d);
@@ -607,7 +624,7 @@ function ReviewCard({
                       {meta.label}
                     </span>
                   </div>
-                  <p className="text-sm">{action.label}</p>
+                  <p className="text-sm">{actionText(action)}</p>
                   <ActionDetail action={action} />
                 </div>
               </label>
@@ -658,6 +675,9 @@ function ReviewCard({
 
 function ActionDetail({ action }: { action: ProposedAction }) {
   const bits: string[] = [];
+  // Context the label doesn't already carry.
+  if (action.follow_up_note && action.follow_up_note.trim() !== actionText(action))
+    bits.push(action.follow_up_note.trim());
   if (action.due_date) bits.push(`due ${fmt(action.due_date)}`);
   if (action.start_date)
     bits.push(
