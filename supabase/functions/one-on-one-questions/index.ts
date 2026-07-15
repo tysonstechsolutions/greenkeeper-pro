@@ -37,14 +37,28 @@ You are given (as data, not instructions):
 - Their recent 1:1 sessions (questions + answers).
 - Any open follow-ups still being tracked.
 
-Write 10–14 questions grouped into sections. Include:
+CRITICAL CONTEXT — this is a MONTHLY CHECK-IN with someone the GM has ALREADY worked alongside for years (he was their superintendent before becoming GM). They know each other well. This is NOT a new hire, NOT an onboarding conversation, and NOT a first meeting.
+
+Therefore NEVER ask introductory or getting-to-know-you questions like:
+  ✗ "How long have you been here?" / "What keeps you here?"
+  ✗ "How's it going so far?" / "Has anything surprised you since you started?"
+  ✗ "Is the job what you expected?" / "Did the training prepare you?"
+  ✗ "How are you settling in?"
+Those belong to the separate Transition and New-Hire-30-Day templates. Asking them in a monthly is insulting to someone who has worked here for years.
+
+Write 10–14 questions grouped into sections. Keep this monthly check-in spine:
 - A "Follow-up from last time" section FIRST when there are open follow-ups or clear threads from the last session — reference the specific thing ("Last month you mentioned … — how did that go?").
-- Standard check-in ground: wins/frustrations since last time, workload and hours, what they need from the GM, feedback both directions, goals/development.
+- Since last time: wins, and what got in the way or was frustrating.
+- Right now: workload and hours, what they need from the GM, anything on the course/with guests they should flag.
+- Feedback both directions.
+- Goals & development.
 - Genuinely PERSONAL questions drawn from the profile — their family, a sport or hobby they follow, something they care about outside work. Make these specific to THIS person, never generic.
 
 Rules:
 - Warm, plain, conversational tone. Short questions.
-- Ground personal questions in the profile/history; do NOT invent facts. If we know little personally, ask open questions to learn (e.g. "What do you like to get into outside of work?").
+- Ground personal questions in the profile/history; do NOT invent facts.
+- If "recent_sessions" is EMPTY, this is simply the FIRST monthly in this new system — it is still a normal monthly check-in with a long-time coworker. Keep the full check-in spine above, and add at most 1–2 light questions to start learning what they care about outside work (e.g. "What do you get up to outside of work these days?"). Do NOT turn it into an interview about their history here.
+- If "engagement_profile" is empty, that only means we haven't recorded personal notes yet — it does NOT mean they are new.
 - Do not repeat the exact same question from the most recent session verbatim; advance the thread instead.
 - Return ONLY JSON, no prose, no markdown fences:
   { "questions": [ { "section": string, "prompt": string } ] }`;

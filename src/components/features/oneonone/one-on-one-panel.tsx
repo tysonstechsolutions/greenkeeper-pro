@@ -15,13 +15,16 @@ import {
   Heart,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useOneOnOne } from "@/lib/oneonone/use-oneonone";
 import {
   staticQuestions,
   instantiateQuestions,
+  newQuestion,
   type QuestionSpec,
 } from "@/lib/oneonone/templates";
 import {
@@ -33,6 +36,8 @@ import {
 import { applyAction, type ApplyContext } from "@/lib/oneonone/apply-actions";
 import {
   TEMPLATE_LABELS,
+  TEMPLATE_HINTS,
+  ADHOC_SECTION,
   type DigestResult,
   type OneOnOneActionType,
   type OneOnOneQuestion,
@@ -196,6 +201,15 @@ export function OneOnOnePanel({
     );
   }
 
+  /**
+   * Add a question mid-conversation — something came up that the template
+   * didn't cover. It's saved with the session like any other question, so the
+   * digest reads its answer and can route actions from it too.
+   */
+  function addAdhocQuestion(prompt: string) {
+    setQuestions((prev) => [...prev, newQuestion(ADHOC_SECTION, prompt)]);
+  }
+
   async function handleSaveSession() {
     setSaving(true);
     setNote(null);
@@ -287,6 +301,7 @@ export function OneOnOnePanel({
         note={note}
         saving={saving}
         onAnswer={setAnswer}
+        onAddQuestion={addAdhocQuestion}
         onSave={handleSaveSession}
         onCancel={() => {
           setMode("idle");
@@ -333,26 +348,32 @@ export function OneOnOnePanel({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      {/* Each template says what it's for — "New Hire 30-Day" vs "Monthly"
+          isn't obvious from the name alone. */}
+      <div className="space-y-2">
         {(["monthly", "transition", "thirty_day"] as OneOnOneTemplate[]).map(
           (t) => (
-            <Button
-              key={t}
-              size="sm"
-              variant={t === "monthly" ? "default" : "outline"}
-              className="gap-1.5"
-              disabled={starting}
-              onClick={() => handleStart(t)}
-            >
-              {starting && template === t ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : t === "monthly" ? (
-                <Sparkles className="w-4 h-4" />
-              ) : (
-                <Play className="w-4 h-4" />
-              )}
-              {TEMPLATE_LABELS[t]}
-            </Button>
+            <div key={t} className="flex items-center gap-2.5">
+              <Button
+                size="sm"
+                variant={t === "monthly" ? "default" : "outline"}
+                className="gap-1.5 shrink-0 w-40 justify-start"
+                disabled={starting}
+                onClick={() => handleStart(t)}
+              >
+                {starting && template === t ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : t === "monthly" ? (
+                  <Sparkles className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                {TEMPLATE_LABELS[t]}
+              </Button>
+              <p className="text-xs text-muted-foreground min-w-0">
+                {TEMPLATE_HINTS[t]}
+              </p>
+            </div>
           ),
         )}
       </div>
@@ -478,6 +499,7 @@ function RunningSession({
   note,
   saving,
   onAnswer,
+  onAddQuestion,
   onSave,
   onCancel,
 }: {
@@ -487,9 +509,18 @@ function RunningSession({
   note: string | null;
   saving: boolean;
   onAnswer: (id: string, answer: string) => void;
+  onAddQuestion: (prompt: string) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const [adhoc, setAdhoc] = useState("");
+
+  const submitAdhoc = () => {
+    const clean = adhoc.trim();
+    if (!clean) return;
+    onAddQuestion(clean);
+    setAdhoc("");
+  };
   // Group questions by section, preserving first-seen order.
   const sections = useMemo(() => {
     const order: string[] = [];
@@ -537,6 +568,39 @@ function RunningSession({
           ))}
         </div>
       ))}
+
+      {/* Something came up that the template doesn't cover — ask it anyway.
+          Added questions save with the session and feed the digest. */}
+      <div className="border-t border-border pt-3 space-y-1.5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Ask something else
+        </p>
+        <div className="flex items-start gap-2">
+          <Input
+            value={adhoc}
+            onChange={(e) => setAdhoc(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitAdhoc();
+              }
+            }}
+            placeholder="Type a question that just came up…"
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5 shrink-0"
+            disabled={!adhoc.trim()}
+            onClick={submitAdhoc}
+          >
+            <Plus className="w-4 h-4" />
+            Add
+          </Button>
+        </div>
+      </div>
 
       {note && <p className="text-xs text-muted-foreground">{note}</p>}
 

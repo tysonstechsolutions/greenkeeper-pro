@@ -90,3 +90,8 @@ export function staticQuestions(template: OneOnOneTemplate): OneOnOneQuestion[] 
   if (template === "custom") return [];
   return instantiateQuestions(SPECS[template]);
 }
+
+/** One fresh question — used when a question is added mid-session. */
+export function newQuestion(section: string, prompt: string): OneOnOneQuestion {
+  return instantiateQuestions([{ section, prompt }])[0];
+}

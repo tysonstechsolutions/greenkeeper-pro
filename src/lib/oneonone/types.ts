@@ -9,10 +9,21 @@ export type OneOnOneTemplate = "transition" | "thirty_day" | "monthly" | "custom
 
 export const TEMPLATE_LABELS: Record<OneOnOneTemplate, string> = {
   transition: "Transition 1:1",
-  thirty_day: "30-Day Check-In",
+  thirty_day: "New Hire 30-Day",
   monthly: "Monthly 1:1",
   custom: "Custom",
 };
+
+/** When to reach for each template — shown under the Start a 1:1 buttons. */
+export const TEMPLATE_HINTS: Record<OneOnOneTemplate, string> = {
+  monthly: "Your recurring check-in. Questions get more personal each time.",
+  transition: "Your first 1:1 as GM. Run once per person.",
+  thirty_day: "For a new hire, around their 30-day mark.",
+  custom: "",
+};
+
+/** The section ad-hoc questions added mid-session are filed under. */
+export const ADHOC_SECTION = "Added during the 1:1";
 
 /** One question + its captured answer within a session. */
 export interface OneOnOneQuestion {
