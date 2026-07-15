@@ -1772,6 +1772,10 @@ export interface PurchaseRequest {
   actual_amount: number | null;
   receipt_path: string | null;
   reconciled_at: string | null;
+  // When the purchase was settled (receipt at/under the submitted total, or
+  // cleared by hand). NULL = still open. Deliberately separate from `status`
+  // so the spend rollup view keeps counting it — see pr-reconciliation.ts.
+  completed_at?: string | null;
   // AI-parsed receipt + deterministic match result, saved at reconcile time
   // so the line-by-line comparison is recoverable later. See src/lib/pr/.
   receipt_data?: {

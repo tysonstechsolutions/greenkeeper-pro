@@ -1,38 +1,41 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PR_STAGES, prStageIndex, type PrStatus } from "@/lib/pr-stages";
+import { PR_TRACKER_LABELS, prTrackerIndex, type PrStatus } from "@/lib/pr-stages";
 
 /**
  * Horizontal step tracker showing where a PR sits in its lifecycle — every
  * stage is named, completed stages are filled + checked, the current one is
  * highlighted, and upcoming ones are dimmed. No hover needed to read it.
+ *
+ * The final "Complete" step comes from `completed` (completed_at), not from
+ * status, so a received PR shows Complete dimmed ahead of it — the receipt is
+ * the thing standing between the two.
  */
 export function PrStageTracker({
   status,
+  completed = false,
   className,
 }: {
   status: PrStatus;
+  completed?: boolean;
   className?: string;
 }) {
-  const current = prStageIndex(status);
+  const current = prTrackerIndex(status, completed);
   // Unknown status — render nothing rather than a broken tracker.
   if (current < 0) return null;
-  const last = PR_STAGES.length - 1;
+  const last = PR_TRACKER_LABELS.length - 1;
 
   return (
     <div
       className={cn("w-full", className)}
-      aria-label={`Stage ${current + 1} of ${PR_STAGES.length}: ${PR_STAGES[current].short}`}
+      aria-label={`Stage ${current + 1} of ${PR_TRACKER_LABELS.length}: ${PR_TRACKER_LABELS[current]}`}
     >
       <div className="flex items-start">
-        {PR_STAGES.map((stage, i) => {
+        {PR_TRACKER_LABELS.map((short, i) => {
           const isDone = i < current;
           const isCurrent = i === current;
           return (
-            <div
-              key={stage.status}
-              className="flex flex-1 flex-col items-center"
-            >
+            <div key={short} className="flex flex-1 flex-col items-center">
               <div className="flex w-full items-center">
                 <span
                   className={cn(
@@ -76,7 +79,7 @@ export function PrStageTracker({
                     : "text-muted-foreground",
                 )}
               >
-                {stage.short}
+                {short}
               </span>
             </div>
           );

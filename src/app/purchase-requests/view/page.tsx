@@ -29,6 +29,8 @@ import {
   prVariance,
   formatVariance,
   prSubmittedTotal,
+  prAutoCompletes,
+  prIsComplete,
   VARIANCE_BADGE_CLASSES,
 } from "@/lib/pr-reconciliation";
 import { isCcFeeItem } from "@/lib/pr-cc-fee";
@@ -696,6 +698,40 @@ function ReconciliationCard({
   const [extracted, setExtracted] = useState<ExtractedReceipt | null>(null);
   const [match, setMatch] = useState<ReceiptMatch | null>(null);
 
+  // Manual completion — for overages (which never auto-complete) and for
+  // undoing a completion that shouldn't have happened.
+  const [togglingComplete, setTogglingComplete] = useState(false);
+  const complete = prIsComplete(pr);
+
+  async function toggleComplete() {
+    setTogglingComplete(true);
+    setError(null);
+    try {
+      const patch: Partial<PurchaseRequest> = {
+        completed_at: complete ? null : new Date().toISOString(),
+      };
+      await directPatchRow(
+        "purchase_requests",
+        "id",
+        pr.id,
+        patch,
+        "purchase-requests.complete",
+      );
+      onSaved(patch);
+      setWarning(
+        complete
+          ? "Reopened — it's back in the active list."
+          : "Marked complete — moved to Completed purchases.",
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't update completion.",
+      );
+    } finally {
+      setTogglingComplete(false);
+    }
+  }
+
   const inputCls =
     "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40";
 
@@ -762,10 +798,19 @@ function ReconciliationCard({
             "Amount saved — the receipt photo didn't upload. You can add it again later with Edit.";
         }
       }
+      // At or under the submitted total (to the penny) → the purchase is
+      // settled, so complete it and drop it out of the active list. An overage
+      // stays open so it lands in front of the GM, who clears it by hand.
+      const actual = Math.round(parsed * 100) / 100;
+      const autoComplete = prAutoCompletes(submittedTotal, actual);
+
       const patch: Partial<PurchaseRequest> = {
-        actual_amount: Math.round(parsed * 100) / 100,
+        actual_amount: actual,
         receipt_path: receiptPath,
         reconciled_at: new Date().toISOString(),
+        completed_at: autoComplete
+          ? new Date().toISOString()
+          : (pr.completed_at ?? null),
         // Persist the AI parse + match so the line-by-line comparison is
         // recoverable later without re-running the AI. Null when the amount
         // was entered by hand with no AI read.
@@ -787,7 +832,11 @@ function ReconciliationCard({
       );
       onSaved(patch);
       clearFile();
-      setWarning(uploadWarning);
+      // Tell the user what just happened to the PR, not just that it saved.
+      const outcome = autoComplete
+        ? `Receipt is ${actual < submittedTotal ? "under" : "on"} the submitted total — marked complete.`
+        : `Receipt is ${formatMoney(actual - submittedTotal)} over the submitted total — left open for you to review.`;
+      setWarning(uploadWarning ? `${outcome} ${uploadWarning}` : outcome);
       setEditing(false);
     } catch (err) {
       setError(
@@ -1015,6 +1064,38 @@ function ReconciliationCard({
                   />
                 </div>
               )}
+
+              {/* Completion. Auto-set when the receipt lands at/under the
+                  submitted total; an overage sits here until cleared. */}
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+                {complete ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Complete · {formatDate(pr.completed_at)}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Still open — over the submitted total.
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleComplete}
+                  disabled={togglingComplete}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    complete
+                      ? "text-muted-foreground hover:bg-muted"
+                      : "bg-success/10 text-success hover:bg-success/20"
+                  }`}
+                >
+                  {togglingComplete ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  )}
+                  {complete ? "Reopen" : "Mark complete"}
+                </button>
+              </div>
             </div>
           );
         })()

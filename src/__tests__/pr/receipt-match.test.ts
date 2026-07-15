@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { prAutoCompletes, prIsComplete } from "@/lib/pr-reconciliation";
+import type { PurchaseRequest } from "@/types/database";
 import { matchReceiptToPr, matchSummary } from "@/lib/pr/receipt-match";
 import type { ExtractedReceipt } from "@/lib/pr/receipt-extract";
 import type { PurchaseRequestItem } from "@/types/database";
@@ -37,6 +39,43 @@ function receipt(
     warnings: [],
   };
 }
+
+describe("prAutoCompletes", () => {
+  it("completes when the receipt is under the submitted total", () => {
+    expect(prAutoCompletes(46.35, 40.0)).toBe(true);
+  });
+
+  it("completes when the receipt matches exactly", () => {
+    expect(prAutoCompletes(46.35, 46.35)).toBe(true);
+  });
+
+  it("does NOT complete when the receipt is over — even by a penny", () => {
+    expect(prAutoCompletes(46.35, 46.36)).toBe(false);
+  });
+
+  it("compares in whole cents so float drift can't wrongly reject a match", () => {
+    // 0.1 + 0.2 === 0.30000000000000004 in IEEE-754; must still count as equal.
+    expect(prAutoCompletes(0.1 + 0.2, 0.3)).toBe(true);
+    expect(prAutoCompletes(46.35, 15.45 + 30.9)).toBe(true);
+  });
+
+  it("completes a $0 receipt against any total", () => {
+    expect(prAutoCompletes(46.35, 0)).toBe(true);
+  });
+});
+
+describe("prIsComplete", () => {
+  it("is false until completed_at is set", () => {
+    expect(prIsComplete({ completed_at: null } as PurchaseRequest)).toBe(false);
+    expect(prIsComplete({} as PurchaseRequest)).toBe(false);
+  });
+
+  it("is true once completed_at is set", () => {
+    expect(
+      prIsComplete({ completed_at: "2026-07-15T12:00:00Z" } as PurchaseRequest),
+    ).toBe(true);
+  });
+});
 
 describe("matchReceiptToPr", () => {
   it("reports a clean match when quantities and prices line up", () => {

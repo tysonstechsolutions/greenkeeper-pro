@@ -39,6 +39,7 @@ import {
   prVariance,
   formatVariance,
   prNeedsReceipt,
+  prIsComplete,
   prSubmittedTotal,
   VARIANCE_BADGE_CLASSES,
 } from "@/lib/pr-reconciliation";
@@ -339,6 +340,7 @@ export default function PurchaseRequestsListPage() {
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendorFilter, setVendorFilter] = useState<string | null>(null);
+  const [listView, setListView] = useState<"open" | "completed">("open");
   const [showVendors, setShowVendors] = useState(false);
 
   const isAllowed =
@@ -387,6 +389,10 @@ export default function PurchaseRequestsListPage() {
   useRefreshOnFocus(refreshOnFocus, isAllowed);
 
   // ── Money stats ─────────────────────────────────────────────────────────────
+  //
+  // NOTE: these cover every non-draft PR, completed ones INCLUDED. A completed
+  // purchase is still money that was spent — the Active/Completed split below
+  // is a working-list filter, never a money filter.
 
   const activePrs = useMemo(
     () => requests.filter((r) => r.status !== "draft"),
@@ -405,6 +411,20 @@ export default function PurchaseRequestsListPage() {
     () => activePrs.filter((r) => r.status === "received"),
     [activePrs],
   );
+
+  // ── Open vs completed (the History list's working split) ────────────────────
+  // Open = anything still needing action, drafts included. Completed = the
+  // receipt is in and settled, filed away so the list shows what's left.
+
+  const openRequests = useMemo(
+    () => requests.filter((r) => !prIsComplete(r)),
+    [requests],
+  );
+  const completedRequests = useMemo(
+    () => requests.filter((r) => prIsComplete(r)),
+    [requests],
+  );
+  const listRequests = listView === "open" ? openRequests : completedRequests;
 
   // ── Vendor list for filter ──────────────────────────────────────────────────
 
@@ -660,11 +680,34 @@ export default function PurchaseRequestsListPage() {
         </div>
       )}
 
-      {/* ── History List ─────────────────────────────────────────────────── */}
+      {/* ── PR List ──────────────────────────────────────────────────────── */}
       <div className="mt-6">
-        <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
-          History
-        </h2>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            {listView === "open" ? "Needs Action" : "Completed Purchases"}
+          </h2>
+          {/* Working-list split: Active = still needs something from you;
+              Completed = receipt in and settled. Money stats above cover both. */}
+          <div className="flex items-center gap-1 rounded-lg bg-muted/60 p-0.5">
+            {(["open", "completed"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setListView(v)}
+                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  listView === v
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v === "open" ? "Active" : "Completed"}
+                <span className="ml-1 opacity-60">
+                  {v === "open" ? openRequests.length : completedRequests.length}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {loading ? (
           <div className="space-y-2">
@@ -675,17 +718,38 @@ export default function PurchaseRequestsListPage() {
               />
             ))}
           </div>
-        ) : requests.length === 0 ? (
+        ) : listRequests.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-6 text-center">
-            <Calendar className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-40" />
-            <p className="text-sm font-medium">No purchase requests yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Tap the button above to create your first one.
-            </p>
+            {listView === "completed" ? (
+              <>
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-40" />
+                <p className="text-sm font-medium">No completed purchases yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  A purchase lands here once its receipt comes in at or under the
+                  submitted total.
+                </p>
+              </>
+            ) : requests.length === 0 ? (
+              <>
+                <Calendar className="w-10 h-10 mx-auto mb-2 text-muted-foreground opacity-40" />
+                <p className="text-sm font-medium">No purchase requests yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tap the button above to create your first one.
+                </p>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-success opacity-60" />
+                <p className="text-sm font-medium">Nothing needs action</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Every purchase request is settled. Nice.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <ul className="space-y-2">
-            {requests.map((pr) => {
+            {listRequests.map((pr) => {
               const meta = STATUS_FLOW[pr.status] ?? STATUS_FLOW.submitted;
               const StatusIcon = meta.icon;
               const NextIcon = meta.nextIcon;
@@ -747,7 +811,11 @@ export default function PurchaseRequestsListPage() {
                       )}
                       <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                     </div>
-                    <PrStageTracker status={pr.status} className="mt-3" />
+                    <PrStageTracker
+                      status={pr.status}
+                      completed={prIsComplete(pr)}
+                      className="mt-3"
+                    />
                     {prNeedsReceipt(pr) && (
                       <p className="mt-2 mr-2 inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning-foreground">
                         <Receipt className="w-3 h-3" />

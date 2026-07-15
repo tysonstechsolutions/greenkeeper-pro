@@ -52,7 +52,36 @@ export function formatVariance(v: PrVariance): string {
 
 /** True when a received PR is still waiting on its receipt's actual cost. */
 export function prNeedsReceipt(pr: PurchaseRequest): boolean {
-  return pr.status === "received" && pr.actual_amount == null;
+  return pr.status === "received" && pr.actual_amount == null && !prIsComplete(pr);
+}
+
+/**
+ * A purchase is COMPLETE once its receipt is in and settled. Tracked with its
+ * own `completed_at` timestamp rather than a 6th `status` value on purpose:
+ * the spend rollup view (20260702_money_rollups.sql) sums PRs
+ * `WHERE status IN ('sent','approved','received')`, so a new status would
+ * silently drop completed purchases out of budget/P&L. Completion is a
+ * separate axis; the PR stays `received` and keeps counting as spend.
+ */
+export function prIsComplete(pr: PurchaseRequest): boolean {
+  return pr.completed_at != null;
+}
+
+/** Compare money in whole cents — avoids 46.35 !== 46.349999 float drift. */
+function cents(n: number): number {
+  return Math.round(n * 100);
+}
+
+/**
+ * Should saving this receipt auto-complete the purchase?
+ *
+ * Rule (Tyson's call): complete when the receipt total came in AT or UNDER the
+ * submitted total, to the penny. Even a one-cent overage stays active so it
+ * lands in front of him. Line-level differences do NOT block completion —
+ * they're recorded in receipt_data, but the money is what decides.
+ */
+export function prAutoCompletes(submitted: number, actual: number): boolean {
+  return cents(actual) <= cents(submitted);
 }
 
 /**
