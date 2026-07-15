@@ -22,6 +22,8 @@ import { evaluateCerts, type Certification, type EvaluatedCert } from "@/lib/peo
 import { useMyDay } from "@/lib/my-day/use-my-day";
 import { useCalendar } from "@/lib/calendar/use-calendar";
 import { useEquipment } from "@/lib/hooks/useEquipment";
+import { useStandards } from "@/lib/standards/use-standards";
+import { StandardsTodaySection } from "@/components/features/standards/standards-today-section";
 import { getReadinessBuckets } from "@/lib/equipment/readiness";
 import { isTriageAttention, triageLabel, triageOrder } from "@/lib/equipment/triage";
 import { kindMeta } from "@/lib/calendar/types";
@@ -41,6 +43,7 @@ export default function TodayPage() {
   const ops = useOperations();
   const myDay = useMyDay();
   const calendar = useCalendar();
+  const standards = useStandards();
   const { equipment: equipmentUnits } = useEquipment();
   const [showScheduled, setShowScheduled] = useState(false);
 
@@ -152,6 +155,15 @@ export default function TodayPage() {
       ) : (
         <>
           {ops.error && <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{ops.error}</div>}
+
+          {/* What's holding the program below standard — the reason the rest of
+              the day's work exists. Sits above the routine rhythm on purpose. */}
+          <StandardsTodaySection
+            score={standards.score}
+            needsAction={standards.needsAction}
+            loading={standards.loading}
+          />
+
           {/* Alarms */}
           {(alarms.length > 0 || certAlarms.length > 0) && (
             <section className="mb-6 gk-animate-in gk-animate-in-2">

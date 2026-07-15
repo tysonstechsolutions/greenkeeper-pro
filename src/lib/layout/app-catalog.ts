@@ -41,6 +41,7 @@ import {
   UtensilsCrossed,
   Store,
   UserRoundCog,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -169,6 +170,9 @@ const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR"
 const CALENDAR: AppEntry = { href: "/calendar", label: "Calendar", icon: CalendarDays, color: "from-sky-500 to-blue-600", group: GROUPS.planning };
 const WEATHER: AppEntry = { href: "/weather", label: "Weather", icon: Cloud, color: "from-sky-500 to-blue-600", group: GROUPS.planning };
 const STANDARDS_PLAN: AppEntry = { href: "/standards-plan", label: "Standards Plan", icon: ShieldCheck, color: "from-sky-600 to-blue-700", group: GROUPS.planning };
+// The live scorecard (DB-backed). /standards-plan remains the original static
+// FY24 assessment view; this is the same standards, owned and evaluated.
+const PROGRAM_STANDARDS: AppEntry = { href: "/standards", label: "Program Standards", icon: Target, color: "from-sky-600 to-blue-700", group: GROUPS.planning, pinned: true, keywords: ["scorecard", "gaps", "navy", "standards", "score", "compliance"] };
 
 const COURSE_MAP: AppEntry = { href: "/course-map", label: "Course Map", icon: MapIcon, color: "from-teal-500 to-emerald-600", group: GROUPS.course };
 const SPRINKLER_MAP: AppEntry = { href: "/irrigation/map", label: "Sprinkler Map", icon: Droplets, color: "from-teal-500 to-cyan-600", group: GROUPS.course };
@@ -365,6 +369,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   // menu stays six doors instead of twenty entries.
   leadership: [
     TODAY,
+    PROGRAM_STANDARDS,
     MY_DAY,
     SCHEDULE,
     CREATE_PR,
