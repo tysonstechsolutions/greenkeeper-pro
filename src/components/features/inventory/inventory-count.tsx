@@ -25,6 +25,7 @@ import {
   directDeleteRow,
   directInsertRow,
   directPatchRow,
+  directRpc,
   directSelectList,
 } from "@/lib/supabase/rest";
 import { periodKey } from "@/lib/operations/engine";
@@ -276,21 +277,29 @@ export function InventoryCountPage({ area, title }: { area: Area; title: string 
           label: "inventory.obligation",
         });
         if (obs[0]) {
-          await directInsertRow(
-            "obligation_completions",
+          // Must go through the RPC: direct INSERT on obligation_completions is
+          // revoked from `authenticated` (20260716010000_command_center_security),
+          // which also enforces that only the owner, backup, or an operations
+          // manager may complete it. The RPC is idempotent — completing an
+          // already-completed period returns the existing row rather than erroring.
+          await directRpc(
+            "complete_operational_obligation",
             {
-              obligation_id: obs[0].id,
-              period: periodKey(obs[0].cadence as "monthly", new Date()),
-              completed_by: profile?.id ?? null,
-              note: "Completed via inventory count",
+              p_obligation_id: obs[0].id,
+              p_period: periodKey(obs[0].cadence as "monthly", new Date()),
+              p_note: "Completed via inventory count",
             },
             "inventory.completeObligation",
           );
           obligationNote = " This month's count obligation is checked off.";
         }
       } catch {
-        // Already completed this period (unique constraint) or unavailable —
-        // either way the count itself succeeded.
+        // The count itself succeeded, so don't fail the save — but never claim
+        // the obligation was checked off when it wasn't. Most likely cause is
+        // that this person isn't the obligation's owner/backup and isn't a
+        // manager, which the RPC refuses by design.
+        obligationNote =
+          " The count is saved, but its monthly obligation was NOT checked off — ask a manager to close it out.";
       }
 
       setNotice(`Count saved — ${lines.size} item${lines.size === 1 ? "" : "s"} counted.${obligationNote}`);
