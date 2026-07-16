@@ -132,7 +132,11 @@ export function WorkspaceLanding({
                 key={e.obligation.id}
                 item={e}
                 onComplete={() => ops.completeObligation(e)}
-                onUndo={() => ops.uncompleteObligation(e.obligation.id, e.period)}
+                onUndo={ops.canUndoObligations ? async () => {
+                  const reason = window.prompt("Why is this completion being corrected?")?.trim();
+                  if (!reason) return;
+                  await ops.uncompleteObligation(e.obligation.id, e.period, reason);
+                } : undefined}
               />
             ))}
           </div>

@@ -11,6 +11,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:historical-replay": "node scripts/test-historical-local-replay.mjs",
+    "test:command-center-security": "node scripts/test-command-center-security-local.mjs",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",

@@ -13,6 +13,7 @@
  */
 import { handleCors, jsonError, jsonResponse } from "../_shared/cors.ts";
 import { getUser, getUserClient } from "../_shared/supabase.ts";
+import { obligationPeriodKey } from "../_shared/obligation-period.ts";
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -530,14 +531,6 @@ function isYmd(v: unknown): v is string {
 function numOrNull(v: unknown): number | null {
   const n = typeof v === "string" ? parseFloat(v) : v;
   return typeof n === "number" && Number.isFinite(n) ? n : null;
-}
-
-/** Period key for obligations — mirrors src/lib/operations/engine.ts. */
-function periodKeyFor(cadence: string, d: Date): string {
-  const y = d.getFullYear();
-  if (cadence === "monthly") return `${y}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  if (cadence === "quarterly") return `${y}-Q${Math.floor(d.getMonth() / 3) + 1}`;
-  return `${y}`;
 }
 
 async function executeTool(
@@ -1139,7 +1132,7 @@ async function executeTool(
       case "list_obligations": {
         const { data: obs, error } = await supabase
           .from("obligations")
-          .select("slug, title, workspace, cadence, due_day, due_month, lead_days, notes")
+          .select("id, slug, title, workspace, cadence, due_day, due_weekday, due_month, lead_days, notes")
           .eq("is_active", true)
           .order("sort_order");
         if (error) return `Error loading obligations: ${error.message}`;
@@ -1147,26 +1140,26 @@ async function executeTool(
 
         const now = new Date();
         const keys = [
-          periodKeyFor("monthly", now),
-          periodKeyFor("quarterly", now),
-          periodKeyFor("annual", now),
+          obligationPeriodKey("weekly", now),
+          obligationPeriodKey("monthly", now),
+          obligationPeriodKey("quarterly", now),
+          obligationPeriodKey("annual", now),
         ];
         const { data: comps } = await supabase
           .from("obligation_completions")
           .select("obligation_id, period")
           .in("period", keys);
-        const { data: obIds } = await supabase
-          .from("obligations")
-          .select("id, slug")
-          .eq("is_active", true);
-        const idBySlug = new Map((obIds ?? []).map((o) => [o.id, o.slug]));
+        const idBySlug = new Map(obs.map((o) => [o.id, o.slug]));
         const doneSlugs = new Set(
           (comps ?? []).map((c) => idBySlug.get(c.obligation_id)).filter(Boolean),
         );
 
         const lines = obs.map((o) => {
+          const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
           const due =
-            o.cadence === "monthly"
+            o.cadence === "weekly"
+              ? `${weekdays[o.due_weekday ?? 1]} weekly`
+              : o.cadence === "monthly"
               ? `day ${o.due_day === -1 ? "end-of-month" : o.due_day} monthly`
               : o.cadence === "annual"
                 ? `${o.due_month}/${o.due_day === -1 ? "end" : o.due_day} yearly`
@@ -1185,18 +1178,14 @@ async function executeTool(
           .eq("slug", String(input.slug).trim())
           .single();
         if (error || !ob) return `No obligation with slug "${input.slug}". Use list_obligations first.`;
-        const period = periodKeyFor(ob.cadence, new Date());
-        const { error: insErr } = await supabase.from("obligation_completions").insert({
-          obligation_id: ob.id,
-          period,
-          completed_by: userId,
-          note: input.note || null,
+        const period = obligationPeriodKey(ob.cadence, new Date());
+        const { error: completionError } = await supabase.rpc("complete_operational_obligation", {
+          p_obligation_id: ob.id,
+          p_period: period,
+          p_note: input.note || null,
         });
-        if (insErr) {
-          if (insErr.code === "23505") {
-            return `${ob.title} was already recorded as done for ${period}.`;
-          }
-          return `Error completing obligation: ${insErr.message}`;
+        if (completionError) {
+          return `Error completing obligation: ${completionError.message}`;
         }
         return `✅ ${ob.title} marked done for ${period}.`;
       }

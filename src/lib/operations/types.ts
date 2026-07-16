@@ -80,6 +80,8 @@ export interface Obligation {
   due_weekday?: number | null;
   /** Who is accountable. NULL = nobody, which is itself a gap worth showing. */
   owner_profile_id?: string | null;
+  /** Authorized fallback owner for obligation execution. */
+  backup_profile_id?: string | null;
   lead_days: number;
   delegable: boolean;
   link_href: string | null;
@@ -93,7 +95,7 @@ export interface Obligation {
 export interface ObligationCompletion {
   id: string;
   obligation_id: string;
-  /** '2026-07' (monthly) | '2026-Q3' (quarterly) | '2026' (annual). */
+  /** 'W2026-07-12' (weekly) | '2026-07' | '2026-Q3' | '2026'. */
   period: string;
   completed_at: string;
   completed_by: string | null;

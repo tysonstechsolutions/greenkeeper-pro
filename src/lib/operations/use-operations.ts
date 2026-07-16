@@ -6,8 +6,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  directDeleteByFilter,
-  directInsertRow,
   directRpc,
   directSelectAll,
 } from "@/lib/supabase/rest";
@@ -41,9 +39,11 @@ export interface UseOperations {
   /** Duties that run today, with per-duty done state. */
   dutiesToday: DutyTodayItem[];
   allDuties: OperationDuty[];
+  /** UI guard aligned to the database's daily-operations management roles. */
+  canUndoObligations: boolean;
   completeObligation: (e: EvaluatedObligation, note?: string) => Promise<void>;
-  /** Undo a completion recorded for the given period. */
-  uncompleteObligation: (obligationId: string, period: string) => Promise<void>;
+  /** Correct a completion through the audited manager-only command. */
+  uncompleteObligation: (obligationId: string, period: string, reason: string) => Promise<void>;
   toggleDuty: (dutyId: string, done: boolean) => Promise<void>;
   transitionDuty: (
     dutyId: string,
@@ -56,6 +56,8 @@ export interface UseOperations {
 export function useOperations(): UseOperations {
   const { session, profile } = useAuth();
   const ready = !!session?.access_token;
+  const canUndoObligations = !!profile?.is_active
+    && ["super", "asst_super", "director", "gm"].includes(profile.role);
 
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [completions, setCompletions] = useState<ObligationCompletion[]>([]);
@@ -238,42 +240,48 @@ export function useOperations(): UseOperations {
       if (busyObligations.current.has(key)) return;
       busyObligations.current.add(key);
       try {
-        const row = await directInsertRow<ObligationCompletion>(
-          "obligation_completions",
+        const row = await directRpc<ObligationCompletion>(
+          "complete_operational_obligation",
           {
-            obligation_id: e.obligation.id,
-            period: e.period,
-            completed_by: profile?.id ?? null,
-            note: note ?? null,
+            p_obligation_id: e.obligation.id,
+            p_period: e.period,
+            p_note: note ?? null,
           },
           "operations.complete",
         );
-        setCompletions((prev) => [row, ...prev]);
+        setCompletions((prev) => [row, ...prev.filter((item) => item.id !== row.id)]);
+        setError(null);
       } catch (err) {
-        // Resync — the row may exist already (409) or the write failed.
+        // Resync because the idempotent command may have committed before a
+        // transport failure reached the browser.
         setError(err instanceof Error ? err.message : String(err));
         reload();
       } finally {
         busyObligations.current.delete(key);
       }
     },
-    [profile?.id, reload],
+    [reload],
   );
 
   const uncompleteObligation = useCallback(
-    async (obligationId: string, period: string) => {
+    async (obligationId: string, period: string, reason: string) => {
       const key = `${obligationId}:${period}`;
       if (busyObligations.current.has(key)) return;
       busyObligations.current.add(key);
       try {
-        await directDeleteByFilter(
-          "obligation_completions",
-          [`obligation_id=eq.${obligationId}`, `period=eq.${encodeURIComponent(period)}`],
+        await directRpc<string>(
+          "void_operational_obligation_completion",
+          {
+            p_obligation_id: obligationId,
+            p_period: period,
+            p_reason: reason,
+          },
           "operations.uncomplete",
         );
         setCompletions((prev) =>
           prev.filter((c) => !(c.obligation_id === obligationId && c.period === period)),
         );
+        setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         reload();
@@ -329,6 +337,7 @@ export function useOperations(): UseOperations {
     evaluated,
     dutiesToday,
     allDuties: duties,
+    canUndoObligations,
     completeObligation,
     uncompleteObligation,
     toggleDuty,
