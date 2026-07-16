@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 import { callApi } from "@/lib/api/client";
 import { useProfiles, roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { useEmployee } from "@/lib/staff/use-employee";
@@ -978,8 +979,10 @@ function ProfileContent() {
 
 export default function StaffProfilePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-      <ProfileContent />
-    </Suspense>
+    <RoleGuard allowedRoles={ADMIN_ROLES}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
+        <ProfileContent />
+      </Suspense>
+    </RoleGuard>
   );
 }

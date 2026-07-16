@@ -31,13 +31,24 @@ import { createClient } from "@/lib/supabase/client";
 import { useCrews } from "@/lib/hooks/useCrews";
 import { roleLabels, roleColors, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
 import { withTimeout, isOnline } from "@/lib/utils/resilient-fetch";
-import type { Profile, UserRole, Task, TimeOffRequest, Schedule } from "@/types/database";
+import type {
+  Profile,
+  StaffPersonnelPrivate,
+  UserRole,
+  Task,
+  TimeOffRequest,
+  Schedule,
+} from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 import { AddStaffSheet } from "@/components/features/staff/add-staff-sheet";
 import { ProShopRosterCard } from "@/components/features/pro-shop/roster-card";
 
 // Extended profile with additional details for staff page
 interface StaffProfile extends Profile {
+  hire_date?: string | null;
+  certifications?: StaffPersonnelPrivate["certifications"];
+  emergency_contact?: StaffPersonnelPrivate["emergency_contact"];
+  personnel_details?: StaffPersonnelPrivate["personnel_details"];
   task_count?: number;
   pending_time_off?: number;
   current_crew?: string | null;
@@ -91,12 +102,12 @@ export default function StaffPage() {
     try {
       const today = todayLocal();
 
-      // Run ALL four queries in parallel with timeouts.
+      // Run directory, workload, and authorized personnel queries in parallel.
       // Profiles get a longer timeout (15s) because RLS evaluation on the
       // table can be slow on cell connections; the previous 8s frequently
       // tripped on real-world networks even when the query eventually
       // succeeded server-side.
-      const [profilesResult, tasksResult, timeOffResult, scheduleResult] = await Promise.all([
+      const [profilesResult, tasksResult, timeOffResult, scheduleResult, personnelResult] = await Promise.all([
         // 1. Get all profiles
         withTimeout(
 
@@ -135,6 +146,17 @@ export default function StaffPage() {
           8000,
           { data: null, error: null }
         ),
+        // 5. Private facts are requested only for upper management. RLS is
+        // still authoritative, but non-admin pages should not mount the query.
+        canEditStaff
+          ? withTimeout(
+              supabase
+                .from("staff_personnel_private")
+                .select("employee_id, hire_date, certifications, emergency_contact, personnel_details"),
+              8000,
+              { data: null, error: null },
+            )
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       // Profiles are essential — if they fail, show error
@@ -153,6 +175,13 @@ export default function StaffPage() {
       const tasksData = (tasksResult.data as unknown as { assigned_to: string }[] | null) || null;
       const timeOffData = (timeOffResult.data as unknown as { user_id: string }[] | null) || null;
       const scheduleData = (scheduleResult.data as unknown as { user_id: string; crew_assignment: string }[] | null) || null;
+      const personnelData = (personnelResult.data as unknown as Array<
+        Pick<
+          StaffPersonnelPrivate,
+          "employee_id" | "hire_date" | "certifications" | "emergency_contact" | "personnel_details"
+        >
+      > | null) || [];
+      const personnelByEmployee = new Map(personnelData.map((row) => [row.employee_id, row]));
 
       // Build enhanced profiles
       const taskCounts = new Map<string, number>();
@@ -180,6 +209,7 @@ export default function StaffPage() {
 
       const enhanced: StaffProfile[] = (profilesResult.data || []).map((p: Profile) => ({
         ...p,
+        ...(personnelByEmployee.get(p.id) || {}),
         task_count: taskCounts.get(p.id) || 0,
         pending_time_off: timeOffCounts.get(p.id) || 0,
         current_crew: crewAssignments.get(p.id) || null,
@@ -192,7 +222,7 @@ export default function StaffPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [canEditStaff, supabase]);
 
   useEffect(() => {
     if (currentUser) {

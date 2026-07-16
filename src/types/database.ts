@@ -287,8 +287,8 @@ export interface ActivityLog {
 
 /**
  * Employment details used to fill the SF-52 (Request for Personnel Action).
- * Stored as JSONB on `profiles`. No sensitive PII (SSN / DOB) — the requesting
- * office never fills those boxes on the form.
+ * Stored in the restricted `staff_personnel_private` row. No sensitive PII
+ * (SSN / DOB) — the requesting office never fills those boxes on the form.
  */
 export interface PersonnelDetails {
   name_last?: string | null;
@@ -324,15 +324,23 @@ export interface Profile {
   role_group?: import("@/lib/operations/types").DutyRoleGroup | null;
   phone: string | null;
   avatar_url: string | null;
-  hire_date: string | null;
-  certifications: Certification[];
-  emergency_contact: EmergencyContact | null;
-  /** Employment details for filling the SF-52 personnel-action form. */
-  personnel_details?: PersonnelDetails | null;
   user_preferences: UserPreferences | null;
   is_active: boolean;
   /** Preferred display locale for bilingual content. Defaults to 'en'. */
   language_preference?: "en" | "es" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Private one-to-one personnel facts separated from the staff directory. */
+export interface StaffPersonnelPrivate {
+  employee_id: string;
+  hire_date: string | null;
+  certifications: Certification[] | null;
+  emergency_contact: EmergencyContact | null;
+  personnel_details: PersonnelDetails | null;
+  created_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -972,6 +980,14 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Omit<Profile, "id">>;
+      };
+      staff_personnel_private: {
+        Row: StaffPersonnelPrivate;
+        Insert: Omit<StaffPersonnelPrivate, "created_at" | "updated_at"> & {
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<StaffPersonnelPrivate, "employee_id">>;
       };
       course_zones: {
         Row: CourseZone;

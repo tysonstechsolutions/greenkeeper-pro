@@ -1144,20 +1144,32 @@ export function useReports() {
         // Get user profile
         type ProfileQueryResult = {
           full_name: string | null;
+        };
+        type PersonnelQueryResult = {
           certifications: { name: string; expiry_date?: string }[] | null;
         };
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name, certifications")
-          .eq("id", userId)
-          .single() as { data: ProfileQueryResult | null };
+        const [{ data: profile }, { data: personnel }] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", userId)
+            .single(),
+          supabase
+            .from("staff_personnel_private")
+            .select("certifications")
+            .eq("employee_id", userId)
+            .maybeSingle(),
+        ]) as [
+          { data: ProfileQueryResult | null },
+          { data: PersonnelQueryResult | null },
+        ];
 
         if (profile) {
           report.user_name = profile.full_name || "Unknown";
 
           // Parse certifications if they exist
-          if (profile.certifications && Array.isArray(profile.certifications)) {
-            report.certifications = profile.certifications.map((cert: { name: string; expiry_date?: string }) => {
+          if (personnel?.certifications && Array.isArray(personnel.certifications)) {
+            report.certifications = personnel.certifications.map((cert: { name: string; expiry_date?: string }) => {
               const expiry = cert.expiry_date;
               let status: "valid" | "expiring" | "expired" = "valid";
               if (expiry) {

@@ -3,12 +3,12 @@ import {
   mapToILRupRecord,
   validateILRupRecord,
   IL_RUP_TOTAL_FIELDS,
+  type ApplicatorProfile,
   type ILRupRecord,
 } from "@/lib/compliance/illinois-rup";
 import type {
   ChemicalApplication,
   ChemicalProduct,
-  Profile,
 } from "@/types/database";
 
 // ── Test fixtures ───────────────────────────────────────────────────────────
@@ -64,16 +64,9 @@ function makeProduct(overrides: Partial<ChemicalProduct> = {}): ChemicalProduct 
   };
 }
 
-function makeProfile(overrides: Partial<Profile> = {}): Profile {
+function makeProfile(overrides: Partial<ApplicatorProfile> = {}): ApplicatorProfile {
   return {
-    id: "user-1",
-    email: "tyson@vmgc.com",
     full_name: "Tyson Bruce",
-    display_name: "Tyson",
-    role: "super",
-    phone: null,
-    avatar_url: null,
-    hire_date: null,
     certifications: [
       {
         name: "IL Pesticide Applicator",
@@ -82,12 +75,6 @@ function makeProfile(overrides: Partial<Profile> = {}): Profile {
         license_number: "IL-67890",
       },
     ],
-    emergency_contact: null,
-    user_preferences: null,
-    is_active: true,
-    language_preference: "en",
-    created_at: "2025-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
   };
 }

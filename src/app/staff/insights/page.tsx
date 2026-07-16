@@ -11,6 +11,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 import { directSelectList } from "@/lib/supabase/rest";
 import type { OneOnOneSession } from "@/lib/oneonone/types";
 import {
@@ -44,7 +45,7 @@ function cutoff(days: number | null): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-export default function OneOnOneInsightsPage() {
+function OneOnOneInsightsContent() {
   const [sessions, setSessions] = useState<OneOnOneSession[]>([]);
   const [concerns, setConcerns] = useState<ConcernLite[]>([]);
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
@@ -239,5 +240,13 @@ export default function OneOnOneInsightsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OneOnOneInsightsPage() {
+  return (
+    <RoleGuard allowedRoles={ADMIN_ROLES}>
+      <OneOnOneInsightsContent />
+    </RoleGuard>
   );
 }

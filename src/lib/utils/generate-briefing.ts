@@ -283,18 +283,33 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
   const thirtyDaysStr = thirtyDaysFromNow.toISOString().split("T")[0];
 
-  type ProfileCertsResult = { full_name: string; certifications: Array<{ name: string; expiry_date: string | null }> | null };
-  const { data: profilesWithCerts } = await supabase
-    .from("profiles")
-    .select("full_name, certifications")
-    .eq("is_active", true) as { data: ProfileCertsResult[] | null };
+  type DirectoryResult = { id: string; full_name: string };
+  type PersonnelCertsResult = {
+    employee_id: string;
+    certifications: Array<{ name: string; expiry_date: string | null }> | null;
+  };
+  const [{ data: activeProfiles }, { data: personnelWithCerts }] = await Promise.all([
+    supabase
+      .from("staff_directory")
+      .select("id, full_name")
+      .eq("is_active", true),
+    supabase
+      .from("staff_personnel_private")
+      .select("employee_id, certifications"),
+  ]) as [
+    { data: DirectoryResult[] | null },
+    { data: PersonnelCertsResult[] | null },
+  ];
+  const activeNames = new Map((activeProfiles || []).map((p) => [p.id, p.full_name]));
 
   const expiringCerts: string[] = [];
-  (profilesWithCerts || []).forEach(p => {
-    const certs = p.certifications as Array<{ name: string; expiry_date: string | null }> || [];
+  (personnelWithCerts || []).forEach(p => {
+    const fullName = activeNames.get(p.employee_id);
+    if (!fullName) return;
+    const certs = p.certifications || [];
     certs.forEach(cert => {
       if (cert.expiry_date && cert.expiry_date <= thirtyDaysStr && cert.expiry_date >= dateStr) {
-        expiringCerts.push(`${p.full_name}'s ${cert.name}`);
+        expiringCerts.push(`${fullName}'s ${cert.name}`);
       }
     });
   });

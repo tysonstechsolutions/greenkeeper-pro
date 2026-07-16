@@ -24,6 +24,13 @@
 - Risks: breaking currently permissive UI, orphan/null actor rows, no staging, irreversible production assumptions.
 - Complexity: **extra-large**.
 
+Phase 0 status on 2026-07-16:
+
+- Live: individual identity, anonymous lockdown, duty/task commands, creator-scoped My Day rows, and audited obligation completion/correction.
+- Implemented and locally verified, not deployed: private staff/1:1/HR/document RLS, forced actors, history protection, manager-only staff-document storage, and pre-query admin guards (`20260716150000_staff_privacy_security.sql`); exact private-personnel extraction, safe directory view, self-promotion guard, and atomic admin profile command (`20260716170000_profiles_personnel_privacy.sql`).
+- Still blocking completion: calendar, certification, onboarding, pro-shop scheduling, inventory, financial, incident, and remaining storage policies; general audit/outbox; ten missing departments; backup/restore and staging evidence.
+- Acceptance is **not met**. Phase 1 must not begin as a broad production consolidation until these remaining boundaries have explicit dispositions and role tests.
+
 ## Phase 1 - Canonical task and requirement engine
 
 **Objective:** one authoritative lifecycle for mandatory/local-approved work.

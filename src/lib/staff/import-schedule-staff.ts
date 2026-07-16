@@ -10,7 +10,7 @@
  * title, Flex schedule) so an SF-52 at least fills the Name box — pay
  * fields stay blank until they're entered on the profile's Info tab.
  */
-import { directInsertRow, directPatchRow, getCachedUserId } from "@/lib/supabase/rest";
+import { directInsertRow, directRpc, getCachedUserId } from "@/lib/supabase/rest";
 import { callApi } from "@/lib/api/client";
 import type { ProShopStaff, ProShopPosition } from "@/lib/pro-shop/types";
 import type { Invite } from "@/types/database";
@@ -102,17 +102,19 @@ export async function importScheduleStaff(staff: ProShopStaff[]): Promise<Import
       // Seed SF-52 personnel details with what the schedule knows. Best
       // effort — the profile exists either way.
       const split = splitStaffName(name);
-      await directPatchRow(
-        "profiles",
-        "id",
-        user.id,
+      await directRpc(
+        "update_staff_profile",
         {
-          personnel_details: {
+          p_employee_id: user.id,
+          p_directory: {},
+          p_personnel: {
+            personnel_details: {
             name_first: split.first,
             name_middle: split.middle,
             name_last: split.last,
             position_title: scheduleStaffPositionTitle(s.position),
             work_schedule: "Flex",
+            },
           },
         },
         "importScheduleStaff.details",

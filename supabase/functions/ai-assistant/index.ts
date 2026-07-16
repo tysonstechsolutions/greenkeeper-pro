@@ -117,13 +117,13 @@ const TOOLS = [
   },
   {
     name: "search_staff",
-    description: "Get staff profiles including name, role, certifications, and contact info.",
+    description: "Get the safe operational staff directory including name, role, and work contact info.",
     input_schema: {
       type: "object" as const,
       properties: {
         role: {
           type: "string",
-          enum: ["super", "asst_super", "foreman", "mechanic", "crew", "seasonal", "pro", "director"],
+          enum: ["super", "asst_super", "foreman", "mechanic", "crew", "seasonal", "pro", "director", "gm"],
         },
         active_only: { type: "boolean", description: "Only active staff (default true)" },
       },
@@ -708,8 +708,8 @@ async function executeTool(
       case "search_staff": {
         const activeOnly = input.active_only !== false;
         let query = supabase
-          .from("profiles")
-          .select("full_name, role, email, phone, hire_date, certifications, is_active")
+          .from("staff_directory")
+          .select("full_name, role, phone, is_active")
           .order("full_name");
 
         if (activeOnly) query = query.eq("is_active", true);
@@ -720,14 +720,9 @@ async function executeTool(
         if (!data || data.length === 0) return "No staff found.";
 
         // deno-lint-ignore no-explicit-any
-        return data.map((s: any) => {
-          // deno-lint-ignore no-explicit-any
-          const certs = (s.certifications || []) as any[];
-          const certStr = certs.length > 0
-            ? ` | Certs: ${certs.map((c: { name: string }) => c.name).join(", ")}`
-            : "";
-          return `• ${s.full_name} (${s.role})${s.phone ? ` — ${s.phone}` : ""}${certStr}${!s.is_active ? " [INACTIVE]" : ""}`;
-        }).join("\n");
+        return data.map((s: any) =>
+          `• ${s.full_name} (${s.role})${s.phone ? ` — ${s.phone}` : ""}${!s.is_active ? " [INACTIVE]" : ""}`
+        ).join("\n");
       }
 
       case "get_schedule": {

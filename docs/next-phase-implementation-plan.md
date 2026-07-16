@@ -2,166 +2,189 @@
 
 ## Selected phase
 
-**Phase 0: security, identity, row-level authorization, auditability, and source-of-truth corrections.**
+**Phase 0B: private people records, identity-safe mutations, and remaining least-privilege boundaries.**
 
-This phase is first because the current product already exposes valuable operating workflows, but several authenticated-table policies allow any signed-in user to write records outside their responsibility. Consolidating task systems or adding AI before correcting those trust boundaries would make the eventual command center faster at spreading ambiguous or forged state.
+This remains the next practical phase because the application cannot safely connect employee development, schedules, certifications, incidents, payroll, finance, and the command center while any authenticated account can manage sensitive records. The live command-center completion boundary is audited, and the repository now contains locally proven staff-record and personnel-directory corrections. Calendar, certification, onboarding, schedule, inventory, and financial boundaries remain inconsistent.
 
-The first shippable slice is the command-center obligation and My Day boundary. It is intentionally narrower than the full Phase 0 roadmap:
+The first two Phase 0B slices are implemented in this repository as `20260716150000_staff_privacy_security.sql` and `20260716170000_profiles_personnel_privacy.sql`. Neither is applied or deployed.
 
-- completion and correction of an obligation must be an authorized server command;
-- the database, not the browser, records the actor;
-- deletion of a completion must require a manager reason and leave an immutable audit snapshot;
-- obligation visibility follows manager, primary-owner, or backup-owner scope;
-- My Day goals and steps are private to their creator;
-- the assistant must use the same obligation command and period semantics as the UI.
+## Why this phase wins
 
-This slice does **not** apply a migration, deploy, change production data, or claim that all repository RLS is corrected.
+1. `staff_one_on_ones`, `staff_concerns`, `staff_one_on_one_sessions`, `staff_engagement_profiles`, `staff_records`, and `staff_documents` were created with all-authenticated CRUD policies.
+2. The one-on-one and engagement tables store discussion answers, concerns, family/interests, goals, and communication notes. `staff_records` can contain disciplinary, sick-time, call-out, holiday-pay, hours, and amount facts.
+3. A private storage bucket is insufficient when every authenticated account still has object SELECT permission.
+4. Live count-only evidence shows all six affected tables are empty, so the forward policy/actor correction does not require a speculative data backfill.
+5. A direct local fix is testable with synthetic identities and does not require an unverified Navy, CNIC, HR, payroll, or retention claim.
 
-## Exact implementation scope
+## Implemented slice
 
-### Database and RLS
+### Work package 0B.1 - private staff database boundary
 
-Add one forward-only migration that:
+Purpose: make the existing people-record tables safe enough to hold real data without introducing a second HR model.
 
-1. creates an append-only `obligation_completion_audit_events` table;
-2. creates `can_execute_obligation(obligation_id)` using the authenticated identity and existing server-side management-role helper;
-3. replaces permissive obligation policies with manager/owner/backup read scope and manager-only definition writes;
-4. removes direct completion inserts, updates, and deletes for `authenticated`;
-5. adds `complete_operational_obligation(...)`, which validates authorization and period format, derives `completed_by` from `auth.uid()`, and is idempotent for the obligation/period pair;
-6. adds `void_operational_obligation_completion(...)`, which is manager-only, requires a correction reason, and deletes through an audited command;
-7. captures completion and void events with actor, time, reason, and row snapshot;
-8. replaces `daily_goals` and `daily_steps` all-authenticated policies with creator-owned policies, including a parent-goal ownership check for steps.
+Files:
 
-### Application commands
+- `supabase/migrations/20260716150000_staff_privacy_security.sql`
+- `supabase/tests/staff_privacy_security.sql`
+- `scripts/test-staff-privacy-security-local.mjs`
+- `src/__tests__/unit/people/staff-privacy-security.test.ts`
+- `package.json`
 
-Change the operations hook so it never writes `obligation_completions` directly. Completion and correction call the database RPCs. The correction action is offered only to the same management roles recognized by the database and must collect a reason before the command runs.
+Schema changes:
 
-### Assistant parity
+- add `updated_by` to scheduled 1:1s, concerns, structured sessions, and staff records;
+- add `created_by` and `updated_by` to engagement profiles;
+- add `can_manage_staff_member(employee_id)` using active-manager or recorded-direct-supervisor authorization;
+- add database-derived mutation attribution and immutable employee identity;
+- add completed/history guards.
 
-Change the AI assistant action handler so `complete_obligation` calls the same RPC. Correct weekly period keys to the existing Sunday-through-Saturday convention (`WYYYY-MM-DD`) and include weekly obligations in the current-period read.
+RLS and grants:
 
-### Repeatable readiness evidence
+- active managers and the employee's recorded direct supervisor may read/create/update scheduled 1:1s, concerns, sessions, and engagement profiles;
+- HR/pay/disciplinary `staff_records` remain active-manager only;
+- employee-document metadata and storage objects remain active-manager only;
+- employees and unrelated authenticated users receive no row/object access merely because they are signed in;
+- completed 1:1 sessions cannot be rewritten; scheduled 1:1, concern, engagement, session, and staff-record history cannot be deleted through authenticated grants or a table-owner bypass;
+- employee documents remain deletable by a manager because an authoritative retention rule has not been established. A later retention policy must define archive/legal-hold behavior before changing that fact.
 
-Keep the count-only readiness script as an audit tool. It may authenticate with the configured control account, but it selects no business rows and performs no writes. Its results are environmental evidence, not fixtures or a migration precondition.
+Actor behavior:
 
-## Files and systems expected to change
+- `created_by`, `updated_by`, and `uploaded_by` come from `auth.uid()`;
+- caller-supplied actor IDs are ignored;
+- an authenticated actor is mandatory;
+- an existing private record cannot be moved to another employee.
 
-| Area | File or system | Change |
-|---|---|---|
-| Database | `supabase/migrations/20260716010000_command_center_security.sql` | RLS, command RPCs, append-only completion audit |
-| Today data hook | `src/lib/operations/use-operations.ts` | Replace raw completion writes with RPCs; expose correction authorization |
-| Manager Today | `src/app/today/page.tsx` | Manager-only correction with required reason |
-| Workspace landing | `src/components/layout/workspace-landing.tsx` | Same correction behavior as Today |
-| AI assistant | `supabase/functions/ai-assistant/index.ts`; `supabase/functions/_shared/obligation-period.ts` | RPC completion and Chicago-calendar weekly/month/quarter/year parity |
-| Unit/security contract tests | `src/__tests__/unit/operations/command-center-security.test.ts` | Verify migration and client command invariants |
-| Database RLS matrix | `supabase/tests/command_center_security.sql` | Transactional unrelated/owner/backup/manager authorization, attribution, idempotency, correction, privacy, and tamper tests |
-| Local database runner | `scripts/test-command-center-security-local.mjs`; `package.json` | Refuse non-local targets and execute the SQL matrix against the disposable replay container |
-| Readiness evidence | `scripts/audit-data-readiness.mjs` | Count-only operational data checks |
-| Audit documents | Six documents under `docs/` | Evidence, target model, roadmap, and handoff |
+### Work package 0B.2 - pre-query UI guards
+
+Purpose: avoid mounting broad full-profile and cross-employee-insights queries for non-admin roles while RLS remains authoritative.
+
+Files:
+
+- `src/app/staff/profile/page.tsx`
+- `src/app/staff/insights/page.tsx`
+
+Behavior:
+
+- full employee profile/HR queries mount only for `ADMIN_ROLES`;
+- cross-employee one-on-one insights mount only for `ADMIN_ROLES`;
+- these guards do not replace RLS;
+- direct-supervisor UI delegation remains a deliberate follow-up. The database predicate is ready, but a focused supervisor UI must avoid exposing HR/document/profile-edit controls.
+
+### Work package 0B.3 - data-readiness evidence
+
+Purpose: keep the audit count-only and verify migration presence without printing production records.
+
+Files:
+
+- `scripts/audit-data-readiness.mjs`
+
+Change:
+
+- include `obligation_completion_audit_events` in the exact-count inventory. Four live events confirm the earlier command-center migration is present; no business-row values were downloaded or printed.
 
 ## Migration sequence
 
-1. Confirm the target project, current migration ledger, backup/restore path, and expected pre-migration column/policy signatures.
-2. Run the migration against a disposable local database built from the complete historical chain.
-3. Seed only synthetic role fixtures: unrelated employee, primary owner, backup owner, GM, and service caller.
-4. Exercise the RLS/RPC matrix, idempotency, actor-forgery, audit immutability, and My Day ownership tests.
-5. Rehearse on a preview/staging clone and compare count-only before/after evidence. Do not copy or expose sensitive row contents.
-6. Deploy compatible UI and Edge Function code with the migration in one authorized release window. Because clients switch from raw table writes to RPCs, do not deploy the client ahead of the RPC migration.
-7. Perform production smoke checks using existing approved identities and records only. Do not create fake production obligations or completions.
-8. Retain migration output, policy/grant snapshots, test evidence, and observed limitations with the release record.
+No production action is authorized by this plan.
 
-## Security requirements and role matrix
+1. Freeze the intended target and capture the linked migration ledger, current policies/grants, bucket posture, and exact counts.
+2. Confirm backup/restore readiness and obtain the product owner's authorization for the manager/direct-supervisor split.
+3. Apply the full retained chain to a disposable local database and run the staff-privacy SQL matrix.
+4. Apply through `20260716170000` in a preview/staging project.
+5. Re-run a role matrix with approved test accounts: GM, superintendent/administrator, direct supervisor, subject employee, unrelated employee, and service role.
+6. Exercise the UI with no fabricated production history: open the full profile as an admin; run a draft then completed 1:1; verify direct-supervisor API scope; verify employee/unrelated denial; upload/open/delete a test document only in preview.
+7. Capture before/after policy and bucket evidence and check that existing row counts and content hashes are unchanged.
+8. Only after explicit user authorization, release the migration and compatible UI together. Do not deploy the UI guard ahead of an incompatible database state if it would strand an approved supervisor workflow.
+9. Retain the exact migration output, role results, observed denials, and forward-fix plan.
 
-| Action | Unrelated employee | Primary/backup owner | Server management role | Anonymous |
-|---|---:|---:|---:|---:|
-| Read an obligation | No | Yes | Yes | No |
-| Create/edit/delete an obligation definition | No | No | Yes | No |
-| Complete current obligation | No | Yes | Yes | No |
-| Set a different completion actor | No | No | No | No |
-| Void/correct a completion | No | No | Yes, with reason | No |
-| Mutate completion audit | No | No | No | No |
-| Read/write another user's My Day | No | No | No | No |
+## Tests
 
-The application role check is a usability guard only. Database authorization remains authoritative. Role names in application navigation that differ from `can_manage_daily_operations()` are a separate Phase 0 reconciliation item and must not be silently widened in this slice.
+Implemented tests:
 
-## Test plan
+- static migration/UI contracts: `npm.cmd exec vitest run src/__tests__/unit/people/staff-privacy-security.test.ts`;
+- disposable role/storage/history matrix: `npm.cmd run test:staff-privacy-security`;
+- retained migration replay: `npm.cmd run test:historical-replay`;
+- existing command-center matrix: `npm.cmd run test:command-center-security`;
+- full Vitest, typecheck, lint, and production build.
 
-### Static and unit contracts in this repository
+The SQL matrix covers:
 
-- Migration contains no globally permissive policies for the four hardened tables.
-- Completion table DML is revoked and only command functions are executable.
-- RPCs require `auth.uid()`, ignore client-supplied actor identity, enforce authorization, validate period shapes, and handle duplicate completion safely.
-- A correction requires a nonblank reason and creates an audit snapshot before history is removed.
-- Audit rows are append-only.
-- My Day child rows cannot point to another creator's goal.
-- UI and assistant contain no raw `obligation_completions` insert/delete path.
-- UI correction is restricted to the database-aligned management roles.
-- Assistant and operations engine agree on weekly period keys.
-- Existing weekly date-boundary, recurrence, Today, TypeScript, lint, full unit/integration, and production build checks remain green.
+- manager access;
+- recorded direct-supervisor access to 1:1 domains only;
+- subject-employee denial;
+- unrelated-employee denial;
+- denial for a supervisor targeting a non-report;
+- manager-only HR/document metadata and storage access;
+- actor spoofing on insert/update;
+- immutable employee linkage;
+- completed-session protection;
+- history deletion protection;
+- transaction rollback of every synthetic row.
 
-### Required database integration tests before release
+## Rollback and forward-fix considerations
 
-- Each matrix role runs SELECT/INSERT/UPDATE/DELETE/RPC probes in a disposable database.
-- Primary owner and backup can complete; unrelated employee cannot.
-- Forged actor parameters are impossible because none are accepted.
-- Two concurrent completion requests leave one completion and a deterministic success result.
-- Manager correction removes the active completion but preserves actor/time/snapshot/reason in audit.
-- Direct deletion and audit mutation fail for all application roles.
-- Goal and step cross-owner reads/writes fail, including a step attached to a foreign goal.
-- Existing rows remain readable to their legitimate actors after policy replacement.
+Preferred recovery is a forward fix. Do not restore the broad all-authenticated policies.
 
-Repository string-contract tests are regression guards; they do not replace execution against PostgreSQL RLS. In this session the SQL also passed the full historical replay and the transactional four-role database matrix. Staging/preview execution remains mandatory before release.
+- If a legitimate role is blocked, add the narrowest evidenced predicate in a new migration and extend the role matrix first.
+- If a current row has a missing/invalid actor, do not invent one. Preserve null/legacy state and add a reasoned, reviewed compatibility path.
+- If a storage path does not match its metadata row, quarantine it in preview evidence; do not expose the bucket or fabricate an employee link.
+- If application code assumes deletes for durable staff history, replace that behavior with status/void/correction semantics rather than reopening raw DELETE.
+- If migration application fails transactionally, retain the old state and diagnose. Do not apply partial policy edits manually in production.
 
-## Rollback and forward-fix strategy
+## Production verification
 
-The preferred recovery is a forward fix, not an automatic down migration.
+Required after an authorized release:
 
-- If the client fails but authorization is correct, roll back the client/Edge release while leaving secure policies and RPCs in place only if the prior client is known to use those RPCs. Otherwise deploy a reviewed compatibility function; do not reopen broad direct writes.
-- If an authorization predicate is wrong, issue a narrow follow-up migration that repairs the helper or policy. Preserve the audit table and completion history.
-- If the migration fails transactionally, no partial policy state should remain.
-- Never restore global `USING (true) WITH CHECK (true)` as a convenience rollback.
-- A database restore is reserved for proven integrity loss and must use the pre-confirmed restore procedure. The audit event stream should be retained wherever legally and operationally appropriate.
+1. migration ledger contains `20260716150000` and `20260716170000` exactly once each;
+2. no `FOR ALL ... USING (true) WITH CHECK (true)` policy remains on the six private tables;
+3. the staff-documents bucket is non-public and its object policies require `is_manager()`;
+4. unrelated and subject employees receive empty/denied responses for private rows and signed-object access;
+5. manager CRUD and direct-supervisor 1:1 operations work only within the intended scope;
+6. created/updated/upload actors equal the authenticated caller even when a client sends a different ID;
+7. completed session mutation and private-history deletion fail;
+8. counts, existing IDs, and existing business values are unchanged;
+9. application logs contain no unexpected 401/403 loop or sensitive row payload;
+10. no production fixture, policy claim, staff note, or document was fabricated for testing.
 
-## Production verification plan
+### Work package 0B.4 - split personnel privacy from the staff directory
 
-After an explicitly authorized release:
+Status: **implemented and locally verified; not applied or deployed**.
 
-1. verify migration ledger and function signatures on the intended project;
-2. rerun anonymous probes and role-matrix queries;
-3. have one approved obligation owner complete an existing due obligation and confirm server actor/time;
-4. have one approved manager correct that completion with a real reason and confirm the audit snapshot;
-5. confirm an unrelated employee cannot read or complete it;
-6. confirm two real users cannot see or mutate one another's My Day records;
-7. confirm Today and workspace landing show the same state after refresh;
-8. confirm assistant weekly listing and completion use the same period as Today;
-9. inspect error/denial metrics and support reports through one normal operating cycle;
-10. record all evidence without including sensitive business row contents in logs.
+`20260716170000_profiles_personnel_privacy.sql` copies every profile's exact hire date, emergency contact, legacy certification JSON, and SF-52 personnel details into the restricted one-to-one `staff_personnel_private` table, verifies the copy, and drops the four source columns without `CASCADE`. Employees may read their own private row; active managers maintain all rows; recorded supervisors receive no implied emergency/pay access. `staff_directory` is the narrow non-HR lookup contract. A trigger blocks employee role/department/supervisor/activation escalation, and `update_staff_profile` provides one allowlisted atomic admin command for directory and private changes.
 
-## Known limitations after this slice
+Application updates route staff profile, SF-52, schedule-import, report, briefing, compliance, and AI-directory callers to the correct surface. Admin-only pages guard before personnel queries mount. The historical replay, database lint, transactional manager/supervisor/employee/unrelated matrix, and prior security matrices pass locally.
 
-- The repository still contains other broad authenticated policies, including later calendar, staff, pro-shop, inventory, and financial modules; those remain Phase 0 blockers.
-- Obligations remain a parallel work model rather than canonical task occurrences.
-- The audit table is obligation-specific; the target architecture still needs a general append-only audit/outbox model.
-- Correction currently removes the active completion while preserving an audit snapshot. A future canonical occurrence model should prefer status transitions over deletion.
-- Manager roles are not yet unified across UI navigation, database helpers, and every domain.
-- The migration executed successfully in a disposable local PostgreSQL/Supabase replay, but no staging/preview environment was available; staging role tests and migration-ledger evidence remain release gates.
+## Remaining Phase 0B work packages
+
+### 0B.5 - calendar, certification, onboarding, and schedule authorization
+
+Define owner/attendee/supervisor/department/manager predicates, forced actors, update/delete rules, and history for `calendar_events`, certifications/training, onboarding runs/documents, generic schedules/time off, and pro-shop schedules. Do not use one all-purpose manager predicate where employee self-service is required.
+
+### 0B.6 - financial, procurement, inventory, incident, and remaining storage boundaries
+
+Classify read/write/approval rights by domain, add independent approval where required, and test row plus object access. Do not infer finance, HR, safety, food-service, or environmental authority from route visibility.
+
+### 0B.7 - audit/outbox, department cleanup, and restore proof
+
+Add transactional audit/outbox coverage for protected state changes, fill the ten missing departments only from reviewed source data, resolve the one unowned obligation, document bucket retention, and complete a restore drill. Phase 0 exits only when the role matrix and restore evidence cover every authoritative operational domain.
 
 ## Explicit non-goals
 
-- No production migration, deployment, data write, push, merge, or branch-history rewrite.
-- No mass assignment of the 644 generated tasks.
-- No fabricated task completions, evidence, departments, staff records, or compliance data.
-- No claim that the 93 program standards are authoritative legal requirements.
-- No consolidation of duties, obligations, My Day, standards actions, and schedule work in this slice.
-- No autonomous AI creation or reprioritization of official work.
-- No redesign of the full Today interface.
-- No connector integration with Kronos, payroll, email, calendar, marketing, or accounting systems.
+- No production migration, deployment, data write, push, merge, or branch change.
+- No fabricated staff notes, HR records, documents, departments, tasks, completions, evidence, or policy sources.
+- No claim that the current one-on-one cadence is a Navy/CNIC requirement.
+- No canonical task-engine consolidation in this slice.
+- No payroll, schedule-publication, incident, certification, food-safety, or environmental workflow expansion before their security and source requirements are explicit.
+- No mass assignment of the 649 generated tasks.
 
-## Definition of done for this repository session
+## Acceptance criteria for this slice
 
-- All six required documents exist and agree on scores, sequencing, and evidence boundaries.
-- The command-center security migration and application callers are implemented.
-- Targeted and full repository verification pass, or every failure is reported with exact scope.
-- The migration is explicitly reported as **created but not applied**.
-- The full historical local replay and command-center RLS matrix pass with synthetic fixtures rolled back.
-- The work is committed locally with the starting base and final commit recorded; nothing is pushed.
+- the repository migration replays from the retained historical chain;
+- the synthetic manager/supervisor/employee/unrelated matrix passes and rolls back;
+- actor spoofing, cross-employee access, document-object access, completed-session edits, and history deletes are denied as designed;
+- full-profile and cross-employee-insights queries do not mount for non-admin application roles;
+- legacy profile personnel values are copied exactly before the source columns are dropped;
+- employees read only their own private personnel row, direct supervisors cannot read subordinate emergency/pay data, and ordinary directory callers receive no private fields;
+- employee role/department/supervisor/activation escalation is denied while safe self-profile edits remain available;
+- manager profile edits update directory and private rows through the allowlisted atomic command;
+- all targeted and full repository checks pass;
+- both people-security migrations are reported honestly as **implemented locally, not applied or deployed**.

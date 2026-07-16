@@ -10,8 +10,13 @@
 import type {
   ChemicalApplication,
   ChemicalProduct,
+  Certification,
   Profile,
 } from "@/types/database";
+
+export type ApplicatorProfile = Pick<Profile, "full_name"> & {
+  certifications?: Certification[] | null;
+};
 
 // ── IL RUP Record (matches state form fields) ──────────────────────────────
 
@@ -73,7 +78,7 @@ export const IL_RUP_TOTAL_FIELDS = REQUIRED_FIELD_LABELS.length;
 export function mapToILRupRecord(
   application: ChemicalApplication,
   product: ChemicalProduct | null,
-  applicator: Profile | null,
+  applicator: ApplicatorProfile | null,
   courseName: string = "Veterans Memorial Golf Course"
 ): ILRupRecord {
   // Build location string from zone_ids and hole_numbers

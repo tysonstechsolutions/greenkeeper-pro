@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 import { useProfiles } from "@/lib/hooks/useProfiles";
 import { directSelectRow } from "@/lib/supabase/rest";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
@@ -38,8 +39,7 @@ import {
   formatPayRate,
   type PayPlan,
 } from "@/lib/sf52/payscale";
-import type { FullProfile } from "@/lib/staff/types";
-import type { PersonnelDetails } from "@/types/database";
+import type { PersonnelDetails, StaffPersonnelPrivate } from "@/types/database";
 
 const selectCls =
   "w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base";
@@ -155,9 +155,24 @@ function Sf52Content() {
         setEmployeeName("");
         return;
       }
-      const row = await directSelectRow<FullProfile>("profiles", "id", employeeId, "*", "sf52.employee");
+      const [row, personnel] = await Promise.all([
+        directSelectRow<{ id: string; full_name: string }>(
+          "profiles",
+          "id",
+          employeeId,
+          "id,full_name",
+          "sf52.employee",
+        ),
+        directSelectRow<Pick<StaffPersonnelPrivate, "employee_id" | "personnel_details">>(
+          "staff_personnel_private",
+          "employee_id",
+          employeeId,
+          "employee_id,personnel_details",
+          "sf52.personnel",
+        ),
+      ]);
       if (cancelled) return;
-      const details = row?.personnel_details || null;
+      const details = personnel?.personnel_details || null;
       setPd(details);
       setEmployeeName(row?.full_name || "");
       if (restoreRef.current.skipEmployeeSeed) {
@@ -562,8 +577,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function Sf52Page() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
-      <Sf52Content />
-    </Suspense>
+    <RoleGuard allowedRoles={ADMIN_ROLES}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
+        <Sf52Content />
+      </Suspense>
+    </RoleGuard>
   );
 }

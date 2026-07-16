@@ -16,9 +16,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { directSelectRow, directPatchRow } from "@/lib/supabase/rest";
-import type { UserRole } from "@/types/database";
+import { directRpc, directSelectRow } from "@/lib/supabase/rest";
+import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: "super", label: "Superintendent" },
@@ -38,7 +39,6 @@ interface StaffProfile {
   display_name: string | null;
   role: UserRole;
   phone: string | null;
-  hire_date: string | null;
   is_active: boolean;
 }
 
@@ -73,13 +73,22 @@ function PageContent() {
         // a 15s ceiling, but that's still a long time to stare at a
         // spinner — the cached-token path doesn't even acquire the
         // wrapper's lock.
-        const staff = await directSelectRow<StaffProfile>(
-          "profiles",
-          "id",
-          staffId,
-          "id, email, full_name, display_name, role, phone, hire_date, is_active",
-          "settings.staff.view.fetch",
-        );
+        const [staff, personnel] = await Promise.all([
+          directSelectRow<StaffProfile>(
+            "profiles",
+            "id",
+            staffId,
+            "id,email,full_name,display_name,role,phone,is_active",
+            "settings.staff.view.fetch",
+          ),
+          directSelectRow<Pick<StaffPersonnelPrivate, "employee_id" | "hire_date">>(
+            "staff_personnel_private",
+            "employee_id",
+            staffId,
+            "employee_id,hire_date",
+            "settings.staff.view.personnel",
+          ),
+        ]);
         if (!staff) {
           setError("Staff member not found");
           return;
@@ -88,7 +97,7 @@ function PageContent() {
         setDisplayName(staff.display_name || "");
         setPhone(staff.phone || "");
         setRole(staff.role);
-        setHireDate(staff.hire_date || "");
+        setHireDate(personnel?.hire_date || "");
         setIsActive(staff.is_active);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load staff");
@@ -109,17 +118,18 @@ function PageContent() {
     try {
       // Direct REST so the save can't wedge on a stalled supabase-js
       // auth wrapper. RLS still validates via JWT.
-      await directPatchRow(
-        "profiles",
-        "id",
-        staffId,
+      await directRpc(
+        "update_staff_profile",
         {
+          p_employee_id: staffId,
+          p_directory: {
           full_name: fullName,
           display_name: displayName || null,
           phone: phone || null,
           role,
-          hire_date: hireDate || null,
           is_active: isActive,
+          },
+          p_personnel: { hire_date: hireDate || null },
         },
         "settings.staff.view.save",
       );
@@ -304,8 +314,10 @@ function PageContent() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="text-sm text-muted-foreground animate-pulse">Loading…</div></div>}>
-      <PageContent />
-    </Suspense>
+    <RoleGuard allowedRoles={ADMIN_ROLES}>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="text-sm text-muted-foreground animate-pulse">Loading…</div></div>}>
+        <PageContent />
+      </Suspense>
+    </RoleGuard>
   );
 }

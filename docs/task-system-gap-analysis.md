@@ -4,7 +4,7 @@
 
 The current task architecture cannot yet act as the General Manager's operational boss.
 
-It contains one production-quality execution kernel - duty-backed rows in `tasks` - surrounded by several weaker work representations. Today composes them visually but does not normalize them. Live evidence makes the gap unmistakable: 644 duty-backed occurrences exist, all 644 are pending and unassigned, and there are zero task evidence records, verified tasks, duty audit events, temporary coverages, or recurrence-history records. The machine can generate rows; it is not running the facility.
+It contains one production-quality execution kernel - duty-backed rows in `tasks` - surrounded by several weaker work representations. Today composes them visually but does not normalize them. Live evidence makes the gap unmistakable: 649 duty-backed occurrences exist, all 649 are pending and unassigned, and there are zero task evidence records, verified tasks, duty audit events, temporary coverages, or recurrence-history records. The machine can generate rows; it is not running the facility.
 
 ## Current work sources
 
@@ -14,7 +14,7 @@ It contains one production-quality execution kernel - duty-backed rows in `tasks
 | `tasks` one-time rows | Rich assigned tasks | Actor/status/evidence protections after Phase 1A corrective migration | Hidden legacy UI, categories biased toward course work, no general source contract | Keep; evolve through canonical command API. |
 | `task_templates` | Reusable task defaults | Checklist/instructions/photo flags | No versioned deadline rule, workflow stages, policy/source, approval, or trigger | Migrate into workflow template/version model; retain compatibility view. |
 | `daily_goals` + `daily_steps` | Personal planning and AI breakdown | Simple UX, buffer scheduling, end-of-month recurrence | Checkboxes lack why/source/priority/evidence/verification/ownership/history; client-side generation | Keep only as personal plan/projection; stop treating as authoritative completion. |
-| `obligations` + `obligation_completions` | Recurring management anchors | Deterministic weekly/monthly/quarterly/annual debt and lead-time display | Descriptive evidence only; no task occurrence; direct mutable completion path; no escalation | Migrate definitions into requirements/workflow templates; preserve completions/audit. |
+| `obligations` + `obligation_completions` | Recurring management anchors | Deterministic weekly/monthly/quarterly/annual debt, lead-time display, and live actor-attributed audited completion RPC | Descriptive evidence only; no task occurrence, staged workflow, dependency, or escalation | Migrate definitions into requirements/workflow templates; preserve completions/audit. |
 | Schedule board items/templates | Course schedule work | Useful planning grid and recurrence | Separate assignment/completion model; not Today/report canonical | Project into canonical tasks; preserve board as planning view. |
 | `pro_shop_duties` + `duty_completions` | Legacy shop duties | Historical compatibility | Competing writer/model | Read-only compatibility, migrate history, retire after acceptance. |
 | Standards evaluations/corrective actions | Requirement gaps and work bridge | Good schema, deterministic pure rules, task link | Rules have no production caller; zero live corrective actions | Keep; add orchestrator and approval transaction. |
@@ -103,7 +103,7 @@ Notification/push infrastructure exists, but live `notifications` is empty and t
 
 ### History and reporting
 
-Duty assignments/recurrence/audit/task history are designed well. My Day steps can be deleted or toggled; obligation completions were directly deletable; calendar and staff records use broad CRUD; many tables lack event history. Reporting reads current states and often cannot reconstruct prior-period state. Work-order and equipment briefing code explicitly reports insufficient history.
+Duty assignments/recurrence/audit/task history are designed well. My Day steps remain lightweight owner-controlled records; obligation completions are now immutable and corrected through an audited RPC. Calendar remains broad CRUD. Repository migrations `20260716150000_staff_privacy_security.sql` and `20260716170000_profiles_personnel_privacy.sql` protect private staff history and separate personnel facts from the directory locally, but neither is deployed and many other tables lack event history. Reporting reads current states and often cannot reconstruct prior-period state. Work-order and equipment briefing code explicitly reports insufficient history.
 
 ### AI recommendations and human approval
 
@@ -124,7 +124,7 @@ The app has PWA/Capacitor foundations, direct REST helpers, an offline queue, ba
 
 ### Security
 
-Individual sessions and the duty-backed task RLS are real. The rest of the work system is not consistently identity-aware. Broad all-authenticated policies exist on My Day, obligations, calendar, staff/one-on-one, certification, schedule, inventory, and other modules. Client RoleGuard is not sufficient. Security must be corrected before connecting sensitive data to a unified command center.
+Individual sessions, duty-backed task RLS, creator-scoped My Day rows, and the audited obligation command are real. The rest of the work system is not consistently identity-aware. Broad all-authenticated policies remain on calendar, certification, schedule, inventory, onboarding, financial, and other modules. Private staff/one-on-one policies are corrected in the repository with a manager/direct-supervisor matrix, forced actors, and history guards, but remain a release item until staged and deployed. Client RoleGuard is a query-mount/usability guard, never the authority. Security must be completed before connecting sensitive data to a unified command center.
 
 ## Proposed canonical architecture
 

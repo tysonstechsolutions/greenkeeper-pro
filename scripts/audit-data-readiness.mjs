@@ -46,6 +46,7 @@ const tables = [
   "task_evidence_items",
   "obligations",
   "obligation_completions",
+  "obligation_completion_audit_events",
   "program_standards",
   "program_standard_versions",
   "standard_evaluations",

@@ -19,6 +19,8 @@ const fixtureScript = join(repositoryRoot, "scripts", "prepare-phase1a-local-fix
 const productionProjectRef = "mbgublyqnyghmvqfooao";
 const supabase = process.env.SUPABASE_BIN || "supabase";
 const dbProjectId = "greenkeeper-pro-phase1a-matrix";
+const finalMigrationVersion = "20260716170000";
+const finalMigrationName = "profiles_personnel_privacy";
 
 function fail(message) {
   throw new Error(`Historical local replay test refused: ${message}`);
@@ -100,7 +102,7 @@ async function waitForFinalMigration() {
         SELECT EXISTS (
           SELECT 1
           FROM supabase_migrations.schema_migrations
-          WHERE version = '20260713230000'
+          WHERE version = '${finalMigrationVersion}'
         );
       `);
       if (applied === "t") return true;
@@ -174,10 +176,21 @@ function assertFinalPhase1aSchema() {
         WHERE table_schema = 'public'
           AND table_name = 'profiles'
           AND column_name = 'role_group'
+      ),
+      to_regprocedure('public.can_manage_staff_member(uuid)') IS NOT NULL,
+      to_regclass('public.staff_personnel_private') IS NOT NULL,
+      to_regclass('public.staff_directory') IS NOT NULL,
+      to_regprocedure('public.update_staff_profile(uuid,jsonb,jsonb)') IS NOT NULL,
+      NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'profiles'
+          AND column_name IN ('hire_date','certifications','emergency_contact','personnel_details')
       );
   `);
-  if (result !== "t|t|t|t") {
-    fail(`full replay did not reach the Phase 1A schema (received ${result})`);
+  if (result !== "t|t|t|t|t|t|t|t|t") {
+    fail(`full replay did not reach the latest repository schema (received ${result})`);
   }
 }
 
@@ -324,7 +337,7 @@ async function runEmptyReplay(label) {
   await startLocalStack(fixture);
   await resetFixture(fixture);
   assertFinalPhase1aSchema();
-  console.log(`PASS empty full replay #${label} through 20260713230000_daily_operations_phase1a_corrective.sql`);
+  console.log(`PASS empty full replay #${label} through ${finalMigrationVersion}_${finalMigrationName}.sql`);
 }
 
 function requestedScenario() {

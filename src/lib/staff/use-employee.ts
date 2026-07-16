@@ -10,9 +10,11 @@ import {
   directStorageUpload,
   directStorageDelete,
   directCreateSignedUrl,
+  directRpc,
   getCachedUserId,
 } from "@/lib/supabase/rest";
 import type { FullProfile, StaffRecord, StaffRecordType, StaffDocument, StaffConcern } from "./types";
+import type { Profile, StaffPersonnelPrivate } from "@/types/database";
 
 const BUCKET = "staff-documents";
 // staff-documents is a PRIVATE bucket (Phase 0B/B2). Files are read via
@@ -34,13 +36,31 @@ export function useEmployee(employeeId: string) {
     setLoading(true);
     setError(null);
     try {
-      const p = await directSelectRow<FullProfile>(
-        "profiles",
-        "id",
-        employeeId,
-        "*",
-        "staff.employee.profile",
-      );
+      const [directory, personnel] = await Promise.all([
+        directSelectRow<Profile & { supervisor_id?: string | null }>(
+          "profiles",
+          "id",
+          employeeId,
+          "id,email,full_name,display_name,role,department,role_group,phone,avatar_url,user_preferences,is_active,language_preference,supervisor_id,created_at,updated_at",
+          "staff.employee.profile",
+        ),
+        directSelectRow<StaffPersonnelPrivate>(
+          "staff_personnel_private",
+          "employee_id",
+          employeeId,
+          "employee_id,hire_date,certifications,emergency_contact,personnel_details,created_by,updated_by,created_at,updated_at",
+          "staff.employee.personnel",
+        ),
+      ]);
+      const p: FullProfile | null = directory
+        ? {
+            ...directory,
+            hire_date: personnel?.hire_date ?? null,
+            certifications: personnel?.certifications ?? [],
+            emergency_contact: personnel?.emergency_contact ?? null,
+            personnel_details: personnel?.personnel_details ?? null,
+          }
+        : null;
       setProfile(p);
 
       if (p?.supervisor_id) {
@@ -99,7 +119,22 @@ export function useEmployee(employeeId: string) {
 
   const saveProfile = useCallback(
     async (patch: Record<string, unknown>) => {
-      await directPatchRow("profiles", "id", employeeId, patch, "staff.employee.saveProfile");
+      const personnelKeys = new Set([
+        "hire_date",
+        "certifications",
+        "emergency_contact",
+        "personnel_details",
+      ]);
+      const directory: Record<string, unknown> = {};
+      const personnel: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(patch)) {
+        (personnelKeys.has(key) ? personnel : directory)[key] = value;
+      }
+      await directRpc(
+        "update_staff_profile",
+        { p_employee_id: employeeId, p_directory: directory, p_personnel: personnel },
+        "staff.employee.saveProfile",
+      );
       await load();
     },
     [employeeId, load],

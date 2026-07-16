@@ -108,6 +108,8 @@ Stages such as owner reminder, backup handoff, supervisor alert, manager review,
 
 `profiles` remains the authenticated person record. Normalize operational roles/departments and effective dates rather than relying only on one `role` string. Keep private HR profile data in separate restricted tables.
 
+Current bridge: `20260716150000_staff_privacy_security.sql` scopes existing 1:1 entities to active managers/recorded direct supervisors, keeps `staff_records` and `staff_documents` manager-only, forces actor fields, protects completed/history rows, and closes the authenticated storage-object bypass. `20260716170000_profiles_personnel_privacy.sql` then moves hire date, emergency contact, legacy certification JSON, and SF-52 employment/pay details into the one-to-one `staff_personnel_private` entity and publishes `staff_directory` as the narrow operational contract. Both are locally proven and not deployed; neither is the final HR workflow model.
+
 ### `responsibility_assignments`
 
 Temporal owner/backup/contractor assignment for a requirement, workflow, or step. Fields mirror the successful Phase 1A pattern: subject type/id, primary/backup/contractor, effective range, reason, actor, non-overlap constraint.
@@ -192,7 +194,7 @@ Append-only: actor, action, object type/id/version, timestamp, request/idempoten
 
 | Existing object | Disposition | Rationale / migration note |
 |---|---|---|
-| `profiles` | Keep and extend carefully | Authentication identity source. Backfill/validate departments and effective role assignments; private HR facts remain separate. |
+| `profiles` | Keep and extend carefully | Authentication identity source and operational directory. The repository-only 0B.4 migration removes four private fields, blocks self-service authority escalation, and adds `staff_directory`; deploy/verify before relying on that boundary. |
 | `program_standards` | Keep -> canonical requirements catalog | Good stable codes/owners/source/evidence foundation. Align classification/source/applicability/validation fields. |
 | `program_standard_versions` | Keep and make mandatory for material edits | Live count is zero; add atomic writer/version enforcement. |
 | `standard_evaluations` | Keep append-only | Existing guard is good. Add orchestrator and input/rule version provenance. |
@@ -202,11 +204,11 @@ Append-only: actor, action, object type/id/version, timestamp, request/idempoten
 | `task_series` | Keep compatibility, migrate to workflow versions/runs | Existing recurrence/generation path remains until parity proven. |
 | `tasks` | Keep as canonical occurrence/execution table | Strongest enforced lifecycle. Generalize sources/types; preserve existing IDs/history. |
 | `task_templates` | Migrate/consolidate | Convert to workflow template versions; compatibility view for old clients. |
-| `daily_goals`, `daily_steps` | Keep as personal planning/projection only | Owner-scope immediately. Link/project canonical tasks; never treat step checkbox as authoritative completion. |
-| `obligations`, `obligation_completions` | Migrate definitions/runs; preserve/audit history | Engine is useful; current model lacks tasks/evidence/verification. Compatibility view during transition. |
+| `daily_goals`, `daily_steps` | Keep as personal planning/projection only | Creator scope is live. Link/project canonical tasks; never treat step checkbox as authoritative completion. |
+| `obligations`, `obligation_completions` | Migrate definitions/runs; preserve/audit history | Engine and audited completion RPC are useful; current model lacks task occurrences, staged evidence/verification, and escalation. Compatibility view during transition. |
 | `pro_shop_duties`, `duty_completions` | Retire after migration | Competing legacy source. Read-only now; migrate history and validate route parity first. |
 | Schedule-board tables | Keep planning UI; consolidate execution | Board remains a view/editor over canonical occurrences after migration. |
-| `staff_one_on_ones`, `staff_one_on_one_sessions`, `staff_records`, `staff_concerns` | Consolidate with restricted meeting/follow-up model | Separate schedule/session/follow-up is valid, but identity, privacy, and links must be explicit. |
+| `staff_one_on_ones`, `staff_one_on_one_sessions`, `staff_engagement_profiles`, `staff_records`, `staff_concerns`, `staff_documents`, `staff_personnel_private` | Consolidate with restricted meeting/follow-up/HR model | Repository RLS/actor/history and personnel-directory bridges are implemented and locally proven; deploy them before use, then add frequency, due/escalation, canonical follow-up links, retention, and audit/outbox coverage. |
 | `calendar_events` | Keep as calendar projection or simple event source | Meetings/events need richer canonical entities; calendar alone is not workflow. |
 | `certifications` | Migrate to employee qualifications | Free-text holder and one-row live data cannot prove position coverage. Preserve documents/history. |
 | `equipment`, `fy26_assets` | Keep, link, then decide master/subtype by field | Operational fleet and accountable-property facts differ. Do not merge blindly. |

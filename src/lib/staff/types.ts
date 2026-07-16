@@ -1,7 +1,11 @@
-import type { Profile } from "@/types/database";
+import type { Profile, StaffPersonnelPrivate } from "@/types/database";
 
-/** Profile plus the new org-hierarchy column (not yet in the base Profile type). */
-export type FullProfile = Profile & { supervisor_id?: string | null };
+/** Manager-facing projection combining directory and restricted personnel rows. */
+export type FullProfile = Profile &
+  Pick<
+    StaffPersonnelPrivate,
+    "hire_date" | "certifications" | "emergency_contact" | "personnel_details"
+  > & { supervisor_id?: string | null };
 
 export type StaffRecordType =
   | "holiday_pay"

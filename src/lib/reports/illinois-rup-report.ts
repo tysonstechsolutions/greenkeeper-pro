@@ -11,11 +11,11 @@ import { getCachedUser } from "@/lib/supabase/rest";
 import {
   mapToILRupRecord,
   validateILRupRecord,
+  type ApplicatorProfile,
 } from "@/lib/compliance/illinois-rup";
 import type {
   ChemicalApplication,
   ChemicalProduct,
-  Profile,
 } from "@/types/database";
 
 const BRAND_DARK: [number, number, number] = [27, 67, 50];
@@ -66,7 +66,7 @@ export async function generateIllinoisRupReport(
     .select(`
       *,
       product:chemical_products!product_id(*),
-      applicator:profiles!applied_by(*)
+      applicator:profiles!applied_by(id, full_name)
     `)
     .gte("application_date", options.since)
     .lte("application_date", options.until)
@@ -76,11 +76,32 @@ export async function generateIllinoisRupReport(
 
   const applications = (applicationsRaw || []) as (ChemicalApplication & {
     product: ChemicalProduct | null;
-    applicator: Profile | null;
+    applicator: (ApplicatorProfile & { id: string }) | null;
   })[];
 
+  const applicatorIds = [...new Set(applications.map((app) => app.applied_by).filter(Boolean))];
+  const { data: personnelRows, error: personnelError } = applicatorIds.length > 0
+    ? await supabase
+        .from("staff_personnel_private")
+        .select("employee_id, certifications")
+        .in("employee_id", applicatorIds)
+    : { data: [], error: null };
+  if (personnelError) throw new IllinoisRupReportError(personnelError.message);
+  const certificationsByEmployee = new Map(
+    ((personnelRows || []) as Array<{
+      employee_id: string;
+      certifications: ApplicatorProfile["certifications"];
+    }>).map((row) => [row.employee_id, row.certifications || []]),
+  );
+
   const records = applications.map((app) => {
-    const rec = mapToILRupRecord(app, app.product, app.applicator);
+    const applicator = app.applicator
+      ? {
+          full_name: app.applicator.full_name,
+          certifications: certificationsByEmployee.get(app.applied_by) || [],
+        }
+      : null;
+    const rec = mapToILRupRecord(app, app.product, applicator);
     return { record: rec, validation: validateILRupRecord(rec) };
   });
 

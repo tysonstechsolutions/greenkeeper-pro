@@ -67,7 +67,7 @@ export function useProfiles(): UseProfilesReturn {
           params.set("role", `in.(${list.join(",")})`);
         }
 
-        const url = `${supabaseUrl}/rest/v1/profiles?${params.toString()}`;
+        const url = `${supabaseUrl}/rest/v1/staff_directory?${params.toString()}`;
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 15_000);
         let res: Response;
