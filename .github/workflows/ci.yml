@@ -120,6 +120,9 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # global-setup.ts reads this to sign in at /pin-login; without it the
+          # whole E2E job throws before a single test runs.
+          PLAYWRIGHT_TEST_PIN: ${{ secrets.PLAYWRIGHT_TEST_PIN }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
