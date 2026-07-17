@@ -19,8 +19,8 @@ const fixtureScript = join(repositoryRoot, "scripts", "prepare-phase1a-local-fix
 const productionProjectRef = "mbgublyqnyghmvqfooao";
 const supabase = process.env.SUPABASE_BIN || "supabase";
 const dbProjectId = "greenkeeper-pro-phase1a-matrix";
-const finalMigrationVersion = "20260716170000";
-const finalMigrationName = "profiles_personnel_privacy";
+const finalMigrationVersion = "20260716190000";
+const finalMigrationName = "unified_operations_command_center";
 
 function fail(message) {
   throw new Error(`Historical local replay test refused: ${message}`);
@@ -187,9 +187,12 @@ function assertFinalPhase1aSchema() {
         WHERE table_schema = 'public'
           AND table_name = 'profiles'
           AND column_name IN ('hire_date','certifications','emergency_contact','personnel_details')
-      );
+      ),
+      to_regclass('public.operational_work_states') IS NOT NULL,
+      to_regclass('public.operational_work_dependencies') IS NOT NULL,
+      to_regprocedure('public.delegate_operational_work(text,uuid,text,text,date,text,date,boolean,text)') IS NOT NULL;
   `);
-  if (result !== "t|t|t|t|t|t|t|t|t") {
+  if (result !== "t|t|t|t|t|t|t|t|t|t|t|t") {
     fail(`full replay did not reach the latest repository schema (received ${result})`);
   }
 }
