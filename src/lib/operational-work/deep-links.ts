@@ -16,7 +16,7 @@ export function operationalWorkDeepLink(
       return `/operations?focus=${encodeURIComponent(stableId)}`;
     case "goal":
     case "step":
-      return `/operations?view=mine&focus=${encodeURIComponent(stableId)}`;
+      return `/operations?focus=${encodeURIComponent(stableId)}`;
     case "calendar":
       return `/calendar?event=${id}`;
     case "equipment":

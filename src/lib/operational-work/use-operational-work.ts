@@ -19,6 +19,7 @@ import { aggregateOperationalWork } from "./adapters";
 import type {
   OperationalAssignmentRow,
   OperationalDependencyRow,
+  OperationalEvidenceRow,
   OperationalEventRow,
   OperationalLeadershipRow,
   OperationalPostponementReason,
@@ -71,8 +72,11 @@ interface UseOperationalWork {
   items: OperationalWorkItem[];
   staff: OperationalStaffDirectoryRow[];
   assignments: OperationalAssignmentRow[];
+  postponements: OperationalPostponementRow[];
   dependencies: OperationalDependencyRow[];
   leadership: OperationalLeadershipRow[];
+  evidence: OperationalEvidenceRow[];
+  events: OperationalEventRow[];
   loading: boolean;
   error: string | null;
   today: string;
@@ -108,8 +112,11 @@ export function useOperationalWork(): UseOperationalWork {
   const [items, setItems] = useState<OperationalWorkItem[]>([]);
   const [staff, setStaff] = useState<OperationalStaffDirectoryRow[]>([]);
   const [assignments, setAssignments] = useState<OperationalAssignmentRow[]>([]);
+  const [postponements, setPostponements] = useState<OperationalPostponementRow[]>([]);
   const [dependencies, setDependencies] = useState<OperationalDependencyRow[]>([]);
   const [leadership, setLeadership] = useState<OperationalLeadershipRow[]>([]);
+  const [evidence, setEvidence] = useState<OperationalEvidenceRow[]>([]);
+  const [events, setEvents] = useState<OperationalEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -151,6 +158,7 @@ export function useOperationalWork(): UseOperationalWork {
           postponementRows,
           dependencyRows,
           leadershipRows,
+          evidenceRows,
           eventRows,
           staffRows,
         ] = await Promise.all([
@@ -226,6 +234,10 @@ export function useOperationalWork(): UseOperationalWork {
             orderBy: [{ column: "updated_at", ascending: false }, { column: "id" }],
             label: "operational-work.leadership",
           }),
+          directSelectAll<OperationalEvidenceRow>("operational_work_evidence", {
+            orderBy: [{ column: "created_at", ascending: false }, { column: "id" }],
+            label: "operational-work.evidence",
+          }),
           directSelectAll<OperationalEventRow>("operational_work_events", {
             orderBy: [{ column: "created_at", ascending: false }, { column: "id" }],
             label: "operational-work.events",
@@ -289,8 +301,11 @@ export function useOperationalWork(): UseOperationalWork {
         setItems(normalized);
         setStaff(staffRows);
         setAssignments(assignmentRows);
+        setPostponements(postponementRows);
         setDependencies(dependencyRows);
         setLeadership(leadershipRows);
+        setEvidence(evidenceRows);
+        setEvents(eventRows);
       } catch (caught) {
         if (!cancelled) {
           setError(caught instanceof Error ? caught.message : "Couldn't load operational work.");
@@ -315,8 +330,11 @@ export function useOperationalWork(): UseOperationalWork {
     items,
     staff,
     assignments,
+    postponements,
     dependencies,
     leadership,
+    evidence,
+    events,
     loading,
     error,
     today,
@@ -412,7 +430,7 @@ export function useOperationalWork(): UseOperationalWork {
       "operational-work.priority",
     ),
   }), [
-    items, staff, assignments, dependencies, leadership, loading, error,
+    items, staff, assignments, postponements, dependencies, leadership, evidence, events, loading, error,
     today, reload, mutate,
   ]);
 }

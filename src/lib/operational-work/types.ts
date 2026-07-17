@@ -238,6 +238,8 @@ export interface OperationalPostponementRow {
   blocking_work_key: string | null;
   actor_id: string;
   active: boolean;
+  ended_at: string | null;
+  ended_by: string | null;
   created_at: string;
 }
 
@@ -266,8 +268,21 @@ export interface OperationalLeadershipRow {
   status: string;
   response: string | null;
   outcome: string | null;
+  created_by: string;
+  updated_by: string;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface OperationalEvidenceRow {
+  id: string;
+  work_key: string;
+  evidence_type: string;
+  label: string;
+  reference: string;
+  added_by: string;
+  created_at: string;
 }
 
 export interface OperationalEventRow {

@@ -122,4 +122,18 @@ describe("explainable operational priority", () => {
     expect([...sections.values()].flat()).toHaveLength(rows.length);
     expect(new Set([...sections.values()].flat().map((row) => row.stableId)).size).toBe(rows.length);
   });
+
+  it("keeps overdue critical work in Overdue while due-today safety work is Critical Now", () => {
+    expect(primarySectionFor(item({
+      dueDate: "2026-07-15",
+      priorityBand: "critical",
+      safetyFlag: true,
+    }), today, null)).toBe("overdue");
+
+    expect(primarySectionFor(item({
+      dueDate: "2026-07-16",
+      priorityBand: "critical",
+      safetyFlag: true,
+    }), today, null)).toBe("critical_now");
+  });
 });

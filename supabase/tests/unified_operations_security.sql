@@ -30,7 +30,19 @@ INSERT INTO public.tasks (
   ('fb000000-0000-0000-0000-000000000001', 'Verified blocker task', 'safety', 'critical', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE, 20, 'Safety dependency', 'Manager verifies completion'),
   ('fb000000-0000-0000-0000-000000000002', 'Mechanic position task', 'mechanical', 'high', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 1, 45, 'Equipment availability', 'Repair documented'),
   ('fb000000-0000-0000-0000-000000000003', 'Dependent task', 'admin', 'normal', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 2, 15, 'Wait for verified blocker', 'Dependency clears automatically'),
-  ('fb000000-0000-0000-0000-000000000004', 'Leadership decision task', 'admin', 'high', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 3, 30, 'Needs recorded approval', 'Approved outcome recorded');
+  ('fb000000-0000-0000-0000-000000000004', 'Leadership decision task', 'admin', 'high', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 3, 30, 'Needs recorded approval', 'Approved outcome recorded'),
+  ('fb000000-0000-0000-0000-000000000005', 'Position safety task', 'admin', 'normal', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 4, 20, 'Position resolution must be honest', 'No employee is guessed'),
+  ('fb000000-0000-0000-0000-000000000006', 'Non-verification blocker', 'admin', 'normal', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 4, 20, 'Exercise immediate reactivation', 'Completion clears its dependency'),
+  ('fb000000-0000-0000-0000-000000000007', 'Multi-blocker dependent', 'admin', 'normal', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 5, 20, 'Remain blocked until every blocker clears', 'All blockers are resolved'),
+  ('fb000000-0000-0000-0000-000000000008', 'Unsupported leadership source guard', 'admin', 'normal', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 5, 20, 'Synthetic spare task', 'Lifecycle remains controlled'),
+  ('fb000000-0000-0000-0000-000000000009', 'Leadership approval task', 'admin', 'high', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 6, 30, 'Exercise approved completion', 'Approved outcome recorded');
+
+INSERT INTO public.calendar_events(
+  id, title, category, event_date, created_by
+) VALUES (
+  'fd000000-0000-0000-0000-000000000001', 'Unsupported leadership completion source',
+  'deadline', CURRENT_DATE + 7, 'fa000000-0000-0000-0000-000000000001'
+);
 
 INSERT INTO public.program_standard_sections(section, name, weight, sort_order)
 VALUES ('98', 'Local Operations Acceptance', 0, 98)
@@ -67,6 +79,7 @@ DO $$
 DECLARE
   v_named public.operational_work_assignments%ROWTYPE;
   v_position public.operational_work_assignments%ROWTYPE;
+  v_unfilled public.operational_work_assignments%ROWTYPE;
   v_blocked BOOLEAN := FALSE;
 BEGIN
   v_named := public.delegate_operational_work(
@@ -90,6 +103,31 @@ BEGIN
     RAISE EXCEPTION 'Position delegation did not resolve deterministically';
   END IF;
 
+  BEGIN
+    PERFORM public.delegate_operational_work(
+      'task:fb000000-0000-0000-0000-000000000005',
+      NULL, 'crew', 'Ambiguous position attempt', CURRENT_DATE + 2,
+      NULL, CURRENT_DATE + 3, FALSE, NULL
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'The selected position matches multiple active employees%' THEN
+      v_blocked := TRUE;
+    ELSE RAISE;
+    END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Ambiguous position silently selected an employee'; END IF;
+
+  v_unfilled := public.delegate_operational_work(
+    'task:fb000000-0000-0000-0000-000000000005',
+    NULL, 'irrigation_specialist', 'Hold for the position', CURRENT_DATE + 2,
+    NULL, CURRENT_DATE + 3, FALSE, NULL
+  );
+  IF v_unfilled.position <> 'irrigation_specialist'
+     OR v_unfilled.resolved_employee_id IS NOT NULL THEN
+    RAISE EXCEPTION 'Unfilled position was not represented honestly';
+  END IF;
+
+  v_blocked := FALSE;
   BEGIN
     INSERT INTO public.operational_work_events(work_key, event_type, actor_id)
     VALUES ('task:fb000000-0000-0000-0000-000000000001', 'forged',
@@ -119,6 +157,47 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
   END;
   IF NOT v_blocked THEN RAISE EXCEPTION 'Unrelated employee changed a delegation'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.delegate_operational_work(
+      'task:fb000000-0000-0000-0000-000000000008',
+      'fa000000-0000-0000-0000-000000000002', NULL,
+      'Unauthorized delegation', CURRENT_DATE + 1, NULL, NULL, FALSE, NULL
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Unrelated employee delegated work'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.transition_operational_work(
+      'task:fb000000-0000-0000-0000-000000000001', 'verify', 'Unauthorized verification'
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Unrelated employee verified work'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.record_program_standard_progress(
+      'fc000000-0000-0000-0000-000000000001', 'complete',
+      'Unauthorized standard update', 30, 'high', CURRENT_DATE, NULL, NULL, NULL
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Unrelated employee modified a Program Standard'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.send_operational_work_to_leadership(
+      'task:fb000000-0000-0000-0000-000000000008', 'Club GM', NULL,
+      'Unauthorized handoff', 'Attempt escalation', CURRENT_DATE,
+      CURRENT_DATE + 2, CURRENT_DATE + 1, NULL
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Unrelated employee managed a leadership handoff'; END IF;
 END $$;
 RESET ROLE;
 
@@ -127,12 +206,26 @@ RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT SET_CONFIG('request.jwt.claim.sub', 'fa000000-0000-0000-0000-000000000002', TRUE);
 DO $$
-DECLARE v_assignment UUID; v_task_status TEXT; v_event_actor UUID;
+DECLARE v_assignment UUID; v_task_status TEXT; v_event_actor UUID; v_blocked BOOLEAN := FALSE;
 BEGIN
   SELECT id INTO v_assignment FROM public.operational_work_assignments
   WHERE work_key = 'task:fb000000-0000-0000-0000-000000000001';
   PERFORM public.transition_operational_assignment(v_assignment, 'accepted', 'Accepted locally');
   PERFORM public.transition_operational_assignment(v_assignment, 'in_progress', 'Work started');
+  BEGIN
+    PERFORM public.transition_operational_assignment(
+      v_assignment, 'submitted_for_verification', 'Attempted without evidence'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Required evidence must be attached before this delegation can be completed' THEN
+      v_blocked := TRUE;
+    ELSE RAISE;
+    END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Expected evidence did not gate completion'; END IF;
+  SELECT status INTO v_task_status FROM public.tasks
+  WHERE id = 'fb000000-0000-0000-0000-000000000001';
+  IF v_task_status <> 'pending' THEN RAISE EXCEPTION 'Failed evidence gate changed the source task'; END IF;
   PERFORM public.record_operational_work_evidence(
     'task:fb000000-0000-0000-0000-000000000001', 'note',
     'Completion evidence', 'Synthetic local evidence reference'
@@ -162,6 +255,7 @@ DECLARE
   v_blocked BOOLEAN := FALSE;
   v_state TEXT;
   v_active INTEGER;
+  v_reason TEXT;
 BEGIN
   BEGIN
     PERFORM public.postpone_operational_work(
@@ -189,12 +283,42 @@ BEGIN
   v_blocked := FALSE;
   BEGIN
     PERFORM public.add_operational_dependency(
+      'task:fb000000-0000-0000-0000-000000000003',
+      'task:fb000000-0000-0000-0000-000000000002'
+    );
+  EXCEPTION WHEN unique_violation THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Duplicate dependency was accepted'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.add_operational_dependency(
       'task:fb000000-0000-0000-0000-000000000002',
       'task:fb000000-0000-0000-0000-000000000003'
     );
   EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
   END;
   IF NOT v_blocked THEN RAISE EXCEPTION 'Circular dependency was accepted'; END IF;
+
+  PERFORM public.add_operational_dependency(
+    'task:fb000000-0000-0000-0000-000000000002',
+    'task:fb000000-0000-0000-0000-000000000005'
+  );
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.add_operational_dependency(
+      'task:fb000000-0000-0000-0000-000000000005',
+      'task:fb000000-0000-0000-0000-000000000003'
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Multi-level circular dependency was accepted'; END IF;
+  PERFORM public.remove_operational_dependency(
+    (SELECT id FROM public.operational_work_dependencies
+      WHERE blocker_work_key = 'task:fb000000-0000-0000-0000-000000000005'
+        AND dependent_work_key = 'task:fb000000-0000-0000-0000-000000000002' AND active),
+    'End multi-level cycle fixture'
+  );
   PERFORM public.remove_operational_dependency(
     (SELECT id FROM public.operational_work_dependencies
       WHERE blocker_work_key = 'task:fb000000-0000-0000-0000-000000000002'
@@ -210,6 +334,24 @@ BEGIN
   SELECT workflow_status INTO v_state FROM public.operational_work_states
   WHERE work_key = 'task:fb000000-0000-0000-0000-000000000003';
   IF v_state <> 'blocked' THEN RAISE EXCEPTION 'Dependent was not visibly blocked'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.transition_operational_work(
+      'task:fb000000-0000-0000-0000-000000000003', 'start', 'Bypass dependency'
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Dependent started while its blocker remained active'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.transition_operational_work(
+      'task:fb000000-0000-0000-0000-000000000003', 'complete', 'Bypass dependency'
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Dependent completed while its blocker remained active'; END IF;
 
   -- Completion alone is insufficient because verification was required.
   SELECT COUNT(*) INTO v_active FROM public.operational_work_dependencies
@@ -232,15 +374,86 @@ BEGIN
   WHERE work_key = 'task:fb000000-0000-0000-0000-000000000003'
     AND event_type = 'automatically_reactivated';
   IF v_active <> 1 THEN RAISE EXCEPTION 'Automatic reactivation was not visible in history'; END IF;
+
+  -- A non-verification blocker clears immediately, but a second active
+  -- blocker keeps the dependent blocked until it is explicitly resolved.
+  PERFORM public.add_operational_dependency(
+    'task:fb000000-0000-0000-0000-000000000007',
+    'task:fb000000-0000-0000-0000-000000000006'
+  );
+  PERFORM public.add_operational_dependency(
+    'task:fb000000-0000-0000-0000-000000000007',
+    'task:fb000000-0000-0000-0000-000000000002'
+  );
+  PERFORM public.transition_operational_work(
+    'task:fb000000-0000-0000-0000-000000000006', 'complete', 'Blocker complete'
+  );
+  SELECT COUNT(*) INTO v_active FROM public.operational_work_dependencies
+  WHERE dependent_work_key = 'task:fb000000-0000-0000-0000-000000000007' AND active;
+  IF v_active <> 1 THEN RAISE EXCEPTION 'Non-verification completion cleared unrelated blockers'; END IF;
+  SELECT workflow_status INTO v_state FROM public.operational_work_states
+  WHERE work_key = 'task:fb000000-0000-0000-0000-000000000007';
+  IF v_state <> 'blocked' THEN RAISE EXCEPTION 'Dependent reactivated with another blocker active'; END IF;
+  PERFORM public.remove_operational_dependency(
+    (SELECT id FROM public.operational_work_dependencies
+      WHERE blocker_work_key = 'task:fb000000-0000-0000-0000-000000000002'
+        AND dependent_work_key = 'task:fb000000-0000-0000-0000-000000000007' AND active),
+    'Second blocker cleared'
+  );
+  SELECT workflow_status INTO v_state FROM public.operational_work_states
+  WHERE work_key = 'task:fb000000-0000-0000-0000-000000000007';
+  IF v_state <> 'active' THEN RAISE EXCEPTION 'Dependent did not reactivate after its final blocker cleared'; END IF;
+
+  -- Exercise every non-dependency postponement reason. Repeated commands
+  -- close the prior active row and preserve the complete history.
+  FOREACH v_reason IN ARRAY ARRAY[
+    'waiting_on_leadership','waiting_on_employee','waiting_on_vendor',
+    'waiting_on_contractor','waiting_on_parts','waiting_on_funding',
+    'waiting_on_approval','waiting_on_weather','equipment_unavailable',
+    'staffing_unavailable','higher_priority_emergency',
+    'scheduled_operational_window','other'
+  ] LOOP
+    PERFORM public.postpone_operational_work(
+      'task:fb000000-0000-0000-0000-000000000003', v_reason,
+      'Synthetic accountability check for ' || v_reason,
+      NULL, CURRENT_DATE + 2, NULL
+    );
+  END LOOP;
+  SELECT COUNT(*) INTO v_active FROM public.operational_work_postponements
+  WHERE work_key = 'task:fb000000-0000-0000-0000-000000000003';
+  IF v_active <> 14 THEN RAISE EXCEPTION 'Not every supported postponement reason preserved history'; END IF;
+  SELECT COUNT(*) INTO v_active FROM public.operational_work_postponements
+  WHERE work_key = 'task:fb000000-0000-0000-0000-000000000003' AND active;
+  IF v_active <> 1 THEN RAISE EXCEPTION 'Repeated postponement left multiple active rows'; END IF;
+  IF (SELECT status FROM public.tasks WHERE id = 'fb000000-0000-0000-0000-000000000003') <> 'pending' THEN
+    RAISE EXCEPTION 'Postponement incorrectly completed the source';
+  END IF;
+  v_blocked := FALSE;
+  BEGIN
+    UPDATE public.operational_work_postponements SET explanation = 'Rewrite attempt'
+    WHERE id = (
+      SELECT id FROM public.operational_work_postponements
+      WHERE work_key = 'task:fb000000-0000-0000-0000-000000000003' AND NOT active
+      ORDER BY created_at LIMIT 1
+    );
+  EXCEPTION WHEN insufficient_privilege THEN v_blocked := TRUE;
+  WHEN OTHERS THEN
+    IF SQLERRM = 'Ended postponement history is immutable' THEN v_blocked := TRUE; ELSE RAISE; END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Ended postponement history was rewritten'; END IF;
 END $$;
 RESET ROLE;
 
--- Leadership handoff keeps the source open while waiting, then an approved
--- recorded outcome completes the source and projection in one transaction.
+-- Leadership handoffs keep sources open while waiting, exercise every active
+-- and terminal response, preserve terminal history, and only complete sources
+-- through supported audited lifecycles.
 SET LOCAL ROLE authenticated;
 SELECT SET_CONFIG('request.jwt.claim.sub', 'fa000000-0000-0000-0000-000000000001', TRUE);
 DO $$
-DECLARE v_handoff public.operational_work_leadership_handoffs%ROWTYPE; v_status TEXT;
+DECLARE
+  v_handoff public.operational_work_leadership_handoffs%ROWTYPE;
+  v_status TEXT;
+  v_blocked BOOLEAN := FALSE;
 BEGIN
   v_handoff := public.send_operational_work_to_leadership(
     'task:fb000000-0000-0000-0000-000000000004', 'Club GM', NULL,
@@ -251,14 +464,108 @@ BEGIN
   WHERE id = 'fb000000-0000-0000-0000-000000000004';
   IF v_status <> 'pending' THEN RAISE EXCEPTION 'Leadership send prematurely completed source'; END IF;
   PERFORM public.resolve_operational_leadership_handoff(
-    v_handoff.id, 'approved', 'Approved', 'Leadership approved the action', 'complete'
+    v_handoff.id, 'awaiting_response', 'Submission acknowledged', NULL, 'reactivate'
+  );
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'additional_information_requested',
+    'Leadership requested more detail', NULL, 'reactivate'
+  );
+  SELECT workflow_status INTO v_status FROM public.operational_work_states
+  WHERE work_key = 'task:fb000000-0000-0000-0000-000000000004';
+  IF v_status <> 'waiting_leadership' THEN
+    RAISE EXCEPTION 'Active leadership response incorrectly reactivated the source';
+  END IF;
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.transition_operational_work(
+      'task:fb000000-0000-0000-0000-000000000004', 'complete',
+      'Attempt local completion while leadership is active'
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Locally completed work while leadership remained active'; END IF;
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.resolve_operational_leadership_handoff(
+      v_handoff.id, 'denied', 'Denied', 'Not approved', 'complete'
+    );
+  EXCEPTION WHEN OTHERS THEN v_blocked := TRUE;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Denied leadership outcome completed the source'; END IF;
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'denied', 'Denied', 'Not approved', 'reactivate'
+  );
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.resolve_operational_leadership_handoff(
+      v_handoff.id, 'approved', 'Rewrite attempt', 'Changed outcome', 'reactivate'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Completed leadership handoff history is immutable' THEN v_blocked := TRUE; ELSE RAISE; END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Terminal leadership history was rewritten'; END IF;
+
+  v_handoff := public.send_operational_work_to_leadership(
+    'task:fb000000-0000-0000-0000-000000000004', NULL, 'Executive team',
+    'Deferral workflow', 'Choose a later operational window', CURRENT_DATE,
+    CURRENT_DATE + 3, CURRENT_DATE + 1, 'LOCAL-DECISION-2'
+  );
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'deferred', 'Deferred', 'Review next cycle', 'next_action'
+  );
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'returned_to_local_management', 'Returned', 'Manager to revise', 'next_action'
+  );
+
+  v_handoff := public.send_operational_work_to_leadership(
+    'task:fb000000-0000-0000-0000-000000000004', 'Club GM', NULL,
+    'Leadership action workflow', 'Complete the leadership-owned action', CURRENT_DATE,
+    CURRENT_DATE + 2, CURRENT_DATE + 1, 'LOCAL-DECISION-3'
+  );
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'leadership_completing_action',
+    'Leadership is completing the action', NULL, 'next_action'
+  );
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'completed', 'Leadership completed it',
+    'Leadership fully satisfied the task', 'complete'
   );
   SELECT status INTO v_status FROM public.tasks
   WHERE id = 'fb000000-0000-0000-0000-000000000004';
-  IF v_status <> 'completed' THEN RAISE EXCEPTION 'Approved leadership outcome did not complete source'; END IF;
+  IF v_status <> 'completed' THEN RAISE EXCEPTION 'Completed leadership outcome did not complete source'; END IF;
   SELECT workflow_status INTO v_status FROM public.operational_work_states
   WHERE work_key = 'task:fb000000-0000-0000-0000-000000000004';
-  IF v_status <> 'completed' THEN RAISE EXCEPTION 'Approved leadership outcome did not complete projection'; END IF;
+  IF v_status <> 'completed' THEN RAISE EXCEPTION 'Completed leadership outcome did not complete projection'; END IF;
+
+  v_handoff := public.send_operational_work_to_leadership(
+    'task:fb000000-0000-0000-0000-000000000009', 'Club GM', NULL,
+    'Approval workflow', 'Approve this separate task', CURRENT_DATE,
+    CURRENT_DATE + 2, CURRENT_DATE + 1, 'LOCAL-DECISION-4'
+  );
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'approved', 'Approved', 'Leadership approved the action', 'complete'
+  );
+  IF (SELECT status FROM public.tasks WHERE id = 'fb000000-0000-0000-0000-000000000009') <> 'completed' THEN
+    RAISE EXCEPTION 'Approved leadership outcome did not complete its supported source';
+  END IF;
+
+  v_handoff := public.send_operational_work_to_leadership(
+    'calendar:fd000000-0000-0000-0000-000000000001', 'Club GM', NULL,
+    'Unsupported completion guard', 'Attempt unsupported completion', CURRENT_DATE,
+    CURRENT_DATE + 2, CURRENT_DATE + 1, 'LOCAL-DECISION-5'
+  );
+  v_blocked := FALSE;
+  BEGIN
+    PERFORM public.resolve_operational_leadership_handoff(
+      v_handoff.id, 'completed', 'Completed', 'Unsupported source outcome', 'complete'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'This source type cannot be completed by a leadership outcome' THEN v_blocked := TRUE; ELSE RAISE; END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Unsupported source was completed by leadership'; END IF;
+  PERFORM public.resolve_operational_leadership_handoff(
+    v_handoff.id, 'closed_without_action', 'Closed', 'No source change', 'reactivate'
+  );
 END $$;
 RESET ROLE;
 
@@ -343,6 +650,39 @@ BEGIN
     IF SQLERRM = 'operational_work_events is append-only history' THEN v_blocked := TRUE; ELSE RAISE; END IF;
   END;
   IF NOT v_blocked THEN RAISE EXCEPTION 'Append-only operational history was deleted'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    UPDATE public.operational_work_evidence SET label = 'Tampered evidence'
+    WHERE work_key = 'task:fb000000-0000-0000-0000-000000000001';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'operational_work_evidence is append-only history' THEN v_blocked := TRUE; ELSE RAISE; END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Append-only evidence history was rewritten'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    UPDATE public.operational_work_dependencies SET resolution_reason = 'Tampered resolution'
+    WHERE id = (
+      SELECT id FROM public.operational_work_dependencies WHERE NOT active ORDER BY created_at LIMIT 1
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Resolved dependency history is immutable' THEN v_blocked := TRUE; ELSE RAISE; END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Resolved dependency history was rewritten'; END IF;
+
+  v_blocked := FALSE;
+  BEGIN
+    UPDATE public.operational_work_leadership_handoffs SET outcome = 'Tampered outcome'
+    WHERE id = (
+      SELECT id FROM public.operational_work_leadership_handoffs
+      WHERE status IN ('approved','denied','returned_to_local_management','completed','closed_without_action')
+      ORDER BY created_at LIMIT 1
+    );
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM = 'Completed leadership handoff history is immutable' THEN v_blocked := TRUE; ELSE RAISE; END IF;
+  END;
+  IF NOT v_blocked THEN RAISE EXCEPTION 'Terminal leadership history was rewritten directly'; END IF;
 END $$;
 
 ROLLBACK;

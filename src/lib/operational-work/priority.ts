@@ -169,8 +169,8 @@ export function primarySectionFor(
   const criticalSignal = item.safetyFlag || item.complianceFlag
     || item.payrollDeadlineFlag || item.financialDeadlineFlag
     || item.priorityBand === "critical";
-  if (criticalSignal && (dueDays === null || dueDays <= 1)) return "critical_now";
   if (dueDays !== null && dueDays < 0) return "overdue";
+  if (criticalSignal && (dueDays === null || dueDays <= 1)) return "critical_now";
   if (dueDays === 0) return "due_today";
   if (dueDays !== null && dueDays <= 7) return "due_soon";
   if (item.estimatedMinutes !== null && item.estimatedMinutes <= 30) return "quick_wins";

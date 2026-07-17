@@ -196,6 +196,11 @@ function OperationsCommandCenter() {
                       item={item}
                       itemById={itemById}
                       assignment={assignmentByWork.get(item.stableId) ?? null}
+                      assignmentHistory={operations.assignments.filter((row) => row.work_key === item.stableId)}
+                      postponementHistory={operations.postponements.filter((row) => row.work_key === item.stableId)}
+                      leadershipHistory={operations.leadership.filter((row) => row.work_key === item.stableId)}
+                      evidence={operations.evidence.filter((row) => row.work_key === item.stableId)}
+                      events={operations.events.filter((row) => row.work_key === item.stableId)}
                       blockers={operations.dependencies.filter((dependency) => dependency.active && dependency.dependent_work_key === item.stableId)}
                       dependents={operations.dependencies.filter((dependency) => dependency.active && dependency.blocker_work_key === item.stableId)}
                       currentUserId={user?.id ?? null}

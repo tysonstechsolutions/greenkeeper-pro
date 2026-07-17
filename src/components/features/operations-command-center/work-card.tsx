@@ -21,14 +21,24 @@ import { cn } from "@/lib/utils";
 import type {
   OperationalAssignmentRow,
   OperationalDependencyRow,
+  OperationalEvidenceRow,
+  OperationalEventRow,
+  OperationalLeadershipRow,
+  OperationalPostponementRow,
   OperationalWorkItem,
 } from "@/lib/operational-work/types";
+import { POSTPONEMENT_LABELS } from "@/lib/operational-work/types";
 import type { WorkActionDialogMode } from "./work-action-dialog";
 
 interface Props {
   item: OperationalWorkItem;
   itemById: Map<string, OperationalWorkItem>;
   assignment: OperationalAssignmentRow | null;
+  assignmentHistory: OperationalAssignmentRow[];
+  postponementHistory: OperationalPostponementRow[];
+  leadershipHistory: OperationalLeadershipRow[];
+  evidence: OperationalEvidenceRow[];
+  events: OperationalEventRow[];
   blockers: OperationalDependencyRow[];
   dependents: OperationalDependencyRow[];
   currentUserId: string | null;
@@ -65,6 +75,11 @@ export function WorkCard({
   item,
   itemById,
   assignment,
+  assignmentHistory,
+  postponementHistory,
+  leadershipHistory,
+  evidence,
+  events,
   blockers,
   dependents,
   currentUserId,
@@ -77,9 +92,17 @@ export function WorkCard({
 }: Props) {
   const finished = ["completed", "verified", "cancelled"].includes(item.status);
   const assignedToMe = item.responsibleEmployee?.id === currentUserId;
-  const mayExecute = isManager || assignedToMe || !item.responsibleEmployee;
+  const mayExecute = isManager || assignedToMe;
+  const hasActiveDependency = blockers.length > 0;
   const acceptsDelegation = assignment?.status === "awaiting_acceptance" && assignedToMe;
-  const canComplete = COMPLETE_SOURCES.has(item.sourceType) && mayExecute && !finished;
+  const canComplete = COMPLETE_SOURCES.has(item.sourceType)
+    && mayExecute
+    && !finished
+    && !hasActiveDependency
+    && !item.leadershipState.active
+    && item.status !== "needs_verification";
+  const auditCount = assignmentHistory.length + postponementHistory.length
+    + leadershipHistory.length + evidence.length + events.length;
 
   async function complete() {
     if (assignment) {
@@ -126,8 +149,26 @@ export function WorkCard({
         {item.department && <span>{item.department.replaceAll("_", " ")}</span>}
         {item.responsibleEmployee && <span>Owner: {item.responsibleEmployee.name}</span>}
         {item.responsiblePosition && <span>Position: {item.responsiblePosition.replaceAll("_", " ")}</span>}
+        {item.responsiblePosition && !item.responsibleEmployee && <span>Owner: Unfilled position</span>}
         {item.reviewDate && <span>Review {item.reviewDate}</span>}
       </div>
+
+      {item.waitingReason && (
+        <p className="mt-2 text-xs font-medium text-violet-700 dark:text-violet-300">
+          {POSTPONEMENT_LABELS[item.waitingReason]}
+          {item.blockedState.reason ? ` — ${item.blockedState.reason}` : ""}
+        </p>
+      )}
+
+      {assignment && (assignment.instructions || assignment.expected_evidence || assignment.follow_up_date || assignment.notes) && (
+        <div className="mt-2 rounded-lg border border-border/70 p-2 text-xs">
+          <p className="font-semibold">Assigned work details</p>
+          {assignment.instructions && <p className="mt-1"><span className="text-muted-foreground">Instructions:</span> {assignment.instructions}</p>}
+          {assignment.expected_evidence && <p className="mt-1"><span className="text-muted-foreground">Expected evidence:</span> {assignment.expected_evidence}</p>}
+          {assignment.follow_up_date && <p className="mt-1"><span className="text-muted-foreground">Follow-up:</span> {assignment.follow_up_date}</p>}
+          {assignment.notes && <p className="mt-1"><span className="text-muted-foreground">Notes:</span> {assignment.notes}</p>}
+        </div>
+      )}
 
       <div className="mt-2 rounded-lg bg-muted/40 px-3 py-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Why this is ranked here</p>
@@ -154,11 +195,34 @@ export function WorkCard({
 
       {item.activitySummary && <p className="mt-2 text-xs text-muted-foreground">Latest activity: {item.activitySummary}</p>}
 
+      {auditCount > 0 && (
+        <details className="mt-2 rounded-lg border border-border/70 p-2 text-xs">
+          <summary className="cursor-pointer font-semibold">Audit history · {auditCount} record{auditCount === 1 ? "" : "s"}</summary>
+          <div className="mt-2 space-y-2">
+            {assignmentHistory.map((row) => (
+              <p key={`assignment-${row.id}`}><span className="font-medium">Delegation · {row.status.replaceAll("_", " ")}</span>{row.position ? ` · ${row.position}` : " · named employee"} · {row.created_at.slice(0, 10)}</p>
+            ))}
+            {postponementHistory.map((row) => (
+              <p key={`postponement-${row.id}`}><span className="font-medium">{POSTPONEMENT_LABELS[row.reason]} · {row.active ? "active" : "ended"}</span> · {row.explanation} · {row.created_at.slice(0, 10)}</p>
+            ))}
+            {leadershipHistory.map((row) => (
+              <p key={`leadership-${row.id}`}><span className="font-medium">Leadership · {row.status.replaceAll("_", " ")}</span> · {row.recipient || row.leadership_group}{row.outcome || row.response ? ` · ${row.outcome || row.response}` : ""} · {row.created_at.slice(0, 10)}</p>
+            ))}
+            {evidence.map((row) => (
+              <p key={`evidence-${row.id}`}><span className="font-medium">Evidence · {row.label}</span> · {row.evidence_type.replaceAll("_", " ")} · {row.reference} · {row.created_at.slice(0, 10)}</p>
+            ))}
+            {events.map((row) => (
+              <p key={`event-${row.id}`}><span className="font-medium">{row.event_type.replaceAll("_", " ")}</span>{row.detail ? ` · ${row.detail}` : ""} · {row.created_at.slice(0, 10)}</p>
+            ))}
+          </div>
+        </details>
+      )}
+
       <div className="mt-3 flex flex-wrap gap-1.5" aria-label={`Actions for ${item.title}`}>
         <Button asChild size="xs" variant="outline"><Link href={item.destinationRoute}><ArrowUpRight />Open</Link></Button>
 
         {acceptsDelegation && <Button size="xs" disabled={busy} onClick={() => onAssignment(assignment.id, "accepted")}><Check />Accept</Button>}
-        {!finished && mayExecute && ["pending", "blocked", "awaiting_acceptance"].includes(item.status) && (
+        {!finished && mayExecute && !hasActiveDependency && ["pending", "blocked", "awaiting_acceptance"].includes(item.status) && (
           <Button size="xs" disabled={busy} onClick={() => assignment ? onAssignment(assignment.id, "in_progress") : onTransition(item, "start")}><CirclePlay />Start</Button>
         )}
         {assignedToMe && assignment && ["accepted", "in_progress"].includes(assignment.status) && <Button size="xs" variant="outline" disabled={busy} onClick={() => onAction("clarification", item)}><MessageCircleQuestion />Needs clarification</Button>}
@@ -169,7 +233,7 @@ export function WorkCard({
         {isManager && !finished && !item.leadershipState.active && <Button size="xs" variant="outline" onClick={() => onAction("leadership", item)}><Send />Send to leadership</Button>}
         {isManager && item.leadershipState.active && <Button size="xs" variant="outline" onClick={() => onAction("leadership_response", item)}><Send />Record response</Button>}
         {!finished && mayExecute && <Button size="xs" variant="outline" onClick={() => onAction("evidence", item)}><FileCheck2 />Upload evidence</Button>}
-        {!finished && mayExecute && item.verificationState === "required" && <Button size="xs" variant="outline" disabled={busy} onClick={() => assignment ? onAssignment(assignment.id, "submitted_for_verification") : onTransition(item, "submit_verification")}><ShieldCheck />Submit for verification</Button>}
+        {!finished && mayExecute && !hasActiveDependency && !item.leadershipState.active && item.verificationState === "required" && <Button size="xs" variant="outline" disabled={busy} onClick={() => assignment ? onAssignment(assignment.id, "submitted_for_verification") : onTransition(item, "submit_verification")}><ShieldCheck />Submit for verification</Button>}
         {canComplete && <Button size="xs" disabled={busy} onClick={complete}><Check />{item.verificationState === "required" ? "Complete & submit" : "Complete"}</Button>}
         {isManager && item.status === "needs_verification" && item.sourceType !== "standard" && <Button size="xs" disabled={busy} onClick={() => onTransition(item, "verify")}><ShieldCheck />Verify</Button>}
         {isManager && <Button size="xs" variant="ghost" onClick={() => onAction("priority", item)}><Clock3 />Priority</Button>}

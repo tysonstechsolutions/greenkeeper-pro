@@ -603,6 +603,23 @@ function applyOverlay(
 
   const followUpDate = leadership?.follow_up_date ?? null;
   const todayYmd = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  const postponementAttentionDate = postponement?.review_date || postponement?.resume_date || null;
+  const postponementAttentionDue = !!postponementAttentionDate
+    && postponementAttentionDate <= todayYmd
+    && postponement?.reason !== "waiting_on_another_task"
+    && blockers.length === 0
+    && !leadership;
+  if (postponementAttentionDue && !sourceIsFinished) {
+    // Accountability dates return the source to the active queue without
+    // rewriting the append-only postponement record. A manager or owner can
+    // then resume it or record a new postponement explicitly.
+    status = assignment?.status === "awaiting_acceptance"
+      ? "awaiting_acceptance"
+      : assignment && ["accepted", "in_progress", "needs_clarification"].includes(assignment.status)
+        ? "in_progress"
+        : item.status;
+  }
+  const operationalDueDate = assignment?.due_date || item.dueDate;
   const delegationStatus = assignment
     && assignment.due_date < todayYmd
     && !["completed", "reassigned", "submitted_for_verification"].includes(assignment.status)
@@ -614,7 +631,10 @@ function applyOverlay(
     responsiblePosition: assignment?.position || state?.responsible_position || item.responsiblePosition,
     accountableManager: person(managerId, indexes.staff),
     status,
-    dueDate: assignment?.due_date || item.dueDate,
+    dueDate: postponementAttentionDue
+      && (!operationalDueDate || postponementAttentionDate! < operationalDueDate)
+      ? postponementAttentionDate
+      : operationalDueDate,
     blockedState: {
       blocked: blockers.length > 0 || status === "blocked" || item.blockedState.blocked,
       blockerKeys: blockers,
@@ -636,9 +656,11 @@ function applyOverlay(
     payrollDeadlineFlag: state?.payroll_deadline_flag || item.payrollDeadlineFlag,
     financialDeadlineFlag: state?.financial_deadline_flag || item.financialDeadlineFlag,
     dependentCount: indexes.dependentCounts.get(item.stableId) ?? 0,
-    waitingReason: postponement?.reason ?? item.waitingReason,
+    waitingReason: postponementAttentionDue ? null : postponement?.reason ?? item.waitingReason,
     reviewDate: postponement?.review_date || postponement?.resume_date || item.reviewDate,
-    activitySummary: lastEvent?.detail || lastEvent?.event_type.replaceAll("_", " ") || null,
+    activitySummary: postponementAttentionDue
+      ? `Postponement review due${postponement?.explanation ? `: ${postponement.explanation}` : "."}`
+      : lastEvent?.detail || lastEvent?.event_type.replaceAll("_", " ") || null,
   };
   const ranked = scoreOperationalPriority({
     dueDate: overlaid.dueDate,

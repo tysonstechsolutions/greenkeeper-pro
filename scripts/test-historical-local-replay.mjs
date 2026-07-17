@@ -433,6 +433,14 @@ async function main() {
   if (scenario === "all" || scenario === "partial") {
     await runPartialSchemaScenario();
   }
+
+  // The refusal scenario intentionally leaves its disposable stack at the
+  // incompatible pre-bootstrap schema. Restore a fully migrated local stack
+  // after the complete matrix so the documented follow-on security and lint
+  // commands exercise the final schema rather than that refusal fixture.
+  if (scenario === "all") {
+    await runEmptyReplay("final");
+  }
 }
 
 await main();

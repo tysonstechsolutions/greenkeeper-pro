@@ -368,6 +368,10 @@ BEGIN
     IF OLD.status IN ('completed','reassigned') THEN
       RAISE EXCEPTION 'Completed assignment history is immutable';
     END IF;
+  ELSIF TG_TABLE_NAME = 'operational_work_leadership_handoffs' THEN
+    IF OLD.status IN ('approved','denied','returned_to_local_management','completed','closed_without_action') THEN
+      RAISE EXCEPTION 'Completed leadership handoff history is immutable';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -387,6 +391,9 @@ CREATE TRIGGER trg_operational_postponements_protected
   FOR EACH ROW EXECUTE FUNCTION public.protect_operational_work_history();
 CREATE TRIGGER trg_operational_assignments_protected
   BEFORE UPDATE OR DELETE ON public.operational_work_assignments
+  FOR EACH ROW EXECUTE FUNCTION public.protect_operational_work_history();
+CREATE TRIGGER trg_operational_leadership_protected
+  BEFORE UPDATE OR DELETE ON public.operational_work_leadership_handoffs
   FOR EACH ROW EXECUTE FUNCTION public.protect_operational_work_history();
 
 -- ---------------------------------------------------------------------------
@@ -408,6 +415,7 @@ RETURNS public.operational_work_assignments AS $$
 DECLARE
   v_actor UUID := (SELECT auth.uid());
   v_resolved UUID;
+  v_position_matches INTEGER := 0;
   v_assignment public.operational_work_assignments%ROWTYPE;
   v_kind TEXT := SPLIT_PART(p_work_key, ':', 1);
   v_source_id UUID;
@@ -425,17 +433,21 @@ BEGIN
   IF p_due_date IS NULL THEN RAISE EXCEPTION 'A delegation due date is required'; END IF;
 
   IF p_employee_id IS NOT NULL THEN
-    SELECT id INTO v_resolved FROM public.profiles
+    SELECT id INTO v_resolved FROM public.staff_directory
     WHERE id = p_employee_id AND is_active;
     IF v_resolved IS NULL THEN RAISE EXCEPTION 'The selected employee is not active'; END IF;
   ELSE
-    SELECT id INTO v_resolved
-    FROM public.profiles
+    SELECT COUNT(*), (ARRAY_AGG(id ORDER BY full_name, id))[1]
+    INTO v_position_matches, v_resolved
+    FROM public.staff_directory
     WHERE is_active
       AND (LOWER(role::TEXT) = LOWER(BTRIM(p_position))
-        OR LOWER(COALESCE(role_group::TEXT, '')) = LOWER(BTRIM(p_position)))
-    ORDER BY full_name, id
-    LIMIT 1;
+        OR LOWER(COALESCE(role_group::TEXT, '')) = LOWER(BTRIM(p_position)));
+    IF v_position_matches > 1 THEN
+      RAISE EXCEPTION 'The selected position matches multiple active employees; delegate to a named employee instead';
+    END IF;
+    -- An unfilled position intentionally keeps the requested position while
+    -- leaving the resolved employee empty. Never guess a person.
   END IF;
 
   UPDATE public.operational_work_assignments
@@ -527,6 +539,28 @@ BEGIN
   ) THEN RAISE EXCEPTION 'Unsupported delegation status'; END IF;
   IF NOT public.can_manage_daily_operations() AND p_status IN ('reassigned','overdue') THEN
     RAISE EXCEPTION 'Only an operations manager may reassign or mark delegated work overdue';
+  END IF;
+  IF p_status IN ('in_progress','submitted_for_verification','completed')
+     AND EXISTS (
+       SELECT 1 FROM public.operational_work_dependencies d
+       WHERE d.dependent_work_key = v_assignment.work_key AND d.active
+     ) THEN
+    RAISE EXCEPTION 'Active dependencies must be resolved before this delegation can progress';
+  END IF;
+  IF p_status IN ('in_progress','submitted_for_verification','completed')
+     AND EXISTS (
+       SELECT 1 FROM public.operational_work_leadership_handoffs h
+       WHERE h.work_key = v_assignment.work_key AND h.completed_at IS NULL
+     ) THEN
+    RAISE EXCEPTION 'The active leadership handoff must be resolved before this delegation can progress';
+  END IF;
+  IF p_status IN ('submitted_for_verification','completed')
+     AND NULLIF(BTRIM(v_assignment.expected_evidence), '') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM public.operational_work_evidence e
+       WHERE e.work_key = v_assignment.work_key
+     ) THEN
+    RAISE EXCEPTION 'Required evidence must be attached before this delegation can be completed';
   END IF;
 
   UPDATE public.operational_work_assignments
@@ -863,15 +897,25 @@ BEGIN
     RAISE EXCEPTION 'Leadership work may complete the source only with an approved/completed outcome';
   END IF;
 
+  SELECT * INTO v_row
+  FROM public.operational_work_leadership_handoffs
+  WHERE id = p_handoff_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Leadership handoff was not found'; END IF;
+  IF v_row.status IN ('approved','denied','returned_to_local_management','completed','closed_without_action') THEN
+    RAISE EXCEPTION 'Completed leadership handoff history is immutable';
+  END IF;
+
   UPDATE public.operational_work_leadership_handoffs
   SET status = p_status,
       response = NULLIF(BTRIM(p_response), ''),
       outcome = NULLIF(BTRIM(p_outcome), ''),
       updated_by = v_actor,
-      completed_at = CASE WHEN p_status IN ('completed','closed_without_action') THEN NOW() ELSE NULL END
+      completed_at = CASE WHEN p_status IN (
+        'approved','denied','returned_to_local_management','completed','closed_without_action'
+      ) THEN NOW() ELSE NULL END
   WHERE id = p_handoff_id
   RETURNING * INTO v_row;
-  IF v_row.id IS NULL THEN RAISE EXCEPTION 'Leadership handoff was not found'; END IF;
 
   -- A leadership outcome may close the originating record only through its
   -- strongest audited lifecycle. Unsupported source kinds remain open rather
@@ -896,9 +940,13 @@ BEGIN
     END IF;
   END IF;
 
-  v_workflow := CASE p_next_action
-    WHEN 'verification' THEN 'needs_verification'
-    WHEN 'complete' THEN 'completed'
+  v_workflow := CASE
+    WHEN p_status IN (
+      'preparing_submission','sent_to_leadership','awaiting_response',
+      'additional_information_requested','deferred','leadership_completing_action'
+    ) THEN 'waiting_leadership'
+    WHEN p_next_action = 'verification' THEN 'needs_verification'
+    WHEN p_next_action = 'complete' THEN 'completed'
     ELSE 'active'
   END;
   UPDATE public.operational_work_states
@@ -1180,6 +1228,20 @@ BEGIN
   END IF;
   IF p_action = 'verify' AND NOT public.can_manage_daily_operations() THEN
     RAISE EXCEPTION 'Only an active operations manager may verify work';
+  END IF;
+  IF p_action IN ('start','submit_verification','complete','verify')
+     AND EXISTS (
+       SELECT 1 FROM public.operational_work_dependencies d
+       WHERE d.dependent_work_key = p_work_key AND d.active
+     ) THEN
+    RAISE EXCEPTION 'Active dependencies must be resolved before this work can progress';
+  END IF;
+  IF p_action IN ('start','submit_verification','complete','verify')
+     AND EXISTS (
+       SELECT 1 FROM public.operational_work_leadership_handoffs h
+       WHERE h.work_key = p_work_key AND h.completed_at IS NULL
+     ) THEN
+    RAISE EXCEPTION 'The active leadership handoff must be resolved before this work can progress';
   END IF;
   v_id := SPLIT_PART(p_work_key, ':', 2)::UUID;
 

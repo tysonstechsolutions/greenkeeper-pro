@@ -16,6 +16,14 @@ describe("Operations Command Center route consolidation", () => {
     expect(read("src/lib/layout/app-catalog.ts")).toContain('href: "/operations", label: "Operations"');
   });
 
+  it("keeps record-specific source deep links live", () => {
+    const calendar = read("src/app/calendar/page.tsx");
+    const deepLinks = read("src/lib/operational-work/deep-links.ts");
+    expect(calendar).toContain('searchParams.get("event")');
+    expect(calendar).toContain('candidate.source === "calendar_event"');
+    expect(deepLinks).toContain('`/operations?focus=${encodeURIComponent(stableId)}`');
+  });
+
   it("exposes required filters, sections, and visible actions", () => {
     const page = read("src/app/operations/page.tsx");
     const card = read("src/components/features/operations-command-center/work-card.tsx");
@@ -29,6 +37,7 @@ describe("Operations Command Center route consolidation", () => {
 });
 describe("unified operations migration security", () => {
   const migration = read("supabase/migrations/20260716190000_unified_operations_command_center.sql");
+  const historicalReplay = read("scripts/test-historical-local-replay.mjs");
 
   it("enables RLS, removes direct writers, and denies anonymous grants", () => {
     for (const table of ["operational_work_states", "operational_work_assignments", "operational_work_postponements", "operational_work_dependencies", "operational_work_leadership_handoffs", "operational_work_evidence", "operational_work_events"]) {
@@ -56,5 +65,16 @@ describe("unified operations migration security", () => {
     expect(migration).toContain("A resume date or review date is required");
     expect(migration).toContain("A leadership follow-up date is required");
     expect(migration).toContain("Program Standard completion must use the audited progress workflow");
+    expect(migration).toContain("Completed leadership handoff history is immutable");
+    expect(migration).toContain("Required evidence must be attached before this delegation can be completed");
+    expect(migration).toContain("The selected position matches multiple active employees");
+    expect(migration).toContain("FROM public.staff_directory");
+  });
+
+  it("restores the final migrated fixture after testing incompatible replay refusal", () => {
+    const refusal = historicalReplay.lastIndexOf("await runPartialSchemaScenario()");
+    const finalReplay = historicalReplay.lastIndexOf('await runEmptyReplay("final")');
+    expect(refusal).toBeGreaterThan(-1);
+    expect(finalReplay).toBeGreaterThan(refusal);
   });
 });

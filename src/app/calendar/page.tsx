@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   format,
   parseISO,
@@ -81,6 +82,15 @@ const EMPTY_FORM = {
 };
 
 export default function CalendarPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading calendar…</div>}>
+      <CalendarContent />
+    </Suspense>
+  );
+}
+
+function CalendarContent() {
+  const searchParams = useSearchParams();
   const cal = useCalendar();
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [dayOpen, setDayOpen] = useState<string | null>(null);
@@ -91,6 +101,8 @@ export default function CalendarPage() {
   const [f, setF] = useState({ ...EMPTY_FORM });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [focusError, setFocusError] = useState<string | null>(null);
+  const focusedEventId = searchParams.get("event");
 
   const set = (k: keyof typeof EMPTY_FORM, v: string | boolean) => setF((p) => ({ ...p, [k]: v }));
 
@@ -112,6 +124,21 @@ export default function CalendarPage() {
     () => Object.entries(cal.people).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
     [cal.people],
   );
+
+  useEffect(() => {
+    if (!focusedEventId || cal.loading) return;
+    const focused = cal.items.find(
+      (candidate) => candidate.source === "calendar_event" && candidate.sourceId === focusedEventId,
+    );
+    if (!focused) {
+      setFocusError("This calendar event is unavailable or you do not have permission to view it.");
+      return;
+    }
+    setFocusError(null);
+    setMonth(startOfMonth(parseISO(focused.date)));
+    setItem(focused);
+    setMoveDate(focused.date);
+  }, [focusedEventId, cal.items, cal.loading]);
 
   function openAdd(date?: string) {
     setF({ ...EMPTY_FORM, date: date || "" });
@@ -213,6 +240,9 @@ export default function CalendarPage() {
 
       {cal.error && (
         <div className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{cal.error}</div>
+      )}
+      {focusError && (
+        <div role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">{focusError}</div>
       )}
 
       {/* Legend */}

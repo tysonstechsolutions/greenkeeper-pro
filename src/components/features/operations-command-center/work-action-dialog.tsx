@@ -108,6 +108,7 @@ export function WorkActionDialog(props: Props) {
   const [blockerKey, setBlockerKey] = useState("");
   const [recipient, setRecipient] = useState("");
   const [leadershipGroup, setLeadershipGroup] = useState("");
+  const [dateSent, setDateSent] = useState(addDays(0));
   const [request, setRequest] = useState("");
   const [relatedReference, setRelatedReference] = useState("");
   const [responseStatus, setResponseStatus] = useState("returned_to_local_management");
@@ -143,6 +144,7 @@ export function WorkActionDialog(props: Props) {
     setBlockerKey("");
     setRecipient("");
     setLeadershipGroup("");
+    setDateSent(addDays(0));
     setRequest("");
     setRelatedReference("");
     setResponseStatus("returned_to_local_management");
@@ -198,13 +200,14 @@ export function WorkActionDialog(props: Props) {
       } else if (mode === "leadership") {
         if (!recipient.trim() && !leadershipGroup.trim()) throw new Error("Enter a recipient or leadership group.");
         if (!explanation.trim() || !request.trim()) throw new Error("A reason and requested decision are required.");
+        if (!dateSent) throw new Error("A sent date is required.");
         if (!followUpDate) throw new Error("A follow-up date is required.");
         await props.onLeadership(item.stableId, {
           recipient,
           leadershipGroup,
           reason: explanation,
           request,
-          dateSent: addDays(0),
+          dateSent,
           requestedResponseDate: dueDate || null,
           followUpDate,
           relatedReference,
@@ -317,7 +320,8 @@ export function WorkActionDialog(props: Props) {
             </div>
             <Field label="Reason"><Textarea value={explanation} onChange={(event) => setExplanation(event.target.value)} /></Field>
             <Field label="Request or decision needed"><Textarea value={request} onChange={(event) => setRequest(event.target.value)} /></Field>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Sent date"><Input type="date" value={dateSent} onChange={(event) => setDateSent(event.target.value)} /></Field>
               <Field label="Requested response"><Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></Field>
               <Field label="Follow-up date"><Input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} /></Field>
             </div>
@@ -328,6 +332,7 @@ export function WorkActionDialog(props: Props) {
         {mode === "leadership_response" && (
           <div className="space-y-3">
             <Field label="Leadership status"><select value={responseStatus} onChange={(event) => setResponseStatus(event.target.value)} className={INPUT_CLASS}>
+              <option value="awaiting_response">Awaiting response</option>
               <option value="additional_information_requested">Additional information requested</option>
               <option value="approved">Approved</option><option value="denied">Denied</option>
               <option value="deferred">Deferred</option><option value="leadership_completing_action">Leadership completing action</option>

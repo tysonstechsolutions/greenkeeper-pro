@@ -125,7 +125,7 @@ describe("canonical operational aggregation", () => {
       states: [{ work_key: `task:${taskId}`, source_type: "task", source_record_id: taskId, responsible_employee_id: employeeId, responsible_position: null, accountable_manager_id: managerId, workflow_status: "waiting_leadership", verification_required: true, manager_priority_override: 200, safety_flag: false, compliance_flag: false, payroll_deadline_flag: false, financial_deadline_flag: false, notes: "Raised", last_transition_at: "2026-07-16T00:00:00Z", created_at: "2026-07-16T00:00:00Z", updated_at: "2026-07-16T00:00:00Z" }],
       assignments: [{ id: "a", work_key: `task:${taskId}`, employee_id: employeeId, position: null, resolved_employee_id: employeeId, instructions: "Fix", due_date: "2026-07-17", expected_evidence: "Photo", follow_up_date: null, verification_required: true, notes: null, status: "in_progress", assigned_by: managerId, accepted_at: "2026-07-16T00:00:00Z", ended_at: null, created_at: "2026-07-16T00:00:00Z", updated_at: "2026-07-16T00:00:00Z" }],
       dependencies: [{ id: "d", blocker_work_key: `standard:${standardId}`, dependent_work_key: `task:${taskId}`, active: true, created_by: managerId, created_at: "2026-07-16T00:00:00Z", resolved_at: null, resolution_reason: null }],
-      leadership: [{ id: "l", work_key: `task:${taskId}`, recipient: "Director", leadership_group: null, reason: "Approval", request_or_decision_needed: "Approve", date_sent: "2026-07-16", requested_response_date: null, follow_up_date: "2026-07-16", related_reference: null, status: "awaiting_response", response: null, outcome: null, created_at: "2026-07-16T00:00:00Z", updated_at: "2026-07-16T00:00:00Z" }],
+      leadership: [{ id: "l", work_key: `task:${taskId}`, recipient: "Director", leadership_group: null, reason: "Approval", request_or_decision_needed: "Approve", date_sent: "2026-07-16", requested_response_date: null, follow_up_date: "2026-07-16", related_reference: null, status: "awaiting_response", response: null, outcome: null, created_by: managerId, updated_by: managerId, completed_at: null, created_at: "2026-07-16T00:00:00Z", updated_at: "2026-07-16T00:00:00Z" }],
     }));
     const projected = rows.find((row) => row.stableId === `task:${taskId}`)!;
     expect(projected.delegated).toBe(true);
@@ -140,6 +140,24 @@ describe("canonical operational aggregation", () => {
       assignments: [{ id: "late", work_key: `task:${taskId}`, employee_id: employeeId, position: null, resolved_employee_id: employeeId, instructions: "Fix", due_date: "2026-07-15", expected_evidence: null, follow_up_date: null, verification_required: false, notes: null, status: "in_progress", assigned_by: managerId, accepted_at: "2026-07-14T00:00:00Z", ended_at: null, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:00:00Z" }],
     }));
     expect(rows.find((row) => row.stableId === `task:${taskId}`)?.delegationStatus).toBe("overdue");
+  });
+
+  it("returns a due postponement review to active attention without rewriting its history", () => {
+    const rows = aggregateOperationalWork(source({
+      postponements: [{
+        id: "review", work_key: `task:${taskId}`, reason: "waiting_on_vendor",
+        explanation: "Confirm the vendor delivery", resume_date: null,
+        review_date: "2026-07-16", blocking_work_key: null, actor_id: managerId,
+        active: true, ended_at: null, ended_by: null,
+        created_at: "2026-07-15T00:00:00Z",
+      }],
+      states: [{ work_key: `task:${taskId}`, source_type: "task", source_record_id: taskId, responsible_employee_id: employeeId, responsible_position: null, accountable_manager_id: managerId, workflow_status: "postponed", verification_required: false, manager_priority_override: null, safety_flag: false, compliance_flag: false, payroll_deadline_flag: false, financial_deadline_flag: false, notes: null, last_transition_at: "2026-07-15T00:00:00Z", created_at: "2026-07-15T00:00:00Z", updated_at: "2026-07-15T00:00:00Z" }],
+    }));
+    const projected = rows.find((row) => row.stableId === `task:${taskId}`)!;
+    expect(projected.status).toBe("pending");
+    expect(projected.dueDate).toBe("2026-07-16");
+    expect(projected.waitingReason).toBeNull();
+    expect(projected.activitySummary).toContain("Postponement review due");
   });
 
   it("keeps a completed source in needs-verification until its delegation is verified", () => {
@@ -182,5 +200,6 @@ describe("canonical operational aggregation", () => {
     expect(operationalWorkDeepLink("equipment", taskId, `equipment:${taskId}`)).toBe(`/equipment/view?id=${taskId}`);
     expect(operationalWorkDeepLink("purchase_request", taskId, `purchase_request:${taskId}`)).toBe(`/purchase-requests/view?id=${taskId}`);
     expect(operationalWorkDeepLink("calendar", taskId, `calendar:${taskId}`)).toBe(`/calendar?event=${taskId}`);
+    expect(operationalWorkDeepLink("goal", taskId, `goal:${taskId}`)).toBe(`/operations?focus=goal%3A${taskId}`);
   });
 });
