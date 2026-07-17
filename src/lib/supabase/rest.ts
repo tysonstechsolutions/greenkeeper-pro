@@ -19,6 +19,7 @@
  */
 
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
+import { supabaseAuthStorageKey } from "@/lib/supabase/persist-session";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -63,10 +64,8 @@ interface CachedSessionShape {
  */
 function readCachedSession(): CachedSessionShape | null {
   if (typeof window === "undefined") return null;
-  const match = SUPABASE_URL.match(/https?:\/\/([^./]+)\.supabase\./);
-  if (!match) return null;
-  const key = `sb-${match[1]}-auth-token`;
   try {
+    const key = supabaseAuthStorageKey(SUPABASE_URL);
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
@@ -165,9 +164,8 @@ async function refreshTokenDirect(): Promise<string | null> {
     if (!data.access_token) return null;
 
     // Persist the new tokens so subsequent localStorage reads are fresh.
-    const match = SUPABASE_URL.match(/https?:\/\/([^./]+)\.supabase\./);
-    if (match && typeof window !== "undefined") {
-      const key = `sb-${match[1]}-auth-token`;
+    if (typeof window !== "undefined") {
+      const key = supabaseAuthStorageKey(SUPABASE_URL);
       localStorage.setItem(
         key,
         JSON.stringify({

@@ -329,7 +329,7 @@ export default function DutiesPage() {
 
   return (
     <div className="gk-page mx-auto space-y-6">
-      <div><Link href="/today" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Today</Link><h1 className="mt-3">Duty ownership</h1><p className="mt-1 text-sm text-muted-foreground">One canonical, audited system for standing work, ownership, coverage, and recurrence.</p></div>
+      <div><Link href="/operations" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Operations</Link><h1 className="mt-3">Duty ownership</h1><p className="mt-1 text-sm text-muted-foreground">One canonical, audited system for standing work, ownership, coverage, and recurrence.</p></div>
       {(localError || management.error) && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{localError || management.error}</div>}
       {notice && <div role="status" aria-live="polite" className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">{notice}</div>}
       {!management.canManage && <Card><CardContent className="pt-6 text-sm text-muted-foreground">You can review duties and history. Only a GM or operations manager can change them.</CardContent></Card>}

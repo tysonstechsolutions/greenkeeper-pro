@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { directSelectRow } from "@/lib/supabase/rest";
+import { supabaseAuthStorageKey } from "@/lib/supabase/persist-session";
 import type { User, Session } from "@supabase/supabase-js";
 import type { Profile, UserRole } from "@/types/database";
 
@@ -39,10 +40,8 @@ interface CachedSessionLike {
  */
 function readCachedSession(): CachedSessionLike | null {
   if (typeof window === "undefined") return null;
-  const match = SUPABASE_URL.match(/https?:\/\/([^./]+)\.supabase\./);
-  if (!match) return null;
-  const key = `sb-${match[1]}-auth-token`;
   try {
+    const key = supabaseAuthStorageKey(SUPABASE_URL);
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;

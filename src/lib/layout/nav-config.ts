@@ -20,7 +20,7 @@ export interface NavItem {
  * live inside the Money workspace; PR Audit is under Money too.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/today", label: "Today", icon: Sunrise },
+  { href: "/operations", label: "Operations", icon: Sunrise },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/course-map", label: "Map", icon: Map },
   { href: "/money", label: "Money", icon: Wallet },

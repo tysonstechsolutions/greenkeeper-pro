@@ -157,14 +157,13 @@ export type CatalogKey =
 // comes from its section's family so the More grid reads as organized
 // shelves instead of confetti.
 const DASHBOARD: AppEntry = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "from-emerald-600 to-green-700", pinned: true };
-// Today — the operating-rhythm home (duties, obligations, events). The
-// superintendent view's landing page since the Phase-1 workspace restructure.
-const TODAY: AppEntry = { href: "/today", label: "Today", icon: Sunrise, color: "from-emerald-600 to-green-700", pinned: true };
+// Operations — one normalized command center for every actionable source.
+const TODAY: AppEntry = { href: "/operations", label: "Operations", icon: Sunrise, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["today", "command center", "work", "priorities"] };
 // Dashboard re-homed inside Course & Range for the leadership view (other
 // views keep the pinned DASHBOARD above).
 const TURF_DASHBOARD: AppEntry = { ...DASHBOARD, pinned: false, label: "Turf Dashboard", group: GROUPS.course };
 const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["time off", "pto", "vacation", "shifts", "crew"] };
-const MY_DAY: AppEntry = { href: "/my-day", label: "My Day", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["to do", "todo", "tasks", "checklist"] };
+const MY_DAY: AppEntry = { href: "/my-day", label: "My Work", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["to do", "todo", "tasks", "checklist", "my day"] };
 const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, color: "from-amber-500 to-yellow-600", pinned: true, keywords: ["new pr", "purchase request", "buy", "order"] };
 
 const CALENDAR: AppEntry = { href: "/calendar", label: "Calendar", icon: CalendarDays, color: "from-sky-500 to-blue-600", group: GROUPS.planning };

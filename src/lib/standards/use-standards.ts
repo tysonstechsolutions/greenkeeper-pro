@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { directSelectList, directPatchRow, getCachedUserId } from "@/lib/supabase/rest";
+import { directRpc, directSelectList, getCachedUserId } from "@/lib/supabase/rest";
 import { currentStatusOf, scoreProgram, rankStandards } from "./scoring";
 import type {
   CorrectiveAction,
   ProgramStandard,
+  ProgramStandardEvidence,
+  ProgramStandardVersion,
+  StandardProgressInput,
   StandardEvaluation,
   StandardSection,
   StandardSubsection,
@@ -28,6 +31,8 @@ export interface StandardOwnerOption {
   id: string;
   full_name: string | null;
   role: string | null;
+  department?: string | null;
+  role_group?: string | null;
 }
 
 export function useStandards() {
@@ -37,6 +42,8 @@ export function useStandards() {
   const [evaluations, setEvaluations] = useState<StandardEvaluation[]>([]);
   const [actions, setActions] = useState<CorrectiveAction[]>([]);
   const [people, setPeople] = useState<StandardOwnerOption[]>([]);
+  const [versions, setVersions] = useState<ProgramStandardVersion[]>([]);
+  const [evidence, setEvidence] = useState<ProgramStandardEvidence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +51,7 @@ export function useStandards() {
     setLoading(true);
     setError(null);
     try {
-      const [std, sec, sub, evals, acts, ppl] = await Promise.all([
+      const [std, sec, sub, evals, acts, ppl, versionRows, evidenceRows] = await Promise.all([
         directSelectList<ProgramStandard>("program_standards", {
           filters: ["is_active=eq.true"],
           orderBy: [{ column: "code", ascending: true }],
@@ -67,11 +74,20 @@ export function useStandards() {
           filters: ["status=in.(proposed,active,awaiting_verification)"],
           label: "standards.actions",
         }),
-        directSelectList<StandardOwnerOption>("profiles", {
-          columns: "id,full_name,role",
+        directSelectList<StandardOwnerOption>("staff_directory", {
+          columns: "id,full_name,role,department,role_group",
           filters: ["is_active=eq.true"],
           orderBy: [{ column: "full_name", ascending: true }],
           label: "standards.people",
+        }),
+        directSelectList<ProgramStandardVersion>("program_standard_versions", {
+          orderBy: [{ column: "changed_at", ascending: false }],
+          label: "standards.versions",
+        }),
+        directSelectList<ProgramStandardEvidence>("operational_work_evidence", {
+          filters: ["work_key=like.standard:*"],
+          orderBy: [{ column: "created_at", ascending: false }],
+          label: "standards.evidence",
         }),
       ]);
       setStandards(std);
@@ -80,6 +96,8 @@ export function useStandards() {
       setEvaluations(evals);
       setActions(acts);
       setPeople(ppl);
+      setVersions(versionRows);
+      setEvidence(evidenceRows);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load standards.");
     } finally {
@@ -106,13 +124,11 @@ export function useStandards() {
         ),
       );
       try {
-        await directPatchRow(
-          "program_standards",
-          "id",
-          standardId,
-          { owner_profile_id: profileId, updated_by: getCachedUserId() },
-          "standards.delegate",
-        );
+        await directRpc("delegate_program_standard", {
+          p_standard_id: standardId,
+          p_profile_id: profileId,
+          p_reason: "Owner changed from Program Standards",
+        }, "standards.delegate");
       } catch (e) {
         setStandards(previous); // don't leave a false owner on screen
         throw e instanceof Error ? e : new Error("Couldn't change the owner.");
@@ -120,6 +136,24 @@ export function useStandards() {
     },
     [standards],
   );
+
+  const recordProgress = useCallback(async (
+    standardId: string,
+    input: StandardProgressInput,
+  ) => {
+    await directRpc("record_program_standard_progress", {
+      p_standard_id: standardId,
+      p_status: input.status,
+      p_notes: input.notes,
+      p_estimated_minutes: input.estimatedMinutes,
+      p_impact_level: input.impactLevel,
+      p_manager_target_date: input.managerTargetDate,
+      p_not_applicable_reason: input.notApplicableReason ?? null,
+      p_evidence_label: input.evidenceLabel ?? null,
+      p_evidence_reference: input.evidenceReference ?? null,
+    }, "standards.progress");
+    await load();
+  }, [load]);
 
   /** id -> display name, for rendering owners without a second query. */
   const peopleById = useMemo(() => {
@@ -196,6 +230,9 @@ export function useStandards() {
     peopleById,
     delegate,
     actions,
+    versions,
+    evidence,
+    recordProgress,
     loading,
     error,
     reload: load,

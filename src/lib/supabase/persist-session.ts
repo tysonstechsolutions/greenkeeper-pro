@@ -68,15 +68,21 @@ function decodeJwt(token: string): JwtClaims | null {
  * Derive the localStorage key Supabase uses for session storage from
  * NEXT_PUBLIC_SUPABASE_URL. `https://abcdefghij.supabase.co` → `sb-abcdefghij-auth-token`.
  */
-function getStorageKey(): string {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const match = url.match(/https?:\/\/([^./]+)\.supabase\./);
-  if (!match) {
+export function supabaseAuthStorageKey(url: string): string {
+  try {
+    const hostname = new URL(url).hostname;
+    const projectRef = hostname.split(".")[0];
+    if (!projectRef) throw new Error("Missing project reference");
+    return `sb-${projectRef}-auth-token`;
+  } catch {
     throw new Error(
       "Could not derive Supabase storage key from NEXT_PUBLIC_SUPABASE_URL",
     );
   }
-  return `sb-${match[1]}-auth-token`;
+}
+
+function getStorageKey(): string {
+  return supabaseAuthStorageKey(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
 }
 
 /**

@@ -82,11 +82,10 @@ describe("command-center callers", () => {
   it("only offers correction to database-aligned manager roles and requires a reason", () => {
     expect(operationsHook).toContain('["super", "asst_super", "director", "gm"]');
     expect(operationsHook).toContain("canUndoObligations");
-    for (const caller of [todayPage, workspaceLanding]) {
-      expect(caller).toContain("ops.canUndoObligations");
-      expect(caller).toContain("Why is this completion being corrected?");
-      expect(caller).toContain("if (!reason) return");
-    }
+    expect(workspaceLanding).toContain("ops.canUndoObligations");
+    expect(workspaceLanding).toContain("Why is this completion being corrected?");
+    expect(workspaceLanding).toContain("if (!reason) return");
+    expect(todayPage).toContain('redirect("/operations")');
   });
 
   it("keeps the assistant on the same command and weekly-key convention", () => {

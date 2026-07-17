@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Loader2,
   Target,
@@ -18,6 +19,9 @@ import {
   SOURCE_LABELS,
   type StandardStatus,
   type StandardWithStatus,
+  type ProgramStandardEvidence,
+  type ProgramStandardVersion,
+  type StandardProgressInput,
 } from "@/lib/standards/types";
 
 /**
@@ -59,7 +63,20 @@ function Percent({ value }: { value: number | null }) {
   return <span className="font-semibold tabular-nums">{value}%</span>;
 }
 
+function StandardsLoading() {
+  return (
+    <div className="max-w-3xl mx-auto p-4 flex items-center gap-2 text-sm text-muted-foreground">
+      <Loader2 className="w-4 h-4 animate-spin" /> Loading program standardsâ€¦
+    </div>
+  );
+}
+
 export default function StandardsPage() {
+  return <Suspense fallback={<StandardsLoading />}><StandardsContent /></Suspense>;
+}
+
+function StandardsContent() {
+  const searchParams = useSearchParams();
   const {
     score,
     needsAction,
@@ -68,10 +85,15 @@ export default function StandardsPage() {
     people,
     peopleById,
     delegate,
+    recordProgress,
+    versions,
+    evidence,
     loading,
     error,
   } = useStandards();
   const [openSection, setOpenSection] = useState<string | null>(null);
+  const focusedStandardId = searchParams.get("standard");
+  const focusedSection = withStatus.find((row) => row.standard.id === focusedStandardId)?.standard.section ?? null;
 
   const bySection = useMemo(() => {
     const map = new Map<string, StandardWithStatus[]>();
@@ -178,12 +200,12 @@ export default function StandardsPage() {
           By area
         </h2>
         {score.sections.map((sec) => {
-          const isOpen = openSection === sec.section;
+          const isOpen = (openSection ?? focusedSection) === sec.section;
           const items = bySection.get(sec.section) ?? [];
           return (
             <div key={sec.section} className="rounded-xl border border-border bg-card">
               <button
-                onClick={() => setOpenSection(isOpen ? null : sec.section)}
+                onClick={() => setOpenSection(isOpen ? "" : sec.section)}
                 className="w-full flex items-center justify-between gap-3 p-3 text-left"
               >
                 <span className="flex items-center gap-2 min-w-0">
@@ -220,6 +242,10 @@ export default function StandardsPage() {
                         people={people}
                         peopleById={peopleById}
                         onDelegate={delegate}
+                        onProgress={recordProgress}
+                        versions={versions.filter((row) => row.standard_id === s.standard.id)}
+                        evidence={evidence.filter((row) => row.work_key === `standard:${s.standard.id}`)}
+                        forceOpen={focusedStandardId === s.standard.id}
                       />
                     ))
                   )}
@@ -243,6 +269,10 @@ export default function StandardsPage() {
               people={people}
               peopleById={peopleById}
               onDelegate={delegate}
+              onProgress={recordProgress}
+              versions={versions.filter((row) => row.standard_id === s.standard.id)}
+              evidence={evidence.filter((row) => row.work_key === `standard:${s.standard.id}`)}
+              forceOpen={focusedStandardId === s.standard.id}
               showWhy
             />
           ))}
@@ -290,19 +320,43 @@ function StandardRow({
   people,
   peopleById,
   onDelegate,
+  onProgress,
+  versions,
+  evidence,
+  forceOpen = false,
   showWhy = false,
 }: {
   item: StandardWithStatus;
   people: StandardOwnerOption[];
   peopleById: Map<string, StandardOwnerOption>;
   onDelegate: (standardId: string, profileId: string | null) => Promise<void>;
+  onProgress: (standardId: string, input: StandardProgressInput) => Promise<void>;
+  versions: ProgramStandardVersion[];
+  evidence: ProgramStandardEvidence[];
+  forceOpen?: boolean;
   showWhy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [delegateError, setDelegateError] = useState<string | null>(null);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressStatus, setProgressStatus] = useState<StandardProgressInput["status"]>(item.standard.operational_status);
+  const [minutes, setMinutes] = useState(String(item.standard.estimated_minutes));
+  const [impact, setImpact] = useState<StandardProgressInput["impactLevel"]>(item.standard.impact_level);
+  const [targetDate, setTargetDate] = useState(item.standard.manager_target_date ?? "");
+  const [progressNotes, setProgressNotes] = useState(item.standard.notes ?? "");
+  const [naReason, setNaReason] = useState(item.standard.not_applicable_reason ?? "");
+  const [evidenceLabel, setEvidenceLabel] = useState("");
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const [progressError, setProgressError] = useState<string | null>(null);
   const s = item.standard;
   const owner = s.owner_profile_id ? peopleById.get(s.owner_profile_id) : null;
+
+  useEffect(() => {
+    if (!forceOpen) return;
+    setOpen(true);
+    requestAnimationFrame(() => document.getElementById(`standard-${s.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [forceOpen, s.id]);
 
   async function handleDelegate(value: string) {
     setSaving(true);
@@ -315,8 +369,40 @@ function StandardRow({
       setSaving(false);
     }
   }
+  async function saveProgress() {
+    const estimatedMinutes = Number(minutes);
+    if (!Number.isFinite(estimatedMinutes) || estimatedMinutes <= 0) {
+      setProgressError("Estimated duration must be greater than zero.");
+      return;
+    }
+    if (progressStatus === "not_applicable" && !naReason.trim()) {
+      setProgressError("A not-applicable reason is required.");
+      return;
+    }
+    setSaving(true);
+    setProgressError(null);
+    try {
+      await onProgress(s.id, {
+        status: progressStatus,
+        notes: progressNotes,
+        estimatedMinutes,
+        impactLevel: impact,
+        managerTargetDate: targetDate || null,
+        notApplicableReason: naReason || null,
+        evidenceLabel: evidenceLabel || null,
+        evidenceReference: evidenceReference || null,
+      });
+      setProgressOpen(false);
+      setEvidenceLabel("");
+      setEvidenceReference("");
+    } catch (caught) {
+      setProgressError(caught instanceof Error ? caught.message : "Couldn't update the standard.");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
-    <div className="p-3">
+    <div id={`standard-${s.id}`} className={`p-3 ${forceOpen ? "ring-2 ring-primary/30" : ""}`}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-start justify-between gap-2 text-left"
@@ -404,6 +490,55 @@ function StandardRow({
               <p className="text-[11px] text-destructive">{delegateError}</p>
             )}
           </div>
+
+          <div className="rounded-lg border border-border p-2 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold">Operational progress</p>
+                <p className="text-[11px] text-muted-foreground capitalize">
+                  {s.operational_status.replaceAll("_", " ")} · {s.estimated_minutes} min · {s.impact_level} impact
+                  {s.manager_target_date ? ` · target ${s.manager_target_date}` : " · no official deadline"}
+                </p>
+              </div>
+              <button className="rounded-md border border-input px-2 py-1 text-[11px] font-medium" onClick={() => setProgressOpen((value) => !value)}>
+                {progressOpen ? "Close" : "Update"}
+              </button>
+            </div>
+            {progressOpen && (
+              <div className="space-y-2 border-t border-border pt-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <label className="space-y-1"><span className="text-[11px] font-semibold">Status</span><select className="w-full rounded-md border border-input bg-background px-2 py-1.5" value={progressStatus} onChange={(event) => setProgressStatus(event.target.value as StandardProgressInput["status"])}>
+                    <option value="not_started">Not started / reopen</option>
+                    <option value="partially_complete">Partially complete</option>
+                    <option value="complete">Complete</option>
+                    <option value="not_applicable">Not applicable</option>
+                    {s.operational_status === "complete" || s.operational_status === "not_applicable" ? <option value="reopen">Reopen</option> : null}
+                  </select></label>
+                  <label className="space-y-1"><span className="text-[11px] font-semibold">Estimated minutes</span><input className="w-full rounded-md border border-input bg-background px-2 py-1.5" type="number" min="1" value={minutes} onChange={(event) => setMinutes(event.target.value)} /></label>
+                  <label className="space-y-1"><span className="text-[11px] font-semibold">Impact</span><select className="w-full rounded-md border border-input bg-background px-2 py-1.5" value={impact} onChange={(event) => setImpact(event.target.value as StandardProgressInput["impactLevel"])}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+                </div>
+                <label className="block space-y-1"><span className="text-[11px] font-semibold">Manager target date (optional)</span><input className="w-full rounded-md border border-input bg-background px-2 py-1.5" type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} /></label>
+                <label className="block space-y-1"><span className="text-[11px] font-semibold">Notes</span><textarea className="w-full rounded-md border border-input bg-background px-2 py-1.5" rows={2} value={progressNotes} onChange={(event) => setProgressNotes(event.target.value)} /></label>
+                {progressStatus === "not_applicable" && <label className="block space-y-1"><span className="text-[11px] font-semibold">Required not-applicable reason</span><textarea className="w-full rounded-md border border-input bg-background px-2 py-1.5" rows={2} value={naReason} onChange={(event) => setNaReason(event.target.value)} /></label>}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className="space-y-1"><span className="text-[11px] font-semibold">Evidence label (optional)</span><input className="w-full rounded-md border border-input bg-background px-2 py-1.5" value={evidenceLabel} onChange={(event) => setEvidenceLabel(event.target.value)} /></label>
+                  <label className="space-y-1"><span className="text-[11px] font-semibold">Evidence link/reference</span><input className="w-full rounded-md border border-input bg-background px-2 py-1.5" value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} /></label>
+                </div>
+                {progressError && <p className="text-destructive">{progressError}</p>}
+                <button disabled={saving} onClick={saveProgress} className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground disabled:opacity-50">{saving ? "Saving…" : "Save progress"}</button>
+              </div>
+            )}
+          </div>
+
+          {(versions.length > 0 || evidence.length > 0) && (
+            <details className="rounded-lg border border-border p-2">
+              <summary className="cursor-pointer font-semibold">History and evidence ({versions.length + evidence.length})</summary>
+              <div className="mt-2 space-y-1.5 text-[11px] text-muted-foreground">
+                {versions.slice(0, 8).map((version) => <p key={version.id}>{new Date(version.changed_at).toLocaleString()} · {version.change_reason || `Version ${version.version}`}</p>)}
+                {evidence.slice(0, 8).map((record) => <p key={record.id}>{new Date(record.created_at).toLocaleString()} · <a href={record.reference} className="text-primary hover:underline" target="_blank" rel="noreferrer">{record.label}</a></p>)}
+              </div>
+            </details>
+          )}
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground pt-1">
             {s.timeline && <span>Timeline: {s.timeline}</span>}

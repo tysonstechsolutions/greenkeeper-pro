@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * Root ("/") page — client-side redirect to Today, the app's single home.
+ * Root ("/") page — client-side redirect to Operations, the app's single home.
  *
  * Kept as a client component so no NEXT_REDIRECT instruction is baked into
  * out/index.html (that HTML serves as Capacitor's SPA fallback; a baked
@@ -14,7 +14,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/today");
+    router.replace("/operations");
   }, [router]);
 
   return (

@@ -117,10 +117,52 @@ export interface ProgramStandard {
   evaluation_frequency: string | null;
   evidence_requirements: string[];
   verification_required: boolean;
+  operational_status: "not_started" | "partially_complete" | "complete" | "not_applicable";
+  estimated_minutes: number;
+  impact_level: "low" | "medium" | "high" | "critical";
+  manager_target_date: string | null;
+  not_applicable_reason: string | null;
   is_active: boolean;
+  inactive_reason: string | null;
   effective_date: string | null;
   version: number;
   notes: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProgramStandardVersion {
+  id: string;
+  standard_id: string;
+  version: number;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  change_reason: string | null;
+  changed_by: string | null;
+  changed_at: string;
+}
+
+export interface ProgramStandardEvidence {
+  id: string;
+  work_key: string;
+  evidence_type: string;
+  label: string;
+  reference: string;
+  added_by: string;
+  created_at: string;
+}
+
+export interface StandardProgressInput {
+  status: "not_started" | "partially_complete" | "complete" | "not_applicable" | "reopen";
+  notes: string;
+  estimatedMinutes: number;
+  impactLevel: "low" | "medium" | "high" | "critical";
+  managerTargetDate: string | null;
+  notApplicableReason?: string | null;
+  evidenceLabel?: string | null;
+  evidenceReference?: string | null;
 }
 
 export interface StandardSection {
