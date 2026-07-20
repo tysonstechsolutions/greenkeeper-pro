@@ -70,7 +70,10 @@ export default function StaffPage() {
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  // Default to active only, so people who no longer work here (marked
+  // inactive) drop off the roster. The "All Status"/"Inactive" filter still
+  // reaches them when their records are needed.
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
   const [showFilters, setShowFilters] = useState(false);
 
   // Selected staff member for detail view
