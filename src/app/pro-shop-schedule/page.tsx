@@ -58,6 +58,7 @@ import {
 import { Overlay } from "@/components/features/pro-shop/overlay";
 import { AvailabilitySheet } from "@/components/features/pro-shop/availability-sheet";
 import { CoverSheet } from "@/components/features/pro-shop/cover-sheet";
+import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 
 const selectCls = "w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm";
 const NOW = new Date();
@@ -68,6 +69,24 @@ function firstName(name: string): string {
 }
 
 export default function ProShopSchedulePage() {
+  return (
+    <RoleGuard
+      allowedRoles={ADMIN_ROLES}
+      fallback={(
+        <div className="gk-page mx-auto">
+          <h1>Pro Shop Schedule</h1>
+          <div role="alert" className="gk-card mt-4 p-4 text-sm text-muted-foreground">
+            Pro-shop roster, availability, and schedule publication are restricted to authorized management.
+          </div>
+        </div>
+      )}
+    >
+      <ProShopScheduleContent />
+    </RoleGuard>
+  );
+}
+
+function ProShopScheduleContent() {
   const ps = useProShop(NOW.getFullYear(), NOW.getMonth());
   const monthDate = useMemo(() => new Date(ps.year, ps.month0, 1), [ps.year, ps.month0]);
 

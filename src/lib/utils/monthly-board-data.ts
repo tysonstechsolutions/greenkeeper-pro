@@ -89,6 +89,7 @@ async function fetchLabor(
     const { data, error } = await supabase
       .from("schedules")
       .select("id, user_id")
+      .eq("is_active", true)
       .gte("schedule_date", startDate)
       .lte("schedule_date", endDate);
 

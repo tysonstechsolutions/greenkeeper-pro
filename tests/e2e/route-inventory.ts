@@ -13,6 +13,12 @@ export type RouteSpec = {
 };
 
 export const ROUTES: RouteSpec[] = [
+  // Phase 0B.5 protected workforce surfaces.
+  { path: "/calendar" },
+  { path: "/certifications" },
+  { path: "/onboarding" },
+  { path: "/pro-shop-schedule" },
+
   // ── recently changed (v1.5.5 → v1.6.2) ──────────────────────────────
   { path: "/assets" },
   { path: "/assets/scan" },

@@ -37,6 +37,7 @@ import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 import { directStorageUpload, publicStorageUrl } from "./rest";
 
 const BUCKET_NAME = "photos";
+const CERTIFICATION_BUCKET_NAME = "certification-documents";
 
 /**
  * Generate a unique filename with UUID
@@ -114,6 +115,58 @@ export async function uploadPhoto(
   recordBreadcrumb("lifecycle", `uploadPhoto: uploaded ${storagePath}`);
 
   return { storagePath, publicUrl };
+}
+
+/**
+ * Upload a certification/license document to the private qualification bucket.
+ * The database storage policy limits inserts to managers and reads to the
+ * certificate subject, their recorded supervisor, or management.
+ */
+export async function uploadCertificationDocument(
+  file: File,
+  userId: string,
+): Promise<UploadResult> {
+  const ext = getFileExtension(file);
+  const filename = generateUniqueFilename(ext);
+  const storagePath = getStoragePath(userId, filename);
+
+  await directStorageUpload(
+    CERTIFICATION_BUCKET_NAME,
+    storagePath,
+    file,
+    "uploadCertificationDocument",
+  );
+
+  return {
+    storagePath,
+    // Private objects are opened with a short-lived signed URL below.
+    publicUrl: "",
+  };
+}
+
+/** Open a private object with a short-lived, authenticated signed URL. */
+export async function openPrivateStorageFile(
+  bucket: string,
+  storagePath: string,
+): Promise<void> {
+  const supabase = createClient();
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(storagePath, 60);
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message || "Unable to open the protected file");
+  }
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
+/** Remove an unlinked private object after a failed metadata save. */
+export async function removePrivateStorageFile(
+  bucket: string,
+  storagePath: string,
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.storage.from(bucket).remove([storagePath]);
+  if (error) throw new Error(error.message);
 }
 
 /**

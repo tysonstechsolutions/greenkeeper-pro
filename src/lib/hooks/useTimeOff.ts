@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { directRpc } from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
 import type {
   TimeOffRequest,
@@ -189,27 +190,12 @@ export function useTimeOff(): UseTimeOffReturn {
       }
 
       try {
-        const insertData = {
-          user_id: user.id,
-          start_date: data.start_date,
-          end_date: data.end_date,
-          request_type: data.request_type,
-          reason: data.reason ?? null,
-          status: "pending",
-        };
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newRequest, error: insertError } = await (supabase as any)
-          .from("time_off_requests")
-          .insert(insertData)
-          .select()
-          .single() as { data: TimeOffRequest | null; error: Error | null };
-
-        if (insertError || !newRequest) {
-          console.error("Error submitting time-off request:", insertError);
-          setError(insertError?.message || "Failed to submit request");
-          return null;
-        }
+        const newRequest = await directRpc<TimeOffRequest>("submit_time_off_request", {
+          p_start_date: data.start_date,
+          p_end_date: data.end_date,
+          p_request_type: data.request_type,
+          p_reason: data.reason ?? null,
+        }, "timeOff.submit");
 
         // Notify managers/supers about the new request
         const { data: managers } = await supabase
@@ -262,22 +248,11 @@ export function useTimeOff(): UseTimeOffReturn {
           .eq("id", id)
           .single() as { data: RequestDataResult | null };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("time_off_requests")
-          .update({
-            status: "approved",
-            reviewed_by: user.id,
-            reviewed_at: new Date().toISOString(),
-          })
-          .eq("id", id)
-          .eq("status", "pending") as { error: Error | null }; // Can only approve pending requests
-
-        if (updateError) {
-          console.error("Error approving time-off request:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+        await directRpc("review_time_off_request", {
+          p_request_id: id,
+          p_decision: "approved",
+          p_notes: null,
+        }, "timeOff.approve");
 
         // Notify the requester
         if (requestData && requestData.user_id !== user.id) {
@@ -338,28 +313,11 @@ export function useTimeOff(): UseTimeOffReturn {
           .eq("id", id)
           .single() as { data: DenyRequestDataResult | null };
 
-        const updateData: Record<string, unknown> = {
-          status: "denied",
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
-        };
-
-        if (reason) {
-          updateData.notes = reason;
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: updateError } = await (supabase as any)
-          .from("time_off_requests")
-          .update(updateData)
-          .eq("id", id)
-          .eq("status", "pending") as { error: Error | null }; // Can only deny pending requests
-
-        if (updateError) {
-          console.error("Error denying time-off request:", updateError);
-          setError(updateError.message);
-          return false;
-        }
+        await directRpc("review_time_off_request", {
+          p_request_id: id,
+          p_decision: "denied",
+          p_notes: reason ?? null,
+        }, "timeOff.deny");
 
         // Notify the requester
         if (requestData && requestData.user_id !== user.id) {
@@ -436,17 +394,10 @@ export function useTimeOff(): UseTimeOffReturn {
           return false;
         }
 
-        // Delete the request
-        const { error: deleteError } = await supabase
-          .from("time_off_requests")
-          .delete()
-          .eq("id", id) as { error: Error | null };
-
-        if (deleteError) {
-          console.error("Error canceling time-off request:", deleteError);
-          setError(deleteError.message);
-          return false;
-        }
+        await directRpc("cancel_time_off_request", {
+          p_request_id: id,
+          p_reason: "Employee canceled the pending request",
+        }, "timeOff.cancel");
 
         // Update local state
         setRequests((prev) => prev.filter((r) => r.id !== id));
@@ -592,6 +543,7 @@ export const timeOffStatusLabels: Record<TimeOffRequestStatus, string> = {
   pending: "Pending",
   approved: "Approved",
   denied: "Denied",
+  cancelled: "Canceled",
 };
 
 // Time-off request status colors for UI
@@ -599,6 +551,7 @@ export const timeOffStatusColors: Record<TimeOffRequestStatus, { bg: string; tex
   pending: { bg: "bg-amber-500/10", text: "text-amber-600" },
   approved: { bg: "bg-green-500/10", text: "text-green-600" },
   denied: { bg: "bg-red-500/10", text: "text-red-600" },
+  cancelled: { bg: "bg-gray-500/10", text: "text-gray-600" },
 };
 
 // Format date range for display

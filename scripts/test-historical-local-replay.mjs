@@ -19,8 +19,8 @@ const fixtureScript = join(repositoryRoot, "scripts", "prepare-phase1a-local-fix
 const productionProjectRef = "mbgublyqnyghmvqfooao";
 const supabase = process.env.SUPABASE_BIN || "supabase";
 const dbProjectId = "greenkeeper-pro-phase1a-matrix";
-const finalMigrationVersion = "20260716190000";
-const finalMigrationName = "unified_operations_command_center";
+const finalMigrationVersion = "20260720120000";
+const finalMigrationName = "phase0b5_workforce_authorization";
 
 function fail(message) {
   throw new Error(`Historical local replay test refused: ${message}`);
@@ -190,9 +190,14 @@ function assertFinalPhase1aSchema() {
       ),
       to_regclass('public.operational_work_states') IS NOT NULL,
       to_regclass('public.operational_work_dependencies') IS NOT NULL,
-      to_regprocedure('public.delegate_operational_work(text,uuid,text,text,date,text,date,boolean,text)') IS NOT NULL;
+      to_regprocedure('public.delegate_operational_work(text,uuid,text,text,date,text,date,boolean,text)') IS NOT NULL,
+      to_regclass('public.domain_audit_events') IS NOT NULL,
+      to_regclass('public.operational_outbox_events') IS NOT NULL,
+      to_regprocedure('public.save_calendar_event(uuid,jsonb,text)') IS NOT NULL,
+      to_regprocedure('public.review_time_off_request(uuid,text,text)') IS NOT NULL,
+      to_regprocedure('public.replace_pro_shop_schedule_shifts(uuid,jsonb,boolean,text)') IS NOT NULL;
   `);
-  if (result !== "t|t|t|t|t|t|t|t|t|t|t|t") {
+  if (result !== "t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t") {
     fail(`full replay did not reach the latest repository schema (received ${result})`);
   }
 }

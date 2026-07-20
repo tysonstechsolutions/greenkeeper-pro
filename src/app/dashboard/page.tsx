@@ -632,6 +632,7 @@ function LeadershipDashboardView() {
           supabase
             .from("schedules")
             .select("*, profiles:user_id(id, full_name, role)")
+            .eq("is_active", true)
             .eq("schedule_date", todayStr)
             .neq("shift_type", "off"),
           8000,

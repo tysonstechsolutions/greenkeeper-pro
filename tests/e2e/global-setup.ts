@@ -1,4 +1,5 @@
 import { chromium, FullConfig } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -8,9 +9,13 @@ import * as path from "path";
  */
 export default async function globalSetup(config: FullConfig) {
   const pin = process.env.PLAYWRIGHT_TEST_PIN;
-  if (!pin || pin.length < 4) {
+  const email = process.env.PLAYWRIGHT_TEST_EMAIL;
+  const password = process.env.PLAYWRIGHT_TEST_PASSWORD;
+  const usePasswordFixture = Boolean(email && password);
+
+  if (!usePasswordFixture && (!pin || pin.length < 4)) {
     throw new Error(
-      "PLAYWRIGHT_TEST_PIN env var must be set to a 4-6 digit PIN.",
+      "Set a 4-6 digit PLAYWRIGHT_TEST_PIN, or set both PLAYWRIGHT_TEST_EMAIL and PLAYWRIGHT_TEST_PASSWORD for a disposable local fixture.",
     );
   }
 
@@ -32,11 +37,50 @@ export default async function globalSetup(config: FullConfig) {
     }
   });
 
+  if (usePasswordFixture) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error(
+        "Password-based Playwright setup requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email!,
+      password: password!,
+    });
+    if (error || !data.session) {
+      throw new Error(
+        `Disposable Playwright user could not sign in: ${error?.message ?? "session missing"}`,
+      );
+    }
+
+    const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
+    const storageKey = `sb-${projectRef}-auth-token`;
+    await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+    await page.evaluate(
+      ({ key, session }) => localStorage.setItem(key, JSON.stringify(session)),
+      { key: storageKey, session: data.session },
+    );
+    await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
+    await page.waitForURL((url) => !url.pathname.startsWith("/pin-login"), {
+      timeout: 30_000,
+    });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    await context.storageState({ path: storagePath });
+    await browser.close();
+    return;
+  }
+
   await page.goto(`${baseURL}/pin-login`, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
 
   // Click each digit
-  for (const digit of pin) {
+  for (const digit of pin!) {
     await page
       .getByRole("button", { name: digit, exact: true })
       .first()

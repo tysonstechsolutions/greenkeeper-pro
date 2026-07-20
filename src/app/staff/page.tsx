@@ -141,6 +141,7 @@ export default function StaffPage() {
            
           supabase.from("schedules")
             .select("user_id, crew_assignment")
+            .eq("is_active", true)
             .eq("schedule_date", today)
             .not("crew_assignment", "is", null),
           8000,
@@ -302,6 +303,7 @@ export default function StaffPage() {
             supabase.from("schedules")
               .select("*")
               .eq("user_id", staff.id)
+              .eq("is_active", true)
               .gte("schedule_date", today)
               .order("schedule_date", { ascending: true })
               .limit(7),

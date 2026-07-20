@@ -13,6 +13,8 @@ export interface Certification {
   issued_date: string | null;
   expires_date: string | null;
   document_path: string | null;
+  /** Legacy records may still point at photos until an authorized storage migration copies them. */
+  document_bucket?: "photos" | "certification-documents";
   notes: string | null;
   is_active: boolean;
   created_at: string;

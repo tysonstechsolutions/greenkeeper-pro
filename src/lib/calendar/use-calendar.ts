@@ -6,7 +6,6 @@ import {
   directRpc,
   directInsertRow,
   directPatchRow,
-  directDeleteRow,
   getCachedUserId,
 } from "@/lib/supabase/rest";
 import type { CalendarEvent, OneOnOneMeeting, CalendarItem } from "./types";
@@ -139,6 +138,7 @@ export function useCalendar() {
       });
     }
     for (const e of events) {
+      if (e.status === "canceled") continue;
       out.push({
         source: "calendar_event",
         sourceId: e.id,
@@ -191,9 +191,9 @@ export function useCalendar() {
   // ── calendar_events ──
   const addCalendarEvent = useCallback(
     async (payload: Partial<CalendarEvent>) => {
-      await directInsertRow(
-        "calendar_events",
-        { ...payload, created_by: getCachedUserId() },
+      await directRpc(
+        "save_calendar_event",
+        { p_event_id: null, p_values: payload, p_reason: "Calendar event created" },
         "calendar.events.add",
       );
       await load();
@@ -202,14 +202,23 @@ export function useCalendar() {
   );
   const updateCalendarEvent = useCallback(
     async (id: string, patch: Partial<CalendarEvent>) => {
-      await directPatchRow("calendar_events", "id", id, patch, "calendar.events.update");
+      await directRpc("save_calendar_event", {
+        p_event_id: id,
+        p_values: patch,
+        p_reason: "Calendar event updated",
+      }, "calendar.events.update");
       await load();
     },
     [load],
   );
   const deleteCalendarEvent = useCallback(
     async (id: string) => {
-      await directDeleteRow("calendar_events", "id", id, "calendar.events.delete");
+      const reason = window.prompt("Why is this calendar event being canceled?")?.trim();
+      if (!reason) return;
+      await directRpc("cancel_calendar_event", {
+        p_event_id: id,
+        p_reason: reason,
+      }, "calendar.events.cancel");
       await load();
     },
     [load],
@@ -218,18 +227,14 @@ export function useCalendar() {
   // ── scheduled 1:1s ──
   const scheduleOneOnOne = useCallback(
     async (employeeId: string, scheduledOn: string, scheduledTime?: string | null, notes?: string | null) => {
-      await directInsertRow(
-        "staff_one_on_ones",
-        {
+      const supabasePayload = {
           employee_id: employeeId,
           scheduled_on: scheduledOn,
           scheduled_time: scheduledTime || null,
           notes: notes || null,
           status: "scheduled",
-          created_by: getCachedUserId(),
-        },
-        "calendar.oneonone.add",
-      );
+        };
+      await directInsertRow("staff_one_on_ones", supabasePayload, "calendar.oneonone.add");
       await load();
     },
     [load],
@@ -243,7 +248,7 @@ export function useCalendar() {
   );
   const deleteOneOnOne = useCallback(
     async (id: string) => {
-      await directDeleteRow("staff_one_on_ones", "id", id, "calendar.oneonone.delete");
+      await directPatchRow("staff_one_on_ones", "id", id, { status: "canceled" }, "calendar.oneonone.cancel");
       await load();
     },
     [load],
@@ -305,7 +310,11 @@ export function useCalendar() {
           p_reason: reason,
         }, "calendar.reschedule.dutyOccurrence");
       } else {
-        await directPatchRow("calendar_events", "id", item.sourceId, { event_date: newDate }, "calendar.reschedule.event");
+        await directRpc("save_calendar_event", {
+          p_event_id: item.sourceId,
+          p_values: { event_date: newDate },
+          p_reason: "Calendar event rescheduled",
+        }, "calendar.reschedule.event");
       }
       await load();
     },

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { directRpc } from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
 import { formatLocalDate } from "@/lib/utils/date";
 import type {
@@ -90,7 +91,8 @@ export function useSchedule(): UseScheduleReturn {
       .select(`
         *,
         profile:profiles!schedules_user_id_fkey(id, full_name, display_name, role, avatar_url, phone)
-      `);
+      `)
+      .eq("is_active", true);
   }, [supabase]);
 
   // Fetch all staff schedules for a given week, grouped by user
@@ -266,72 +268,25 @@ export function useSchedule(): UseScheduleReturn {
       }
 
       try {
-        // Check if entry exists
-        const { data: existing } = await supabase
-          .from("schedules")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("schedule_date", date)
-          .single() as { data: { id: string } | null };
-
-        if (existing) {
-          // Update existing
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: updated, error: updateError } = await (supabase as any)
-            .from("schedules")
-            .update({
-              shift_start: shiftData.shift_start ?? null,
-              shift_end: shiftData.shift_end ?? null,
-              shift_type: shiftData.shift_type ?? null,
-              crew_assignment: shiftData.crew_assignment ?? null,
-              notes: shiftData.notes ?? null,
-            })
-            .eq("id", existing.id)
-            .select()
-            .single() as { data: Schedule | null; error: Error | null };
-
-          if (updateError) {
-            console.error("Error updating schedule:", updateError);
-            setError(updateError.message);
-            return null;
-          }
-
-          return updated as Schedule;
-        } else {
-          // Insert new
-          const insertData = {
-            user_id: userId,
-            schedule_date: date,
+        return await directRpc<Schedule>("upsert_staff_schedule", {
+          p_user_id: userId,
+          p_schedule_date: date,
+          p_values: {
             shift_start: shiftData.shift_start ?? null,
             shift_end: shiftData.shift_end ?? null,
             shift_type: shiftData.shift_type ?? null,
             crew_assignment: shiftData.crew_assignment ?? null,
             notes: shiftData.notes ?? null,
-            created_by: profile.id,
-          };
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: inserted, error: insertError } = await (supabase as any)
-            .from("schedules")
-            .insert(insertData)
-            .select()
-            .single() as { data: Schedule | null; error: Error | null };
-
-          if (insertError) {
-            console.error("Error inserting schedule:", insertError);
-            setError(insertError.message);
-            return null;
-          }
-
-          return inserted as Schedule;
-        }
+          },
+          p_reason: "Staff schedule entry saved",
+        }, "schedule.upsert");
       } catch (err) {
         console.error("Unexpected error setting schedule:", err);
         setError("Failed to set schedule");
         return null;
       }
     },
-    [profile, supabase]
+    [profile]
   );
 
   // Bulk set multiple schedule entries
@@ -345,61 +300,10 @@ export function useSchedule(): UseScheduleReturn {
       if (entries.length === 0) return true;
 
       try {
-        // Process entries in batches to handle upserts
-        for (const entry of entries) {
-          // Check if exists
-          const { data: existing } = await supabase
-            .from("schedules")
-            .select("id")
-            .eq("user_id", entry.user_id)
-            .eq("schedule_date", entry.schedule_date)
-            .single() as { data: { id: string } | null };
-
-          if (existing) {
-            // Update
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: updateError } = await (supabase as any)
-              .from("schedules")
-              .update({
-                shift_start: entry.shift_start ?? null,
-                shift_end: entry.shift_end ?? null,
-                shift_type: entry.shift_type ?? null,
-                crew_assignment: entry.crew_assignment ?? null,
-                notes: entry.notes ?? null,
-              })
-              .eq("id", existing.id) as { error: Error | null };
-
-            if (updateError) {
-              console.error("Error updating schedule in bulk:", updateError);
-              setError(updateError.message);
-              return false;
-            }
-          } else {
-            // Insert
-            const insertData = {
-              user_id: entry.user_id,
-              schedule_date: entry.schedule_date,
-              shift_start: entry.shift_start ?? null,
-              shift_end: entry.shift_end ?? null,
-              shift_type: entry.shift_type ?? null,
-              crew_assignment: entry.crew_assignment ?? null,
-              notes: entry.notes ?? null,
-              created_by: profile.id,
-            };
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: insertError } = await (supabase as any)
-              .from("schedules")
-              .insert(insertData) as { error: Error | null };
-
-            if (insertError) {
-              console.error("Error inserting schedule in bulk:", insertError);
-              setError(insertError.message);
-              return false;
-            }
-          }
-        }
-
+        await directRpc("bulk_upsert_staff_schedules", {
+          p_entries: entries,
+          p_reason: "Bulk staff schedule update",
+        }, "schedule.bulkUpsert");
         return true;
       } catch (err) {
         console.error("Unexpected error in bulk set schedule:", err);
@@ -407,24 +311,18 @@ export function useSchedule(): UseScheduleReturn {
         return false;
       }
     },
-    [profile, supabase]
+    [profile]
   );
 
   // Delete a schedule entry
   const deleteSchedule = useCallback(
     async (userId: string, date: string): Promise<boolean> => {
       try {
-        const { error: deleteError } = await supabase
-          .from("schedules")
-          .delete()
-          .eq("user_id", userId)
-          .eq("schedule_date", date);
-
-        if (deleteError) {
-          console.error("Error deleting schedule:", deleteError);
-          setError(deleteError.message);
-          return false;
-        }
+        await directRpc("void_staff_schedule", {
+          p_user_id: userId,
+          p_schedule_date: date,
+          p_reason: "Schedule entry removed from the active roster",
+        }, "schedule.void");
 
         // Remove from local state
         setSchedules((prev) =>
@@ -438,7 +336,7 @@ export function useSchedule(): UseScheduleReturn {
         return false;
       }
     },
-    [supabase]
+    []
   );
 
   // Copy an entire week's schedule to another week
@@ -465,6 +363,7 @@ export function useSchedule(): UseScheduleReturn {
         const { data: sourceSchedules, error: fetchError } = await supabase
           .from("schedules")
           .select("*")
+          .eq("is_active", true)
           .gte("schedule_date", sourceDates[0])
           .lte("schedule_date", sourceDates[6]) as { data: SourceScheduleResult[] | null; error: Error | null };
 

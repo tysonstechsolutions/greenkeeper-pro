@@ -10,7 +10,6 @@ import {
   directPatchRow,
   directRpc,
   directSelectAll,
-  directSelectList,
 } from "@/lib/supabase/rest";
 import {
   occurrencesFor,
@@ -230,6 +229,7 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
         filters: [
           `schedule_date=gte.${encodeURIComponent(dates[0])}`,
           `schedule_date=lte.${encodeURIComponent(weekEnd)}`,
+          "is_active=eq.true",
         ],
         orderBy: [{ column: "schedule_date" }, { column: "id" }],
         label: "scheduleBoard.fetchShifts",
@@ -798,16 +798,6 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       try {
         // Upsert via direct REST. Same wedge-resistance reasoning as the
         // initial fetches above — supabase.from() can hang post-navigation.
-        const existing = await directSelectList<{ id: string }>("schedules", {
-          columns: "id",
-          filters: [
-            `user_id=eq.${encodeURIComponent(userId)}`,
-            `schedule_date=eq.${encodeURIComponent(date)}`,
-          ],
-          limit: 1,
-          label: "scheduleBoard.setShift.check",
-        });
-
         const patch = {
           shift_start: shiftPatch.shift_start ?? null,
           shift_end: shiftPatch.shift_end ?? null,
@@ -816,26 +806,12 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
           notes: shiftPatch.notes ?? null,
         };
 
-        if (existing.length > 0) {
-          await directPatchRow(
-            "schedules",
-            "id",
-            existing[0].id,
-            patch,
-            "scheduleBoard.setShift.update",
-          );
-        } else {
-          await directInsertRow(
-            "schedules",
-            {
-              ...patch,
-              user_id: userId,
-              schedule_date: date,
-              created_by: profile.id,
-            },
-            "scheduleBoard.setShift.insert",
-          );
-        }
+        await directRpc("upsert_staff_schedule", {
+          p_user_id: userId,
+          p_schedule_date: date,
+          p_values: patch,
+          p_reason: "Schedule board shift saved",
+        }, "scheduleBoard.setShift");
 
         // Refresh the cell with the real row so id is correct for later edits.
         await fetchBoard();
@@ -861,23 +837,11 @@ export function useScheduleBoard(weekStart: string): UseScheduleBoardReturn {
       try {
         // Look up the row id then delete via direct REST. directDeleteRow
         // takes a single id; it's wedge-resistant where supabase.from() isn't.
-        const existing = await directSelectList<{ id: string }>("schedules", {
-          columns: "id",
-          filters: [
-            `user_id=eq.${encodeURIComponent(userId)}`,
-            `schedule_date=eq.${encodeURIComponent(date)}`,
-          ],
-          limit: 1,
-          label: "scheduleBoard.clearShift.check",
-        });
-        if (existing.length > 0) {
-          await directDeleteRow(
-            "schedules",
-            "id",
-            existing[0].id,
-            "scheduleBoard.clearShift.delete",
-          );
-        }
+        await directRpc("void_staff_schedule", {
+          p_user_id: userId,
+          p_schedule_date: date,
+          p_reason: "Schedule board shift cleared",
+        }, "scheduleBoard.clearShift");
         return true;
       } catch (err) {
         rollback();

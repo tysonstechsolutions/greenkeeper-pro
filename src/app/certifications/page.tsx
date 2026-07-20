@@ -19,12 +19,15 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
-  directInsertRow,
-  directPatchRow,
+  directRpc,
   directSelectList,
-  publicStorageUrl,
 } from "@/lib/supabase/rest";
-import { uploadPhoto } from "@/lib/supabase/storage";
+import {
+  openPrivateStorageFile,
+  removePrivateStorageFile,
+  uploadCertificationDocument,
+} from "@/lib/supabase/storage";
+import { ADMIN_ROLES } from "@/components/auth/role-guard";
 import {
   CERT_LEAD_DAYS,
   evaluateCerts,
@@ -54,9 +57,17 @@ const STATUS_BADGE: Record<
   },
 };
 
+interface StaffOption {
+  id: string;
+  full_name: string | null;
+  display_name: string | null;
+}
+
 export default function CertificationsPage() {
-  const { user } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
+  const canManage = !!profile && ADMIN_ROLES.includes(profile.role);
   const [certs, setCerts] = useState<Certification[]>([]);
+  const [staff, setStaff] = useState<StaffOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -64,6 +75,7 @@ export default function CertificationsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Certification | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fProfileId, setFProfileId] = useState("");
   const [fHolder, setFHolder] = useState("");
   const [fName, setFName] = useState("");
   const [fLicense, setFLicense] = useState("");
@@ -74,31 +86,48 @@ export default function CertificationsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
+    if (!canManage) {
+      setCerts([]);
+      setStaff([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const rows = await directSelectList<Certification>("certifications", {
-        columns: "*",
-        filters: ["is_active=eq.true"],
-        limit: 500,
-        label: "certs.list",
-      });
+      const [rows, staffRows] = await Promise.all([
+        directSelectList<Certification>("certifications", {
+          columns: "*",
+          filters: ["is_active=eq.true"],
+          limit: 500,
+          label: "certs.list",
+        }),
+        directSelectList<StaffOption>("staff_directory", {
+          columns: "id,full_name,display_name",
+          filters: ["is_active=eq.true"],
+          orderBy: [{ column: "full_name", ascending: true }],
+          limit: 500,
+          label: "certs.staffDirectory",
+        }),
+      ]);
       setCerts(rows);
+      setStaff(staffRows);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!authLoading) load();
+  }, [authLoading, load]);
 
   const evaluated = useMemo(() => evaluateCerts(certs, new Date()), [certs]);
 
   const openAdd = () => {
     setEditing(null);
+    setFProfileId("");
     setFHolder("");
     setFName("");
     setFLicense("");
@@ -112,6 +141,7 @@ export default function CertificationsPage() {
 
   const openEdit = (c: Certification) => {
     setEditing(c);
+    setFProfileId(c.profile_id ?? "");
     setFHolder(c.holder);
     setFName(c.cert_name);
     setFLicense(c.license_number ?? "");
@@ -128,6 +158,7 @@ export default function CertificationsPage() {
     setSaving(true);
     setError(null);
     setNotice(null);
+    let orphanedUploadPath: string | null = null;
     try {
       // Card/license photo is best-effort — the record must never block.
       let documentPath = editing?.document_path ?? null;
@@ -137,8 +168,9 @@ export default function CertificationsPage() {
           uploadFailed = true;
         } else {
           try {
-            const up = await uploadPhoto(file, user.id);
+            const up = await uploadCertificationDocument(file, user.id);
             documentPath = up.storagePath;
+            orphanedUploadPath = up.storagePath;
           } catch {
             uploadFailed = true;
           }
@@ -147,20 +179,26 @@ export default function CertificationsPage() {
 
       const row = {
         holder: fHolder.trim(),
+        profile_id: fProfileId || null,
         cert_name: fName.trim(),
         license_number: fLicense.trim() || null,
         issued_date: fIssued || null,
         expires_date: fExpires || null,
         document_path: documentPath,
+        document_bucket: file
+          ? "certification-documents"
+          : (editing?.document_bucket ?? "certification-documents"),
         notes: fNotes.trim() || null,
-        updated_at: new Date().toISOString(),
       };
 
-      if (editing) {
-        await directPatchRow("certifications", "id", editing.id, row, "certs.update");
-      } else {
-        await directInsertRow("certifications", row, "certs.insert");
-      }
+      await directRpc("save_certification", {
+        p_certification_id: editing?.id ?? null,
+        p_values: row,
+        p_reason: editing
+          ? "Certification record updated"
+          : "Certification record created",
+      }, editing ? "certs.update" : "certs.insert");
+      orphanedUploadPath = null;
       setShowForm(false);
       await load();
       setNotice(
@@ -171,6 +209,14 @@ export default function CertificationsPage() {
             : "Certification added.",
       );
     } catch (e) {
+      if (orphanedUploadPath) {
+        try {
+          await removePrivateStorageFile("certification-documents", orphanedUploadPath);
+        } catch {
+          // The manager can still remove an unlinked object through the private
+          // bucket's orphan-only delete policy; preserve the original error.
+        }
+      }
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
@@ -179,8 +225,13 @@ export default function CertificationsPage() {
 
   const retire = async (c: Certification) => {
     if (!window.confirm(`Remove "${c.cert_name} — ${c.holder}" from tracking?`)) return;
+    const reason = window.prompt("Why is this certification being retired?")?.trim();
+    if (!reason) return;
     try {
-      await directPatchRow("certifications", "id", c.id, { is_active: false }, "certs.retire");
+      await directRpc("retire_certification", {
+        p_certification_id: c.id,
+        p_reason: reason,
+      }, "certs.retire");
       setCerts((prev) => prev.filter((x) => x.id !== c.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -189,6 +240,20 @@ export default function CertificationsPage() {
 
   const inputCls =
     "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
+
+  if (authLoading) {
+    return <div className="gk-page mx-auto text-sm text-muted-foreground">Checking accessâ€¦</div>;
+  }
+  if (!canManage) {
+    return (
+      <div className="gk-page mx-auto">
+        <h1>Certifications & Licenses</h1>
+        <div role="alert" className="gk-card mt-4 p-4 text-sm text-muted-foreground">
+          Qualification records are restricted to authorized management. Scoped employee and supervisor access remains enforced by the database.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="gk-page mx-auto">
@@ -221,6 +286,31 @@ export default function CertificationsPage() {
 
       {showForm && (
         <div className="gk-card p-3 mb-5 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Linked staff member
+            </label>
+            <select
+              value={fProfileId}
+              onChange={(e) => {
+                const profileId = e.target.value;
+                setFProfileId(profileId);
+                const person = staff.find((candidate) => candidate.id === profileId);
+                if (person) setFHolder(person.display_name || person.full_name || "");
+              }}
+              className={inputCls}
+            >
+              <option value="">Not linked (external or legacy holder)</option>
+              {staff.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.display_name || person.full_name || "Unnamed staff member"}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Link employees whenever possible so their qualification and protected evidence follow the employee/supervisor access rules.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Who holds it</label>
@@ -315,15 +405,23 @@ export default function CertificationsPage() {
                   </p>
                 </div>
                 {cert.document_path && (
-                  <a
-                    href={publicStorageUrl("photos", cert.document_path)}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await openPrivateStorageFile(
+                          cert.document_bucket || "photos",
+                          cert.document_path!,
+                        );
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "Unable to open the protected file");
+                      }
+                    }}
                     className="inline-link p-1.5 rounded text-muted-foreground hover:text-foreground shrink-0"
                     aria-label="View card"
                   >
                     <Paperclip className="w-4 h-4" />
-                  </a>
+                  </button>
                 )}
                 <button
                   onClick={() => openEdit(cert)}

@@ -9,8 +9,8 @@
  * the engagement profile separately via useOneOnOne.applyProfileUpdates.
  */
 import {
-  directInsertRow,
   directInsertRows,
+  directRpc,
   getCachedUserId,
 } from "@/lib/supabase/rest";
 import type { ProposedAction } from "./types";
@@ -47,19 +47,15 @@ export async function applyAction(
 
     case "time_off":
       if (action.start_date && action.end_date) {
-        await directInsertRow(
-          "time_off_requests",
+        await directRpc(
+          "create_time_off_request_for_employee",
           {
-            user_id: ctx.employeeId,
-            start_date: action.start_date,
-            end_date: action.end_date,
-            request_type: action.request_type || "vacation",
-            reason: action.reason ?? null,
-            // The GM entered and approved it in the review, so it lands
-            // approved and shows on the schedule board immediately.
-            status: "approved",
-            reviewed_by: getCachedUserId(),
-            reviewed_at: new Date().toISOString(),
+            p_user_id: ctx.employeeId,
+            p_start_date: action.start_date,
+            p_end_date: action.end_date,
+            p_request_type: action.request_type || "vacation",
+            p_status: "approved",
+            p_reason: action.reason ?? "Approved one-on-one follow-up",
           },
           "oneonone.apply.timeoff",
         );
@@ -68,14 +64,17 @@ export async function applyAction(
 
     case "calendar":
       if (action.event_date) {
-        await directInsertRow(
-          "calendar_events",
+        await directRpc(
+          "save_calendar_event",
           {
+            p_event_id: null,
+            p_values: {
             title: action.event_title || action.label,
             category: action.event_category || "other",
             event_date: action.event_date,
             all_day: true,
-            created_by: getCachedUserId(),
+            },
+            p_reason: "Approved one-on-one calendar follow-up",
           },
           "oneonone.apply.calendar",
         );

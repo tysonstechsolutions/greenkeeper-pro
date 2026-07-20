@@ -32,6 +32,7 @@ import {
 import { buildPacketPdf } from "@/lib/onboarding/build-packet-pdf";
 import { callApi } from "@/lib/api/client";
 import { saveCreatedDocument } from "@/lib/documents/saved-documents";
+import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 
 type RoleFilter = "everyone" | OnboardingRole;
 
@@ -93,6 +94,24 @@ const mdComponents = {
 };
 
 export default function OnboardingPage() {
+  return (
+    <RoleGuard
+      allowedRoles={ADMIN_ROLES}
+      fallback={(
+        <div className="gk-page mx-auto">
+          <h1>Onboarding Packet</h1>
+          <div role="alert" className="gk-card mt-4 p-4 text-sm text-muted-foreground">
+            Onboarding definitions and packet generation are restricted to authorized management.
+          </div>
+        </div>
+      )}
+    >
+      <OnboardingContent />
+    </RoleGuard>
+  );
+}
+
+function OnboardingContent() {
   const { docs, loading, error, saveDoc, createDoc, deleteDoc, restoreDefaults } =
     useOnboardingDocs();
 
@@ -287,7 +306,7 @@ ${draft.body}`;
 
   const removeDraft = async () => {
     if (!draft?.id) return;
-    if (!window.confirm(`Delete "${draft.title}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Retire "${draft.title}"? Its audit history will be preserved.`)) return;
     setSaving(true);
     try {
       await deleteDoc(draft.id);

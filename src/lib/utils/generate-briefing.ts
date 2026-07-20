@@ -173,6 +173,7 @@ async function fetchBriefingData(date: Date): Promise<BriefingData> {
       user_id,
       profiles!schedules_user_id_fkey(full_name, role)
     `)
+    .eq("is_active", true)
     .eq("schedule_date", dateStr)
     .neq("shift_type", "off") as { data: ScheduleResult[] | null };
 

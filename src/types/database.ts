@@ -171,7 +171,7 @@ export type ShiftType = "morning" | "afternoon" | "split" | "full" | "on_call" |
 
 export type TimeOffRequestType = "vacation" | "sick" | "personal" | "military" | "other";
 
-export type TimeOffRequestStatus = "pending" | "approved" | "denied";
+export type TimeOffRequestStatus = "pending" | "approved" | "denied" | "cancelled";
 
 export type NotificationType =
   | "task_assigned"

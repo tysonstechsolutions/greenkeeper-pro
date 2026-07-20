@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   directSelectList,
-  directInsertRow,
-  directInsertRows,
-  directPatchRow,
-  directDeleteRow,
-  directDeleteByFilter,
-  getCachedUserId,
+  directRpc,
 } from "@/lib/supabase/rest";
 import type {
   ProShopSchedule,
@@ -64,6 +59,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       }),
       directSelectList<ProShopTimeOff>("pro_shop_time_off", {
         columns: "*",
+        filters: ["is_active=eq.true"],
         orderBy: [{ column: "start_date", ascending: true }],
         label: "proshop.timeoff",
       }),
@@ -78,7 +74,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     const last = lastOfMonth(year, month0);
     const rows = await directSelectList<ProShopShift>("pro_shop_shifts", {
       columns: "*",
-      filters: [`shift_date=gte.${first}`, `shift_date=lte.${last}`],
+      filters: [`shift_date=gte.${first}`, `shift_date=lte.${last}`, "is_active=eq.true"],
       orderBy: [
         { column: "shift_date", ascending: true },
         { column: "start_time", ascending: true },
@@ -124,11 +120,13 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       availability: WeeklyAvailability,
       availabilityText: string,
     ) => {
-      await directPatchRow(
-        "pro_shop_staff",
-        "id",
-        staffId,
-        { availability, availability_text: availabilityText },
+      await directRpc(
+        "save_pro_shop_staff",
+        {
+          p_staff_id: staffId,
+          p_values: { availability, availability_text: availabilityText },
+          p_reason: "Weekly availability updated",
+        },
         "proshop.staff.availability",
       );
       await loadStatic();
@@ -145,9 +143,11 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       phone?: string | null;
     }) => {
       const maxSort = staff.reduce((m, s) => Math.max(m, s.sort_order), 0);
-      await directInsertRow(
-        "pro_shop_staff",
+      await directRpc(
+        "save_pro_shop_staff",
         {
+          p_staff_id: null,
+          p_values: {
           full_name: payload.full_name,
           position: payload.position,
           default_group: payload.default_group,
@@ -156,6 +156,8 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           phone: payload.phone ?? null,
           sort_order: maxSort + 1,
           availability: { weekly: {}, notes: "" },
+          },
+          p_reason: "Pro-shop roster member added",
         },
         "proshop.staff.add",
       );
@@ -166,7 +168,11 @@ export function useProShop(initialYear: number, initialMonth0: number) {
 
   const updateStaff = useCallback(
     async (staffId: string, patch: Partial<ProShopStaff>) => {
-      await directPatchRow("pro_shop_staff", "id", staffId, patch, "proshop.staff.update");
+      await directRpc("save_pro_shop_staff", {
+        p_staff_id: staffId,
+        p_values: patch,
+        p_reason: "Pro-shop roster member updated",
+      }, "proshop.staff.update");
       await loadStatic();
     },
     [loadStatic],
@@ -182,17 +188,14 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           month: "long",
           year: "numeric",
         })} Pro Shop Schedule`;
-        sched = await directInsertRow<ProShopSchedule>(
-          "pro_shop_schedules",
-          { month: monthKey, title, status: "draft", created_by: getCachedUserId() },
+        sched = await directRpc<ProShopSchedule>(
+          "save_pro_shop_schedule",
+          {
+            p_schedule_id: null,
+            p_values: { month: monthKey, title },
+            p_reason: "Monthly pro-shop schedule created",
+          },
           "proshop.schedule.create",
-        );
-      }
-      if (replace) {
-        await directDeleteByFilter(
-          "pro_shop_shifts",
-          [`schedule_id=eq.${sched.id}`],
-          "proshop.shifts.clear",
         );
       }
       // Read staff + time-off FRESH so a change applied moments earlier (e.g. the
@@ -200,18 +203,19 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       const [freshStaff, freshTimeOff] = await Promise.all([
         directSelectList<ProShopStaff>("pro_shop_staff", {
           columns: "*",
+          filters: ["is_active=eq.true"],
           orderBy: [{ column: "sort_order", ascending: true }],
           label: "proshop.staff.fresh",
         }),
         directSelectList<ProShopTimeOff>("pro_shop_time_off", {
           columns: "*",
+          filters: ["is_active=eq.true"],
           orderBy: [{ column: "start_date", ascending: true }],
           label: "proshop.timeoff.fresh",
         }),
       ]);
       const planned = expandMonth(freshStaff, year, month0, freshTimeOff);
       const rows = planned.map((p) => ({
-        schedule_id: sched!.id,
         staff_id: p.staff_id,
         shift_date: p.shift_date,
         group: p.group,
@@ -219,7 +223,14 @@ export function useProShop(initialYear: number, initialMonth0: number) {
         end_time: p.end_time,
         source: p.source,
       }));
-      if (rows.length) await directInsertRows("pro_shop_shifts", rows, "proshop.shifts.generate");
+      await directRpc("replace_pro_shop_schedule_shifts", {
+        p_schedule_id: sched.id,
+        p_rows: rows,
+        p_replace: replace,
+        p_reason: replace
+          ? "Monthly schedule regenerated and prior active shifts replaced"
+          : "Monthly schedule generated without replacing unmatched shifts",
+      }, "proshop.shifts.generate");
       await Promise.all([loadStatic(), loadShifts()]);
       return { inserted: rows.length };
     },
@@ -228,7 +239,11 @@ export function useProShop(initialYear: number, initialMonth0: number) {
 
   const setScheduleNotes = useCallback(
     async (scheduleId: string, notes: string) => {
-      await directPatchRow("pro_shop_schedules", "id", scheduleId, { notes }, "proshop.schedule.notes");
+      await directRpc("save_pro_shop_schedule", {
+        p_schedule_id: scheduleId,
+        p_values: { notes },
+        p_reason: "Schedule notes updated",
+      }, "proshop.schedule.notes");
       await loadStatic();
     },
     [loadStatic],
@@ -237,13 +252,6 @@ export function useProShop(initialYear: number, initialMonth0: number) {
   /** Publish the month and drop a "rebuild next month" reminder on the calendar. */
   const publishMonth = useCallback(
     async (scheduleId: string) => {
-      await directPatchRow(
-        "pro_shop_schedules",
-        "id",
-        scheduleId,
-        { status: "published" },
-        "proshop.schedule.publish",
-      );
       // Reminder to build the *next* month, dated ~5 days before this month ends.
       const next = new Date(year, month0 + 1, 1);
       const nextLabel = next.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -251,27 +259,12 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       const remindDate = ymd(new Date(year, month0 + 1, 0 - 4)); // 5 days before end
       void remindOn;
       const title = `Update Pro Shop Schedule — ${nextLabel}`;
-      // De-dupe: remove any existing reminder with this title first.
-      const existing = await directSelectList<{ id: string }>("calendar_events", {
-        columns: "id",
-        filters: [`title=eq.${encodeURIComponent(title)}`],
-        label: "proshop.reminder.find",
-      });
-      for (const e of existing) {
-        await directDeleteRow("calendar_events", "id", e.id, "proshop.reminder.clear");
-      }
-      await directInsertRow(
-        "calendar_events",
-        {
-          title,
-          category: "deadline",
-          event_date: remindDate,
-          all_day: true,
-          notes: `Build the ${nextLabel} pro shop schedule and publish it.`,
-          created_by: getCachedUserId(),
-        },
-        "proshop.reminder.add",
-      );
+      await directRpc("publish_pro_shop_schedule", {
+        p_schedule_id: scheduleId,
+        p_reminder_date: remindDate,
+        p_reminder_title: title,
+        p_reminder_notes: `Build the ${nextLabel} pro shop schedule and publish it.`,
+      }, "proshop.schedule.publish");
       await loadStatic();
     },
     [year, month0, loadStatic],
@@ -281,9 +274,11 @@ export function useProShop(initialYear: number, initialMonth0: number) {
   const addShift = useCallback(
     async (input: ShiftInput) => {
       const sched = schedules.find((s) => s.month === monthKey) ?? null;
-      await directInsertRow(
-        "pro_shop_shifts",
+      await directRpc(
+        "save_pro_shop_shift",
         {
+          p_shift_id: null,
+          p_values: {
           schedule_id: sched?.id ?? null,
           staff_id: input.staff_id,
           shift_date: input.shift_date,
@@ -292,6 +287,8 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           end_time: input.end_time,
           note: input.note ?? null,
           source: input.source ?? "manual",
+          },
+          p_reason: "Manual pro-shop shift added",
         },
         "proshop.shift.add",
       );
@@ -302,7 +299,11 @@ export function useProShop(initialYear: number, initialMonth0: number) {
 
   const updateShift = useCallback(
     async (shiftId: string, patch: Partial<ProShopShift>) => {
-      await directPatchRow("pro_shop_shifts", "id", shiftId, patch, "proshop.shift.update");
+      await directRpc("save_pro_shop_shift", {
+        p_shift_id: shiftId,
+        p_values: patch,
+        p_reason: "Pro-shop shift updated",
+      }, "proshop.shift.update");
       await loadShifts();
     },
     [loadShifts],
@@ -310,7 +311,10 @@ export function useProShop(initialYear: number, initialMonth0: number) {
 
   const deleteShift = useCallback(
     async (shiftId: string) => {
-      await directDeleteRow("pro_shop_shifts", "id", shiftId, "proshop.shift.delete");
+      await directRpc("retire_pro_shop_shift", {
+        p_shift_id: shiftId,
+        p_reason: "Shift removed from the active schedule",
+      }, "proshop.shift.retire");
       await loadShifts();
     },
     [loadShifts],
@@ -335,11 +339,13 @@ export function useProShop(initialYear: number, initialMonth0: number) {
         prev.map((s) => (s.id === sched.id ? { ...s, dismissed_warnings: next } : s)),
       );
       try {
-        await directPatchRow(
-          "pro_shop_schedules",
-          "id",
-          sched.id,
-          { dismissed_warnings: next },
+        await directRpc(
+          "save_pro_shop_schedule",
+          {
+            p_schedule_id: sched.id,
+            p_values: { dismissed_warnings: next },
+            p_reason: dismissed ? `Coverage warning ${code} dismissed` : `Coverage warning ${code} restored`,
+          },
           "proshop.schedule.dismiss",
         );
       } catch (e) {
@@ -362,9 +368,13 @@ export function useProShop(initialYear: number, initialMonth0: number) {
   // ── Time off ──────────────────────────────────────────────────────────────
   const addTimeOff = useCallback(
     async (staffId: string, startDate: string, endDate: string, reason: string) => {
-      await directInsertRow(
-        "pro_shop_time_off",
-        { staff_id: staffId, start_date: startDate, end_date: endDate, reason },
+      await directRpc(
+        "save_pro_shop_time_off",
+        {
+          p_time_off_id: null,
+          p_values: { staff_id: staffId, start_date: startDate, end_date: endDate, reason },
+          p_reason: "Pro-shop time off added",
+        },
         "proshop.timeoff.add",
       );
       await Promise.all([loadStatic(), loadShifts()]);
@@ -374,7 +384,10 @@ export function useProShop(initialYear: number, initialMonth0: number) {
 
   const removeTimeOff = useCallback(
     async (id: string) => {
-      await directDeleteRow("pro_shop_time_off", "id", id, "proshop.timeoff.delete");
+      await directRpc("retire_pro_shop_time_off", {
+        p_time_off_id: id,
+        p_reason: "Pro-shop time-off entry removed from the active schedule",
+      }, "proshop.timeoff.retire");
       await Promise.all([loadStatic(), loadShifts()]);
     },
     [loadStatic, loadShifts],

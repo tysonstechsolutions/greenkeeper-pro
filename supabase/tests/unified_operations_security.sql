@@ -37,6 +37,9 @@ INSERT INTO public.tasks (
   ('fb000000-0000-0000-0000-000000000008', 'Unsupported leadership source guard', 'admin', 'normal', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 5, 20, 'Synthetic spare task', 'Lifecycle remains controlled'),
   ('fb000000-0000-0000-0000-000000000009', 'Leadership approval task', 'admin', 'high', 'pending', 'fa000000-0000-0000-0000-000000000001', CURRENT_DATE + 6, 30, 'Exercise approved completion', 'Approved outcome recorded');
 
+-- Phase 0B.5 requires every calendar mutation, including owner/admin fixture
+-- setup, to have an authenticated actor for attribution and audit history.
+SELECT SET_CONFIG('request.jwt.claim.sub', 'fa000000-0000-0000-0000-000000000001', TRUE);
 INSERT INTO public.calendar_events(
   id, title, category, event_date, created_by
 ) VALUES (

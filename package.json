@@ -15,6 +15,7 @@
     "test:unified-operations-security": "node scripts/test-unified-operations-security-local.mjs",
     "test:staff-privacy-security": "node scripts/test-staff-privacy-security-local.mjs",
     "test:personnel-privacy-security": "node scripts/test-personnel-privacy-security-local.mjs",
+    "test:workforce-authorization": "node scripts/test-workforce-authorization-local.mjs",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test",

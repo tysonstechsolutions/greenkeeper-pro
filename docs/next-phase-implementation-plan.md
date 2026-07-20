@@ -157,7 +157,9 @@ Application updates route staff profile, SF-52, schedule-import, report, briefin
 
 ### 0B.5 - calendar, certification, onboarding, and schedule authorization
 
-Define owner/attendee/supervisor/department/manager predicates, forced actors, update/delete rules, and history for `calendar_events`, certifications/training, onboarding runs/documents, generic schedules/time off, and pro-shop schedules. Do not use one all-purpose manager predicate where employee self-service is required.
+Status: **implemented and locally verified; production migration and application deployment pending**.
+
+`20260720120000_phase0b5_workforce_authorization.sql` defines separate manager, owner/attendee, employee, direct-supervisor, department, and established pro-scheduler predicates; forces authenticated actors; replaces destructive user-visible removal with terminal states; and adds append-only audit plus transactional outbox history. Calendar events, certifications and private evidence, onboarding documents, generic schedules and time off, and pro-shop scheduling now use command functions instead of direct browser writes. See `docs/phase0b5-workforce-authorization.md` for the authorization contract, verification matrix, and production order.
 
 ### 0B.6 - financial, procurement, inventory, incident, and remaining storage boundaries
 

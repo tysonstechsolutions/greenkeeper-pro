@@ -713,7 +713,7 @@ export function aggregateOperationalWork(input: OperationalAggregationInput): Op
     ...input.obligations.map(baseObligation),
     ...input.steps.map((step) => baseStep(step, step.goal_id ? goalsById.get(step.goal_id) : undefined)),
     ...input.goals.filter((goal) => (stepsByGoal.get(goal.id) ?? []).length === 0).map(baseGoal),
-    ...input.calendarEvents.map(baseCalendar),
+    ...input.calendarEvents.filter((event) => event.status !== "canceled").map(baseCalendar),
     ...input.equipment
       .filter((unit) => ["needs_service", "in_repair", "out_of_service"].includes(unit.status))
       .map(baseEquipment),

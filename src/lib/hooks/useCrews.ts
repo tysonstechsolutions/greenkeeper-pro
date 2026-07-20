@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   directSelectList,
   directPatchByFilter,
+  directRpc,
 } from "@/lib/supabase/rest";
 import { useAuth } from "./useAuth";
 import type { Profile, UserRole } from "@/types/database";
@@ -33,13 +33,71 @@ interface UseCrewsReturn {
   getCrewNames: () => string[];
 }
 
+interface CrewScheduleRow {
+  user_id: string;
+  schedule_date: string;
+  shift_start: string | null;
+  shift_end: string | null;
+  shift_type: string | null;
+  crew_assignment: string | null;
+  notes: string | null;
+}
+
+async function saveCrewAssignment(
+  userId: string,
+  scheduleDate: string,
+  crewAssignment: string | null,
+  reason: string,
+): Promise<void> {
+  const existing = await directSelectList<CrewScheduleRow>("schedules", {
+    columns: "user_id,schedule_date,shift_start,shift_end,shift_type,crew_assignment,notes",
+    filters: [
+      `user_id=eq.${encodeURIComponent(userId)}`,
+      `schedule_date=eq.${scheduleDate}`,
+    ],
+    limit: 1,
+    label: "useCrews.schedule.current",
+  });
+  const row = existing[0];
+  await directRpc("upsert_staff_schedule", {
+    p_user_id: userId,
+    p_schedule_date: scheduleDate,
+    p_values: {
+      shift_start: row?.shift_start ?? null,
+      shift_end: row?.shift_end ?? null,
+      shift_type: row?.shift_type ?? null,
+      crew_assignment: crewAssignment,
+      notes: row?.notes ?? null,
+    },
+    p_reason: reason,
+  }, "useCrews.schedule.saveCrew");
+}
+
+async function replaceCrewAssignments(
+  oldName: string,
+  newName: string | null,
+  reason: string,
+): Promise<void> {
+  const rows = await directSelectList<CrewScheduleRow>("schedules", {
+    columns: "user_id,schedule_date,shift_start,shift_end,shift_type,crew_assignment,notes",
+    filters: [
+      `crew_assignment=eq.${encodeURIComponent(oldName)}`,
+      "is_active=eq.true",
+    ],
+    label: "useCrews.schedule.byCrew",
+  });
+  if (rows.length === 0) return;
+  await directRpc("bulk_upsert_staff_schedules", {
+    p_entries: rows.map((row) => ({ ...row, crew_assignment: newName })),
+    p_reason: reason,
+  }, "useCrews.schedule.replaceCrew");
+}
+
 export function useCrews(): UseCrewsReturn {
   const [crews, setCrews] = useState<Crew[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user, isSuper } = useAuth();
-
-  const supabase = createClient();
+  const { isSuper } = useAuth();
 
   // Fetch all crews by aggregating crew_assignment values
   const fetchCrews = useCallback(async (): Promise<Crew[]> => {
@@ -63,7 +121,7 @@ export function useCrews(): UseCrewsReturn {
           }),
           directSelectList<{ crew_assignment: string | null }>("schedules", {
             columns: "crew_assignment",
-            filters: [`crew_assignment=not.is.null`],
+            filters: [`crew_assignment=not.is.null`, `is_active=eq.true`],
             label: "useCrews.fetchCrews.schedules",
           }),
           directSelectList<{ assigned_crew: string | null }>("tasks", {
@@ -136,6 +194,7 @@ export function useCrews(): UseCrewsReturn {
             filters: [
               `schedule_date=eq.${today}`,
               `crew_assignment=not.is.null`,
+              "is_active=eq.true",
             ],
             label: "useCrews.fetchCrews.currentSchedules",
           },
@@ -214,20 +273,11 @@ export function useCrews(): UseCrewsReturn {
       // To persist the crew, we'll assign the foreman to it via a schedule entry
       if (foremanId) {
         const today = todayLocal();
-         
-        const { error: insertError } = await supabase.from("schedules")
-          .upsert({
-            user_id: foremanId,
-            schedule_date: today,
-            crew_assignment: name,
-            created_by: user?.id,
-          }, {
-            onConflict: "user_id,schedule_date"
-          });
-
-        if (insertError) {
-          console.error("Error creating crew:", insertError);
-          setError(insertError.message);
+        try {
+          await saveCrewAssignment(foremanId, today, name, "Crew created and foreman assigned");
+        } catch (err) {
+          console.error("Error creating crew:", err);
+          setError(err instanceof Error ? err.message : "Failed to create crew");
           return false;
         }
       }
@@ -244,7 +294,7 @@ export function useCrews(): UseCrewsReturn {
       setCrews((prev) => [...prev, newCrew].sort((a, b) => a.name.localeCompare(b.name)));
       return true;
     },
-    [isSuper, crews, supabase, user]
+    [isSuper, crews]
   );
 
   // Delete a crew (remove all crew assignments with this name)
@@ -257,12 +307,7 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         // Clear crew assignments from schedules + tasks via direct REST.
-        await directPatchByFilter(
-          "schedules",
-          [`crew_assignment=eq.${encodeURIComponent(name)}`],
-          { crew_assignment: null },
-          "useCrews.deleteCrew.schedules",
-        );
+        await replaceCrewAssignments(name, null, "Crew removed from active schedule entries");
         await directPatchByFilter(
           "tasks",
           [`assigned_crew=eq.${encodeURIComponent(name)}`],
@@ -297,12 +342,7 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         // Update schedules + tasks via direct REST.
-        await directPatchByFilter(
-          "schedules",
-          [`crew_assignment=eq.${encodeURIComponent(oldName)}`],
-          { crew_assignment: newName },
-          "useCrews.renameCrew.schedules",
-        );
+        await replaceCrewAssignments(oldName, newName, "Crew renamed on active schedule entries");
         await directPatchByFilter(
           "tasks",
           [`assigned_crew=eq.${encodeURIComponent(oldName)}`],
@@ -338,20 +378,11 @@ export function useCrews(): UseCrewsReturn {
       // If setting a foreman, add them to the crew
       if (foremanId) {
         const today = todayLocal();
-         
-        const { error: updateError } = await supabase.from("schedules")
-          .upsert({
-            user_id: foremanId,
-            schedule_date: today,
-            crew_assignment: crewName,
-            created_by: user?.id,
-          }, {
-            onConflict: "user_id,schedule_date"
-          });
-
-        if (updateError) {
-          console.error("Error setting foreman:", updateError);
-          setError(updateError.message);
+        try {
+          await saveCrewAssignment(foremanId, today, crewName, "Crew foreman assigned");
+        } catch (err) {
+          console.error("Error setting foreman:", err);
+          setError(err instanceof Error ? err.message : "Failed to set foreman");
           return false;
         }
       }
@@ -360,7 +391,7 @@ export function useCrews(): UseCrewsReturn {
       await fetchCrews();
       return true;
     },
-    [isSuper, supabase, user, fetchCrews]
+    [isSuper, fetchCrews]
   );
 
   // Add member to crew (via schedule assignment for today)
@@ -373,22 +404,7 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         const today = todayLocal();
-         
-        const { error: upsertError } = await supabase.from("schedules")
-          .upsert({
-            user_id: userId,
-            schedule_date: today,
-            crew_assignment: crewName,
-            created_by: user?.id,
-          }, {
-            onConflict: "user_id,schedule_date"
-          });
-
-        if (upsertError) {
-          console.error("Error adding member to crew:", upsertError);
-          setError(upsertError.message);
-          return false;
-        }
+        await saveCrewAssignment(userId, today, crewName, "Employee assigned to crew");
 
         await fetchCrews();
         return true;
@@ -398,7 +414,7 @@ export function useCrews(): UseCrewsReturn {
         return false;
       }
     },
-    [isSuper, supabase, user, fetchCrews]
+    [isSuper, fetchCrews]
   );
 
   // Remove member from crew
@@ -411,15 +427,7 @@ export function useCrews(): UseCrewsReturn {
 
       try {
         const today = todayLocal();
-        await directPatchByFilter(
-          "schedules",
-          [
-            `user_id=eq.${encodeURIComponent(userId)}`,
-            `schedule_date=eq.${today}`,
-          ],
-          { crew_assignment: null },
-          "useCrews.removeMemberFromCrew",
-        );
+        await saveCrewAssignment(userId, today, null, "Employee removed from crew");
 
         await fetchCrews();
         return true;

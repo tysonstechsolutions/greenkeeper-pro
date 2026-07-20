@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { directRpc } from "@/lib/supabase/rest";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { ADMIN_ROLES } from "@/components/auth/role-guard";
 import {
   DEFAULT_DOCUMENTS,
   type OnboardingCategory,
@@ -33,6 +36,8 @@ function defaultsAsRows() {
 
 export function useOnboardingDocs() {
   const supabase = createClient();
+  const { profile } = useAuth();
+  const canManage = !!profile && ADMIN_ROLES.includes(profile.role);
   const [docs, setDocs] = useState<OnboardingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +47,7 @@ export function useOnboardingDocs() {
     const { data, error: err } = await supabase
       .from(TABLE)
       .select("id, slug, title, category, roles, body, sort_order")
+      .eq("is_active", true)
       .order("sort_order", { ascending: true });
     if (err) throw err;
     return (data ?? []) as OnboardingDoc[];
@@ -56,15 +62,16 @@ export function useOnboardingDocs() {
       // built-in docs added to default-documents.ts since. Idempotent upsert by
       // slug; runs once per mount so an in-session delete of a built-in still
       // sticks for the session (it re-seeds on the next visit).
-      if (!seededRef.current) {
+      if (!seededRef.current && canManage) {
         seededRef.current = true;
         const have = new Set(rows.map((r) => r.slug));
         const missing = defaultsAsRows().filter((r) => !have.has(r.slug));
         if (missing.length > 0) {
-          const { error: seedErr } = await supabase
-            .from(TABLE)
-            .upsert(missing, { onConflict: "slug" });
-          if (seedErr) throw seedErr;
+          await directRpc("sync_onboarding_documents", {
+            p_documents: missing,
+            p_replace_existing: false,
+            p_reason: "Missing authored onboarding defaults synchronized",
+          }, "onboarding.defaults.sync");
           rows = await fetchDocs();
         }
       }
@@ -74,7 +81,7 @@ export function useOnboardingDocs() {
     } finally {
       setLoading(false);
     }
-  }, [fetchDocs, supabase]);
+  }, [fetchDocs, canManage]);
 
   useEffect(() => {
     load();
@@ -85,14 +92,14 @@ export function useOnboardingDocs() {
       id: string,
       patch: Partial<Pick<OnboardingDoc, "title" | "category" | "roles" | "body">>,
     ) => {
-      const { error: err } = await supabase
-        .from(TABLE)
-        .update({ ...patch, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (err) throw err;
+      await directRpc("save_onboarding_document", {
+        p_document_id: id,
+        p_values: patch,
+        p_reason: "Onboarding document updated",
+      }, "onboarding.document.update");
       await load();
     },
-    [supabase, load],
+    [load],
   );
 
   const createDoc = useCallback(
@@ -104,41 +111,45 @@ export function useOnboardingDocs() {
     }) => {
       const maxOrder = docs.reduce((m, d) => Math.max(m, d.sort_order), 0);
       const slug = `custom-${Date.now()}`;
-      const { data, error: err } = await supabase
-        .from(TABLE)
-        .insert({
+      const data = await directRpc<{ id: string }>("save_onboarding_document", {
+        p_document_id: null,
+        p_values: {
           slug,
           title: input.title,
           category: input.category,
           roles: input.roles,
           body: input.body,
           sort_order: maxOrder + 1,
-        })
-        .select("id")
-        .single();
-      if (err) throw err;
+        },
+        p_reason: "Custom onboarding document created",
+      }, "onboarding.document.create");
       await load();
-      return data?.id as string | undefined;
+      return data?.id;
     },
-    [supabase, docs, load],
+    [docs, load],
   );
 
   const deleteDoc = useCallback(
     async (id: string) => {
-      const { error: err } = await supabase.from(TABLE).delete().eq("id", id);
-      if (err) throw err;
+      const reason = window.prompt("Why is this onboarding document being retired?")?.trim();
+      if (!reason) return;
+      await directRpc("retire_onboarding_document", {
+        p_document_id: id,
+        p_reason: reason,
+      }, "onboarding.document.retire");
       await load();
     },
-    [supabase, load],
+    [load],
   );
 
   const restoreDefaults = useCallback(async () => {
-    const { error: err } = await supabase
-      .from(TABLE)
-      .upsert(defaultsAsRows(), { onConflict: "slug" });
-    if (err) throw err;
+    await directRpc("sync_onboarding_documents", {
+      p_documents: defaultsAsRows(),
+      p_replace_existing: true,
+      p_reason: "Authored onboarding defaults restored",
+    }, "onboarding.defaults.restore");
     await load();
-  }, [supabase, load]);
+  }, [load]);
 
   return {
     docs,
