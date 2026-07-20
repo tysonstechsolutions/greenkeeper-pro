@@ -150,7 +150,17 @@ function ProfileContent() {
   } = useEmployee(id);
   const { profiles } = useProfiles();
 
-  const [tab, setTab] = useState<Tab>("info");
+  // Honor a `tab` query param so links can land straight on a section — e.g.
+  // the 1:1s launcher deep-links to `?id=…&tab=oneonone` to skip the click
+  // path through Info → 1:1s.
+  const tabParam = params.get("tab");
+  const initialTab: Tab =
+    tabParam === "oneonone" ||
+    tabParam === "documents" ||
+    tabParam === "records"
+      ? tabParam
+      : "info";
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   // ── Info form ──
   const [fullName, setFullName] = useState("");
