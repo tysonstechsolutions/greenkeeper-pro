@@ -71,6 +71,13 @@ describe("personnel privacy application routing", () => {
     );
   });
 
+  it("does not require the optional legacy preferences column to load an employee", () => {
+    const profileQuery = employeeHook.match(/"id,email,[^"]+"/)?.[0] ?? "";
+
+    expect(profileQuery).toContain("avatar_url,is_active");
+    expect(profileQuery).not.toContain("user_preferences");
+  });
+
   it("uses the safe directory for ordinary staff lists", () => {
     expect(profilesHook).toContain("/rest/v1/staff_directory?");
   });

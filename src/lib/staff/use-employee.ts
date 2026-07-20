@@ -21,6 +21,10 @@ const BUCKET = "staff-documents";
 // short-lived signed URLs, never a permanent public URL.
 const SIGNED_URL_TTL_SECONDS = 300;
 
+type EmployeeDirectoryProfile = Omit<Profile, "user_preferences"> & {
+  supervisor_id?: string | null;
+};
+
 export function useEmployee(employeeId: string) {
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [supervisor, setSupervisor] = useState<{ id: string; full_name: string } | null>(null);
@@ -37,11 +41,11 @@ export function useEmployee(employeeId: string) {
     setError(null);
     try {
       const [directory, personnel] = await Promise.all([
-        directSelectRow<Profile & { supervisor_id?: string | null }>(
+        directSelectRow<EmployeeDirectoryProfile>(
           "profiles",
           "id",
           employeeId,
-          "id,email,full_name,display_name,role,department,role_group,phone,avatar_url,user_preferences,is_active,language_preference,supervisor_id,created_at,updated_at",
+          "id,email,full_name,display_name,role,department,role_group,phone,avatar_url,is_active,language_preference,supervisor_id,created_at,updated_at",
           "staff.employee.profile",
         ),
         directSelectRow<StaffPersonnelPrivate>(
@@ -55,6 +59,7 @@ export function useEmployee(employeeId: string) {
       const p: FullProfile | null = directory
         ? {
             ...directory,
+            user_preferences: null,
             hire_date: personnel?.hire_date ?? null,
             certifications: personnel?.certifications ?? [],
             emergency_contact: personnel?.emergency_contact ?? null,
