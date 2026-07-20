@@ -263,16 +263,6 @@ interface BriefingData {
       unit: string;
     }[];
   };
-  feedback: {
-    recent: {
-      id: string;
-      type: string;
-      area: string;
-      notes: string;
-      date: string;
-    }[];
-    unresolved: number;
-  };
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -605,7 +595,6 @@ function LeadershipDashboardView() {
         equipmentResult,
         chemAppsResult,
         chemProductsResult,
-        feedbackResult,
       ] = await Promise.all([
         withTimeout(
           supabase
@@ -674,16 +663,6 @@ function LeadershipDashboardView() {
           8000,
           { data: null, error: null }
         ),
-        withTimeout(
-          supabase
-            .from("golfer_feedback")
-            .select("*")
-            .in("status", ["new", "acknowledged", "in_progress"])
-            .order("created_at", { ascending: false })
-            .limit(5),
-          8000,
-          { data: null, error: null }
-        ),
       ]);
 
       const tasks = (tasksResult.data || []) as Task[];
@@ -733,14 +712,6 @@ function LeadershipDashboardView() {
         expires: a.rei_expires_at,
       }));
 
-      const feedbackItems = (feedbackResult.data || []) as Array<{
-        id: string;
-        feedback_type: string;
-        area: string;
-        notes: string;
-        feedback_date: string;
-      }>;
-
       setBriefingData({
         tasks: {
           critical: tasks.filter((t) => t.priority === "critical"),
@@ -773,16 +744,6 @@ function LeadershipDashboardView() {
             threshold: p.reorder_threshold ?? 0,
             unit: p.unit_of_measure || "units",
           })),
-        },
-        feedback: {
-          recent: feedbackItems.map((f) => ({
-            id: f.id,
-            type: f.feedback_type,
-            area: f.area,
-            notes: f.notes,
-            date: f.feedback_date,
-          })),
-          unresolved: feedbackItems.length,
         },
       });
     } catch (err) {

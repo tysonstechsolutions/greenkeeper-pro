@@ -350,11 +350,13 @@ export function useKnowledge() {
           .select("*", { count: "exact", head: true })
           .eq("article_id", id) as { count: number | null };
 
-        // Get total staff count
+        // Single-tenant installations do not have profiles.active_course_id.
+        // Count the active staff directory instead of querying a column that
+        // has never existed in production.
         const { count: totalStaff } = await supabase
           .from("profiles")
           .select("*", { count: "exact", head: true })
-          .eq("active_course_id", data.course_id) as { count: number | null };
+          .eq("is_active", true) as { count: number | null };
 
         return {
           ...data,

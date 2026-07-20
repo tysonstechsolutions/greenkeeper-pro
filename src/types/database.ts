@@ -942,6 +942,7 @@ export interface AppSetting {
   key: string;
   value: Record<string, unknown>;
   updated_at: string;
+  updated_by: string | null;
 }
 
 // ── Drone Flights ──
@@ -1176,8 +1177,9 @@ export interface Database {
       };
       app_settings: {
         Row: AppSetting;
-        Insert: Omit<AppSetting, "updated_at"> & {
+        Insert: Omit<AppSetting, "updated_at" | "updated_by"> & {
           updated_at?: string;
+          updated_by?: string | null;
         };
         Update: Partial<AppSetting>;
       };

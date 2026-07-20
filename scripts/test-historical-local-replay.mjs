@@ -19,8 +19,8 @@ const fixtureScript = join(repositoryRoot, "scripts", "prepare-phase1a-local-fix
 const productionProjectRef = "mbgublyqnyghmvqfooao";
 const supabase = process.env.SUPABASE_BIN || "supabase";
 const dbProjectId = "greenkeeper-pro-phase1a-matrix";
-const finalMigrationVersion = "20260720120000";
-const finalMigrationName = "phase0b5_workforce_authorization";
+const finalMigrationVersion = "20260720130000";
+const finalMigrationName = "production_schema_reconciliation";
 
 function fail(message) {
   throw new Error(`Historical local replay test refused: ${message}`);
@@ -195,9 +195,75 @@ function assertFinalPhase1aSchema() {
       to_regclass('public.operational_outbox_events') IS NOT NULL,
       to_regprocedure('public.save_calendar_event(uuid,jsonb,text)') IS NOT NULL,
       to_regprocedure('public.review_time_off_request(uuid,text,text)') IS NOT NULL,
-      to_regprocedure('public.replace_pro_shop_schedule_shifts(uuid,jsonb,boolean,text)') IS NOT NULL;
+      to_regprocedure('public.replace_pro_shop_schedule_shifts(uuid,jsonb,boolean,text)') IS NOT NULL,
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'profiles'
+          AND column_name = 'user_preferences'
+      ),
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'knowledge_articles'
+          AND column_name = 'course_id'
+      ),
+      EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'push_subscriptions'
+          AND column_name IN ('fcm_token', 'platform')
+        GROUP BY table_schema, table_name
+        HAVING COUNT(*) = 2
+      ),
+      to_regclass('public.asset_disposals') IS NOT NULL,
+      to_regclass('public.irrigation_schedules') IS NOT NULL,
+      to_regclass('public.irrigation_runs') IS NOT NULL,
+      NOT EXISTS (
+        SELECT 1
+        FROM information_schema.role_table_grants
+        WHERE table_schema = 'public'
+          AND table_name IN (
+            'app_settings', 'push_subscriptions', 'asset_disposals',
+            'irrigation_zones', 'irrigation_schedules', 'irrigation_runs'
+          )
+          AND grantee = 'anon'
+      ),
+      NOT EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname IN (
+            'app_settings', 'push_subscriptions', 'asset_disposals',
+            'irrigation_zones', 'irrigation_schedules', 'irrigation_runs'
+          )
+          AND (
+            NOT c.relrowsecurity
+            OR NOT EXISTS (
+              SELECT 1
+              FROM pg_policies p
+              WHERE p.schemaname = n.nspname
+                AND p.tablename = c.relname
+            )
+          )
+      ),
+      (
+        SELECT COUNT(*) = 2 AND BOOL_AND(i.indpred IS NULL)
+        FROM pg_class c
+        JOIN pg_index i ON i.indexrelid = c.oid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname IN (
+            'push_subscriptions_web_endpoint_key',
+            'push_subscriptions_fcm_token_key'
+          )
+      );
   `);
-  if (result !== "t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t") {
+  if (result !== "t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t|t") {
     fail(`full replay did not reach the latest repository schema (received ${result})`);
   }
 }

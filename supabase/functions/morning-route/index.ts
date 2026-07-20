@@ -541,16 +541,23 @@ Deno.serve(async (req) => {
       wind_mph: windMph,
     };
 
-    // 4. First tee time override
-    const { data: teeTimeRows } = await supabase
-      .from("tee_times")
-      .select("tee_time")
-      .eq("date", date)
-      .order("tee_time", { ascending: true })
+    // 4. First tee time override from the canonical golf-event calendar.
+    // The old tee_times member-booking table was never deployed and no
+    // current workflow writes it. Tournaments already records the operational
+    // first tee time for both single-day and multi-day events.
+    const { data: tournamentRows } = await supabase
+      .from("tournaments")
+      .select("first_tee_time")
+      .neq("status", "cancelled")
+      .not("first_tee_time", "is", null)
+      .or(`event_date.eq.${date},and(event_date.lte.${date},event_end_date.gte.${date})`)
+      .order("first_tee_time", { ascending: true })
       .limit(1);
 
-    if (teeTimeRows && teeTimeRows.length > 0) {
-      conditions.firstTeeTime = (teeTimeRows[0] as { tee_time: string }).tee_time;
+    if (tournamentRows && tournamentRows.length > 0) {
+      const firstTeeTime = (tournamentRows[0] as { first_tee_time: string })
+        .first_tee_time;
+      conditions.firstTeeTime = `${date}T${firstTeeTime}`;
     }
 
     // 5. Generate route
