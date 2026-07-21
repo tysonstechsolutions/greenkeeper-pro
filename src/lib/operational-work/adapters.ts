@@ -620,6 +620,15 @@ function applyOverlay(
         : item.status;
   }
   const operationalDueDate = assignment?.due_date || item.dueDate;
+  // A "scheduled operational window" postponement with a future date is a
+  // reschedule: push the effective due date forward so seasonal or big-ticket
+  // work (e.g. spring aeration) leaves the Overdue pile instead of piling up.
+  const rescheduledToDate = postponement?.reason === "scheduled_operational_window"
+    && !postponementAttentionDue
+    && !!postponementAttentionDate
+    && postponementAttentionDate > todayYmd
+    ? postponementAttentionDate
+    : null;
   const delegationStatus = assignment
     && assignment.due_date < todayYmd
     && !["completed", "reassigned", "submitted_for_verification"].includes(assignment.status)
@@ -631,10 +640,11 @@ function applyOverlay(
     responsiblePosition: assignment?.position || state?.responsible_position || item.responsiblePosition,
     accountableManager: person(managerId, indexes.staff),
     status,
-    dueDate: postponementAttentionDue
-      && (!operationalDueDate || postponementAttentionDate! < operationalDueDate)
-      ? postponementAttentionDate
-      : operationalDueDate,
+    dueDate: rescheduledToDate
+      ?? (postponementAttentionDue
+        && (!operationalDueDate || postponementAttentionDate! < operationalDueDate)
+        ? postponementAttentionDate
+        : operationalDueDate),
     blockedState: {
       blocked: blockers.length > 0 || status === "blocked" || item.blockedState.blocked,
       blockerKeys: blockers,

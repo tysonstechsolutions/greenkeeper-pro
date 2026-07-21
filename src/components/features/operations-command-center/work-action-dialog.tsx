@@ -25,10 +25,12 @@ import {
   type OperationalStaffDirectoryRow,
   type OperationalWorkItem,
 } from "@/lib/operational-work/types";
+import { SOLO_MODE } from "@/lib/operational-work/solo-mode";
 
 export type WorkActionDialogMode =
   | "delegate"
   | "postpone"
+  | "reschedule"
   | "dependency"
   | "leadership"
   | "leadership_response"
@@ -47,6 +49,7 @@ interface Props {
   onClose: () => void;
   onDelegate: (workKey: string, input: DelegateWorkInput) => Promise<void>;
   onPostpone: (workKey: string, input: PostponeWorkInput) => Promise<void>;
+  onReschedule: (workKey: string, date: string, note: string) => Promise<void>;
   onDependency: (dependentKey: string, blockerKey: string) => Promise<void>;
   onLeadership: (workKey: string, input: LeadershipWorkInput) => Promise<void>;
   onLeadershipResponse: (
@@ -76,8 +79,9 @@ function addDays(days: number): string {
 }
 
 const TITLES: Record<WorkActionDialogMode, string> = {
-  delegate: "Delegate work",
+  delegate: SOLO_MODE ? "Assign for your records" : "Delegate work",
   postpone: "Postpone with accountability",
+  reschedule: "Reschedule to a later date",
   dependency: "Add a blocking dependency",
   leadership: "Send to leadership",
   leadership_response: "Record leadership response",
@@ -102,6 +106,7 @@ export function WorkActionDialog(props: Props) {
   const [verificationRequired, setVerificationRequired] = useState(false);
   const [notes, setNotes] = useState("");
   const [postponeReason, setPostponeReason] = useState<OperationalPostponementReason>("other");
+  const [rescheduleDate, setRescheduleDate] = useState(addDays(14));
   const [explanation, setExplanation] = useState("");
   const [resumeDate, setResumeDate] = useState("");
   const [reviewDate, setReviewDate] = useState(addDays(3));
@@ -135,9 +140,10 @@ export function WorkActionDialog(props: Props) {
     setDueDate(item.dueDate || addDays(7));
     setExpectedEvidence("");
     setFollowUpDate(addDays(3));
-    setVerificationRequired(item.verificationState !== "not_required");
+    setVerificationRequired(SOLO_MODE ? false : item.verificationState !== "not_required");
     setNotes("");
     setPostponeReason("other");
+    setRescheduleDate(item.dueDate && item.dueDate > addDays(0) ? item.dueDate : addDays(14));
     setExplanation("");
     setResumeDate("");
     setReviewDate(addDays(3));
@@ -194,6 +200,10 @@ export function WorkActionDialog(props: Props) {
           reviewDate: reviewDate || null,
           blockingWorkKey: postponeReason === "waiting_on_another_task" ? blockerKey : null,
         });
+      } else if (mode === "reschedule") {
+        if (!rescheduleDate) throw new Error("Pick a new date.");
+        if (rescheduleDate < addDays(0)) throw new Error("Pick a date in the future.");
+        await props.onReschedule(item.stableId, rescheduleDate, notes);
       } else if (mode === "dependency") {
         if (!blockerKey) throw new Error("Choose a blocker.");
         await props.onDependency(item.stableId, blockerKey);
@@ -286,11 +296,24 @@ export function WorkActionDialog(props: Props) {
             <Field label="Instructions"><Textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} /></Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Due date"><Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></Field>
-              <Field label="Follow-up date"><Input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} /></Field>
+              {!SOLO_MODE && <Field label="Follow-up date"><Input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} /></Field>}
             </div>
-            <Field label="Expected evidence"><Input value={expectedEvidence} onChange={(event) => setExpectedEvidence(event.target.value)} placeholder="Photo, document, record…" /></Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verificationRequired} onChange={(event) => setVerificationRequired(event.target.checked)} /> Manager verification required</label>
+            {!SOLO_MODE && (
+              <>
+                <Field label="Expected evidence"><Input value={expectedEvidence} onChange={(event) => setExpectedEvidence(event.target.value)} placeholder="Photo, document, record…" /></Field>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verificationRequired} onChange={(event) => setVerificationRequired(event.target.checked)} /> Manager verification required</label>
+              </>
+            )}
             <Field label="Notes"><Textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></Field>
+            {SOLO_MODE && <p className="text-xs text-muted-foreground">Records who you handed this to. No app account is created — print the list to hand out.</p>}
+          </div>
+        )}
+
+        {mode === "reschedule" && (
+          <div className="space-y-3">
+            <Field label="New date"><Input type="date" value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} /></Field>
+            <Field label="Reason (optional)"><Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="e.g. season passed — push to next aeration window" /></Field>
+            <p className="text-xs text-muted-foreground">Moves this off the overdue list until the new date. Recurring daily work is better left to roll forward on its own.</p>
           </div>
         )}
 

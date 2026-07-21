@@ -84,6 +84,7 @@ interface UseOperationalWork {
   delegate: (workKey: string, input: DelegateWorkInput) => Promise<void>;
   transitionAssignment: (assignmentId: string, status: string, note?: string) => Promise<void>;
   postpone: (workKey: string, input: PostponeWorkInput) => Promise<void>;
+  reschedule: (workKey: string, date: string, note: string) => Promise<void>;
   addDependency: (dependentWorkKey: string, blockerWorkKey: string) => Promise<void>;
   removeDependency: (dependencyId: string, reason: string) => Promise<void>;
   sendToLeadership: (workKey: string, input: LeadershipWorkInput) => Promise<void>;
@@ -363,6 +364,18 @@ export function useOperationalWork(): UseOperationalWork {
       p_review_date: input.reviewDate,
       p_blocking_work_key: input.blockingWorkKey,
     }, "operational-work.postpone"),
+    reschedule: (workKey: string, date: string, note: string) => mutate(
+      "postpone_operational_work",
+      {
+        p_work_key: workKey,
+        p_reason: "scheduled_operational_window",
+        p_explanation: note.trim() || `Rescheduled to ${date}`,
+        p_resume_date: date,
+        p_review_date: null,
+        p_blocking_work_key: null,
+      },
+      "operational-work.reschedule",
+    ),
     addDependency: (dependentWorkKey: string, blockerWorkKey: string) => mutate(
       "add_operational_dependency",
       { p_dependent_work_key: dependentWorkKey, p_blocker_work_key: blockerWorkKey },

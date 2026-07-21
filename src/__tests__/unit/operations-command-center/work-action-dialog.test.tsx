@@ -47,6 +47,7 @@ const callbacks = {
   onClose: vi.fn(),
   onDelegate: vi.fn(),
   onPostpone: vi.fn(),
+  onReschedule: vi.fn(),
   onDependency: vi.fn(),
   onLeadership: vi.fn(),
   onLeadershipResponse: vi.fn(),

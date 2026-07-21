@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   Ban,
+  CalendarClock,
   Check,
   CirclePlay,
   Clock3,
@@ -28,6 +29,7 @@ import type {
   OperationalWorkItem,
 } from "@/lib/operational-work/types";
 import { POSTPONEMENT_LABELS } from "@/lib/operational-work/types";
+import { SOLO_MODE } from "@/lib/operational-work/solo-mode";
 import type { WorkActionDialogMode } from "./work-action-dialog";
 
 interface Props {
@@ -221,21 +223,22 @@ export function WorkCard({
       <div className="mt-3 flex flex-wrap gap-1.5" aria-label={`Actions for ${item.title}`}>
         <Button asChild size="xs" variant="outline"><Link href={item.destinationRoute}><ArrowUpRight />Open</Link></Button>
 
-        {acceptsDelegation && <Button size="xs" disabled={busy} onClick={() => onAssignment(assignment.id, "accepted")}><Check />Accept</Button>}
+        {!SOLO_MODE && acceptsDelegation && <Button size="xs" disabled={busy} onClick={() => onAssignment(assignment.id, "accepted")}><Check />Accept</Button>}
         {!finished && mayExecute && !hasActiveDependency && ["pending", "blocked", "awaiting_acceptance"].includes(item.status) && (
           <Button size="xs" disabled={busy} onClick={() => assignment ? onAssignment(assignment.id, "in_progress") : onTransition(item, "start")}><CirclePlay />Start</Button>
         )}
-        {assignedToMe && assignment && ["accepted", "in_progress"].includes(assignment.status) && <Button size="xs" variant="outline" disabled={busy} onClick={() => onAction("clarification", item)}><MessageCircleQuestion />Needs clarification</Button>}
-        {isManager && !finished && <Button size="xs" variant="outline" onClick={() => onAction("delegate", item)}><UserRoundPlus />Delegate</Button>}
-        {!finished && mayExecute && <Button size="xs" variant="outline" onClick={() => onAction("postpone", item)}><Pause />Postpone</Button>}
-        {!finished && mayExecute && item.status !== "blocked" && <Button size="xs" variant="outline" onClick={() => onAction("block", item)}><Ban />Mark blocked</Button>}
-        {isManager && !finished && <Button size="xs" variant="outline" onClick={() => onAction("dependency", item)}><GitBranch />Add dependency</Button>}
-        {isManager && !finished && !item.leadershipState.active && <Button size="xs" variant="outline" onClick={() => onAction("leadership", item)}><Send />Send to leadership</Button>}
-        {isManager && item.leadershipState.active && <Button size="xs" variant="outline" onClick={() => onAction("leadership_response", item)}><Send />Record response</Button>}
-        {!finished && mayExecute && <Button size="xs" variant="outline" onClick={() => onAction("evidence", item)}><FileCheck2 />Upload evidence</Button>}
-        {!finished && mayExecute && !hasActiveDependency && !item.leadershipState.active && item.verificationState === "required" && <Button size="xs" variant="outline" disabled={busy} onClick={() => assignment ? onAssignment(assignment.id, "submitted_for_verification") : onTransition(item, "submit_verification")}><ShieldCheck />Submit for verification</Button>}
-        {canComplete && <Button size="xs" disabled={busy} onClick={complete}><Check />{item.verificationState === "required" ? "Complete & submit" : "Complete"}</Button>}
-        {isManager && item.status === "needs_verification" && item.sourceType !== "standard" && <Button size="xs" disabled={busy} onClick={() => onTransition(item, "verify")}><ShieldCheck />Verify</Button>}
+        {!SOLO_MODE && assignedToMe && assignment && ["accepted", "in_progress"].includes(assignment.status) && <Button size="xs" variant="outline" disabled={busy} onClick={() => onAction("clarification", item)}><MessageCircleQuestion />Needs clarification</Button>}
+        {isManager && !finished && <Button size="xs" variant="outline" onClick={() => onAction("delegate", item)}><UserRoundPlus />{SOLO_MODE ? "Assign" : "Delegate"}</Button>}
+        {!finished && mayExecute && <Button size="xs" variant="outline" onClick={() => onAction("reschedule", item)}><CalendarClock />Reschedule</Button>}
+        {!SOLO_MODE && !finished && mayExecute && <Button size="xs" variant="outline" onClick={() => onAction("postpone", item)}><Pause />Postpone</Button>}
+        {!SOLO_MODE && !finished && mayExecute && item.status !== "blocked" && <Button size="xs" variant="outline" onClick={() => onAction("block", item)}><Ban />Mark blocked</Button>}
+        {!SOLO_MODE && isManager && !finished && <Button size="xs" variant="outline" onClick={() => onAction("dependency", item)}><GitBranch />Add dependency</Button>}
+        {!SOLO_MODE && isManager && !finished && !item.leadershipState.active && <Button size="xs" variant="outline" onClick={() => onAction("leadership", item)}><Send />Send to leadership</Button>}
+        {!SOLO_MODE && isManager && item.leadershipState.active && <Button size="xs" variant="outline" onClick={() => onAction("leadership_response", item)}><Send />Record response</Button>}
+        {!SOLO_MODE && !finished && mayExecute && <Button size="xs" variant="outline" onClick={() => onAction("evidence", item)}><FileCheck2 />Upload evidence</Button>}
+        {!SOLO_MODE && !finished && mayExecute && !hasActiveDependency && !item.leadershipState.active && item.verificationState === "required" && <Button size="xs" variant="outline" disabled={busy} onClick={() => assignment ? onAssignment(assignment.id, "submitted_for_verification") : onTransition(item, "submit_verification")}><ShieldCheck />Submit for verification</Button>}
+        {canComplete && <Button size="xs" disabled={busy} onClick={complete}><Check />{!SOLO_MODE && item.verificationState === "required" ? "Complete & submit" : "Complete"}</Button>}
+        {!SOLO_MODE && isManager && item.status === "needs_verification" && item.sourceType !== "standard" && <Button size="xs" disabled={busy} onClick={() => onTransition(item, "verify")}><ShieldCheck />Verify</Button>}
         {isManager && <Button size="xs" variant="ghost" onClick={() => onAction("priority", item)}><Clock3 />Priority</Button>}
         {isManager && finished && <Button size="xs" variant="outline" onClick={() => onAction("reopen", item)}><RefreshCcw />Reopen</Button>}
       </div>

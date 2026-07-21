@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, Filter, Loader2, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Filter, Loader2, Printer, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,6 +17,7 @@ import {
   type OperationalWorkItem,
 } from "@/lib/operational-work/types";
 import { useOperationalWork } from "@/lib/operational-work/use-operational-work";
+import { buildAssignmentsPrintHtml } from "@/lib/operational-work/print-assignments";
 import {
   WorkActionDialog,
   type WorkActionDialogMode,
@@ -103,6 +104,19 @@ function OperationsCommandCenter() {
     setActionError(null);
   }
 
+  function printAssignments() {
+    const html = buildAssignmentsPrintHtml(operations.items, new Date());
+    const win = window.open("", "_blank");
+    if (!win) {
+      setActionError("Allow pop-ups to print the assignment lists.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   async function run(workKey: string, action: () => Promise<void>) {
     setBusyKey(workKey);
     setActionError(null);
@@ -139,6 +153,7 @@ function OperationsCommandCenter() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1 md:flex-none" onClick={() => setShowFilters((value) => !value)}><SlidersHorizontal />Filters</Button>
+            <Button variant="outline" className="flex-1 md:flex-none" onClick={printAssignments}><Printer />Print lists</Button>
             <Button variant="outline" size="icon" onClick={operations.reload} aria-label="Refresh work"><RefreshCw className={operations.loading ? "animate-spin" : ""} /></Button>
           </div>
         </div>
@@ -228,6 +243,7 @@ function OperationsCommandCenter() {
         onClose={() => { setDialogMode(null); setSelectedItem(null); }}
         onDelegate={operations.delegate}
         onPostpone={operations.postpone}
+        onReschedule={operations.reschedule}
         onDependency={operations.addDependency}
         onLeadership={operations.sendToLeadership}
         onLeadershipResponse={operations.resolveLeadership}

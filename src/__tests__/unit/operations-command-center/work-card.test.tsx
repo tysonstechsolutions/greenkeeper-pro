@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkCard } from "@/components/features/operations-command-center/work-card";
 import type { OperationalAssignmentRow, OperationalWorkItem } from "@/lib/operational-work/types";
 
+// This suite exercises the full multi-person workflow (accept, verification,
+// leadership, dependencies), which renders only when solo mode is off. Solo
+// mode — the production default for the single-GM course — is covered by
+// solo-work-card.test.tsx and reschedule-and-solo.test.ts.
+vi.mock("@/lib/operational-work/solo-mode", () => ({ SOLO_MODE: false }));
+
 const item: OperationalWorkItem = {
   stableId: "task:20000000-0000-0000-0000-000000000001",
   sourceType: "task",
