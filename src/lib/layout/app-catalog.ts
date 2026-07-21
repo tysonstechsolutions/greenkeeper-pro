@@ -164,7 +164,9 @@ const TODAY: AppEntry = { href: "/operations", label: "Operations", icon: Sunris
 // views keep the pinned DASHBOARD above).
 const TURF_DASHBOARD: AppEntry = { ...DASHBOARD, pinned: false, label: "Turf Dashboard", group: GROUPS.course };
 const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["time off", "pto", "vacation", "shifts", "crew"] };
-const MY_DAY: AppEntry = { href: "/my-day", label: "My Work", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["to do", "todo", "tasks", "checklist", "my day"] };
+// "My Work" (/my-day) was removed from the menu: it redirects to the same
+// Operations command center as the pinned Operations entry, so it was a
+// duplicate door. The route still exists for deep links.
 const CREATE_PR: AppEntry = { href: "/purchase-requests/new", label: "Create PR", icon: FilePlus, color: "from-amber-500 to-yellow-600", pinned: true, keywords: ["new pr", "purchase request", "buy", "order"] };
 
 const CALENDAR: AppEntry = { href: "/calendar", label: "Calendar", icon: CalendarDays, color: "from-sky-500 to-blue-600", group: GROUPS.planning };
@@ -373,10 +375,9 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   leadership: [
     TODAY,
     PROGRAM_STANDARDS,
-    MY_DAY,
+    ONEONONE,
     SCHEDULE,
     CREATE_PR,
-    ONEONONE,
     HUB_COURSE,
     HUB_RESTAURANT,
     HUB_PRO_SHOP,

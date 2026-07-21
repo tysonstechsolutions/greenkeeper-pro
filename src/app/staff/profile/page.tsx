@@ -33,6 +33,10 @@ import { callApi } from "@/lib/api/client";
 import { useProfiles, roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { useEmployee } from "@/lib/staff/use-employee";
 import { OneOnOnePanel } from "@/components/features/oneonone/one-on-one-panel";
+import { EmailDraftDialog } from "@/components/features/operations-command-center/email-draft-dialog";
+import { DocumentDraftDialog } from "@/components/features/oneonone/document-draft-dialog";
+import { buildFollowUpEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
+import { classifyFollowUp, buildFollowUpDocument, type FollowUpDocument } from "@/lib/documents/follow-up-document";
 import {
   DUTY_DEPARTMENT_LABELS,
   DUTY_ROLE_GROUP_LABELS,
@@ -380,6 +384,8 @@ function ProfileContent() {
   const [newConcernTitle, setNewConcernTitle] = useState("");
   const [newConcernNote, setNewConcernNote] = useState("");
   const [concernNotes, setConcernNotes] = useState<Record<string, string>>({});
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+  const [docDraft, setDocDraft] = useState<FollowUpDocument | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [concernBusy, setConcernBusy] = useState(false);
 
@@ -869,7 +875,10 @@ function ProfileContent() {
             {openConcerns.length === 0 ? (
               <p className="text-xs text-muted-foreground">No open follow-ups.</p>
             ) : (
-              openConcerns.map((c) => (
+              openConcerns.map((c) => {
+                const ctx = c.updates.map((u) => u.note).join(" ");
+                const cls = classifyFollowUp(`${c.title} ${ctx}`);
+                return (
                 <div key={c.id} className="rounded-lg border border-amber-300/70 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium">{c.title}</p>
@@ -877,7 +886,7 @@ function ProfileContent() {
                       onClick={() => reconcileConcern(c.id)}
                       className="text-xs text-green-700 dark:text-green-400 hover:underline shrink-0 flex items-center gap-1"
                     >
-                      <CheckCircle className="w-3.5 h-3.5" /> Resolve
+                      <CheckCircle className="w-3.5 h-3.5" /> Complete
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">Raised {fmtDate(c.opened_on)}</p>
@@ -907,8 +916,29 @@ function ProfileContent() {
                       Add note
                     </Button>
                   </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      onClick={() => setEmailDraft(buildFollowUpEmailDraft(c.title, ctx, profile?.full_name || "", "General Manager"))}
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Draft email to superior
+                    </Button>
+                    {cls.canCreateDoc && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        onClick={() => setDocDraft(buildFollowUpDocument(c.title, ctx, cls.docType))}
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Create document
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              ))
+                );
+              })
             )}
             <div className="border-t border-border pt-3 space-y-2">
               <Label className="text-xs">Add a follow-up</Label>
@@ -983,6 +1013,9 @@ function ProfileContent() {
           )}
         </div>
       )}
+
+      <EmailDraftDialog open={!!emailDraft} draft={emailDraft} onClose={() => setEmailDraft(null)} />
+      <DocumentDraftDialog open={!!docDraft} draft={docDraft} onClose={() => setDocDraft(null)} />
     </div>
   );
 }

@@ -42,6 +42,33 @@ ${signerName}`;
   };
 }
 
+/**
+ * Build an email draft from a 1:1 follow-up / action item. Used by the
+ * follow-up "Draft email to my superior" button. Editable and never auto-sent.
+ */
+export function buildFollowUpEmailDraft(
+  followUpTitle: string,
+  note: string,
+  employeeName: string,
+  signerName: string,
+): EmailDraft {
+  const who = employeeName.trim() || "a member of the team";
+  const context = note.trim() ? `\n\nContext:\n${note.trim()}` : "";
+  const body =
+`Hello,
+
+I'm writing to raise a request that came out of a recent one-on-one with ${who}:
+
+${followUpTitle.trim()}${context}
+
+I think it's worth supporting and wanted to get your read on it. Please let me know if you'd like more detail or how you'd like to proceed.
+
+Thank you,
+${signerName}`;
+
+  return { to: "", subject: followUpTitle.trim(), body };
+}
+
 /** Build a mailto: URL from a draft. */
 export function draftToMailto(draft: EmailDraft): string {
   const params = new URLSearchParams();
