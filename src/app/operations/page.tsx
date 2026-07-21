@@ -24,6 +24,7 @@ import {
 } from "@/components/features/operations-command-center/work-action-dialog";
 import { WorkCard } from "@/components/features/operations-command-center/work-card";
 import { EmailDraftDialog } from "@/components/features/operations-command-center/email-draft-dialog";
+import { MorningBrief } from "@/components/features/operations-command-center/morning-brief";
 import { buildTaskEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
 import type { InterpretedAction } from "@/lib/operational-work/instruction-interpreter";
 
@@ -187,6 +188,10 @@ function OperationsCommandCenter() {
           ? "Your assigned work, using the same priority and workflow data as management."
           : "One explainable list for tasks, duties, obligations, standards, goals, calendar deadlines, equipment alerts, and purchase requests."}
       />
+
+      {!personalView && !operationsLoading && operations.items.length > 0 && (
+        <MorningBrief items={operations.items} today={todayDate} />
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric label="Visible work" value={visibleItems.length} />
