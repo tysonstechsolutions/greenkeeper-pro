@@ -43,6 +43,7 @@ import {
   UserRoundCog,
   Target,
   MessageSquareHeart,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -206,6 +207,7 @@ const RESTAURANT_INVENTORY: AppEntry = { href: "/restaurant/inventory", label: "
 const PRO_SHOP_INVENTORY: AppEntry = { href: "/pro-shop/inventory", label: "Inventory Count", icon: ClipboardCheck, color: "from-indigo-500 to-blue-600", group: GROUPS.money };
 const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "Purchases", icon: ShoppingCart, color: "from-amber-500 to-orange-600", group: GROUPS.money };
 const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
+const MARKETING: AppEntry = { href: "/marketing", label: "Daily Specials", icon: Megaphone, color: "from-amber-500 to-orange-600", group: GROUPS.people, keywords: ["marketing", "specials", "promotion", "flyer", "hot dog monday", "taco tuesday", "advertise", "events"] };
 
 const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["employees", "team", "people", "1:1", "one on one"] };
 const DUTY_OWNERSHIP: AppEntry = { href: "/operations/duties", label: "Duty Ownership", icon: UserRoundCog, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
@@ -311,7 +313,7 @@ export const HUB_RESTAURANT: AppEntry = {
   icon: UtensilsCrossed,
   color: "from-amber-500 to-orange-600",
   group: GROUPS.workspaces,
-  children: [RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+  children: [RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
 };
 
 export const HUB_PRO_SHOP: AppEntry = {
