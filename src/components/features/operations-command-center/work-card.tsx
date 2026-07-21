@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import {
   ArrowUpRight,
   Ban,
@@ -14,11 +15,19 @@ import {
   Pause,
   RefreshCcw,
   Send,
+  Sparkles,
   ShieldCheck,
   UserRoundPlus,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  interpretTaskInstruction,
+  type InterpretedAction,
+} from "@/lib/operational-work/instruction-interpreter";
+import type { OperationalStaffDirectoryRow } from "@/lib/operational-work/types";
 import type {
   OperationalAssignmentRow,
   OperationalDependencyRow,
@@ -46,10 +55,13 @@ interface Props {
   currentUserId: string | null;
   isManager: boolean;
   busy: boolean;
+  staff: OperationalStaffDirectoryRow[];
+  today: Date;
   onAction: (mode: WorkActionDialogMode, item: OperationalWorkItem) => void;
   onTransition: (item: OperationalWorkItem, action: string, note?: string) => Promise<void>;
   onAssignment: (assignmentId: string, status: string, note?: string) => Promise<void>;
   onRemoveDependency: (dependencyId: string) => Promise<void>;
+  onInstruction: (item: OperationalWorkItem, action: InterpretedAction) => Promise<void>;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -87,10 +99,13 @@ export function WorkCard({
   currentUserId,
   isManager,
   busy,
+  staff,
+  today,
   onAction,
   onTransition,
   onAssignment,
   onRemoveDependency,
+  onInstruction,
 }: Props) {
   const finished = ["completed", "verified", "cancelled"].includes(item.status);
   const assignedToMe = item.responsibleEmployee?.id === currentUserId;
@@ -105,6 +120,43 @@ export function WorkCard({
     && item.status !== "needs_verification";
   const auditCount = assignmentHistory.length + postponementHistory.length
     + leadershipHistory.length + evidence.length + events.length;
+
+  const [instructionOpen, setInstructionOpen] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [pending, setPending] = useState<InterpretedAction | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [instructionError, setInstructionError] = useState<string | null>(null);
+
+  function previewInstruction() {
+    if (!instruction.trim()) return;
+    setInstructionError(null);
+    setPending(interpretTaskInstruction(instruction, {
+      today,
+      dueDate: item.dueDate,
+      staff: staff.map((person) => ({ id: person.id, name: person.display_name || person.full_name || "" })),
+    }));
+  }
+
+  function resetInstruction() {
+    setInstructionOpen(false);
+    setInstruction("");
+    setPending(null);
+    setInstructionError(null);
+  }
+
+  async function applyInstruction() {
+    if (!pending || pending.kind === "unknown") return;
+    setApplying(true);
+    setInstructionError(null);
+    try {
+      await onInstruction(item, pending);
+      resetInstruction();
+    } catch (caught) {
+      setInstructionError(caught instanceof Error ? caught.message : "That action could not be completed.");
+    } finally {
+      setApplying(false);
+    }
+  }
 
   async function complete() {
     if (assignment) {
@@ -242,6 +294,76 @@ export function WorkCard({
         {isManager && <Button size="xs" variant="ghost" onClick={() => onAction("priority", item)}><Clock3 />Priority</Button>}
         {isManager && finished && <Button size="xs" variant="outline" onClick={() => onAction("reopen", item)}><RefreshCcw />Reopen</Button>}
       </div>
+
+      {!finished && (
+        <div className="mt-3 border-t border-border/60 pt-2.5">
+          {!instructionOpen ? (
+            <button
+              type="button"
+              onClick={() => setInstructionOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              <Sparkles className="h-3.5 w-3.5" />Tell the assistant what to do
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <form
+                className="flex items-start gap-2"
+                onSubmit={(event) => { event.preventDefault(); previewInstruction(); }}
+              >
+                <Textarea
+                  autoFocus
+                  value={instruction}
+                  onChange={(event) => { setInstruction(event.target.value); setPending(null); }}
+                  placeholder={'e.g. "move this to Wednesday" · "assign to John" · "mark done" · "draft an email to leadership"'}
+                  rows={2}
+                  className="text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={resetInstruction}
+                  aria-label="Close instruction box"
+                  className="mt-1 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </form>
+
+              {!pending && (
+                <Button size="xs" disabled={!instruction.trim()} onClick={previewInstruction}>
+                  <Sparkles />Interpret
+                </Button>
+              )}
+
+              {pending && pending.kind === "unknown" && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+                  <p>{pending.summary} Try a date (“move to Friday”), “mark done”, “assign to …”, or “draft an email”.</p>
+                  <Link href="/assistant" className="mt-1 inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                    Ask the full AI assistant <ArrowUpRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
+
+              {pending && pending.kind !== "unknown" && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 text-xs">
+                  <p className="font-medium">{pending.summary}</p>
+                  {pending.kind === "reschedule" && pending.recurringHint && (
+                    <p className="mt-1 text-muted-foreground">{pending.recurringHint}</p>
+                  )}
+                  <div className="mt-2 flex gap-1.5">
+                    <Button size="xs" disabled={applying} onClick={applyInstruction}>
+                      <Check />{pending.kind === "email" ? "Draft email" : applying ? "Applying…" : "Apply"}
+                    </Button>
+                    <Button size="xs" variant="ghost" disabled={applying} onClick={() => setPending(null)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+
+              {instructionError && <p role="alert" className="text-xs text-destructive">{instructionError}</p>}
+            </div>
+          )}
+        </div>
+      )}
     </article>
   );
 }

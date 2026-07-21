@@ -62,10 +62,13 @@ function renderCard() {
     currentUserId="manager"
     isManager
     busy={false}
+    staff={[]}
+    today={new Date(2026, 6, 21)}
     onAction={vi.fn()}
     onTransition={vi.fn()}
     onAssignment={vi.fn()}
     onRemoveDependency={vi.fn()}
+    onInstruction={vi.fn()}
   />);
 }
 

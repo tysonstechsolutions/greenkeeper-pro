@@ -68,6 +68,9 @@ describe("Operations work card", () => {
       onAction={vi.fn()}
       onTransition={vi.fn()}
       onAssignment={vi.fn()}
+      staff={[]}
+      today={new Date(2026, 6, 16)}
+      onInstruction={vi.fn()}
       onRemoveDependency={vi.fn()}
     />);
 
@@ -118,6 +121,9 @@ describe("Operations work card", () => {
       onAction={vi.fn()}
       onTransition={onTransition}
       onAssignment={onAssignment}
+      staff={[]}
+      today={new Date(2026, 6, 16)}
+      onInstruction={vi.fn()}
       onRemoveDependency={vi.fn()}
     />);
 
@@ -144,6 +150,9 @@ describe("Operations work card", () => {
       onAction={vi.fn()}
       onTransition={vi.fn()}
       onAssignment={vi.fn()}
+      staff={[]}
+      today={new Date(2026, 6, 16)}
+      onInstruction={vi.fn()}
       onRemoveDependency={vi.fn()}
     />);
 
@@ -171,6 +180,9 @@ describe("Operations work card", () => {
       onAction={vi.fn()}
       onTransition={vi.fn()}
       onAssignment={vi.fn()}
+      staff={[]}
+      today={new Date(2026, 6, 16)}
+      onInstruction={vi.fn()}
       onRemoveDependency={vi.fn()}
     />);
 
@@ -207,6 +219,9 @@ describe("Operations work card", () => {
       onAction={vi.fn()}
       onTransition={vi.fn()}
       onAssignment={vi.fn()}
+      staff={[]}
+      today={new Date(2026, 6, 16)}
+      onInstruction={vi.fn()}
       onRemoveDependency={vi.fn()}
     />);
 
@@ -243,6 +258,9 @@ describe("Operations work card", () => {
       onAction={vi.fn()}
       onTransition={vi.fn()}
       onAssignment={vi.fn()}
+      staff={[]}
+      today={new Date(2026, 6, 16)}
+      onInstruction={vi.fn()}
       onRemoveDependency={vi.fn()}
     />);
 

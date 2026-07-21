@@ -23,6 +23,9 @@ import {
   type WorkActionDialogMode,
 } from "@/components/features/operations-command-center/work-action-dialog";
 import { WorkCard } from "@/components/features/operations-command-center/work-card";
+import { EmailDraftDialog } from "@/components/features/operations-command-center/email-draft-dialog";
+import { buildTaskEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
+import type { InterpretedAction } from "@/lib/operational-work/instruction-interpreter";
 
 export default function OperationsPage() {
   return <Suspense fallback={<OperationsLoading />}><OperationsCommandCenter /></Suspense>;
@@ -40,7 +43,16 @@ function OperationsCommandCenter() {
   const [selectedItem, setSelectedItem] = useState<OperationalWorkItem | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
   const personalView = searchParams.get("view") === "mine";
+  const todayDate = useMemo(() => {
+    const [year, month, day] = operations.today.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }, [operations.today]);
+  const signerName = useMemo(() => {
+    const me = operations.staff.find((person) => person.id === user?.id);
+    return me?.display_name || me?.full_name || "General Manager";
+  }, [operations.staff, user?.id]);
 
   const visibleItems = useMemo(() => {
     let rows = operations.items;
@@ -115,6 +127,44 @@ function OperationsCommandCenter() {
     win.document.close();
     win.focus();
     win.print();
+  }
+
+  async function handleInstruction(item: OperationalWorkItem, action: InterpretedAction) {
+    switch (action.kind) {
+      case "reschedule":
+        await operations.reschedule(item.stableId, action.date, action.note);
+        return;
+      case "complete":
+        await operations.transition(item.stableId, "complete");
+        return;
+      case "assign":
+        await operations.delegate(item.stableId, {
+          employeeId: action.employeeId,
+          position: null,
+          instructions: action.note,
+          dueDate: action.dueDate,
+          expectedEvidence: "",
+          followUpDate: null,
+          verificationRequired: false,
+          notes: "",
+        });
+        return;
+      case "priority":
+        await operations.setPriority(item.stableId, {
+          override: action.override,
+          safety: false,
+          compliance: false,
+          payroll: false,
+          financial: false,
+          reason: action.reason,
+        });
+        return;
+      case "email":
+        setEmailDraft(buildTaskEmailDraft(item, action.instruction, signerName));
+        return;
+      default:
+        return;
+    }
   }
 
   async function run(workKey: string, action: () => Promise<void>) {
@@ -221,10 +271,13 @@ function OperationsCommandCenter() {
                       currentUserId={user?.id ?? null}
                       isManager={isManager}
                       busy={busyKey === item.stableId}
+                      staff={operations.staff}
+                      today={todayDate}
                       onAction={openAction}
                       onTransition={(work, action, note) => run(work.stableId, () => operations.transition(work.stableId, action, note))}
                       onAssignment={(assignmentId, status, note) => run(item.stableId, () => operations.transitionAssignment(assignmentId, status, note))}
                       onRemoveDependency={(dependencyId) => run(item.stableId, () => operations.removeDependency(dependencyId, "Removed from the Operations Command Center"))}
+                      onInstruction={handleInstruction}
                     />
                   ))}
                 </div>
@@ -256,6 +309,12 @@ function OperationsCommandCenter() {
         onEvidence={operations.addEvidence}
         onPriority={operations.setPriority}
         onReopen={operations.reopen}
+      />
+
+      <EmailDraftDialog
+        open={!!emailDraft}
+        draft={emailDraft}
+        onClose={() => setEmailDraft(null)}
       />
     </div>
   );
