@@ -7,6 +7,8 @@
  * fabricated about the specific course, fees, or people.
  */
 
+import { COURSE_NAME } from "@/lib/config/org";
+
 export type FollowUpDocType = "rental_agreement" | "policy" | "form" | "letter" | "generic";
 
 export interface FollowUpClassification {
@@ -50,7 +52,7 @@ export function buildFollowUpDocument(
   followUpTitle: string,
   note: string,
   docType: FollowUpDocType,
-  orgName = "[Course Name]",
+  orgName = COURSE_NAME,
 ): FollowUpDocument {
   const source = `${followUpTitle} ${note}`.toLowerCase();
   const extra = note.trim() ? `\n\nNotes:\n${note.trim()}\n` : "\n";
@@ -63,39 +65,51 @@ export function buildFollowUpDocument(
     return {
       title: "Equipment Rental Agreement",
       body:
-`${orgName.toUpperCase()} — EQUIPMENT RENTAL AGREEMENT
+`${orgName.toUpperCase()}
+EQUIPMENT RENTAL AGREEMENT
 
-This Rental Agreement ("Agreement") is entered into between ${orgName} ("the Course")
-and the individual named below ("Renter") for the rental of ${covers}.
+This Equipment Rental Agreement ("Agreement") is made between ${orgName}
+("the Course") and the undersigned ("Renter") governing the rental and use of
+${covers}.
 
-RENTER INFORMATION
-  Name: ______________________________________
-  Phone: _____________________  Email: _____________________
-  Date of rental: ____________  Time out: ________  Due back: ________
+1. RENTER INFORMATION
+   Name: ______________________________________
+   Phone: _____________________   Email: _____________________
+   Date of rental: ____________   Time out: ________   Due back: ________
 
-EQUIPMENT RENTED
-  [ ] Golf cart(s) — Qty: ____   Unit #(s): ____________
-  [ ] Golf club set(s) — Qty: ____   Set #(s): ____________
-  [ ] Other: ____________________________________________
+2. EQUIPMENT RENTED
+   [ ] Golf cart(s) — Quantity: ____   Unit number(s): ____________
+   [ ] Golf club set(s) — Quantity: ____   Set number(s): ____________
+   [ ] Other: ____________________________________________
 
-FEES & DEPOSIT
-  Rental fee: $__________     Security deposit: $__________
-  Payment method: [ ] Cash  [ ] Card  [ ] Charge to account
+3. CONDITION AND USE
+   The Renter acknowledges receiving the equipment in good working condition and
+   agrees to use it only for its intended purpose and in accordance with all
+   Course rules and posted signage. Golf carts shall be operated only by licensed
+   drivers of legal age and only in areas designated by the Course.
 
-TERMS AND CONDITIONS
-  1. The Renter is responsible for the equipment from time of checkout until returned.
-  2. Equipment must be returned in the same condition, normal wear excepted.
-  3. The Renter agrees to pay for any loss, theft, or damage beyond normal wear.
-  4. Carts must be operated only by licensed drivers of legal age, in designated areas.
-  5. The Course is not liable for injury or loss arising from the Renter's use of the equipment.
-  6. Late returns may incur additional charges at the posted rate.
+4. CARE AND RETURN
+   The Renter agrees to return the equipment by the time stated above in the same
+   condition in which it was received, ordinary wear excepted, and to report any
+   damage, loss, or malfunction to Course staff immediately.
+
+5. RESPONSIBILITY
+   The Renter assumes responsibility for the equipment while it is in their
+   possession and agrees to be responsible for any loss, theft, or damage beyond
+   ordinary wear.
+
+6. LIABILITY
+   The Renter agrees that the Course shall not be liable for any injury, loss, or
+   damage arising from the Renter's use or operation of the equipment, and the
+   Renter uses the equipment at their own risk.
 ${extra}
-ACKNOWLEDGEMENT
-  I have read and agree to the terms of this Agreement.
+7. ACKNOWLEDGEMENT
+   By signing below, the Renter acknowledges that they have read, understood, and
+   agree to the terms of this Agreement.
 
-  Renter signature: ______________________________   Date: ____________
+   Renter signature: ______________________________   Date: ____________
 
-  Course representative: __________________________   Date: ____________`,
+   Course representative: __________________________   Date: ____________`,
     };
   }
 

@@ -26,13 +26,18 @@ describe("classifyFollowUp", () => {
 });
 
 describe("buildFollowUpDocument", () => {
-  it("builds an editable rental agreement that mentions carts and clubs", () => {
+  it("builds a professional rental agreement with the real course name and no fees", () => {
     const doc = buildFollowUpDocument("signed agreements for clubs and carts", "", "rental_agreement");
     expect(doc.title).toBe("Equipment Rental Agreement");
-    expect(doc.body).toContain("RENTAL AGREEMENT");
+    expect(doc.body).toContain("VETERANS MEMORIAL GOLF COURSE");
+    expect(doc.body).toContain("Veterans Memorial Golf Course");
     expect(doc.body.toLowerCase()).toContain("cart");
     expect(doc.body.toLowerCase()).toContain("club");
     expect(doc.body).toContain("Renter signature");
+    // Fees and deposit were removed per the GM's request.
+    expect(doc.body.toLowerCase()).not.toContain("deposit");
+    expect(doc.body).not.toContain("$");
+    expect(doc.body).not.toContain("[Course Name]");
   });
 
   it("produces printable, escaped HTML", () => {
