@@ -22,6 +22,15 @@ function atMidnight(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/** Parse a local YYYY-MM-DD as local midnight (never UTC — a Z-parse shifts a
+ *  day in US timezones). Returns null for empty/malformed input. */
+function parseLocalYmd(ymd: string | null | undefined): Date | null {
+  if (!ymd) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
 function lastDayOfMonth(year: number, month0: number): number {
   return new Date(year, month0 + 1, 0).getDate();
 }
@@ -128,28 +137,45 @@ export function evaluateObligation(
   const horizon = new Date(t0);
   horizon.setDate(horizon.getDate() + Math.max(ob.lead_days, 0));
 
-  // NOTE: occurrences start at the period CONTAINING created_at, so a period
-  // that ended before the obligation existed never becomes debt. But an
-  // obligation added mid-period still owes that period's work — seeded Jul 15
-  // with due_day 1, July is genuinely still owed and shows overdue rather than
-  // being skipped to August. That is deliberate; see the engine tests.
+  // The schedule START. `effective_from` (a local YYYY-MM-DD) lets an
+  // obligation begin later than created_at — occurrences whose due date falls
+  // before it are never owed (used to reschedule the whole set to August so the
+  // July seed dates don't read as overdue). NULL = start at created_at, the
+  // legacy behavior, byte-for-byte unchanged.
+  const cutoff = parseLocalYmd(ob.effective_from);
+  const start =
+    cutoff && cutoff.getTime() > created.getTime() ? cutoff : created;
+  const before = (due: Date): boolean =>
+    cutoff !== null && due.getTime() < cutoff.getTime();
+
+  // NOTE: occurrences start at the period CONTAINING `start`, so a period that
+  // ended before the obligation began never becomes debt. An obligation added
+  // mid-period still owes that period's work (seeded Jul 15 with due_day 1,
+  // July is genuinely still owed and shows overdue) — that is deliberate; see
+  // the engine tests. The loop only *stops* on an in-scope occurrence, so a
+  // pre-cutoff due (e.g. this year's February when effective_from is August)
+  // can never end the walk before the first real occurrence is reached.
   const occurrences: { period: string; due: Date }[] = [];
-  let anchor = periodAnchor(ob.cadence, created, 0);
+  let anchor = periodAnchor(ob.cadence, start, 0);
   for (let i = 0; i < MAX_OCCURRENCES; i++) {
     const due = dueDateInPeriod(ob, anchor);
     occurrences.push({ period: periodKey(ob.cadence, anchor), due });
-    if (due.getTime() > t0.getTime() && due.getTime() > horizon.getTime()) break;
+    if (!before(due) && due.getTime() > t0.getTime() && due.getTime() > horizon.getTime()) break;
     anchor = periodAnchor(ob.cadence, anchor, 1);
   }
 
-  const uncompleted = occurrences.filter((o) => !completedPeriods.has(o.period));
+  // Occurrences owed before the schedule start are excluded outright, so a
+  // pre-start period is never the shown one — in either branch below.
+  const inScope = occurrences.filter((o) => !before(o.due));
+
+  const uncompleted = inScope.filter((o) => !completedPeriods.has(o.period));
 
   if (uncompleted.length === 0) {
     // Everything through the horizon is handled. Show the most recent
     // occurrence that has actually come due (what was just finished); if
     // none has yet, show the first future one.
-    const past = occurrences.filter((o) => o.due.getTime() <= t0.getTime());
-    const shown = past[past.length - 1] ?? occurrences[occurrences.length - 1];
+    const past = inScope.filter((o) => o.due.getTime() <= t0.getTime());
+    const shown = past[past.length - 1] ?? inScope[inScope.length - 1];
     return {
       obligation: ob,
       period: shown.period,

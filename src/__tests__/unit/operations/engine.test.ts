@@ -30,6 +30,7 @@ function ob(partial: Partial<Obligation>): Obligation {
     // Local noon — a Z-suffixed midnight would parse to Dec 31 in US zones
     // and shift the creation period.
     created_at: "2026-01-01T12:00:00",
+    effective_from: null,
     updated_at: "2026-01-01T12:00:00",
     ...partial,
   };
@@ -228,6 +229,75 @@ describe("evaluateObligation — quarterly", () => {
     expect(r.period).toBe("2026-Q3");
     expect(r.dueDate).toBe("2026-09-15");
     expect(r.status).toBe("upcoming");
+  });
+});
+
+describe("evaluateObligation — effective_from", () => {
+  // All evaluated against Jul 22 2026 — the day the whole set was rescheduled
+  // to start in August, so nothing should read as overdue.
+  const JUL22 = new Date(2026, 6, 22);
+
+  it("monthly due_day 1 starting Aug 1 is upcoming, not overdue", () => {
+    const o = ob({ due_day: 1, lead_days: 7, effective_from: "2026-08-01" });
+    const r = evaluateObligation(o, NONE, JUL22);
+    expect(r.status).not.toBe("overdue");
+    expect(["upcoming", "due_soon"]).toContain(r.status);
+    expect(r.dueDate).toBe("2026-08-01");
+    expect(r.period).toBe("2026-08");
+  });
+
+  it("monthly due_day -1 resolves to Aug 31", () => {
+    const o = ob({ due_day: -1, lead_days: 7, effective_from: "2026-08-01" });
+    const r = evaluateObligation(o, NONE, JUL22);
+    expect(r.dueDate).toBe("2026-08-31");
+    expect(r.status).not.toBe("overdue");
+  });
+
+  it("monthly due_day 15 resolves to Aug 15", () => {
+    const o = ob({ due_day: 15, lead_days: 7, effective_from: "2026-08-01" });
+    const r = evaluateObligation(o, NONE, JUL22);
+    expect(r.dueDate).toBe("2026-08-15");
+    expect(r.status).not.toBe("overdue");
+  });
+
+  it("weekly Monday starting Aug 2 (first Sunday) lands Aug 3, not overdue", () => {
+    const o = ob({
+      cadence: "weekly",
+      due_weekday: 1,
+      due_day: 1,
+      lead_days: 3,
+      effective_from: "2026-08-02",
+    });
+    const r = evaluateObligation(o, NONE, JUL22);
+    expect(r.dueDate).toBe("2026-08-03");
+    expect(r.status).not.toBe("overdue");
+  });
+
+  it("annual due Feb skips the pre-start 2026 occurrence and shows 2027", () => {
+    // Feb 2026 is before the Aug 1 2026 start, so it is never owed — the next
+    // real occurrence is Feb 2027, which is upcoming (not overdue).
+    const o = ob({
+      cadence: "annual",
+      due_month: 2,
+      due_day: 1,
+      lead_days: 30,
+      created_at: "2026-01-01T12:00:00",
+      effective_from: "2026-08-01",
+    });
+    const r = evaluateObligation(o, NONE, JUL22);
+    expect(r.dueDate).toBe("2027-02-01");
+    expect(r.period).toBe("2027");
+    expect(r.status).toBe("upcoming");
+  });
+
+  it("effective_from null behaves exactly as before (in-progress period owed)", () => {
+    // Same scenario as the "tracks the IN-PROGRESS period" case: seeded Jul 2
+    // with due_day 1 and no effective_from still shows July 1 day overdue.
+    const o = ob({ due_day: 1, effective_from: null, created_at: "2026-07-02T10:00:00Z" });
+    const r = evaluateObligation(o, NONE, new Date(2026, 6, 2));
+    expect(r.period).toBe("2026-07");
+    expect(r.status).toBe("overdue");
+    expect(r.daysUntil).toBe(-1);
   });
 });
 

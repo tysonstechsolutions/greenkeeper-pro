@@ -2,12 +2,19 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, Filter, Loader2, Printer, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, ClipboardList, Filter, LayoutGrid, Loader2, Printer, RefreshCw, Search, ShoppingBag, SlidersHorizontal, Sprout, UtensilsCrossed } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { applyOperationalFilters, EMPTY_OPERATIONAL_FILTERS } from "@/lib/operational-work/filters";
+import {
+  categoryOf,
+  OPERATIONAL_CATEGORY_LABELS,
+  OPERATIONAL_CATEGORY_ORDER,
+  type OperationalCategory,
+} from "@/lib/operational-work/category";
 import { partitionOperationalWork } from "@/lib/operational-work/priority";
 import {
   OPERATIONAL_SECTION_LABELS,
@@ -27,6 +34,11 @@ import { EmailDraftDialog } from "@/components/features/operations-command-cente
 import { MorningBrief } from "@/components/features/operations-command-center/morning-brief";
 import { buildTaskEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
 import type { InterpretedAction } from "@/lib/operational-work/instruction-interpreter";
+import {
+  listObligationDocuments,
+  groupDocumentsByObligation,
+  type ObligationDocument,
+} from "@/lib/operations/obligation-documents";
 
 export default function OperationsPage() {
   return <Suspense fallback={<OperationsLoading />}><OperationsCommandCenter /></Suspense>;
@@ -45,6 +57,8 @@ function OperationsCommandCenter() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
+  const [reportDocs, setReportDocs] = useState<ObligationDocument[]>([]);
+  const [reportsNonce, setReportsNonce] = useState(0);
   const personalView = searchParams.get("view") === "mine";
   const todayDate = useMemo(() => {
     const [year, month, day] = operations.today.split("-").map(Number);
@@ -73,6 +87,34 @@ function OperationsCommandCenter() {
     }
     return rows;
   }, [operations.items, personalView, user?.id, filters, query]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<OperationalCategory, number> = { restaurant: 0, pro_shop: 0, grounds: 0, admin: 0 };
+    for (const item of operations.items) counts[categoryOf(item)] += 1;
+    return counts;
+  }, [operations.items]);
+
+  // Load the report samples / how-to instructions attached to obligations.
+  // Best-effort: the obligation_documents table won't exist until the owner
+  // applies the migration, so any failure falls back to an empty list rather
+  // than breaking the dashboard render.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const docs = await listObligationDocuments();
+        if (!cancelled) setReportDocs(docs);
+      } catch {
+        if (!cancelled) setReportDocs([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [reportsNonce]);
+
+  const reportDocsByObligation = useMemo(
+    () => groupDocumentsByObligation(reportDocs),
+    [reportDocs],
+  );
 
   const sections = useMemo(
     () => partitionOperationalWork(visibleItems, new Date(), user?.id ?? null),
@@ -212,6 +254,25 @@ function OperationsCommandCenter() {
             <Button variant="outline" size="icon" onClick={operations.reload} aria-label="Refresh work"><RefreshCw className={operations.loading ? "animate-spin" : ""} /></Button>
           </div>
         </div>
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by business area">
+          <CategoryPill
+            label="All"
+            icon={LayoutGrid}
+            count={operations.items.length}
+            active={filters.category === "all"}
+            onClick={() => updateFilter("category", "all")}
+          />
+          {OPERATIONAL_CATEGORY_ORDER.map((category) => (
+            <CategoryPill
+              key={category}
+              label={OPERATIONAL_CATEGORY_LABELS[category]}
+              icon={CATEGORY_ICONS[category]}
+              count={categoryCounts[category]}
+              active={filters.category === category}
+              onClick={() => updateFilter("category", filters.category === category ? "all" : category)}
+            />
+          ))}
+        </div>
         {showFilters && (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <FilterSelect label="Department" value={filters.department} onChange={(value) => updateFilter("department", value)} options={departments.map((value) => [value, pretty(value)])} />
@@ -283,6 +344,9 @@ function OperationsCommandCenter() {
                       onAssignment={(assignmentId, status, note) => run(item.stableId, () => operations.transitionAssignment(assignmentId, status, note))}
                       onRemoveDependency={(dependencyId) => run(item.stableId, () => operations.removeDependency(dependencyId, "Removed from the Operations Command Center"))}
                       onInstruction={handleInstruction}
+                      reportDocs={item.sourceType === "obligation" ? (reportDocsByObligation.get(item.sourceRecordId) ?? []) : []}
+                      onReschedule={(work, date, note) => run(work.stableId, () => operations.reschedule(work.stableId, date, note))}
+                      onReportChange={() => { setReportsNonce((n) => n + 1); operations.reload(); }}
                     />
                   ))}
                 </div>
@@ -322,6 +386,38 @@ function OperationsCommandCenter() {
         onClose={() => setEmailDraft(null)}
       />
     </div>
+  );
+}
+
+const CATEGORY_ICONS: Record<OperationalCategory, LucideIcon> = {
+  restaurant: UtensilsCrossed,
+  pro_shop: ShoppingBag,
+  grounds: Sprout,
+  admin: ClipboardList,
+};
+
+function CategoryPill({ label, icon: Icon, count, active, onClick }: {
+  label: string;
+  icon: LucideIcon;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-card text-foreground hover:bg-muted/50"
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="whitespace-nowrap">{label}</span>
+      <span className={`rounded-full px-1.5 text-xs font-bold tabular-nums ${active ? "bg-primary-foreground/20" : "bg-muted text-muted-foreground"}`}>{count}</span>
+    </button>
   );
 }
 

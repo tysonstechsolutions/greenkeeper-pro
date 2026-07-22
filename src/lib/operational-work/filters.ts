@@ -1,7 +1,9 @@
+import { categoryOf } from "./category";
 import { daysFrom } from "./priority";
 import type { OperationalWorkFilters, OperationalWorkItem } from "./types";
 
 export const EMPTY_OPERATIONAL_FILTERS: OperationalWorkFilters = {
+  category: "all",
   department: "all",
   employee: "all",
   position: "all",
@@ -22,6 +24,7 @@ export function applyOperationalFilters(
   today: Date,
 ): OperationalWorkItem[] {
   return items.filter((item) => {
+    if (filters.category !== "all" && categoryOf(item) !== filters.category) return false;
     if (filters.department !== "all" && item.department !== filters.department) return false;
     if (filters.employee !== "all" && item.responsibleEmployee?.id !== filters.employee) return false;
     if (filters.position !== "all" && item.responsiblePosition !== filters.position) return false;

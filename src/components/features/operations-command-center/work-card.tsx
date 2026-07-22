@@ -12,6 +12,7 @@ import {
   FileCheck2,
   GitBranch,
   MessageCircleQuestion,
+  Paperclip,
   Pause,
   RefreshCcw,
   Send,
@@ -39,7 +40,12 @@ import type {
 } from "@/lib/operational-work/types";
 import { POSTPONEMENT_LABELS } from "@/lib/operational-work/types";
 import { SOLO_MODE } from "@/lib/operational-work/solo-mode";
+import {
+  obligationReportUrl,
+  type ObligationDocument,
+} from "@/lib/operations/obligation-documents";
 import type { WorkActionDialogMode } from "./work-action-dialog";
+import { ObligationReportDialog } from "./obligation-report-dialog";
 
 interface Props {
   item: OperationalWorkItem;
@@ -62,6 +68,9 @@ interface Props {
   onAssignment: (assignmentId: string, status: string, note?: string) => Promise<void>;
   onRemoveDependency: (dependencyId: string) => Promise<void>;
   onInstruction: (item: OperationalWorkItem, action: InterpretedAction) => Promise<void>;
+  reportDocs?: ObligationDocument[];
+  onReschedule?: (item: OperationalWorkItem, date: string, note: string) => Promise<void>;
+  onReportChange?: () => void;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -106,8 +115,14 @@ export function WorkCard({
   onAssignment,
   onRemoveDependency,
   onInstruction,
+  reportDocs = [],
+  onReschedule,
+  onReportChange,
 }: Props) {
   const finished = ["completed", "verified", "cancelled"].includes(item.status);
+  const isObligation = item.sourceType === "obligation";
+  const canAttachReport = isObligation && !!onReschedule;
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const assignedToMe = item.responsibleEmployee?.id === currentUserId;
   const mayExecute = isManager || assignedToMe;
   const hasActiveDependency = blockers.length > 0;
@@ -224,6 +239,37 @@ export function WorkCard({
         </div>
       )}
 
+      {isObligation && reportDocs.length > 0 && (
+        <div className="mt-2 rounded-lg border border-border/70 p-2 text-xs">
+          <p className="font-semibold">Report &amp; how-to</p>
+          <div className="mt-1 space-y-2">
+            {reportDocs.map((doc) => {
+              const url = obligationReportUrl(doc.storage_path);
+              return (
+                <div key={doc.id} className="space-y-0.5">
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {doc.file_name || "Report sample"}
+                    </a>
+                  ) : (
+                    doc.file_name && <span className="font-medium">{doc.file_name}</span>
+                  )}
+                  {doc.instructions && (
+                    <p className="whitespace-pre-wrap"><span className="text-muted-foreground">How to: </span>{doc.instructions}</p>
+                  )}
+                  {doc.due_date && <p className="text-muted-foreground">Due {doc.due_date}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="mt-2 rounded-lg bg-muted/40 px-3 py-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Why this is ranked here</p>
         <p className="mt-0.5 text-xs">{item.priorityExplanation.join(" ")}</p>
@@ -274,6 +320,8 @@ export function WorkCard({
 
       <div className="mt-3 flex flex-wrap gap-1.5" aria-label={`Actions for ${item.title}`}>
         <Button asChild size="xs" variant="outline"><Link href={item.destinationRoute}><ArrowUpRight />Open</Link></Button>
+
+        {canAttachReport && <Button size="xs" variant="outline" onClick={() => setReportDialogOpen(true)}><Paperclip />Attach report / set due date</Button>}
 
         {!SOLO_MODE && acceptsDelegation && <Button size="xs" disabled={busy} onClick={() => onAssignment(assignment.id, "accepted")}><Check />Accept</Button>}
         {!finished && mayExecute && !hasActiveDependency && ["pending", "blocked", "awaiting_acceptance"].includes(item.status) && (
@@ -363,6 +411,17 @@ export function WorkCard({
             </div>
           )}
         </div>
+      )}
+
+      {canAttachReport && (
+        <ObligationReportDialog
+          open={reportDialogOpen}
+          obligationTitle={item.title}
+          obligationId={item.sourceRecordId}
+          onReschedule={(date, note) => onReschedule!(item, date, note)}
+          onSaved={() => { onReportChange?.(); }}
+          onClose={() => setReportDialogOpen(false)}
+        />
       )}
     </article>
   );

@@ -307,6 +307,7 @@ export interface OperationalStaffDirectoryRow {
 }
 
 export interface OperationalWorkFilters {
+  category: string;
   department: string;
   employee: string;
   position: string;

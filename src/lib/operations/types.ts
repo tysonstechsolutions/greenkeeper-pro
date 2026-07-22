@@ -89,6 +89,9 @@ export interface Obligation {
   notes: string | null;
   sort_order: number;
   created_at: string;
+  /** Local YYYY-MM-DD. The obligation's schedule START: periods whose due date
+   *  falls before this are never owed. NULL = start at created_at (legacy). */
+  effective_from?: string | null;
   updated_at: string;
 }
 
