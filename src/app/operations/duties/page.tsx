@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Link2, Loader2, Pencil, RefreshCw, Save, ShieldCheck, UserRoundCog } from "lucide-react";
+import { ArrowLeft, CalendarClock, Link2, Loader2, Pencil, Printer, RefreshCw, Save, ShieldCheck, UserRoundCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
   dutyScheduleLabel,
   previewActiveDutyReassignment,
 } from "@/lib/operations/duties";
+import { buildRoleDutySheetsHtml } from "@/lib/operations/print-role-sheets";
 import { useDutyManagement, type CoveragePreviewRow, type RecurrencePreviewRow } from "@/lib/operations/use-duty-management";
 import type {
   DutyCadence,
@@ -316,6 +317,18 @@ export default function DutiesPage() {
     } catch (error) { setLocalError(error instanceof Error ? error.message : "Could not save coverage."); }
   };
 
+  // The wall posters: one printable page per role listing its standing duties
+  // by day. Staff have no logins — the GM posts these in each work area.
+  const printRoleSheets = () => {
+    const html = buildRoleDutySheetsHtml(management.duties, new Date());
+    const win = window.open("", "_blank");
+    if (!win) return setLocalError("Allow pop-ups to print the role duty sheets.");
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   const linkRoster = async () => {
     if (!rosterStaffId || !rosterProfileId || !rosterReason.trim()) return setLocalError("Choose both records and confirm why they are the same person.");
     try {
@@ -329,7 +342,7 @@ export default function DutiesPage() {
 
   return (
     <div className="gk-page mx-auto space-y-6">
-      <div><Link href="/operations" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Operations</Link><h1 className="mt-3">Duty ownership</h1><p className="mt-1 text-sm text-muted-foreground">One canonical, audited system for standing work, ownership, coverage, and recurrence.</p></div>
+      <div><Link href="/operations" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Operations</Link><h1 className="mt-3">Duty ownership</h1><p className="mt-1 text-sm text-muted-foreground">One canonical, audited system for standing work, ownership, coverage, and recurrence.</p><Button variant="outline" className="mt-3" onClick={printRoleSheets}><Printer className="h-4 w-4" />Print role duty sheets</Button></div>
       {(localError || management.error) && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{localError || management.error}</div>}
       {notice && <div role="status" aria-live="polite" className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">{notice}</div>}
       {!management.canManage && <Card><CardContent className="pt-6 text-sm text-muted-foreground">You can review duties and history. Only a GM or operations manager can change them.</CardContent></Card>}
