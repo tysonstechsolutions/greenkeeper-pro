@@ -80,6 +80,8 @@ interface UseOperationalWork {
   loading: boolean;
   error: string | null;
   today: string;
+  /** Last due date included in the loaded window (see OPERATIONAL_WORK_HORIZON_DAYS). */
+  horizonDate: string;
   reload: () => void;
   delegate: (workKey: string, input: DelegateWorkInput) => Promise<void>;
   transitionAssignment: (assignmentId: string, status: string, note?: string) => Promise<void>;
@@ -107,17 +109,71 @@ function daysAgoYmd(days: number): string {
   return ymdLocal(date);
 }
 
+/**
+ * How far ahead the command center loads dated work.
+ *
+ * The duty materializer writes a full year of occurrences ahead of time —
+ * 22k+ pending task rows at the time of writing. Loading all of them meant 45
+ * sequential PostgREST pages (~38 MB) and 22k cards in the DOM, which froze
+ * the tab for tens of seconds on any filter or keystroke. The command center
+ * is a "what needs doing now" view, so it loads a bounded forward window.
+ *
+ * There is deliberately NO lower bound: overdue work must never be hidden by
+ * the window, however old it is.
+ */
+export const OPERATIONAL_WORK_HORIZON_DAYS = 30;
+
+/** Last due date the command center loads, inclusive. */
+export function operationalWorkHorizonYmd(today: Date, days = OPERATIONAL_WORK_HORIZON_DAYS): string {
+  const date = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  date.setDate(date.getDate() + days);
+  return ymdLocal(date);
+}
+
+/**
+ * Columns the adapters actually read. `select=*` pulled ~60 task columns
+ * (including large duty text blobs) for every row; the adapter uses 20.
+ */
+const TASK_COLUMNS = [
+  "id", "title", "description", "category", "priority", "status",
+  "assigned_to", "assigned_by", "due_date", "estimated_minutes",
+  "duty_id", "duty_role_group", "duty_department",
+  "duty_verification_requirement_state", "blocked_reason",
+  "created_at", "updated_at", "completed_at", "standard_id", "why_it_matters",
+].join(",");
+
+/** Raw rows as fetched — aggregation happens separately so a profile/role
+ *  change re-derives the list without re-running the whole network load. */
+interface OperationalSourceRows {
+  tasks: Task[];
+  standards: StandardWithStatus[];
+  obligations: Obligation[];
+  completions: ObligationCompletion[];
+  goals: DailyGoal[];
+  steps: DailyStep[];
+  calendarEvents: CalendarEvent[];
+  equipment: Equipment[];
+  purchaseRequests: PurchaseRequest[];
+  states: OperationalWorkStateRow[];
+  assignments: OperationalAssignmentRow[];
+  postponements: OperationalPostponementRow[];
+  dependencies: OperationalDependencyRow[];
+  leadership: OperationalLeadershipRow[];
+  evidence: OperationalEvidenceRow[];
+  events: OperationalEventRow[];
+  staff: OperationalStaffDirectoryRow[];
+}
+
+const EMPTY_SOURCE_ROWS: OperationalSourceRows = {
+  tasks: [], standards: [], obligations: [], completions: [], goals: [], steps: [],
+  calendarEvents: [], equipment: [], purchaseRequests: [], states: [], assignments: [],
+  postponements: [], dependencies: [], leadership: [], evidence: [], events: [], staff: [],
+};
+
 export function useOperationalWork(): UseOperationalWork {
   const { session, user, isManager } = useAuth();
   const ready = !!session?.access_token;
-  const [items, setItems] = useState<OperationalWorkItem[]>([]);
-  const [staff, setStaff] = useState<OperationalStaffDirectoryRow[]>([]);
-  const [assignments, setAssignments] = useState<OperationalAssignmentRow[]>([]);
-  const [postponements, setPostponements] = useState<OperationalPostponementRow[]>([]);
-  const [dependencies, setDependencies] = useState<OperationalDependencyRow[]>([]);
-  const [leadership, setLeadership] = useState<OperationalLeadershipRow[]>([]);
-  const [evidence, setEvidence] = useState<OperationalEvidenceRow[]>([]);
-  const [events, setEvents] = useState<OperationalEventRow[]>([]);
+  const [rows, setRows] = useState<OperationalSourceRows>(EMPTY_SOURCE_ROWS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -164,8 +220,11 @@ export function useOperationalWork(): UseOperationalWork {
           staffRows,
         ] = await Promise.all([
           directSelectAll<Task>("tasks", {
-            columns: "*",
+            columns: TASK_COLUMNS,
             filters: ["status=not.eq.cancelled"],
+            // Bounded forward window, unbounded backward so nothing overdue
+            // can be hidden. Undated tasks are kept explicitly.
+            or: `due_date.lte.${operationalWorkHorizonYmd(new Date())},due_date.is.null`,
             orderBy: [{ column: "due_date" }, { column: "id" }],
             label: "operational-work.tasks",
           }),
@@ -274,15 +333,11 @@ export function useOperationalWork(): UseOperationalWork {
             openAction: correctiveByStandard.get(standard.id) ?? null,
           };
         });
-        const evaluatedObligations = evaluateObligations(
-          obligationRows,
-          completionRows,
-          new Date(),
-        );
-        const normalized = aggregateOperationalWork({
+        setRows({
           tasks: taskRows,
           standards,
-          obligations: evaluatedObligations,
+          obligations: obligationRows,
+          completions: completionRows,
           goals: goalRows,
           steps: stepRows,
           calendarEvents: calendarRows,
@@ -293,20 +348,10 @@ export function useOperationalWork(): UseOperationalWork {
           postponements: postponementRows,
           dependencies: dependencyRows,
           leadership: leadershipRows,
+          evidence: evidenceRows,
           events: eventRows,
           staff: staffRows,
-          currentUserId: user?.id ?? null,
-          isManager,
-          today: new Date(),
         });
-        setItems(normalized);
-        setStaff(staffRows);
-        setAssignments(assignmentRows);
-        setPostponements(postponementRows);
-        setDependencies(dependencyRows);
-        setLeadership(leadershipRows);
-        setEvidence(evidenceRows);
-        setEvents(eventRows);
       } catch (caught) {
         if (!cancelled) {
           setError(caught instanceof Error ? caught.message : "Couldn't load operational work.");
@@ -316,7 +361,39 @@ export function useOperationalWork(): UseOperationalWork {
       }
     })();
     return () => { cancelled = true; };
-  }, [ready, nonce, today, user?.id, isManager]);
+    // `user?.id` and `isManager` deliberately excluded: they only affect how
+    // the rows are aggregated, not which rows are fetched. `isManager` is
+    // derived from the profile, which resolves AFTER the session — including
+    // it here made the entire multi-page load run twice on every visit.
+  }, [ready, nonce, today]);
+
+  // Wall-clock "now", refreshed when the calendar day rolls over so the
+  // derivation below re-runs at midnight along with the fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const asOf = useMemo(() => new Date(), [today]);
+
+  // Aggregation is derived, not fetched, so a profile/role arriving late
+  // re-derives the list instead of re-running the network load.
+  const items = useMemo(() => aggregateOperationalWork({
+    tasks: rows.tasks,
+    standards: rows.standards,
+    obligations: evaluateObligations(rows.obligations, rows.completions, asOf),
+    goals: rows.goals,
+    steps: rows.steps,
+    calendarEvents: rows.calendarEvents,
+    equipment: rows.equipment,
+    purchaseRequests: rows.purchaseRequests,
+    states: rows.states,
+    assignments: rows.assignments,
+    postponements: rows.postponements,
+    dependencies: rows.dependencies,
+    leadership: rows.leadership,
+    events: rows.events,
+    staff: rows.staff,
+    currentUserId: user?.id ?? null,
+    isManager,
+    today: asOf,
+  }), [rows, user?.id, isManager, asOf]);
 
   const mutate = useCallback(async (
     functionName: string,
@@ -329,16 +406,17 @@ export function useOperationalWork(): UseOperationalWork {
 
   return useMemo(() => ({
     items,
-    staff,
-    assignments,
-    postponements,
-    dependencies,
-    leadership,
-    evidence,
-    events,
+    staff: rows.staff,
+    assignments: rows.assignments,
+    postponements: rows.postponements,
+    dependencies: rows.dependencies,
+    leadership: rows.leadership,
+    evidence: rows.evidence,
+    events: rows.events,
     loading,
     error,
     today,
+    horizonDate: operationalWorkHorizonYmd(new Date()),
     reload,
     delegate: (workKey: string, input: DelegateWorkInput) => mutate("delegate_operational_work", {
       p_work_key: workKey,
@@ -442,8 +520,5 @@ export function useOperationalWork(): UseOperationalWork {
       },
       "operational-work.priority",
     ),
-  }), [
-    items, staff, assignments, postponements, dependencies, leadership, evidence, events, loading, error,
-    today, reload, mutate,
-  ]);
+  }), [items, rows, loading, error, today, reload, mutate]);
 }

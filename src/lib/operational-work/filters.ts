@@ -1,4 +1,5 @@
 import { categoryOf } from "./category";
+import { normalizePosition } from "./position";
 import { daysFrom } from "./priority";
 import type { OperationalWorkFilters, OperationalWorkItem } from "./types";
 
@@ -27,7 +28,8 @@ export function applyOperationalFilters(
     if (filters.category !== "all" && categoryOf(item) !== filters.category) return false;
     if (filters.department !== "all" && item.department !== filters.department) return false;
     if (filters.employee !== "all" && item.responsibleEmployee?.id !== filters.employee) return false;
-    if (filters.position !== "all" && item.responsiblePosition !== filters.position) return false;
+    if (filters.position !== "all"
+      && normalizePosition(item.responsiblePosition) !== normalizePosition(filters.position)) return false;
     if (filters.status !== "all" && item.status !== filters.status) return false;
     if (filters.source !== "all" && item.sourceType !== filters.source) return false;
     if (filters.priority !== "all" && item.priorityBand !== filters.priority) return false;

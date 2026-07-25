@@ -100,3 +100,25 @@ describe("applyOperationalFilters category filter", () => {
     expect(result).toHaveLength(items.length);
   });
 });
+
+describe("applyOperationalFilters position filter", () => {
+  // Duty occurrences carry lowercase role groups ("mechanic"); Program
+  // Standards carry free-text owner roles that may be capitalised
+  // ("Mechanic"). One choice in the filter must match both.
+  const items = [
+    item({ stableId: "duty", responsiblePosition: "mechanic" }),
+    item({ stableId: "standard", responsiblePosition: "Mechanic" }),
+    item({ stableId: "other", responsiblePosition: "recreation_aide" }),
+    item({ stableId: "none", responsiblePosition: null }),
+  ];
+
+  it("matches every case variant of the chosen position", () => {
+    const result = applyOperationalFilters(items, { ...EMPTY_OPERATIONAL_FILTERS, position: "mechanic" }, today);
+    expect(result.map((row) => row.stableId)).toEqual(["duty", "standard"]);
+  });
+
+  it("still excludes other positions and unpositioned work", () => {
+    const result = applyOperationalFilters(items, { ...EMPTY_OPERATIONAL_FILTERS, position: "recreation_aide" }, today);
+    expect(result.map((row) => row.stableId)).toEqual(["other"]);
+  });
+});

@@ -1,14 +1,16 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useDeferredValue, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ClipboardList, Filter, LayoutGrid, Loader2, Printer, RefreshCw, Search, ShoppingBag, SlidersHorizontal, Sprout, UtensilsCrossed } from "lucide-react";
+import { AlertTriangle, ClipboardList, Filter, LayoutGrid, Loader2, Printer, RefreshCw, Search, ShoppingBag, SlidersHorizontal, Sprout, UsersRound, UtensilsCrossed } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { applyOperationalFilters, EMPTY_OPERATIONAL_FILTERS } from "@/lib/operational-work/filters";
+import { positionOptions } from "@/lib/operational-work/position";
 import {
   categoryOf,
   OPERATIONAL_CATEGORY_LABELS,
@@ -25,6 +27,11 @@ import {
 } from "@/lib/operational-work/types";
 import { useOperationalWork } from "@/lib/operational-work/use-operational-work";
 import { buildAssignmentsPrintHtml } from "@/lib/operational-work/print-assignments";
+import {
+  buildPositionListsPrintHtml,
+  POSITION_PRINT_RANGES,
+  type PositionPrintRange,
+} from "@/lib/operational-work/print-positions";
 import {
   WorkActionDialog,
   type WorkActionDialogMode,
@@ -59,7 +66,12 @@ function OperationsCommandCenter() {
   const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null);
   const [reportDocs, setReportDocs] = useState<ObligationDocument[]>([]);
   const [reportsNonce, setReportsNonce] = useState(0);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set());
   const personalView = searchParams.get("view") === "mine";
+  // Typing stays responsive: React renders the (cheap) input update first and
+  // re-filters the (expensive) list at a lower priority.
+  const deferredQuery = useDeferredValue(query);
   const todayDate = useMemo(() => {
     const [year, month, day] = operations.today.split("-").map(Number);
     return new Date(year, month - 1, day);
@@ -75,7 +87,7 @@ function OperationsCommandCenter() {
       rows = rows.filter((item) => item.responsibleEmployee?.id === user?.id);
     }
     rows = applyOperationalFilters(rows, filters, new Date());
-    const needle = query.trim().toLowerCase();
+    const needle = deferredQuery.trim().toLowerCase();
     if (needle) {
       rows = rows.filter((item) => [
         item.title,
@@ -86,7 +98,7 @@ function OperationsCommandCenter() {
       ].some((value) => value?.toLowerCase().includes(needle)));
     }
     return rows;
-  }, [operations.items, personalView, user?.id, filters, query]);
+  }, [operations.items, personalView, user?.id, filters, deferredQuery]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<OperationalCategory, number> = { restaurant: 0, pro_shop: 0, grounds: 0, admin: 0 };
@@ -132,6 +144,22 @@ function OperationsCommandCenter() {
     }
     return map;
   }, [operations.assignments]);
+  // Each card needs its own slice of six audit tables. Filtering those arrays
+  // inside the render loop was O(cards x rows) on every keystroke; index them
+  // by work_key once instead.
+  const assignmentsByWork = useMemo(() => groupBy(operations.assignments, (row) => row.work_key), [operations.assignments]);
+  const postponementsByWork = useMemo(() => groupBy(operations.postponements, (row) => row.work_key), [operations.postponements]);
+  const leadershipByWork = useMemo(() => groupBy(operations.leadership, (row) => row.work_key), [operations.leadership]);
+  const evidenceByWork = useMemo(() => groupBy(operations.evidence, (row) => row.work_key), [operations.evidence]);
+  const eventsByWork = useMemo(() => groupBy(operations.events, (row) => row.work_key), [operations.events]);
+  const blockersByWork = useMemo(
+    () => groupBy(operations.dependencies.filter((row) => row.active), (row) => row.dependent_work_key),
+    [operations.dependencies],
+  );
+  const dependentsByWork = useMemo(
+    () => groupBy(operations.dependencies.filter((row) => row.active), (row) => row.blocker_work_key),
+    [operations.dependencies],
+  );
   const activeLeadershipByWork = useMemo(() => {
     const terminal = new Set(["approved", "denied", "returned_to_local_management", "completed", "closed_without_action"]);
     return new Map(operations.leadership.filter((row) => !terminal.has(row.status)).map((row) => [row.work_key, row]));
@@ -145,13 +173,51 @@ function OperationsCommandCenter() {
     });
   }, [searchParams, operationsLoading]);
 
-  const departments = unique(operations.items.map((item) => item.department));
-  const positions = unique(operations.items.map((item) => item.responsiblePosition));
-  const standards = operations.items.filter((item) => item.sourceType === "standard");
+  // Every filter's options come from the loaded work itself. A filter whose
+  // options are empty is not rendered at all — previously the Employee and
+  // Duration selects were always offered even though no task in the database
+  // carries an assignee or an estimate, so choosing one always emptied the
+  // list and read as "the filters are broken".
+  const filterOptions = useMemo(() => {
+    const items = operations.items;
+    const staffById = new Map(operations.staff.map((person) => [person.id, person]));
+    const employees = new Map<string, string>();
+    for (const item of items) {
+      const owner = item.responsibleEmployee;
+      if (!owner) continue;
+      const row = staffById.get(owner.id);
+      employees.set(owner.id, row?.display_name || row?.full_name || owner.name);
+    }
+    const durations: string[][] = [];
+    const minutes = items.map((item) => item.estimatedMinutes).filter((value): value is number => value !== null);
+    if (minutes.some((value) => value <= 15)) durations.push(["15", "15 minutes or less"]);
+    if (minutes.some((value) => value <= 30)) durations.push(["30", "30 minutes or less"]);
+    if (minutes.some((value) => value <= 60)) durations.push(["60", "60 minutes or less"]);
+    if (minutes.some((value) => value > 60)) durations.push(["long", "Over 60 minutes"]);
+    return {
+      department: unique(items.map((item) => item.department)).map((value) => [value, pretty(value)]),
+      employee: [...employees.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([id, name]) => [id, name]),
+      position: positionOptions(items.map((item) => item.responsiblePosition)),
+      status: unique(items.map((item) => item.status)).map((value) => [value, pretty(value)]),
+      source: unique(items.map((item) => item.sourceType)).map((value) => [value, pretty(value)]),
+      priority: ["critical", "high", "normal", "low"]
+        .filter((band) => items.some((item) => item.priorityBand === band))
+        .map((value) => [value, pretty(value)]),
+      duration: durations,
+      standard: items
+        .filter((item) => item.sourceType === "standard")
+        .map((item) => [item.sourceRecordId, item.title]),
+    };
+  }, [operations.items, operations.staff]);
 
   function updateFilter(key: keyof OperationalWorkFilters, value: string) {
     setFilters((prior) => ({ ...prior, [key]: value }));
   }
+
+  const activeFilterCount = useMemo(
+    () => Object.entries(filters).filter(([key, value]) => key !== "category" && value !== "all").length,
+    [filters],
+  );
 
   function openAction(mode: WorkActionDialogMode, item: OperationalWorkItem) {
     setSelectedItem(item);
@@ -159,17 +225,26 @@ function OperationsCommandCenter() {
     setActionError(null);
   }
 
-  function printAssignments() {
-    const html = buildAssignmentsPrintHtml(operations.items, new Date());
+  function openPrintWindow(html: string) {
+    setPrintOpen(false);
     const win = window.open("", "_blank");
     if (!win) {
-      setActionError("Allow pop-ups to print the assignment lists.");
+      setActionError("Allow pop-ups to print work lists.");
       return;
     }
     win.document.write(html);
     win.document.close();
     win.focus();
     win.print();
+  }
+
+  /** The lists the GM hands to each work area — crew have no app logins. */
+  function printByPosition(range: PositionPrintRange) {
+    openPrintWindow(buildPositionListsPrintHtml(operations.items, new Date(), range));
+  }
+
+  function printByPerson() {
+    openPrintWindow(buildAssignmentsPrintHtml(operations.items, new Date()));
   }
 
   async function handleInstruction(item: OperationalWorkItem, action: InterpretedAction) {
@@ -235,6 +310,12 @@ function OperationsCommandCenter() {
         <MorningBrief items={operations.items} today={todayDate} />
       )}
 
+      <p className="mb-3 text-xs text-muted-foreground">
+        Showing everything overdue plus work due through {formatHorizon(operations.horizonDate)}. Later
+        occurrences of recurring duties are scheduled but not loaded here — see{" "}
+        <Link href="/operations/duties" className="font-medium text-primary hover:underline">Duty ownership</Link>.
+      </p>
+
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric label="Visible work" value={visibleItems.length} />
         <Metric label="Overdue" value={sections.get("overdue")?.length ?? 0} tone="danger" />
@@ -249,8 +330,65 @@ function OperationsCommandCenter() {
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search operational work" className="pl-9" />
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 md:flex-none" onClick={() => setShowFilters((value) => !value)}><SlidersHorizontal />Filters</Button>
-            <Button variant="outline" className="flex-1 md:flex-none" onClick={printAssignments}><Printer />Print lists</Button>
+            <Button variant="outline" className="flex-1 md:flex-none" onClick={() => setShowFilters((value) => !value)}>
+              <SlidersHorizontal />Filters{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+            </Button>
+            <div className="relative flex-1 md:flex-none">
+              <Button
+                variant="outline"
+                className="w-full md:w-auto"
+                aria-haspopup="menu"
+                aria-expanded={printOpen}
+                onClick={() => setPrintOpen((value) => !value)}
+              >
+                <Printer />Print
+              </Button>
+              {printOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close print menu"
+                    className="fixed inset-0 z-30 cursor-default"
+                    onClick={() => setPrintOpen(false)}
+                  />
+                  <div role="menu" className="absolute right-0 z-40 mt-1 w-72 rounded-xl border border-border bg-card p-1.5 shadow-lg">
+                    <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Hand-out lists by position
+                    </p>
+                    <PrintMenuItem
+                      icon={UsersRound}
+                      label="Today — by position"
+                      hint="One page per role: Recreation Aides, Maintenance Staff, Pro-Shop Staff…"
+                      onClick={() => printByPosition(POSITION_PRINT_RANGES.today)}
+                    />
+                    <PrintMenuItem
+                      icon={UsersRound}
+                      label="Next 7 days — by position"
+                      hint="Same sheets, one section per day."
+                      onClick={() => printByPosition(POSITION_PRINT_RANGES.week)}
+                    />
+                    <div className="my-1 border-t border-border" />
+                    <PrintMenuItem
+                      icon={Printer}
+                      label="By named person"
+                      hint="Only work delegated to a specific employee."
+                      onClick={printByPerson}
+                    />
+                    <Link
+                      href="/operations/duties"
+                      role="menuitem"
+                      onClick={() => setPrintOpen(false)}
+                      className="mt-0.5 block rounded-lg px-2.5 py-2 text-left text-sm hover:bg-muted/60"
+                    >
+                      <span className="font-medium">Wall posters — standing duties</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Duty ownership page → &ldquo;Print role duty sheets&rdquo;.
+                      </span>
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
             <Button variant="outline" size="icon" onClick={operations.reload} aria-label="Refresh work"><RefreshCw className={operations.loading ? "animate-spin" : ""} /></Button>
           </div>
         </div>
@@ -275,15 +413,15 @@ function OperationsCommandCenter() {
         </div>
         {showFilters && (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <FilterSelect label="Department" value={filters.department} onChange={(value) => updateFilter("department", value)} options={departments.map((value) => [value, pretty(value)])} />
-            <FilterSelect label="Employee" value={filters.employee} onChange={(value) => updateFilter("employee", value)} options={operations.staff.map((person) => [person.id, person.display_name || person.full_name || "Unnamed"])} />
-            <FilterSelect label="Position" value={filters.position} onChange={(value) => updateFilter("position", value)} options={positions.map((value) => [value, pretty(value)])} />
-            <FilterSelect label="Status" value={filters.status} onChange={(value) => updateFilter("status", value)} options={["pending", "awaiting_acceptance", "in_progress", "postponed", "blocked", "waiting_leadership", "needs_verification", "completed", "verified"].map((value) => [value, pretty(value)])} />
-            <FilterSelect label="Source" value={filters.source} onChange={(value) => updateFilter("source", value)} options={unique(operations.items.map((item) => item.sourceType)).map((value) => [value, pretty(value)])} />
-            <FilterSelect label="Priority" value={filters.priority} onChange={(value) => updateFilter("priority", value)} options={["critical", "high", "normal", "low"].map((value) => [value, pretty(value)])} />
+            <FilterSelect label="Department" value={filters.department} onChange={(value) => updateFilter("department", value)} options={filterOptions.department} />
+            <FilterSelect label="Employee" value={filters.employee} onChange={(value) => updateFilter("employee", value)} options={filterOptions.employee} />
+            <FilterSelect label="Position" value={filters.position} onChange={(value) => updateFilter("position", value)} options={filterOptions.position} />
+            <FilterSelect label="Status" value={filters.status} onChange={(value) => updateFilter("status", value)} options={filterOptions.status} />
+            <FilterSelect label="Source" value={filters.source} onChange={(value) => updateFilter("source", value)} options={filterOptions.source} />
+            <FilterSelect label="Priority" value={filters.priority} onChange={(value) => updateFilter("priority", value)} options={filterOptions.priority} />
             <FilterSelect label="Due date" value={filters.due} onChange={(value) => updateFilter("due", value)} options={[["overdue", "Overdue"], ["today", "Today"], ["week", "Next 7 days"], ["none", "No due date"]]} />
-            <FilterSelect label="Duration" value={filters.duration} onChange={(value) => updateFilter("duration", value)} options={[["15", "15 minutes or less"], ["30", "30 minutes or less"], ["60", "60 minutes or less"], ["long", "Over 60 minutes"]]} />
-            <FilterSelect label="Program Standard" value={filters.standard} onChange={(value) => updateFilter("standard", value)} options={standards.map((item) => [item.sourceRecordId, item.title])} />
+            <FilterSelect label="Duration" value={filters.duration} onChange={(value) => updateFilter("duration", value)} options={filterOptions.duration} />
+            <FilterSelect label="Program Standard" value={filters.standard} onChange={(value) => updateFilter("standard", value)} options={filterOptions.standard} />
             <FilterSelect label="Delegated" value={filters.delegated} onChange={(value) => updateFilter("delegated", value)} options={[["yes", "Delegated"], ["no", "Not delegated"]]} />
             <FilterSelect label="Blocked" value={filters.blocked} onChange={(value) => updateFilter("blocked", value)} options={[["yes", "Blocked"], ["no", "Not blocked"]]} />
             <FilterSelect label="Leadership" value={filters.leadership} onChange={(value) => updateFilter("leadership", value)} options={[["yes", "With leadership"], ["no", "Not with leadership"]]} />
@@ -314,26 +452,30 @@ function OperationsCommandCenter() {
           {OPERATIONAL_SECTION_ORDER.map((key) => {
             const rows = sections.get(key) ?? [];
             if (rows.length === 0) return null;
+            const expanded = expandedSections.has(key);
+            const shown = expanded ? rows : rows.slice(0, SECTION_PAGE_SIZE);
             return (
               <section key={key} id={`section-${key}`} className="scroll-mt-28">
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-sm font-bold uppercase tracking-wide">{OPERATIONAL_SECTION_LABELS[key]}</h2>
-                  <span className="text-xs text-muted-foreground">{rows.length}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {shown.length < rows.length ? `${shown.length} of ${rows.length}` : rows.length}
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                  {rows.map((item) => (
+                  {shown.map((item) => (
                     <WorkCard
                       key={item.stableId}
                       item={item}
                       itemById={itemById}
                       assignment={assignmentByWork.get(item.stableId) ?? null}
-                      assignmentHistory={operations.assignments.filter((row) => row.work_key === item.stableId)}
-                      postponementHistory={operations.postponements.filter((row) => row.work_key === item.stableId)}
-                      leadershipHistory={operations.leadership.filter((row) => row.work_key === item.stableId)}
-                      evidence={operations.evidence.filter((row) => row.work_key === item.stableId)}
-                      events={operations.events.filter((row) => row.work_key === item.stableId)}
-                      blockers={operations.dependencies.filter((dependency) => dependency.active && dependency.dependent_work_key === item.stableId)}
-                      dependents={operations.dependencies.filter((dependency) => dependency.active && dependency.blocker_work_key === item.stableId)}
+                      assignmentHistory={assignmentsByWork.get(item.stableId) ?? EMPTY_ROWS}
+                      postponementHistory={postponementsByWork.get(item.stableId) ?? EMPTY_ROWS}
+                      leadershipHistory={leadershipByWork.get(item.stableId) ?? EMPTY_ROWS}
+                      evidence={evidenceByWork.get(item.stableId) ?? EMPTY_ROWS}
+                      events={eventsByWork.get(item.stableId) ?? EMPTY_ROWS}
+                      blockers={blockersByWork.get(item.stableId) ?? EMPTY_ROWS}
+                      dependents={dependentsByWork.get(item.stableId) ?? EMPTY_ROWS}
                       currentUserId={user?.id ?? null}
                       isManager={isManager}
                       busy={busyKey === item.stableId}
@@ -350,6 +492,16 @@ function OperationsCommandCenter() {
                     />
                   ))}
                 </div>
+                {shown.length < rows.length && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => setExpandedSections((prior) => new Set(prior).add(key))}
+                  >
+                    Show all {rows.length} in {OPERATIONAL_SECTION_LABELS[key]}
+                  </Button>
+                )}
               </section>
             );
           })}
@@ -386,6 +538,46 @@ function OperationsCommandCenter() {
         onClose={() => setEmailDraft(null)}
       />
     </div>
+  );
+}
+
+/**
+ * Cards rendered per section before "Show all". The duty materializer keeps a
+ * year of occurrences on hand, so an uncapped list put tens of thousands of
+ * interactive cards in the DOM and froze the tab on every filter change.
+ */
+const SECTION_PAGE_SIZE = 25;
+
+/** Shared empty array so cards with no audit rows keep a stable prop identity. */
+const EMPTY_ROWS: never[] = [];
+
+function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const bucket = map.get(key);
+    if (bucket) bucket.push(row);
+    else map.set(key, [row]);
+  }
+  return map;
+}
+
+function PrintMenuItem({ icon: Icon, label, hint, onClick }: {
+  icon: LucideIcon;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="block w-full rounded-lg px-2.5 py-2 text-left hover:bg-muted/60"
+    >
+      <span className="flex items-center gap-2 text-sm font-medium"><Icon className="h-3.5 w-3.5" />{label}</span>
+      <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
+    </button>
   );
 }
 
@@ -430,6 +622,10 @@ function Metric({ label, value, tone = "default" }: { label: string; value: numb
 }
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: string[][] }) {
+  // A select with nothing to choose can only ever empty the list, which reads
+  // as a broken filter. Hide it unless it is already carrying a selection the
+  // user needs to be able to clear.
+  if (options.length === 0 && value === "all") return null;
   return <label className="space-y-1"><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-2 text-xs"><option value="all">All</option>{options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}</select></label>;
 }
 
@@ -439,4 +635,9 @@ function unique(values: Array<string | null | undefined>): string[] {
 
 function pretty(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatHorizon(ymd: string): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
