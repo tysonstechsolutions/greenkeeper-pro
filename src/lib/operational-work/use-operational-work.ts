@@ -138,6 +138,7 @@ const TASK_COLUMNS = [
   "id", "title", "description", "category", "priority", "status",
   "assigned_to", "assigned_by", "due_date", "estimated_minutes",
   "duty_id", "duty_role_group", "duty_department",
+  "duty_primary_profile_id", "duty_primary_name",
   "duty_verification_requirement_state", "blocked_reason",
   "created_at", "updated_at", "completed_at", "standard_id", "why_it_matters",
 ].join(",");

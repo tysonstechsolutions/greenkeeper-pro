@@ -70,23 +70,80 @@ describe("print range windows", () => {
     expect(workInPrintRange(item({ dueDate: null }), today, POSITION_PRINT_RANGES.today)).toBe(true);
   });
 
-  it("leaves undated Program Standards off the hand-out sheets", () => {
-    // Standards with no target date are the GM's improvement programme, not
-    // shift work. Left in, the identical block printed on every sheet every
-    // day and buried the real duties.
-    const standard = item({ sourceType: "standard", dueDate: null, responsiblePosition: "GCM" });
-    expect(workInPrintRange(standard, today, POSITION_PRINT_RANGES.today)).toBe(false);
-    expect(workInPrintRange(standard, today, POSITION_PRINT_RANGES.week)).toBe(false);
+  it("keeps undated work from other sources, such as a one-off crew task", () => {
+    const task = item({ sourceType: "task", dueDate: null, responsiblePosition: "maintenance_staff" });
+    expect(workInPrintRange(task, today, POSITION_PRINT_RANGES.today)).toBe(true);
+  });
+});
+
+describe("crew sheets carry crew work only", () => {
+  // These sheets are handed to employees or posted on a wall. The GM works out
+  // of the command center, so nothing that belongs to him should print.
+  function sheetLabels(items: OperationalWorkItem[]) {
+    return groupOpenWorkByPosition(items, today, POSITION_PRINT_RANGES.today).map((group) => group.label);
+  }
+
+  it("prints a sheet for each crew role group", () => {
+    expect(sheetLabels([
+      item({ stableId: "a", responsiblePosition: "recreation_aide" }),
+      item({ stableId: "b", responsiblePosition: "maintenance_staff" }),
+      item({ stableId: "c", responsiblePosition: "restaurant_staff" }),
+      item({ stableId: "d", responsiblePosition: "pro_shop_staff" }),
+      item({ stableId: "e", responsiblePosition: "golf_operations_assistant" }),
+      item({ stableId: "f", responsiblePosition: "contractor" }),
+    ])).toEqual([
+      "Contractors", "Golf Operations Assistants", "Maintenance Staff",
+      "Pro-Shop Staff", "Recreation Aides", "Restaurant Staff",
+    ]);
   });
 
-  it("keeps a Program Standard that has a real target date", () => {
-    const standard = item({ sourceType: "standard", dueDate: "2026-07-25" });
-    expect(workInPrintRange(standard, today, POSITION_PRINT_RANGES.today)).toBe(true);
+  it("never prints a Program Standard, whatever role owns it", () => {
+    // All 93 are Navy program standards owned by manager roles ("Crew",
+    // "Mechanic", "GCM"); they are the GM's improvement backlog, not shift work.
+    expect(sheetLabels([
+      item({ sourceType: "standard", responsiblePosition: "Crew", dueDate: "2026-07-25" }),
+      item({ sourceType: "standard", responsiblePosition: "maintenance_staff", dueDate: null }),
+    ])).toEqual([]);
   });
 
-  it("keeps undated work from other sources, such as an equipment alert", () => {
-    const alert = item({ sourceType: "equipment", dueDate: null, responsiblePosition: "mechanic" });
-    expect(workInPrintRange(alert, today, POSITION_PRINT_RANGES.today)).toBe(true);
+  it("never prints the General Manager's own work", () => {
+    expect(sheetLabels([
+      item({ responsiblePosition: "general_manager" }),
+      item({ sourceType: "step", responsiblePosition: null, responsibleEmployee: { id: "gm", name: "Tyson", role: "gm" } }),
+      item({ sourceType: "purchase_request", responsiblePosition: null, responsibleEmployee: null }),
+    ])).toEqual([]);
+  });
+
+  it("does not print manager-only roles that only exist as free text", () => {
+    expect(sheetLabels([
+      item({ responsiblePosition: "GCM" }),
+      item({ responsiblePosition: "Superintendent" }),
+      item({ responsiblePosition: "Leadership" }),
+      item({ sourceType: "equipment", responsiblePosition: "mechanic" }),
+    ])).toEqual([]);
+  });
+
+  it("groups by position even when a named owner is recorded", () => {
+    const groups = groupOpenWorkByPosition(
+      [item({ responsiblePosition: "maintenance_staff", responsibleEmployee: { id: "r", name: "Rosie Lloyd", role: "crew" } })],
+      today,
+      POSITION_PRINT_RANGES.today,
+    );
+    expect(groups.map((group) => group.label)).toEqual(["Maintenance Staff"]);
+    expect(groups[0].days[0].items[0].responsibleEmployee?.name).toBe("Rosie Lloyd");
+  });
+
+  it("names the responsible person on the printed line when one is recorded", () => {
+    const html = buildPositionListsPrintHtml(
+      [
+        item({ stableId: "a", title: "Mow greens", responsiblePosition: "maintenance_staff", responsibleEmployee: { id: "r", name: "Rosie Lloyd", role: "crew" } }),
+        item({ stableId: "b", title: "Rake bunkers", responsiblePosition: "maintenance_staff" }),
+      ],
+      today,
+      POSITION_PRINT_RANGES.today,
+    );
+    expect(html).toContain("Rosie Lloyd");
+    expect(html).toContain("Rake bunkers");
   });
 });
 
@@ -106,39 +163,18 @@ describe("grouping open work by position", () => {
   });
 
   it("prints one sheet per role even when sources disagree about capitalisation", () => {
-    // Equipment alerts hard-code "mechanic"; Program Standards carry a
-    // free-text owner role that may read "Mechanic". Two sheets for the same
-    // person is a printing bug, not two positions.
+    // Two sheets for the same role is a printing bug, not two positions.
     const groups = groupOpenWorkByPosition(
       [
-        item({ stableId: "equipment:1", title: "Mower down", responsiblePosition: "mechanic" }),
-        item({ stableId: "standard:1", title: "PM schedule", responsiblePosition: "Mechanic" }),
+        item({ stableId: "task:1", title: "Mow greens", responsiblePosition: "maintenance_staff" }),
+        item({ stableId: "task:2", title: "Rake bunkers", responsiblePosition: "Maintenance_Staff" }),
       ],
       today,
       POSITION_PRINT_RANGES.today,
     );
     expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe("Maintenance Staff");
     expect(groups[0].days.flatMap((day) => day.items)).toHaveLength(2);
-  });
-
-  it("names the person when work is owned by an employee rather than a position", () => {
-    const groups = groupOpenWorkByPosition(
-      [item({ responsiblePosition: null, responsibleEmployee: { id: "e1", name: "Maria Diaz", role: "crew" } })],
-      today,
-      POSITION_PRINT_RANGES.today,
-    );
-    expect(groups[0].label).toBe("Maria Diaz");
-  });
-
-  it("collects work with no owner into its own reviewable bucket instead of hiding it", () => {
-    const groups = groupOpenWorkByPosition(
-      [item({ responsiblePosition: null, responsibleEmployee: null, title: "Nobody owns this" })],
-      today,
-      POSITION_PRINT_RANGES.today,
-    );
-    expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe("No position recorded");
-    expect(groups[0].days[0].items[0].title).toBe("Nobody owns this");
   });
 
   it("drops finished work and work outside the range", () => {
@@ -197,7 +233,8 @@ describe("printable position sheets", () => {
   });
 
   it("explains an empty result instead of printing a blank page", () => {
-    expect(buildPositionListsPrintHtml([], today, POSITION_PRINT_RANGES.today))
-      .toContain("No open work");
+    const html = buildPositionListsPrintHtml([], today, POSITION_PRINT_RANGES.today);
+    expect(html).toContain("No open crew work");
+    expect(html).toContain("Operations Command Center");
   });
 });

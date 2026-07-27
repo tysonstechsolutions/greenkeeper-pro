@@ -24,6 +24,8 @@ type TaskOperationalFields = Task & {
   standard_code?: string | null;
   why_it_matters?: string | null;
   definition_of_done?: string | null;
+  duty_primary_profile_id?: string | null;
+  duty_primary_name?: string | null;
 };
 
 export interface OperationalAggregationInput {
@@ -104,9 +106,19 @@ function baseTask(task: TaskOperationalFields): OperationalWorkItem {
     title: task.title,
     description: task.description || task.why_it_matters || null,
     department: taskDepartment(task),
+    // A duty occurrence carries the owner the materializer stamped from the
+    // duty's dated assignment. Most duties are owned by the role rather than a
+    // person, so this is usually null — but when the GM does name someone, the
+    // crew sheet and the card can say whose responsibility it is.
     responsibleEmployee: task.assigned_to
       ? { id: task.assigned_to, name: "Assigned employee", role: null }
-      : null,
+      : task.duty_primary_profile_id
+        ? {
+          id: task.duty_primary_profile_id,
+          name: task.duty_primary_name || "Assigned employee",
+          role: null,
+        }
+        : null,
     responsiblePosition: task.duty_role_group ?? null,
     accountableManager: task.assigned_by
       ? { id: task.assigned_by, name: "Accountable manager", role: null }

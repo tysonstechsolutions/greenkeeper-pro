@@ -137,3 +137,45 @@ describe("explainable operational priority", () => {
     }), today, null)).toBe("critical_now");
   });
 });
+
+describe("Program Standards as the course improvement backlog", () => {
+  // Standards are the GM's long-term course-improvement programme, knocked out
+  // when time allows. With no target date they were scattering into My work,
+  // Quick wins and Critical now, leaving "Program improvements" empty.
+  const standard = (overrides: Partial<OperationalWorkItem> = {}) =>
+    item({ sourceType: "standard", dueDate: null, sourceLabel: "Program Standard 2.2.20", ...overrides });
+
+  it("puts an undated standard in the improvement backlog, not My work", () => {
+    const owned = standard({ responsibleEmployee: { id: "gm", name: "Tyson", role: "gm" }, delegated: true });
+    expect(primarySectionFor(owned, today, "gm")).toBe("program_improvements");
+  });
+
+  it("keeps a short undated standard out of Quick wins", () => {
+    expect(primarySectionFor(standard({ estimatedMinutes: 15 }), today, null)).toBe("program_improvements");
+  });
+
+  it("does not treat an undated standard as critical just because it is flagged", () => {
+    const flagged = standard({ safetyFlag: true, complianceFlag: true, priorityBand: "critical" });
+    expect(primarySectionFor(flagged, today, null)).toBe("program_improvements");
+  });
+
+  it("still respects a real target date on a standard", () => {
+    expect(primarySectionFor(standard({ dueDate: "2026-07-10" }), today, null)).toBe("overdue");
+    expect(primarySectionFor(standard({ dueDate: "2026-07-16" }), today, null)).toBe("due_today");
+    expect(primarySectionFor(standard({ dueDate: "2026-07-18" }), today, null)).toBe("due_soon");
+  });
+
+  it("still surfaces a blocked or escalated standard in its workflow section", () => {
+    expect(primarySectionFor(standard({ blockedState: { blocked: true, blockerKeys: [], reason: null } }), today, null))
+      .toBe("blocked");
+    expect(primarySectionFor(
+      standard({ leadershipState: { active: true, status: "sent", followUpDate: null, followUpDue: false, recipient: "Region" } }),
+      today, null,
+    )).toBe("waiting_on_leadership");
+  });
+
+  it("leaves non-standard undated work where it was", () => {
+    expect(primarySectionFor(item({ sourceType: "equipment", dueDate: null, estimatedMinutes: null }), today, null))
+      .toBe("upcoming");
+  });
+});

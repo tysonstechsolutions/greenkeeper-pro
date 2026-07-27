@@ -353,7 +353,7 @@ function OperationsCommandCenter() {
                   />
                   <div role="menu" className="absolute right-0 z-40 mt-1 w-72 rounded-xl border border-border bg-card p-1.5 shadow-lg">
                     <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Hand-out lists by position
+                      Crew sheets — hand out or post on a wall
                     </p>
                     <PrintMenuItem
                       icon={UsersRound}
@@ -385,6 +385,10 @@ function OperationsCommandCenter() {
                         Duty ownership page → &ldquo;Print role duty sheets&rdquo;.
                       </span>
                     </Link>
+                    <p className="border-t border-border px-2.5 pb-1 pt-2 text-xs text-muted-foreground">
+                      Crew roles only. Your own work — Program Standards, purchase
+                      requests, equipment — stays here in the command center.
+                    </p>
                   </div>
                 </>
               )}

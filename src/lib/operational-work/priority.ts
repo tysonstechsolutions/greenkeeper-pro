@@ -165,6 +165,14 @@ export function primarySectionFor(
     return "waiting_on_someone";
   }
 
+  // Program Standards are the course-improvement programme: work the GM knocks
+  // out over time rather than work that comes due. Until one is given a target
+  // date it belongs in that backlog, whatever its impact or compliance flags —
+  // otherwise the 93 undated standards scatter into My work, Quick wins and
+  // Critical now, and the backlog section reads as empty. A standard WITH a
+  // target date is a real deadline and falls through to the date rules below.
+  if (item.sourceType === "standard" && !item.dueDate) return "program_improvements";
+
   const dueDays = item.dueDate ? daysFrom(today, item.dueDate) : null;
   const criticalSignal = item.safetyFlag || item.complianceFlag
     || item.payrollDeadlineFlag || item.financialDeadlineFlag

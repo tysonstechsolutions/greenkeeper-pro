@@ -1,23 +1,48 @@
-// Printable per-position work lists.
+// Printable per-position work lists — the sheets the GM hands to employees or
+// posts on a wall.
 //
 // The crew have no app logins, and duty occurrences are assigned by role group
 // ("recreation_aide", "maintenance_staff", …) rather than to a named person —
 // `tasks.assigned_to` is null across the whole table. Grouping printouts by
 // employee therefore produced an empty sheet every time. These lists group the
-// real dated work by the position that owns it, so the GM can hand each area
-// its list for today or for the week.
+// real dated work by the position that owns it: what that role does, on what
+// day, and who is responsible when a name is recorded.
+//
+// These are crew documents. The GM and other managers work out of the command
+// center, so manager work never prints — see CREW_PRINT_ROLE_GROUPS.
 //
 // Deterministic and self-contained (no network), mirroring print-assignments.ts
 // and print-role-sheets.ts.
 
+import type { DutyRoleGroup } from "@/lib/operations/types";
 import { normalizePosition, positionDisplayLabel } from "./position";
 import { daysFrom } from "./priority";
 import type { OperationalWorkItem } from "./types";
 
 const FINISHED = new Set(["completed", "verified", "cancelled"]);
 
-/** Bucket for work that has an owner recorded nowhere — printed, never hidden. */
-const NO_POSITION_LABEL = "No position recorded";
+/**
+ * The positions that get a printed sheet: the duty catalogue's employee and
+ * contractor role groups.
+ *
+ * Deliberately excluded:
+ *  - `general_manager` and `unassigned` — the GM's own queue.
+ *  - Free-text owner roles that only ever arrive on Program Standards
+ *    ("GCM", "Superintendent", "Leadership", "Crew", "Mechanic") and the
+ *    hard-coded "mechanic" on equipment alerts. None is a staffed position in
+ *    the duty catalogue, and all of that work is the GM's.
+ *
+ * Nothing is lost by excluding them — the GM sees every one of these in the
+ * command center, which is where he works.
+ */
+export const CREW_PRINT_ROLE_GROUPS: ReadonlySet<DutyRoleGroup> = new Set<DutyRoleGroup>([
+  "recreation_aide",
+  "golf_operations_assistant",
+  "maintenance_staff",
+  "restaurant_staff",
+  "pro_shop_staff",
+  "contractor",
+]);
 
 export interface PositionPrintRange {
   key: "today" | "week";
@@ -37,21 +62,28 @@ export const POSITION_PRINT_RANGES: Record<PositionPrintRange["key"], PositionPr
  * Anything already overdue stays on the sheet regardless of range — a missed
  * duty should not disappear from the crew's list. Undated work is kept too, so
  * nothing is silently dropped by a date filter it never had a value for.
- *
- * The one exception is a Program Standard with no target date. Those are the
- * GM's improvement programme rather than shift work, and because they never
- * come due they would reprint identically on every sheet every day and bury
- * the actual duties. They stay on /standards and in the command center's
- * "Program improvements" section; a standard that HAS a target date is a real
- * deadline for its owner and is printed like anything else.
  */
 export function workInPrintRange(
   item: OperationalWorkItem,
   today: Date,
   range: PositionPrintRange,
 ): boolean {
-  if (!item.dueDate) return item.sourceType !== "standard";
+  if (!item.dueDate) return true;
   return daysFrom(today, item.dueDate) <= range.daysAhead;
+}
+
+/**
+ * Whether an item belongs on a crew sheet at all.
+ *
+ * Program Standards are the GM's course-improvement programme — he works
+ * through them in the command center's improvement backlog when time allows,
+ * and they are never crew shift work regardless of the owner role recorded
+ * against them.
+ */
+function isCrewWork(item: OperationalWorkItem): boolean {
+  if (item.sourceType === "standard") return false;
+  const position = normalizePosition(item.responsiblePosition);
+  return !!position && CREW_PRINT_ROLE_GROUPS.has(position as DutyRoleGroup);
 }
 
 export interface PositionDayGroup {
@@ -68,18 +100,10 @@ export interface PositionGroup {
   total: number;
 }
 
+/** Only called for work that already passed `isCrewWork`, so a position exists. */
 function positionKeyAndLabel(item: OperationalWorkItem): { key: string; label: string } {
-  const position = normalizePosition(item.responsiblePosition);
-  if (position && item.responsiblePosition) {
-    return {
-      key: `position:${position}`,
-      label: positionDisplayLabel(item.responsiblePosition),
-    };
-  }
-  if (item.responsibleEmployee) {
-    return { key: `employee:${item.responsibleEmployee.id}`, label: item.responsibleEmployee.name };
-  }
-  return { key: "unassigned", label: NO_POSITION_LABEL };
+  const position = normalizePosition(item.responsiblePosition)!;
+  return { key: position, label: positionDisplayLabel(item.responsiblePosition!) };
 }
 
 function dayLabel(dueDate: string | null, today: Date): { key: string; label: string } {
@@ -111,6 +135,7 @@ export function groupOpenWorkByPosition(
 
   for (const item of items) {
     if (FINISHED.has(item.status)) continue;
+    if (!isCrewWork(item)) continue;
     if (!workInPrintRange(item, today, range)) continue;
     const { key, label } = positionKeyAndLabel(item);
     const group = byPosition.get(key) ?? { label, items: [] };
@@ -138,13 +163,7 @@ export function groupOpenWorkByPosition(
     groups.push({ key, label: group.label, days, total: group.items.length });
   }
 
-  // Named positions first in a stable alphabetical order; the unowned bucket
-  // sinks to the end so it reads as a review pile, not a work assignment.
-  return groups.sort((a, b) => {
-    if (a.key === "unassigned") return 1;
-    if (b.key === "unassigned") return -1;
-    return a.label.localeCompare(b.label);
-  });
+  return groups.sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function escapeHtml(value: string): string {
@@ -167,6 +186,11 @@ function formatDate(date: Date): string {
 
 function dayBlock(day: PositionDayGroup): string {
   const rows = day.items.map((item) => {
+    // Who is responsible, when the duty has a named owner. Most duties are
+    // owned by the role rather than a person, so this is often absent.
+    const owner = item.responsibleEmployee
+      ? `<span class="owner">${escapeHtml(item.responsibleEmployee.name)}</span>`
+      : "";
     const meta = [item.sourceLabel, item.department?.replaceAll("_", " ")]
       .filter(Boolean)
       .map((value) => escapeHtml(String(value)))
@@ -175,7 +199,7 @@ function dayBlock(day: PositionDayGroup): string {
       <li>
         <span class="box" aria-hidden="true"></span>
         <span class="task">
-          <span class="title">${escapeHtml(item.title)}</span>
+          <span class="title">${escapeHtml(item.title)}${owner}</span>
           <span class="meta">${meta}</span>
         </span>
       </li>`;
@@ -200,7 +224,7 @@ export function buildPositionListsPrintHtml(
   const printedDate = formatDate(generatedOn);
 
   const body = groups.length === 0
-    ? `<p class="empty">No open work falls in this range. Try the "Next 7 days" list, or check that duties are active on the Duty ownership page.</p>`
+    ? `<p class="empty">No open crew work falls in this range. Try the &ldquo;Next 7 days&rdquo; list, or check that duties are active on the Duty ownership page. Your own work is not printed &mdash; it stays in the Operations Command Center.</p>`
     : groups.map((group) => `
       <article class="sheet">
         <header>
@@ -233,6 +257,8 @@ export function buildPositionListsPrintHtml(
     .box { width: 15px; height: 15px; border: 2px solid #333; border-radius: 3px; margin-top: 3px; flex: 0 0 auto; }
     .task { display: flex; flex-direction: column; }
     .title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+    .owner { font-weight: 400; color: #333; }
+    .owner::before { content: " — "; }
     .meta { font-size: 11px; color: #555; }
     .sign { font-size: 12px; color: #333; margin-top: 14px; }
     footer { margin-top: 10px; font-size: 12px; color: #555; border-top: 1px solid #ddd; padding-top: 8px; }

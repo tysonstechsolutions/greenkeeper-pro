@@ -140,7 +140,7 @@ export const OPERATIONAL_SECTION_LABELS: Record<OperationalSectionKey, string> =
   waiting_on_leadership: "Waiting on leadership",
   blocked: "Blocked",
   needs_verification: "Needs verification",
-  program_improvements: "Program improvements",
+  program_improvements: "Course improvement program",
   upcoming: "Upcoming",
   completed_recently: "Completed recently",
 };
