@@ -13,7 +13,8 @@ export interface StaleActionPlan {
   table: string;
   /** Column holding the scheduled date, for "reschedule". */
   dateColumn: string;
-  /** Patch that marks the row finished. */
+  /** Patch that marks the row finished. For tasks the database stamps who and
+   *  when (guard_task_mutation), so only the status is sent. */
   donePatch: (nowIso: string, actorId: string | null) => Record<string, unknown>;
   /** Whether deleting the row outright is a safe, expected action here. */
   deletable: boolean;
@@ -35,11 +36,7 @@ export function stalePlanFor(item: OperationalWorkItem): StaleActionPlan | null 
       return {
         table: "tasks",
         dateColumn: "due_date",
-        donePatch: (nowIso, actorId) => ({
-          status: "completed",
-          completed_at: nowIso,
-          completed_by: actorId,
-        }),
+        donePatch: () => ({ status: "completed" }),
         deletable: true,
       };
     case "step":

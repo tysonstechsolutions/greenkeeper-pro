@@ -15,6 +15,7 @@ import {
 } from "@/lib/operations/stale-work";
 import { isActionableStaleItem, stalePlanFor } from "@/lib/operations/stale-actions";
 import { directDeleteRow, directPatchRow } from "@/lib/supabase/rest";
+import { trackAction } from "@/lib/usage/track";
 
 function todayLocal(): string {
   const now = new Date();
@@ -49,6 +50,7 @@ export default function CleanupPage() {
   );
 
   async function run(key: string, action: () => Promise<void>, done: string) {
+    trackAction(key === "bulk" ? "cleanup_bulk_clear" : "cleanup_single_action");
     setBusy(key);
     setError(null);
     setNotice(null);

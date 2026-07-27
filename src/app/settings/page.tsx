@@ -76,6 +76,13 @@ const adminSections = [
     href: "/settings/briefing",
     color: "from-sky-500 to-cyan-600",
   },
+  {
+    title: "How you use the app",
+    description: "What gets recorded, and switch it off",
+    icon: FileText,
+    href: "/settings/usage",
+    color: "from-slate-500 to-gray-600",
+  },
 ];
 
 export default function SettingsPage() {

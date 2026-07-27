@@ -42,6 +42,7 @@ import { MorningBrief } from "@/components/features/operations-command-center/mo
 import { buildTaskEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
 import type { InterpretedAction } from "@/lib/operational-work/instruction-interpreter";
 import { classifyStaleWork } from "@/lib/operations/stale-work";
+import { trackAction } from "@/lib/usage/track";
 import {
   listObligationDocuments,
   groupDocumentsByObligation,
@@ -218,6 +219,7 @@ function OperationsCommandCenter() {
   }, [operations.items, operations.staff]);
 
   function updateFilter(key: keyof OperationalWorkFilters, value: string) {
+    if (value !== "all") trackAction(`filter_${key}`);
     setFilters((prior) => ({ ...prior, [key]: value }));
   }
 
@@ -247,10 +249,12 @@ function OperationsCommandCenter() {
 
   /** The lists the GM hands to each work area — crew have no app logins. */
   function printByPosition(range: PositionPrintRange) {
+    trackAction(`print_by_position_${range.key}`);
     openPrintWindow(buildPositionListsPrintHtml(operations.items, new Date(), range));
   }
 
   function printByPerson() {
+    trackAction("print_by_person");
     openPrintWindow(buildAssignmentsPrintHtml(operations.items, new Date()));
   }
 

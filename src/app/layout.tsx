@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout";
 import { OfflineSyncIndicator } from "@/components/features/offline/offline-sync-indicator";
 import { AuthProvider } from "@/lib/providers/auth-provider";
 import { AuthGate } from "@/components/auth/auth-gate";
+import { UsageTracker } from "@/components/usage-tracker";
 import { CapacitorInit } from "@/components/capacitor-init";
 import { SupabaseRecovery } from "@/components/supabase-recovery";
 
@@ -125,6 +126,7 @@ export default function RootLayout({
           <AuthGate>
             <AppShell>{children}</AppShell>
             <OfflineSyncIndicator />
+            <UsageTracker />
           </AuthGate>
         </AuthProvider>
       </body>

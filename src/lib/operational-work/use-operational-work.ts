@@ -13,13 +13,7 @@ import type {
   StandardEvaluation,
   StandardWithStatus,
 } from "@/lib/standards/types";
-import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
-import { directPatchRow, directRpc, directSelectAll } from "@/lib/supabase/rest";
-import {
-  completionStampFor,
-  taskIdFromWorkKey,
-  type CompletionAction,
-} from "@/lib/tasks/completion-stamp";
+import { directRpc, directSelectAll } from "@/lib/supabase/rest";
 import type { Equipment, PurchaseRequest, Task } from "@/types/database";
 import { aggregateOperationalWork } from "./adapters";
 import type {
@@ -107,34 +101,6 @@ interface UseOperationalWork {
   reopen: (workKey: string, reason: string) => Promise<void>;
   addEvidence: (workKey: string, type: string, label: string, reference: string) => Promise<void>;
   setPriority: (workKey: string, input: PriorityOverrideInput) => Promise<void>;
-}
-
-/**
- * Record completion history for task and duty work keys.
- *
- * `transition_operational_work` delegates to `transition_task_status`, which
- * moves `tasks.status` but never writes `completed_at` / `completed_by`. The
- * app stamps them so "what got done this week, and who did it" is answerable.
- * Best-effort: a failure here must not make a successful transition look like
- * it failed, so it is logged as a breadcrumb rather than thrown.
- */
-async function stampTaskCompletion(
-  workKey: string,
-  action: string,
-  actorId: string | null,
-): Promise<void> {
-  const taskId = taskIdFromWorkKey(workKey);
-  if (!taskId) return;
-  const stamp = completionStampFor(action as CompletionAction, actorId, new Date());
-  if (!stamp) return;
-  try {
-    await directPatchRow("tasks", "id", taskId, stamp, `operational-work.stamp-${action}`);
-  } catch (caught) {
-    recordBreadcrumb(
-      "warn",
-      `completion stamp failed for ${workKey}: ${caught instanceof Error ? caught.message : String(caught)}`,
-    );
-  }
 }
 
 function daysAgoYmd(days: number): string {
@@ -434,10 +400,8 @@ export function useOperationalWork(): UseOperationalWork {
     functionName: string,
     args: Record<string, unknown>,
     label: string,
-    afterCommit?: () => Promise<void>,
   ) => {
     await directRpc(functionName, args, label);
-    if (afterCommit) await afterCommit();
     reload();
   }, [reload]);
 
@@ -529,17 +493,18 @@ export function useOperationalWork(): UseOperationalWork {
       p_outcome: outcome,
       p_next_action: nextAction,
     }, "operational-work.leadership-response"),
+    // The database stamps completion itself: guard_task_mutation sets
+    // completed_by / completed_at (and verified_by / verified_at) on the status
+    // transition, then makes those facts append-only. Nothing to do here.
     transition: (workKey: string, action: string, note = "") => mutate(
       "transition_operational_work",
       { p_work_key: workKey, p_action: action, p_note: note },
       "operational-work.transition",
-      () => stampTaskCompletion(workKey, action, user?.id ?? null),
     ),
     reopen: (workKey: string, reason: string) => mutate(
       "reopen_operational_work",
       { p_work_key: workKey, p_reason: reason },
       "operational-work.reopen",
-      () => stampTaskCompletion(workKey, "reopen", user?.id ?? null),
     ),
     addEvidence: (workKey: string, type: string, label: string, reference: string) => mutate(
       "record_operational_work_evidence",

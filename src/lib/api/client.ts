@@ -319,6 +319,13 @@ export async function callApi<T = unknown>(
         } catch {
           /* body wasn't JSON */
         }
+        // A 404 here means the function exists in the repo but was never
+        // deployed. "Requested function was not found" reads like a bug in the
+        // app; say what it actually is and how to fix it.
+        if (res.status === 404) {
+          message = `This feature isn't switched on yet — the "${fnSlug}" service hasn't been deployed. `
+            + `Run: supabase functions deploy ${fnSlug}`;
+        }
         const apiErr: ApiError = Object.assign(new Error(message), {
           status: res.status,
         });

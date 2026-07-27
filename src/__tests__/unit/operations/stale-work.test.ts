@@ -154,11 +154,10 @@ describe("stale action routing", () => {
       expect(plan.table).toBe("tasks");
       expect(plan.dateColumn).toBe("due_date");
       expect(plan.deletable).toBe(true);
-      expect(plan.donePatch("2026-07-26T12:00:00Z", "gm")).toEqual({
-        status: "completed",
-        completed_at: "2026-07-26T12:00:00Z",
-        completed_by: "gm",
-      });
+      // The database stamps completed_at / completed_by itself in
+      // guard_task_mutation, then makes them append-only — sending them from
+      // the client is rejected with "Completed task facts cannot be rewritten".
+      expect(plan.donePatch("2026-07-26T12:00:00Z", "gm")).toEqual({ status: "completed" });
     }
   });
 
