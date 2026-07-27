@@ -102,7 +102,8 @@ describe("DutiesPage", () => {
   it("renders missing operational facts honestly", () => {
     render(<DutiesPage />);
     expect(screen.getAllByText("Restaurant Staff").length).toBeGreaterThan(0);
-    expect(screen.getByText("Primary:").parentElement).toHaveTextContent("DJ");
+    // A named owner still wins over the role description.
+    expect(screen.getByText("Responsible:").parentElement).toHaveTextContent("DJ");
     expect(screen.getByText("Duration:").parentElement).toHaveTextContent("Not recorded");
     expect(screen.getByText("Instructions:").parentElement).toHaveTextContent("Not recorded");
     expect(screen.queryByText(/0 minutes/)).not.toBeInTheDocument();

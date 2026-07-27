@@ -13,8 +13,10 @@ import {
   DUTY_ROLE_GROUP_LABELS,
   DUTY_ROLE_GROUP_ORDER,
   assignmentForDate,
+  dutyOwnershipDisplay,
   dutyScheduleLabel,
   previewActiveDutyReassignment,
+  splitRosterByRole,
 } from "@/lib/operations/duties";
 import { buildRoleDutySheetsHtml } from "@/lib/operations/print-role-sheets";
 import { useDutyManagement, type CoveragePreviewRow, type RecurrencePreviewRow } from "@/lib/operations/use-duty-management";
@@ -370,7 +372,28 @@ export default function DutiesPage() {
             <RequirementField label="Evidence requirement" state={form.evidenceState} setState={(value) => set("evidenceState", value)} value={form.evidence} setValue={(value) => set("evidence", value)} placeholder="Comma-separated evidence" />
             <Field label="Manager verification"><select className="gk-input" value={form.verificationState} onChange={(e) => set("verificationState", e.target.value as RequirementState)}><RequirementOptions /></select></Field>
             <Field label="Priority"><select className="gk-input" value={form.priority} onChange={(e) => set("priority", e.target.value as DutyFormState["priority"])}>{["critical","high","normal","low"].map((value) => <option key={value}>{value}</option>)}</select></Field>
-            {EMPLOYEE_GROUPS.has(form.roleGroup) && <><Field label="Primary employee"><select className="gk-input" value={form.primaryProfileId} onChange={(e) => set("primaryProfileId", e.target.value)}><option value="">Unassigned</option>{management.people.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></Field><Field label="Backup employee"><select className="gk-input" value={form.backupProfileId} onChange={(e) => set("backupProfileId", e.target.value)}><option value="">Not recorded</option>{management.people.filter((p) => p.id !== form.primaryProfileId).map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></Field></>}
+            {EMPLOYEE_GROUPS.has(form.roleGroup) && <>
+              <RolePersonSelect
+                label="Named person (optional)"
+                value={form.primaryProfileId}
+                onChange={(value) => set("primaryProfileId", value)}
+                people={management.people}
+                roleGroup={form.roleGroup}
+                empty={`Leave to whoever works ${DUTY_ROLE_GROUP_LABELS[form.roleGroup]}`}
+              />
+              <RolePersonSelect
+                label="Named backup (optional)"
+                value={form.backupProfileId}
+                onChange={(value) => set("backupProfileId", value)}
+                people={management.people.filter((p) => p.id !== form.primaryProfileId)}
+                roleGroup={form.roleGroup}
+                empty="Not recorded"
+              />
+              <p className="text-xs text-muted-foreground md:col-span-2">
+                Leave both blank to keep this duty owned by the role — whoever is working
+                that role covers it. Name someone only when one specific person owns it.
+              </p>
+            </>}
             {form.roleGroup === "contractor" && <Field label="Contractor"><select className="gk-input" value={form.contractorVendorId} onChange={(e) => set("contractorVendorId", e.target.value)}><option value="">Unassigned</option>{management.vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</select></Field>}
             <Field label="Ownership effective date"><Input type="date" value={form.assignmentDate} onChange={(e) => set("assignmentDate", e.target.value)} /></Field>
             <Field label="Ownership reason (required only when ownership changes)"><Input value={form.assignmentReason} onChange={(e) => set("assignmentReason", e.target.value)} /></Field>
@@ -399,6 +422,39 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function RequirementOptions() { return <><option value="not_recorded">Not recorded</option><option value="not_required">Explicitly not required</option><option value="required">Required</option></>; }
 function RequirementField({ label, state, setState, value, setValue, placeholder }: { label: string; state: RequirementState; setState: (value: RequirementState) => void; value: string; setValue: (value: string) => void; placeholder: string }) { return <div className="space-y-2"><Field label={label}><select className="gk-input" value={state} onChange={(e) => setState(e.target.value as RequirementState)}><RequirementOptions /></select></Field>{state === "required" && <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} />}</div>; }
 function PersonSelect({ label, value, onChange, people, empty = "Choose employee" }: { label: string; value: string; onChange: (value: string) => void; people: {id:string;full_name:string}[]; empty?: string }) { return <Field label={label}><select className="gk-input" value={value} onChange={(e) => onChange(e.target.value)}><option value="">{empty}</option>{people.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select></Field>; }
+
+/**
+ * Person picker that puts the roster for the duty's own role at the top.
+ * Everyone else stays selectable — the maintenance crew have no role_group
+ * recorded yet, and hiding them would make those duties unassignable.
+ */
+function RolePersonSelect({ label, value, onChange, people, roleGroup, empty }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  people: { id: string; full_name: string; role_group?: string | null }[];
+  roleGroup: DutyRoleGroup;
+  empty: string;
+}) {
+  const { inRole, others } = splitRosterByRole(people, roleGroup);
+  return (
+    <Field label={label}>
+      <select className="gk-input" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{empty}</option>
+        {inRole.length > 0 && (
+          <optgroup label={DUTY_ROLE_GROUP_LABELS[roleGroup]}>
+            {inRole.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </optgroup>
+        )}
+        {others.length > 0 && (
+          <optgroup label={inRole.length > 0 ? "Other staff" : "All staff (no role recorded)"}>
+            {others.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </optgroup>
+        )}
+      </select>
+    </Field>
+  );
+}
 function PreviewSummary({ rows }: { rows: RecurrencePreviewRow[] }) { return <div className="rounded-xl border bg-muted/30 p-3 text-sm"><p>{rows.filter((r) => r.action === "cancel_pending").length} obsolete pending occurrence(s) will be cancelled.</p><p>{rows.filter((r) => r.action === "preserve").length} occurrence(s) will be preserved.</p></div>; }
 
 function DutyCard({ duty, management, onEdit }: { duty: OperationDuty; management: ReturnType<typeof useDutyManagement>; onEdit: () => void }) {
@@ -406,7 +462,13 @@ function DutyCard({ duty, management, onEdit }: { duty: OperationDuty; managemen
   const assignments = management.assignments.filter((a) => a.duty_id === duty.id);
   const coverages = management.coverages.filter((c) => c.duty_id === duty.id);
   const versions = management.recurrenceVersions.filter((v) => v.duty_id === duty.id);
-  const owner = current?.primary?.full_name ?? current?.contractor?.name ?? "Unassigned";
+  // Role ownership is a complete answer, not a missing one — most duties are
+  // covered by whoever is working that role that day.
+  const ownership = dutyOwnershipDisplay(
+    duty.role_group,
+    current?.primary?.full_name,
+    current?.contractor?.name,
+  );
   const requirement = (state: RequirementState | undefined, values?: string[]) => state === "required" ? (values?.length ? values.join(", ") : "Required - details missing") : state === "not_required" ? "Explicitly not required" : "Not recorded";
   return (
     <Card>
@@ -421,8 +483,11 @@ function DutyCard({ duty, management, onEdit }: { duty: OperationDuty; managemen
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <p><span className="font-medium">Status:</span> {duty.is_active ? "Active" : `Inactive - ${duty.inactive_reason || "reason not recorded"}`}</p>
-        <p><span className="font-medium">Primary:</span> {owner}</p>
-        <p><span className="font-medium">Backup:</span> {current?.backup?.full_name ?? "Not recorded"}</p>
+        <p>
+          <span className="font-medium">Responsible:</span>{" "}
+          <span className={ownership.needsAttention ? "text-amber-700 dark:text-amber-300" : ""}>{ownership.label}</span>
+        </p>
+        <p><span className="font-medium">Named backup:</span> {current?.backup?.full_name ?? "Not recorded"}</p>
         <p><span className="font-medium">Duration:</span> {duty.estimated_minutes == null ? "Not recorded" : `${duty.estimated_minutes} minutes`}</p>
         <p><span className="font-medium">Instructions:</span> {duty.instructions || "Not recorded"}</p>
         <p><span className="font-medium">Equipment:</span> {requirement(duty.equipment_requirement_state, duty.equipment_needed)}</p>

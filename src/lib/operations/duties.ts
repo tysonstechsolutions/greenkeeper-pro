@@ -253,3 +253,59 @@ export function dutyScheduleLabel(duty: OperationDuty): string {
   if (rule.cadence === "quarterly") return `Quarterly · ${day}`;
   return `Annual · ${day}`;
 }
+
+/**
+ * Role groups that describe a staffed position rather than a placeholder.
+ * A duty owned by one of these is fully specified even with nobody named:
+ * whoever is working that role does it, which is how the part-time roster
+ * actually runs.
+ */
+const STAFFED_ROLE_GROUPS = new Set<DutyRoleGroup>([
+  "recreation_aide",
+  "golf_operations_assistant",
+  "maintenance_staff",
+  "restaurant_staff",
+  "pro_shop_staff",
+  "general_manager",
+]);
+
+export interface DutyOwnershipDisplay {
+  label: string;
+  /** True only when nobody AND no role owns the duty — a real gap to fix. */
+  needsAttention: boolean;
+}
+
+/**
+ * How to describe who owns a duty.
+ *
+ * Every duty used to read "Primary: Unassigned", including the ~155 that are
+ * deliberately owned by a role. That made a correct, complete setup look like
+ * 155 outstanding problems. Role ownership is now stated as what it is, and
+ * "not assigned" is reserved for duties that genuinely have no owner at all.
+ */
+export function dutyOwnershipDisplay(
+  roleGroup: DutyRoleGroup | null | undefined,
+  primaryName?: string | null,
+  contractorName?: string | null,
+): DutyOwnershipDisplay {
+  if (primaryName) return { label: primaryName, needsAttention: false };
+  if (contractorName) return { label: contractorName, needsAttention: false };
+  if (roleGroup && STAFFED_ROLE_GROUPS.has(roleGroup)) {
+    return { label: `Any ${DUTY_ROLE_GROUP_LABELS[roleGroup]} on shift`, needsAttention: false };
+  }
+  if (roleGroup === "contractor") {
+    return { label: "Contractor — none chosen yet", needsAttention: true };
+  }
+  return { label: "Not assigned to anyone or any role", needsAttention: true };
+}
+
+/** Split the roster into the people in a duty's role and everyone else, so the
+ *  GM can name a specific person within the responsible role at a glance. */
+export function splitRosterByRole<T extends { role_group?: string | null }>(
+  people: T[],
+  roleGroup: DutyRoleGroup | null | undefined,
+): { inRole: T[]; others: T[] } {
+  if (!roleGroup) return { inRole: [], others: people };
+  const inRole = people.filter((person) => person.role_group === roleGroup);
+  return { inRole, others: people.filter((person) => person.role_group !== roleGroup) };
+}
