@@ -186,6 +186,7 @@ const VOICE_LOG: AppEntry = { href: "/voice-log", label: "Voice Log", icon: Mic,
 const ENVIRONMENTAL: AppEntry = { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-teal-600 to-emerald-700", group: GROUPS.course };
 const REPORT_ISSUE: AppEntry = { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700", group: GROUPS.course };
 const EQUIPMENT: AppEntry = { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-amber-500 to-yellow-600", group: GROUPS.course };
+const FLEET_READINESS: AppEntry = { href: "/equipment/readiness", label: "Fleet Readiness", icon: Wrench, color: "from-amber-600 to-orange-600", group: GROUPS.course };
 
 const ASSETS: AppEntry = { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const IMPORT_ASSETS: AppEntry = { href: "/assets/import", label: "Import Assets", icon: FilePlus, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
@@ -253,6 +254,7 @@ export const HUB_COURSE: AppEntry = {
   children: [
     TURF_DASHBOARD,
     EQUIPMENT,
+    FLEET_READINESS,
     COURSE_MAP,
     SPRINKLER_MAP,
     PARKING,
