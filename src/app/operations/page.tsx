@@ -41,6 +41,7 @@ import { EmailDraftDialog } from "@/components/features/operations-command-cente
 import { MorningBrief } from "@/components/features/operations-command-center/morning-brief";
 import { buildTaskEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
 import type { InterpretedAction } from "@/lib/operational-work/instruction-interpreter";
+import { classifyStaleWork } from "@/lib/operations/stale-work";
 import {
   listObligationDocuments,
   groupDocumentsByObligation,
@@ -99,6 +100,12 @@ function OperationsCommandCenter() {
     }
     return rows;
   }, [operations.items, personalView, user?.id, filters, deferredQuery]);
+
+  // Banner only: the cleanup screen does its own full classification.
+  const staleCount = useMemo(
+    () => classifyStaleWork(operations.items, new Date()).total,
+    [operations.items],
+  );
 
   const categoryCounts = useMemo(() => {
     const counts: Record<OperationalCategory, number> = { restaurant: 0, pro_shop: 0, grounds: 0, admin: 0 };
@@ -315,6 +322,19 @@ function OperationsCommandCenter() {
         occurrences of recurring duties are scheduled but not loaded here — see{" "}
         <Link href="/operations/duties" className="font-medium text-primary hover:underline">Duty ownership</Link>.
       </p>
+
+      {staleCount > 0 && (
+        <Link
+          href="/operations/cleanup"
+          className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-sm hover:bg-amber-500/10"
+        >
+          <span>
+            <span className="font-semibold">{staleCount} item{staleCount === 1 ? "" : "s"} more than a day past due.</span>{" "}
+            <span className="text-muted-foreground">Most repeat anyway — clear them in one tap.</span>
+          </span>
+          <span className="shrink-0 font-medium text-primary">Clean up →</span>
+        </Link>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Metric label="Visible work" value={visibleItems.length} />

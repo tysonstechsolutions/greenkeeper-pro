@@ -161,6 +161,7 @@ function baseTask(task: TaskOperationalFields): OperationalWorkItem {
     reviewDate: null,
     programStandardId: task.standard_id ?? null,
     activitySummary: null,
+    dutySeriesKey: task.duty_id ?? null,
   };
 }
 
@@ -236,6 +237,7 @@ function baseStandard(item: StandardWithStatus): OperationalWorkItem {
     reviewDate: null,
     programStandardId: standard.id,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 
@@ -291,6 +293,7 @@ function baseObligation(row: EvaluatedObligation): OperationalWorkItem {
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 
@@ -338,6 +341,7 @@ function baseStep(step: DailyStep, goal: DailyGoal | undefined): OperationalWork
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 
@@ -385,6 +389,7 @@ function baseGoal(goal: DailyGoal): OperationalWorkItem {
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 
@@ -434,6 +439,7 @@ function baseCalendar(event: CalendarEvent): OperationalWorkItem {
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 
@@ -481,6 +487,7 @@ function baseEquipment(unit: Equipment): OperationalWorkItem {
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 
@@ -529,6 +536,7 @@ function basePurchaseRequest(pr: PurchaseRequest): OperationalWorkItem {
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
   };
 }
 

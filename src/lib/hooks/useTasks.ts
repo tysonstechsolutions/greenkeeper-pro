@@ -19,10 +19,12 @@ import {
   directSelectAll,
   directSelectRow,
   directInsertRow,
+  directPatchRow,
   directPatchRowReturning,
   directDeleteRow,
   directRpc,
 } from "@/lib/supabase/rest";
+import { completionStampFor } from "@/lib/tasks/completion-stamp";
 
 // Extended task type with joined data
 export interface TaskWithRelations extends Task {
@@ -401,11 +403,15 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
 
       try {
         // Get task details first for notification
-        const taskData = await directSelectRow<{ title: string; assigned_by: string }>(
+        const taskData = await directSelectRow<{
+          title: string;
+          assigned_by: string;
+          completed_at: string | null;
+        }>(
           "tasks",
           "id",
           id,
-          "title, assigned_by",
+          "title, assigned_by, completed_at",
           "completeTask:fetch",
         );
 
@@ -414,6 +420,11 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           p_status: "completed",
           p_blocked_reason: null,
         }, "completeTask:update");
+
+        // transition_task_status only moves `status`; record what got done,
+        // when, and by whom so completion history is reportable.
+        const stamp = completionStampFor("complete", user.id, new Date(), taskData?.completed_at ?? null);
+        if (stamp) await directPatchRow("tasks", "id", id, stamp, "completeTask:stamp");
 
         // Notify the person who assigned the task
         if (taskData?.assigned_by && taskData.assigned_by !== user.id) {
@@ -465,6 +476,9 @@ export function useTasks(initialFilters?: TaskFilters): UseTasksReturn {
           p_status: "verified",
           p_blocked_reason: null,
         }, "verifyTask:update");
+
+        const verifyStamp = completionStampFor("verify", user.id, new Date());
+        if (verifyStamp) await directPatchRow("tasks", "id", id, verifyStamp, "verifyTask:stamp");
 
         // Notify the person who completed the task (or was assigned if different)
         const notifyUserId = taskData?.completed_by || taskData?.assigned_to;

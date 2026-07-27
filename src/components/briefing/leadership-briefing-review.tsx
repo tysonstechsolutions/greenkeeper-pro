@@ -300,7 +300,7 @@ function Financials({ briefing }: { briefing: BriefingData }) {
           label={data.prSpendAgainstBudget.label}
           render={(value) => (
             <p>
-              Budget {money(value.budget)} · {value.label} {money(value.prCommittedOrderedSpend)} · Remaining {money(value.remaining)} · Used {value.percentUsed === null ? "Unavailable" : `${value.percentUsed}%`}
+              Budget {formatMoney(value.budget)} · {value.label} {formatMoney(value.prCommittedOrderedSpend)} · Remaining {formatMoney(value.remaining)} · Used {value.percentUsed === null ? "Unavailable" : `${value.percentUsed}%`}
             </p>
           )}
         />
@@ -633,8 +633,22 @@ function DetailList({ items }: { items: string[] }) {
   );
 }
 
+const CURRENCY = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Plain text — safe to interpolate inside a sentence. */
+function formatMoney(value: number): string {
+  return CURRENCY.format(value);
+}
+
+/** Block form, for use as a FactBlock `render` prop. Never nest this inside a
+ *  paragraph: use formatMoney() there, or the markup becomes <p> inside <p>. */
 function money(value: number): ReactNode {
-  return <p className="text-sm">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}</p>;
+  return <p className="text-sm">{formatMoney(value)}</p>;
 }
 
 function comparisonText(value: PeriodComparison): ReactNode {

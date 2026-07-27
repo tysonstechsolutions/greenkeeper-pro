@@ -41,6 +41,7 @@ const item: OperationalWorkItem = {
   reviewDate: null,
   programStandardId: null,
   activitySummary: null,
+  dutySeriesKey: null,
 };
 
 const callbacks = {

@@ -6,6 +6,7 @@ const today = new Date(2026, 6, 21); // Tuesday, July 21
 
 function makeItem(overrides: Partial<OperationalWorkItem>): OperationalWorkItem {
   return {
+    dutySeriesKey: null,
     stableId: "task:x", sourceType: "task", sourceRecordId: "x", title: "Task",
     description: null, department: "maintenance", responsibleEmployee: null,
     responsiblePosition: null, accountableManager: null, status: "pending",

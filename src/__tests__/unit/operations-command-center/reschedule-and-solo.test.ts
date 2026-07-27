@@ -126,6 +126,7 @@ function assignedItem(overrides: Partial<OperationalWorkItem>): OperationalWorkI
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
     ...overrides,
   };
 }

@@ -47,6 +47,7 @@ const item: OperationalWorkItem = {
   reviewDate: null,
   programStandardId: null,
   activitySummary: "Work started",
+  dutySeriesKey: null,
 };
 
 describe("Operations work card", () => {

@@ -93,6 +93,12 @@ export interface OperationalWorkItem {
   reviewDate: string | null;
   programStandardId: string | null;
   activitySummary: string | null;
+  /**
+   * The recurring duty this occurrence belongs to (`tasks.duty_id`), or null
+   * for work that is not a duty occurrence. Lets stale-work triage tell "this
+   * duty comes around again" from "this was a one-off that got missed".
+   */
+  dutySeriesKey: string | null;
 }
 
 export type OperationalSectionKey =

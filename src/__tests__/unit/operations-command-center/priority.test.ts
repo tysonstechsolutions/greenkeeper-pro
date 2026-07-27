@@ -66,6 +66,7 @@ function item(overrides: Partial<OperationalWorkItem> = {}): OperationalWorkItem
     reviewDate: null,
     programStandardId: null,
     activitySummary: null,
+    dutySeriesKey: null,
     ...overrides,
   };
 }
