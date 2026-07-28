@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Loader2, Sparkles, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { callApi } from "@/lib/api/client";
@@ -35,7 +36,12 @@ export function AvailabilitySheet({
 }: {
   staff: ProShopStaff;
   onClose: () => void;
-  onSave: (availability: WeeklyAvailability, text: string, flex: boolean) => Promise<void>;
+  onSave: (
+    availability: WeeklyAvailability,
+    text: string,
+    flex: boolean,
+    employedThrough: string | null,
+  ) => Promise<void>;
 }) {
   const initialWeekly = staff.availability?.weekly
     ? { ...emptyWeekly(), ...staff.availability.weekly }
@@ -44,6 +50,7 @@ export function AvailabilitySheet({
   const [text, setText] = useState(staff.availability_text ?? "");
   const [notes, setNotes] = useState(staff.availability?.notes ?? "");
   const [flex, setFlex] = useState(staff.flex);
+  const [employedThrough, setEmployedThrough] = useState(staff.employed_through ?? "");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -113,7 +120,7 @@ export function AvailabilitySheet({
           };
         }
       }
-      await onSave({ weekly: cleanWeekly, notes }, text, flex);
+      await onSave({ weekly: cleanWeekly, notes }, text, flex, employedThrough || null);
       onClose();
     } finally {
       setSaving(false);
@@ -163,6 +170,22 @@ export function AvailabilitySheet({
             </span>
           </span>
         </label>
+
+        {/* Last working day */}
+        <div className="space-y-1.5 rounded-xl border border-border p-3">
+          <Label className="text-xs font-medium">Last working day (optional)</Label>
+          <Input
+            type="date"
+            value={employedThrough}
+            onChange={(e) => setEmployedThrough(e.target.value)}
+            className="w-48"
+          />
+          <p className="text-xs text-muted-foreground">
+            {employedThrough
+              ? `Scheduled up to and including ${employedThrough}, then dropped automatically. Shifts already generated after that date are removed when you save.`
+              : "Leave blank for open-ended. Set it when someone gives notice and the schedule stops using them after that day."}
+          </p>
+        </div>
 
         {/* Manual 7-day editor */}
         <div className="space-y-1.5">

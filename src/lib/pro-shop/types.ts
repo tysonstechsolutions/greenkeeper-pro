@@ -33,6 +33,12 @@ export interface ProShopStaff {
   flex: boolean;
   phone: string | null;
   is_active: boolean;
+  /**
+   * Last day this person works, inclusive. NULL/absent = open-ended, which is
+   * the normal case. The schedule engine stops stamping shifts after it, so a
+   * leaver can be recorded once and then forgotten about.
+   */
+  employed_through?: string | null;
   sort_order: number;
   notes: string | null;
 }

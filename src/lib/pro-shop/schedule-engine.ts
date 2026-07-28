@@ -80,7 +80,8 @@ export interface PlannedShift {
 
 /**
  * Stamp every active person's weekly pattern across the month, skipping any
- * date covered by their time-off. Returns the planned shifts (not yet saved).
+ * date covered by their time-off or falling after their last working day.
+ * Returns the planned shifts (not yet saved).
  */
 export function expandMonth(
   staff: ProShopStaff[],
@@ -95,6 +96,9 @@ export function expandMonth(
     const weekly = person.availability?.weekly;
     if (!weekly) continue;
     for (const date of dates) {
+      // Nobody is scheduled past their last working day. Dates are ISO
+      // yyyy-mm-dd, so a string compare is the correct calendar compare.
+      if (person.employed_through && date > person.employed_through) continue;
       const key = weekdayKeyForDate(parseYmd(date));
       const pat: DayPattern | undefined = weekly[key];
       if (!pat?.works || !pat.start || !pat.end) continue;

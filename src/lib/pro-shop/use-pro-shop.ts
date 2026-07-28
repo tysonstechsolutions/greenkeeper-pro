@@ -166,6 +166,32 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     [staff, loadStatic],
   );
 
+  /**
+   * Retire every future shift already stamped past someone's last working day.
+   *
+   * Setting a leaving date only stops FUTURE generation; months already
+   * generated still hold their shifts. Without this the leaver stays on the
+   * printed schedule for every month that was generated before they gave
+   * notice — which is exactly the bug this feature exists to fix.
+   */
+  const retireShiftsAfter = useCallback(
+    async (staffId: string, lastDay: string) => {
+      const doomed = await directSelectList<ProShopShift>("pro_shop_shifts", {
+        columns: "id",
+        filters: [`staff_id=eq.${staffId}`, `shift_date=gt.${lastDay}`, "is_active=eq.true"],
+        label: "proshop.shifts.after-last-day",
+      });
+      for (const shift of doomed) {
+        await directRpc("retire_pro_shop_shift", {
+          p_shift_id: shift.id,
+          p_reason: "Past the employee's last working day",
+        }, "proshop.shift.retire-after-last-day");
+      }
+      return doomed.length;
+    },
+    [],
+  );
+
   const updateStaff = useCallback(
     async (staffId: string, patch: Partial<ProShopStaff>) => {
       await directRpc("save_pro_shop_staff", {
@@ -412,6 +438,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     saveAvailability,
     addStaff,
     updateStaff,
+    retireShiftsAfter,
     generateMonth,
     publishMonth,
     setScheduleNotes,

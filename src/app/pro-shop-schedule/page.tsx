@@ -598,9 +598,16 @@ function ProShopScheduleContent() {
         <AvailabilitySheet
           staff={availabilityStaff}
           onClose={() => setAvailabilityStaff(null)}
-          onSave={async (availability, text, flex) => {
+          onSave={async (availability, text, flex, employedThrough) => {
             await ps.saveAvailability(availabilityStaff.id, availability, text);
             if (flex !== availabilityStaff.flex) await ps.updateStaff(availabilityStaff.id, { flex });
+            if (employedThrough !== (availabilityStaff.employed_through ?? null)) {
+              await ps.updateStaff(availabilityStaff.id, { employed_through: employedThrough });
+              // Months generated before they gave notice still hold their
+              // shifts; clear the ones past the last day so the printed
+              // schedule matches reality immediately.
+              if (employedThrough) await ps.retireShiftsAfter(availabilityStaff.id, employedThrough);
+            }
           }}
         />
       )}
