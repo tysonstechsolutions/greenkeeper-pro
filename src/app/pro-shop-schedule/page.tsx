@@ -1,4 +1,5 @@
 "use client";
+import { SCHEDULE_AREA_LABELS, type ScheduleArea } from "@/lib/pro-shop/types";
 
 import { useMemo, useState } from "react";
 import {
@@ -87,7 +88,10 @@ export default function ProShopSchedulePage() {
 }
 
 function ProShopScheduleContent() {
-  const ps = useProShop(NOW.getFullYear(), NOW.getMonth());
+  // Two entirely separate schedules share this screen. Everything below —
+  // staff, months, shifts, warnings — is scoped to the selected area.
+  const [area, setArea] = useState<ScheduleArea>("pro_shop");
+  const ps = useProShop(NOW.getFullYear(), NOW.getMonth(), area);
   const monthDate = useMemo(() => new Date(ps.year, ps.month0, 1), [ps.year, ps.month0]);
 
   const [dayOpen, setDayOpen] = useState<string | null>(null);
@@ -290,7 +294,7 @@ function ProShopScheduleContent() {
     const out: { date: string; active: DayWarning[] }[] = [];
     for (const d of days) {
       const ds = ymd(d);
-      const active = activeWarnings(dayWarnings(shiftsOn(ds)), dismissedMap[ds]);
+      const active = activeWarnings(dayWarnings(shiftsOn(ds), area), dismissedMap[ds]);
       if (active.length) out.push({ date: ds, active });
     }
     return out;
@@ -301,7 +305,7 @@ function ProShopScheduleContent() {
   // Active + dismissed issues for the currently-open day (for the day editor).
   const openDayWarnings = useMemo(() => {
     if (!dayOpen) return { active: [] as DayWarning[], dismissed: [] as DayWarning[] };
-    const all = dayWarnings(shiftsOn(dayOpen));
+    const all = dayWarnings(shiftsOn(dayOpen), area);
     const codes = dismissedMap[dayOpen] ?? [];
     return {
       active: all.filter((w) => !codes.includes(w.code)),
@@ -312,13 +316,36 @@ function ProShopScheduleContent() {
 
   return (
     <div className="p-3 md:p-6 pb-28 max-w-6xl mx-auto">
+      {/* Which schedule — the two are entirely separate rosters and months. */}
+      <div className="mb-3 flex gap-2" role="group" aria-label="Choose schedule">
+        {(Object.keys(SCHEDULE_AREA_LABELS) as ScheduleArea[]).map((key) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={area === key}
+            onClick={() => setArea(key)}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+              area === key
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-foreground hover:bg-muted/50"
+            }`}
+          >
+            {SCHEDULE_AREA_LABELS[key]}
+          </button>
+        ))}
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <CalendarClock className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-xl font-bold leading-tight">Pro Shop Schedule</h1>
-            <p className="text-xs text-muted-foreground">Rec aids & golf ops — days & hours</p>
+            <h1 className="text-xl font-bold leading-tight">{SCHEDULE_AREA_LABELS[area]} Schedule</h1>
+            <p className="text-xs text-muted-foreground">
+              {area === "pro_shop"
+                ? "Rec aids & golf ops — days & hours"
+                : "Grounds crew & mechanic — days & hours"}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -459,7 +486,7 @@ function ProShopScheduleContent() {
           const dayShifts = shiftsOn(ds);
           const out = dayShifts.filter((s) => s.group === "outside");
           const ins = dayShifts.filter((s) => s.group === "inside");
-          const warns = inMonth ? activeWarnings(dayWarnings(dayShifts), dismissedMap[ds]) : [];
+          const warns = inMonth ? activeWarnings(dayWarnings(dayShifts, area), dismissedMap[ds]) : [];
           return (
             <button
               key={ds}

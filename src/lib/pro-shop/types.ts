@@ -3,8 +3,38 @@
  * supabase/migrations/20260626_pro_shop_scheduler.sql.
  */
 
-export type ProShopPosition = "rec_aid" | "golf_ops_assistant";
-export type ShiftGroup = "inside" | "outside";
+/**
+ * Which schedule a person and their shifts belong to. The two areas are kept
+ * entirely separate — separate staff, separate months, separate shifts.
+ *
+ * (The `pro_shop_*` table names predate this and now cover both areas.)
+ */
+export type ScheduleArea = "pro_shop" | "maintenance";
+
+export const SCHEDULE_AREA_LABELS: Record<ScheduleArea, string> = {
+  pro_shop: "Pro Shop",
+  maintenance: "Maintenance Crew",
+};
+
+export type ProShopPosition =
+  | "rec_aid"
+  | "golf_ops_assistant"
+  | "maintenance_crew"
+  | "mechanic";
+
+export type ShiftGroup = "inside" | "outside" | "grounds" | "shop";
+
+/** The groups that belong to each area's schedule. */
+export const AREA_GROUPS: Record<ScheduleArea, ShiftGroup[]> = {
+  pro_shop: ["inside", "outside"],
+  maintenance: ["grounds", "shop"],
+};
+
+/** The positions that belong to each area. */
+export const AREA_POSITIONS: Record<ScheduleArea, ProShopPosition[]> = {
+  pro_shop: ["rec_aid", "golf_ops_assistant"],
+  maintenance: ["maintenance_crew", "mechanic"],
+};
 export type WeekdayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 
 /** One weekday in a person's standing weekly pattern. */
@@ -39,6 +69,8 @@ export interface ProShopStaff {
    * leaver can be recorded once and then forgotten about.
    */
   employed_through?: string | null;
+  /** Which schedule this person is on. Absent on legacy rows = pro_shop. */
+  area?: ScheduleArea;
   sort_order: number;
   notes: string | null;
 }
@@ -75,8 +107,12 @@ export interface ProShopTimeOff {
   reason: string | null;
 }
 
-/** A duty targets a whole area (rec aids / golf ops / both) or one person. */
-export type DutyArea = ShiftGroup | "both";
+/**
+ * A pro-shop duty targets a whole area (rec aids / golf ops / both) or one
+ * person. Pinned to the two pro-shop groups on purpose — this is the pro-shop
+ * duty roster and must not widen when new schedule areas are added.
+ */
+export type DutyArea = "inside" | "outside" | "both";
 
 /** A standing daily duty for the pro-shop jobs, recurring on set weekdays. */
 export interface ProShopDuty {
@@ -99,6 +135,7 @@ export type WarningCode =
   | "no_inside"
   | "no_inside_opener"
   | "no_inside_closer"
+  | "no_crew"
   | "no_outside_closer";
 
 export interface DayWarning {

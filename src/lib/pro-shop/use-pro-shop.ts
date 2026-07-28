@@ -10,6 +10,7 @@ import type {
   ProShopShift,
   ProShopStaff,
   ProShopTimeOff,
+  ScheduleArea,
   ShiftGroup,
   WarningCode,
   WeeklyAvailability,
@@ -34,7 +35,16 @@ function lastOfMonth(year: number, month0: number): string {
   return ymd(new Date(year, month0 + 1, 0));
 }
 
-export function useProShop(initialYear: number, initialMonth0: number) {
+/**
+ * @param area Which schedule to load. The two areas are entirely separate —
+ *   separate staff, months, shifts and time-off — so every read is filtered by
+ *   it and every write stamps it.
+ */
+export function useProShop(
+  initialYear: number,
+  initialMonth0: number,
+  area: ScheduleArea = "pro_shop",
+) {
   const [year, setYear] = useState(initialYear);
   const [month0, setMonth0] = useState(initialMonth0);
 
@@ -49,11 +59,13 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     const [st, sch, off] = await Promise.all([
       directSelectList<ProShopStaff>("pro_shop_staff", {
         columns: "*",
+        filters: [`area=eq.${area}`],
         orderBy: [{ column: "sort_order", ascending: true }],
         label: "proshop.staff",
       }),
       directSelectList<ProShopSchedule>("pro_shop_schedules", {
         columns: "*",
+        filters: [`area=eq.${area}`],
         orderBy: [{ column: "month", ascending: false }],
         label: "proshop.schedules",
       }),
@@ -67,14 +79,14 @@ export function useProShop(initialYear: number, initialMonth0: number) {
     setStaff(st);
     setSchedules(sch);
     setTimeOff(off);
-  }, []);
+  }, [area]);
 
   const loadShifts = useCallback(async () => {
     const first = firstOfMonth(year, month0);
     const last = lastOfMonth(year, month0);
     const rows = await directSelectList<ProShopShift>("pro_shop_shifts", {
       columns: "*",
-      filters: [`shift_date=gte.${first}`, `shift_date=lte.${last}`, "is_active=eq.true"],
+      filters: [`shift_date=gte.${first}`, `shift_date=lte.${last}`, "is_active=eq.true", `area=eq.${area}`],
       orderBy: [
         { column: "shift_date", ascending: true },
         { column: "start_time", ascending: true },
@@ -82,7 +94,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       label: "proshop.shifts",
     });
     setShifts(rows);
-  }, [year, month0]);
+  }, [year, month0, area]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -156,14 +168,15 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           phone: payload.phone ?? null,
           sort_order: maxSort + 1,
           availability: { weekly: {}, notes: "" },
+          area,
           },
-          p_reason: "Pro-shop roster member added",
+          p_reason: "Roster member added",
         },
         "proshop.staff.add",
       );
       await loadStatic();
     },
-    [staff, loadStatic],
+    [staff, loadStatic, area],
   );
 
   /**
@@ -218,7 +231,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           "save_pro_shop_schedule",
           {
             p_schedule_id: null,
-            p_values: { month: monthKey, title },
+            p_values: { month: monthKey, title, area },
             p_reason: "Monthly pro-shop schedule created",
           },
           "proshop.schedule.create",
@@ -229,7 +242,9 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       const [freshStaff, freshTimeOff] = await Promise.all([
         directSelectList<ProShopStaff>("pro_shop_staff", {
           columns: "*",
-          filters: ["is_active=eq.true"],
+          // MUST stay area-filtered: without it a month generated for one area
+          // would stamp the other area's staff into it.
+          filters: ["is_active=eq.true", `area=eq.${area}`],
           orderBy: [{ column: "sort_order", ascending: true }],
           label: "proshop.staff.fresh",
         }),
@@ -260,7 +275,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
       await Promise.all([loadStatic(), loadShifts()]);
       return { inserted: rows.length };
     },
-    [schedules, monthKey, year, month0, loadStatic, loadShifts],
+    [schedules, monthKey, year, month0, loadStatic, loadShifts, area],
   );
 
   const setScheduleNotes = useCallback(
@@ -313,6 +328,7 @@ export function useProShop(initialYear: number, initialMonth0: number) {
           end_time: input.end_time,
           note: input.note ?? null,
           source: input.source ?? "manual",
+          // area is derived from the schedule inside save_pro_shop_shift.
           },
           p_reason: "Manual pro-shop shift added",
         },

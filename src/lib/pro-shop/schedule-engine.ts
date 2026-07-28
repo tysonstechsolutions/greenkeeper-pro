@@ -13,6 +13,7 @@ import {
   type DayWarning,
   type ProShopStaff,
   type ProShopTimeOff,
+  type ScheduleArea,
   type ShiftGroup,
   type WarningCode,
   type WeekdayKey,
@@ -123,11 +124,21 @@ export function expandMonth(
  */
 export function dayWarnings(
   shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
+  area: ScheduleArea = "pro_shop",
 ): DayWarning[] {
   const warnings: DayWarning[] = [];
+  const add = (code: WarningCode, message: string) => warnings.push({ code, message });
+
+  // The maintenance crew's day has no counter to staff and no closing shift —
+  // the pro-shop opener/closer rules would fire on every single day and train
+  // the GM to ignore warnings. Only flag a day with nobody on it.
+  if (area === "maintenance") {
+    if (shiftsForDay.length === 0) add("no_crew", "No maintenance crew scheduled");
+    return warnings;
+  }
+
   const inside = shiftsForDay.filter((s) => s.group === "inside");
   const outside = shiftsForDay.filter((s) => s.group === "outside");
-  const add = (code: WarningCode, message: string) => warnings.push({ code, message });
 
   if (outside.length === 0) add("no_outside", "No outside staff (rec aids) scheduled");
   if (inside.length === 0) add("no_inside", "No inside staff (golf ops) scheduled");
