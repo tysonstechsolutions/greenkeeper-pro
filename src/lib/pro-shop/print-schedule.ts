@@ -71,7 +71,11 @@ function shiftRow(time: string, name: string, inside: boolean): string {
   return `<div class="s ${inside ? "in" : "out"}"><span class="t">${escapeHtml(time)}</span><span class="n">${escapeHtml(name)}</span></div>`;
 }
 
-/** A shift with nobody on it: the time, then a line to write a name on. */
+/**
+ * A shift with nobody on it: the time, then a solid underline with room to
+ * write a name. Tinted and ruled in the group's colour so it is obvious at a
+ * glance whether the open shift wants a rec aid or a golf ops assistant.
+ */
 function openRow(slot: OpenSlot): string {
   const time = `${compactTime(slot.start)}-${compactTime(slot.end)}`;
   return `<div class="s open ${slot.group === "inside" ? "in" : "out"}"><span class="t">${escapeHtml(time)}</span><span class="blank"></span></div>`;
@@ -157,13 +161,16 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   <style>
     @page { size: landscape; margin: 10mm; }
     * { box-sizing: border-box; }
+    /* Browsers drop background colours when printing unless told otherwise,
+       which would strip exactly the colour coding this sheet relies on. */
+    html { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
     body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #111; margin: 16px; }
     header { border-bottom: 3px solid #111; padding-bottom: 6px; margin-bottom: 10px; }
     h1 { font-size: 20px; margin: 0; }
     .sub { color: #444; font-size: 11px; margin: 2px 0 0; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; border: 1px solid #999; padding: 3px; background: #f0f0f0; }
-    td { border: 1px solid #999; vertical-align: top; height: 92px; padding: 2px 3px; }
+    td { border: 1px solid #999; vertical-align: top; height: 104px; padding: 2px 3px; }
     td.blankday { background: #fafafa; }
     .d { font-size: 11px; font-weight: 700; margin-bottom: 1px; }
     .s { display: flex; gap: 4px; font-size: 9.5px; line-height: 1.5; white-space: nowrap; }
@@ -172,9 +179,16 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
     .in .t { font-weight: 600; }
     .out { color: #7a4b00; }
     .in { color: #23408e; }
-    /* An unstaffed shift: the time, then a line to write a name on. */
-    .open .blank { flex: 1; border-bottom: 1px solid #555; margin-bottom: 2px; min-width: 42px; }
-    .open { color: #111; }
+    /* An unstaffed shift: the time, then a solid underline with room to write
+       a name on. Tinted and ruled in the group's own colour so it reads at a
+       glance as a rec aid shift or a golf ops one. */
+    .open { align-items: flex-end; margin: 2px 0; padding: 0 2px; border-radius: 2px; }
+    .open .t { font-weight: 600; }
+    .open .blank { flex: 1; min-width: 56px; height: 15px; border-bottom: 1.2px solid #333; }
+    .open.out { background: #fff3e0; }
+    .open.in  { background: #e8eeff; }
+    .open.out .blank { border-bottom-color: #7a4b00; }
+    .open.in  .blank { border-bottom-color: #23408e; }
     .legend { display: flex; gap: 14px; font-size: 10px; color: #444; margin: 8px 0 4px; }
     .legend .swatch { display: inline-block; width: 10px; height: 10px; border: 1px solid #999; vertical-align: -1px; margin-right: 3px; }
     h2 { font-size: 13px; margin: 14px 0 4px; }
@@ -195,9 +209,9 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   </header>
 
   <div class="legend">
-    <span><span class="swatch" style="background:#fff3e0"></span>Outside / rec aids</span>
-    <span><span class="swatch" style="background:#e8eeff"></span>Inside / golf ops</span>
-    <span>A time with a blank line is an open shift &mdash; write your name on it.</span>
+    <span><span class="swatch" style="background:#fff3e0;border-color:#7a4b00"></span><b style="color:#7a4b00">Rec aid</b> (outside)</span>
+    <span><span class="swatch" style="background:#e8eeff;border-color:#23408e"></span><b style="color:#23408e">Golf ops assistant</b> (inside)</span>
+    <span>A time with a line after it is an <b>open shift</b> &mdash; write your name on the line. The colour says which job it is.</span>
   </div>
 
   <table>

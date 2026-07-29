@@ -598,6 +598,11 @@ function ProShopScheduleContent() {
         <span className="flex items-center gap-1.5">
           <Lock className="w-3.5 h-3.5" /> Pinned · drag a shift to another day
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-6 border-b border-amber-600 bg-amber-50 dark:bg-amber-950/40" />
+          <span className="inline-block w-6 border-b border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40" />
+          Open shift — colour says which job
+        </span>
       </div>
 
       {/* Weekday header */}
@@ -673,20 +678,32 @@ function ProShopScheduleContent() {
                   {out.map(line)}
                   {ins.length > 0 && out.length > 0 && <div className="h-px bg-border my-0.5" />}
                   {ins.map(line)}
-                  {/* A shift with nobody on it, shown rather than left blank —
-                      it prints with a line to write a name on. */}
-                  {openOn(ds).map((slot, i) => (
-                    <div
-                      key={`open-${i}`}
-                      className="flex items-center gap-1 text-[10px] leading-tight px-1 rounded text-muted-foreground"
-                      title={`Open ${slot.group === "inside" ? "golf ops" : "rec aid"} shift`}
-                    >
-                      <span className="tabular-nums">
-                        {compactTime(slot.start)}-{compactTime(slot.end)}
-                      </span>
-                      <span className="flex-1 border-b border-dashed border-muted-foreground/60" />
-                    </div>
-                  ))}
+                  {/* A shift with nobody on it, shown rather than left blank.
+                      Solid underline with room for a name, tinted in the
+                      group's colour — the same as it prints. */}
+                  {openOn(ds).map((slot, i) => {
+                    const inside = slot.group === "inside";
+                    return (
+                      <div
+                        key={`open-${i}`}
+                        className={`flex items-end gap-1 text-[10px] leading-tight px-1 rounded ${
+                          inside
+                            ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300"
+                            : "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        }`}
+                        title={`Open ${inside ? "golf ops assistant" : "rec aid"} shift — nobody scheduled`}
+                      >
+                        <span className="tabular-nums font-semibold">
+                          {compactTime(slot.start)}-{compactTime(slot.end)}
+                        </span>
+                        <span
+                          className={`flex-1 min-w-[2.5rem] h-[0.9rem] border-b ${
+                            inside ? "border-indigo-500" : "border-amber-600"
+                          }`}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -85,7 +85,41 @@ describe("buildSchedulePrintHtml", () => {
     expect(out).toContain('class="s open');
     expect(out).toContain('class="blank"');
     expect(out).toMatch(/1430-2000|1400-2000/);
-    expect(out).toContain("write your name on it");
+    expect(out).toContain("write your name on the line");
+  });
+
+  it("rules the name line solid, with room to write", () => {
+    const out = html();
+    expect(out).toMatch(/\.open \.blank \{[^}]*border-bottom: 1\.2px solid/);
+    expect(out).not.toMatch(/\.open \.blank \{[^}]*dashed/);
+    // Enough height and width for a handwritten first name.
+    expect(out).toMatch(/\.open \.blank \{[^}]*height: 15px/);
+    expect(out).toMatch(/\.open \.blank \{[^}]*min-width: 56px/);
+  });
+
+  it("colour-codes an open shift by the job it needs", () => {
+    const out = html();
+    // A rec aid shift and a golf ops shift carry different classes…
+    expect(out).toContain('class="s open out"');
+    expect(out).toContain('class="s open in"');
+    // …and those classes are tinted and ruled in different colours.
+    expect(out).toContain(".open.out { background: #fff3e0; }");
+    expect(out).toContain(".open.in  { background: #e8eeff; }");
+    expect(out).toContain(".open.out .blank { border-bottom-color: #7a4b00; }");
+    expect(out).toContain(".open.in  .blank { border-bottom-color: #23408e; }");
+  });
+
+  it("keeps those backgrounds when the page is actually printed", () => {
+    // Browsers drop background colour on print unless told otherwise, which
+    // would strip the colour coding this sheet depends on.
+    expect(html()).toMatch(/print-color-adjust:\s*exact/);
+  });
+
+  it("explains the colours in the legend", () => {
+    const out = html();
+    expect(out).toContain("Rec aid");
+    expect(out).toContain("Golf ops assistant");
+    expect(out).toContain("The colour says which job it is");
   });
 
   it("counts the open shifts in the header so the gap is not a surprise", () => {
