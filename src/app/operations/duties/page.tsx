@@ -15,6 +15,7 @@ import {
   assignmentForDate,
   dutyOwnershipDisplay,
   dutyScheduleLabel,
+  normalizeDutyRoleGroup,
   previewActiveDutyReassignment,
   splitRosterByRole,
 } from "@/lib/operations/duties";
@@ -37,7 +38,7 @@ const WEEKDAYS = [
 
 const EMPLOYEE_GROUPS = new Set<DutyRoleGroup>([
   "recreation_aide", "golf_operations_assistant", "maintenance_staff",
-  "restaurant_staff", "pro_shop_staff", "general_manager",
+  "restaurant_staff", "general_manager",
 ]);
 
 function todayLocal(): string {
@@ -173,7 +174,9 @@ export default function DutiesPage() {
   const groupedDuties = useMemo(() => {
     const grouped = new Map<DutyRoleGroup, OperationDuty[]>();
     for (const duty of management.duties.filter((item) => item.is_active)) {
-      const group = duty.role_group ?? "unassigned";
+      // Normalized so a retired role group still lands in a rendered section
+      // rather than disappearing from the page.
+      const group = normalizeDutyRoleGroup(duty.role_group) ?? "unassigned";
       grouped.set(group, [...(grouped.get(group) ?? []), duty]);
     }
     return grouped;
@@ -189,7 +192,7 @@ export default function DutiesPage() {
     const rule = duty.recurrence_rule;
     setForm({
       id: duty.id, title: duty.title, department: duty.department ?? "maintenance",
-      roleGroup: duty.role_group ?? "unassigned", cadence: duty.cadence ?? rule?.cadence ?? "weekly",
+      roleGroup: normalizeDutyRoleGroup(duty.role_group) ?? "unassigned", cadence: duty.cadence ?? rule?.cadence ?? "weekly",
       interval: String(rule?.interval ?? 1), weekdays: rule?.weekdays ?? duty.days,
       dayOfMonth: String(rule?.day_of_month ?? 1), annualMonth: String(rule?.months?.[0] ?? new Date().getMonth() + 1),
       season: duty.season, seasonalStart: duty.seasonal_start_mmdd ?? "", seasonalEnd: duty.seasonal_end_mmdd ?? "",

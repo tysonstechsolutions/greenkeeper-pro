@@ -15,12 +15,26 @@ describe("normalizePosition", () => {
     expect(normalizePosition(null)).toBeNull();
     expect(normalizePosition("")).toBeNull();
   });
+
+  it("resolves a merged-away role group to the position that survived it", () => {
+    expect(normalizePosition("pro_shop_staff")).toBe("golf_operations_assistant");
+    expect(normalizePosition("Pro_Shop_Staff")).toBe("golf_operations_assistant");
+  });
+
+  it("leaves free-text positions that were never role groups alone", () => {
+    expect(normalizePosition("lead_technician")).toBe("lead_technician");
+  });
 });
 
 describe("positionDisplayLabel", () => {
   it("uses the duty catalogue label for known role groups", () => {
     expect(positionDisplayLabel("recreation_aide")).toBe("Recreation Aides");
-    expect(positionDisplayLabel("Pro_Shop_Staff")).toBe("Pro-Shop Staff");
+    expect(positionDisplayLabel("Golf_Operations_Assistant")).toBe("Golf Ops / Pro Shop");
+  });
+
+  it("labels the retired pro-shop role as the position it merged into", () => {
+    // One job, one sheet: the people who work inside are golf ops assistants.
+    expect(positionDisplayLabel("Pro_Shop_Staff")).toBe("Golf Ops / Pro Shop");
   });
 
   it("expands snake_case free text into words", () => {

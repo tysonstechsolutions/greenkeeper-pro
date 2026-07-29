@@ -7,12 +7,20 @@
 // Filtering and printing both need one identity per role, and a label that
 // does not mangle an acronym.
 
-import { DUTY_ROLE_GROUP_LABELS } from "@/lib/operations/duties";
+import { DUTY_ROLE_GROUP_LABELS, normalizeDutyRoleGroup } from "@/lib/operations/duties";
 import type { DutyRoleGroup } from "@/lib/operations/types";
 
-/** Stable identity for a position across sources. Null when not recorded. */
+/**
+ * Stable identity for a position across sources. Null when not recorded.
+ *
+ * Role groups that have been merged into another resolve to the survivor, so
+ * work still carrying a retired key lands on the same sheet as the rest of
+ * that position's work rather than printing a second, near-empty page.
+ */
 export function normalizePosition(value: string | null | undefined): string | null {
-  return value ? value.trim().toLowerCase() : null;
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  return normalizeDutyRoleGroup(normalized as DutyRoleGroup) ?? normalized;
 }
 
 /**

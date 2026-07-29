@@ -5,7 +5,11 @@
 // area. Deterministic and self-contained (no network), mirroring
 // print-assignments.ts.
 
-import { DUTY_ROLE_GROUP_LABELS, DUTY_ROLE_GROUP_ORDER } from "./duties";
+import {
+  DUTY_ROLE_GROUP_LABELS,
+  DUTY_ROLE_GROUP_ORDER,
+  normalizeDutyRoleGroup,
+} from "./duties";
 import type { DutyRoleGroup, OperationDuty } from "./types";
 
 const WEEKDAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
@@ -84,7 +88,9 @@ export function buildRoleDutySheets(duties: OperationDuty[]): RoleDutySheet[] {
   const byRole = new Map<DutyRoleGroup, OperationDuty[]>();
   for (const duty of duties) {
     if (!duty.is_active) continue;
-    const role = (duty.role_group ?? "unassigned") as DutyRoleGroup;
+    // Merged-away role groups fold into their survivor, so one job never gets
+    // two sheets — see normalizeDutyRoleGroup.
+    const role = normalizeDutyRoleGroup(duty.role_group) ?? ("unassigned" as DutyRoleGroup);
     byRole.set(role, [...(byRole.get(role) ?? []), duty]);
   }
 

@@ -89,13 +89,21 @@ describe("crew sheets carry crew work only", () => {
       item({ stableId: "a", responsiblePosition: "recreation_aide" }),
       item({ stableId: "b", responsiblePosition: "maintenance_staff" }),
       item({ stableId: "c", responsiblePosition: "restaurant_staff" }),
-      item({ stableId: "d", responsiblePosition: "pro_shop_staff" }),
       item({ stableId: "e", responsiblePosition: "golf_operations_assistant" }),
       item({ stableId: "f", responsiblePosition: "contractor" }),
     ])).toEqual([
-      "Contractors", "Golf Operations Assistants", "Maintenance Staff",
-      "Pro-Shop Staff", "Recreation Aides", "Restaurant Staff",
+      "Contractors", "Golf Ops / Pro Shop", "Maintenance Staff",
+      "Recreation Aides", "Restaurant Staff",
     ]);
+  });
+
+  it("prints one sheet, not two, for the merged golf ops / pro shop position", () => {
+    // The two role groups described one job. Printing both handed a single
+    // person two lists to work from.
+    expect(sheetLabels([
+      item({ stableId: "d", responsiblePosition: "pro_shop_staff" }),
+      item({ stableId: "e", responsiblePosition: "golf_operations_assistant" }),
+    ])).toEqual(["Golf Ops / Pro Shop"]);
   });
 
   it("never prints a Program Standard, whatever role owns it", () => {
@@ -154,13 +162,13 @@ describe("grouping open work by position", () => {
       [
         item({ stableId: "task:1", title: "Mow greens", responsiblePosition: "maintenance_staff" }),
         item({ stableId: "task:2", title: "Rake bunkers", responsiblePosition: "maintenance_staff" }),
-        item({ stableId: "task:3", title: "Open pro shop", responsiblePosition: "pro_shop_staff" }),
+        item({ stableId: "task:3", title: "Open pro shop", responsiblePosition: "golf_operations_assistant" }),
       ],
       today,
       POSITION_PRINT_RANGES.today,
     );
-    expect(groups.map((group) => group.label)).toEqual(["Maintenance Staff", "Pro-Shop Staff"]);
-    expect(groups[0].days[0].items.map((row) => row.title)).toEqual(["Mow greens", "Rake bunkers"]);
+    expect(groups.map((group) => group.label)).toEqual(["Golf Ops / Pro Shop", "Maintenance Staff"]);
+    expect(groups[1].days[0].items.map((row) => row.title)).toEqual(["Mow greens", "Rake bunkers"]);
   });
 
   it("prints one sheet per role even when sources disagree about capitalisation", () => {
@@ -210,14 +218,14 @@ describe("grouping open work by position", () => {
 describe("printable position sheets", () => {
   const items = [
     item({ stableId: "task:1", title: "Mow greens", responsiblePosition: "maintenance_staff" }),
-    item({ stableId: "task:2", title: "Open pro shop", responsiblePosition: "pro_shop_staff" }),
+    item({ stableId: "task:2", title: "Open pro shop", responsiblePosition: "golf_operations_assistant" }),
   ];
 
   it("renders one self-contained page per position", () => {
     const html = buildPositionListsPrintHtml(items, today, POSITION_PRINT_RANGES.today);
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("Maintenance Staff");
-    expect(html).toContain("Pro-Shop Staff");
+    expect(html).toContain("Golf Ops / Pro Shop");
     expect(html).toContain("Mow greens");
     expect(html).toContain("Open pro shop");
   });

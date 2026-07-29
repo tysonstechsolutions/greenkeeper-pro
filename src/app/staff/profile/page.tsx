@@ -67,12 +67,13 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "gm", label: "General Manager" },
 ];
 
+// `pro_shop_staff` is deliberately absent: it merged into
+// `golf_operations_assistant`, which is the one inside position.
 const EMPLOYEE_DUTY_ROLE_GROUPS: DutyRoleGroup[] = [
   "recreation_aide",
   "golf_operations_assistant",
   "maintenance_staff",
   "restaurant_staff",
-  "pro_shop_staff",
   "general_manager",
 ];
 

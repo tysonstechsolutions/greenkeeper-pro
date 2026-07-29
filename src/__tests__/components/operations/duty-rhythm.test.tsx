@@ -28,15 +28,24 @@ function item(partial: Partial<DutyTodayItem> & { duty: OperationDuty }): DutyTo
 }
 
 describe("DutyRhythm", () => {
-  it("keeps recreation aides, golf operations assistants, and pro-shop staff distinct", () => {
+  it("keeps recreation aides and the golf ops / pro shop position distinct", () => {
     render(<DutyRhythm items={[
       item({ duty: duty({ id: "rec", title: "Range setup", role_group: "recreation_aide", department: "golf_operations" }), primaryName: "Alex" }),
       item({ duty: duty({ id: "ops", title: "Open counter", role_group: "golf_operations_assistant", department: "golf_operations" }), primaryName: "Blair" }),
-      item({ duty: duty({ id: "shop", title: "Merchandise check", role_group: "pro_shop_staff", department: "pro_shop" }), primaryName: "Casey" }),
     ]} onTransition={() => false} />);
     expect(screen.getAllByText("Recreation Aides").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Golf Operations Assistants").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Pro-Shop Staff").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Golf Ops / Pro Shop").length).toBeGreaterThan(0);
+  });
+
+  it("shows pro-shop work under the golf ops position it merged into", () => {
+    // Two cards for one job is a display bug, not two positions.
+    render(<DutyRhythm items={[
+      item({ duty: duty({ id: "ops", title: "Open counter", role_group: "golf_operations_assistant", department: "golf_operations" }), primaryName: "Blair" }),
+      item({ duty: duty({ id: "shop", title: "Merchandise check", role_group: "pro_shop_staff", department: "pro_shop" }), primaryName: "Casey" }),
+    ]} onTransition={() => false} />);
+    // The section's done-count covers both duties, so they share one card.
+    expect(screen.getByText("0/2")).toBeInTheDocument();
+    expect(screen.queryByText("Pro-Shop Staff")).toBeNull();
   });
 
   it("shows source-backed execution detail and separate actions without fabricating missing values", async () => {

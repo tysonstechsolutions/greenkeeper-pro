@@ -34,13 +34,15 @@ const FINISHED = new Set(["completed", "verified", "cancelled"]);
  *
  * Nothing is lost by excluding them — the GM sees every one of these in the
  * command center, which is where he works.
+ *
+ * Values are post-`normalizePosition`, so a retired role group (`pro_shop_staff`)
+ * is absent on purpose: it resolves to the position it merged into.
  */
 export const CREW_PRINT_ROLE_GROUPS: ReadonlySet<DutyRoleGroup> = new Set<DutyRoleGroup>([
   "recreation_aide",
   "golf_operations_assistant",
   "maintenance_staff",
   "restaurant_staff",
-  "pro_shop_staff",
   "contractor",
 ]);
 

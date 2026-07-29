@@ -10,15 +10,19 @@ import {
   DUTY_ROLE_GROUP_LABELS,
   DUTY_ROLE_GROUP_ORDER,
   dutyScheduleLabel,
+  normalizeDutyRoleGroup,
 } from "@/lib/operations/duties";
 import type { DutyRoleGroup, DutyTodayItem, RequirementState } from "@/lib/operations/types";
 
 function legacyRoleGroup(item: DutyTodayItem): DutyRoleGroup {
-  if (item.occurrence?.duty_role_group) return item.occurrence.duty_role_group;
-  if (item.duty.role_group) return item.duty.role_group;
+  const recorded = normalizeDutyRoleGroup(
+    item.occurrence?.duty_role_group ?? item.duty.role_group,
+  );
+  if (recorded) return recorded;
   if (item.duty.area === "course") return "maintenance_staff";
   if (item.duty.area === "restaurant") return "restaurant_staff";
-  if (item.duty.area === "pro_shop") return "pro_shop_staff";
+  // Pro-shop work is the golf ops assistant's — the two roles were merged.
+  if (item.duty.area === "pro_shop") return "golf_operations_assistant";
   return "unassigned";
 }
 
@@ -106,7 +110,7 @@ export function DutyRhythm({
                       <dl className="space-y-1 text-xs text-muted-foreground">
                         <div><dt className="inline font-medium text-foreground">Backup: </dt><dd className="inline">{occurrence?.duty_backup_name ?? item.backupName ?? "Not recorded"}</dd></div>
                         <div><dt className="inline font-medium text-foreground">Department: </dt><dd className="inline">{occurrence?.duty_department ? DUTY_DEPARTMENT_LABELS[occurrence.duty_department] : item.duty.department ? DUTY_DEPARTMENT_LABELS[item.duty.department] : "Not recorded"}</dd></div>
-                        <div><dt className="inline font-medium text-foreground">Role group: </dt><dd className="inline">{DUTY_ROLE_GROUP_LABELS[occurrence?.duty_role_group ?? legacyRoleGroup(item)]}</dd></div>
+                        <div><dt className="inline font-medium text-foreground">Role group: </dt><dd className="inline">{DUTY_ROLE_GROUP_LABELS[legacyRoleGroup(item)]}</dd></div>
                         <div><dt className="inline font-medium text-foreground">Schedule: </dt><dd className="inline">{dutyScheduleLabel({ ...item.duty, recurrence_rule: occurrence?.duty_recurrence_rule ?? item.duty.recurrence_rule })}</dd></div>
                         {originalDate && currentDate && <div><dt className="inline font-medium text-foreground">Date: </dt><dd className="inline">{originalDate === currentDate ? currentDate : `${currentDate} (moved from ${originalDate})`}</dd></div>}
                         <div><dt className="inline font-medium text-foreground">Duration: </dt><dd className="inline">{occurrence?.estimated_minutes == null ? "Not recorded" : `${occurrence.estimated_minutes} minutes`}</dd></div>

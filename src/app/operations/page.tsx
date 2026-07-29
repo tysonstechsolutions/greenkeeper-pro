@@ -382,7 +382,7 @@ function OperationsCommandCenter() {
                     <PrintMenuItem
                       icon={UsersRound}
                       label="Today — by position"
-                      hint="One page per role: Recreation Aides, Maintenance Staff, Pro-Shop Staff…"
+                      hint="One page per role: Recreation Aides, Maintenance Staff, Golf Ops / Pro Shop…"
                       onClick={() => printByPosition(POSITION_PRINT_RANGES.today)}
                     />
                     <PrintMenuItem

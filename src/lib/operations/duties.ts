@@ -18,23 +18,47 @@ export const DUTY_DEPARTMENT_LABELS: Record<DutyDepartment, string> = {
   external: "External",
 };
 
+/**
+ * Role groups that no longer stand on their own, and what they fold into.
+ *
+ * `pro_shop_staff` and `golf_operations_assistant` described one job. Nobody
+ * was ever recorded as pro-shop staff — the people who work inside are golf
+ * ops assistants on their profile and on the schedule — yet the split printed
+ * two duty sheets for one person to work from. The 2026-07-29 migration
+ * rewrote the stored rows; this map keeps any straggler (an old draft, a
+ * hand-edited import) landing on the merged sheet instead of a ghost one.
+ */
+const MERGED_ROLE_GROUPS: Partial<Record<DutyRoleGroup, DutyRoleGroup>> = {
+  pro_shop_staff: "golf_operations_assistant",
+};
+
+/** The surviving role group for a stored value. */
+export function normalizeDutyRoleGroup(
+  roleGroup: DutyRoleGroup | null | undefined,
+): DutyRoleGroup | null {
+  if (!roleGroup) return null;
+  return MERGED_ROLE_GROUPS[roleGroup] ?? roleGroup;
+}
+
 export const DUTY_ROLE_GROUP_LABELS: Record<DutyRoleGroup, string> = {
   recreation_aide: "Recreation Aides",
-  golf_operations_assistant: "Golf Operations Assistants",
+  golf_operations_assistant: "Golf Ops / Pro Shop",
   maintenance_staff: "Maintenance Staff",
   restaurant_staff: "Restaurant Staff",
-  pro_shop_staff: "Pro-Shop Staff",
+  // Retired — kept so a stale stored value still reads as the merged position
+  // rather than rendering blank. Not offered anywhere in the UI.
+  pro_shop_staff: "Golf Ops / Pro Shop",
   general_manager: "General Manager",
   contractor: "Contractors",
   unassigned: "Unassigned Work",
 };
 
+/** Selectable, printable role groups. Merged-away values are absent by design. */
 export const DUTY_ROLE_GROUP_ORDER: DutyRoleGroup[] = [
   "recreation_aide",
   "golf_operations_assistant",
   "maintenance_staff",
   "restaurant_staff",
-  "pro_shop_staff",
   "general_manager",
   "contractor",
   "unassigned",
@@ -265,9 +289,14 @@ const STAFFED_ROLE_GROUPS = new Set<DutyRoleGroup>([
   "golf_operations_assistant",
   "maintenance_staff",
   "restaurant_staff",
-  "pro_shop_staff",
   "general_manager",
 ]);
+
+/** Crew nouns for the "Any ___ on shift" sentence, where the sheet label reads
+ *  as an area rather than a group of people. */
+const SHIFT_CREW_LABELS: Partial<Record<DutyRoleGroup, string>> = {
+  golf_operations_assistant: "Golf Ops / Pro Shop staff",
+};
 
 export interface DutyOwnershipDisplay {
   label: string;
@@ -284,14 +313,18 @@ export interface DutyOwnershipDisplay {
  * "not assigned" is reserved for duties that genuinely have no owner at all.
  */
 export function dutyOwnershipDisplay(
-  roleGroup: DutyRoleGroup | null | undefined,
+  rawRoleGroup: DutyRoleGroup | null | undefined,
   primaryName?: string | null,
   contractorName?: string | null,
 ): DutyOwnershipDisplay {
   if (primaryName) return { label: primaryName, needsAttention: false };
   if (contractorName) return { label: contractorName, needsAttention: false };
+  const roleGroup = normalizeDutyRoleGroup(rawRoleGroup);
   if (roleGroup && STAFFED_ROLE_GROUPS.has(roleGroup)) {
-    return { label: `Any ${DUTY_ROLE_GROUP_LABELS[roleGroup]} on shift`, needsAttention: false };
+    // Most labels are already a plural crew noun ("Recreation Aides"); the
+    // merged golf ops label names two areas, so it needs its own wording.
+    const crew = SHIFT_CREW_LABELS[roleGroup] ?? DUTY_ROLE_GROUP_LABELS[roleGroup];
+    return { label: `Any ${crew} on shift`, needsAttention: false };
   }
   if (roleGroup === "contractor") {
     return { label: "Contractor — none chosen yet", needsAttention: true };
@@ -303,9 +336,12 @@ export function dutyOwnershipDisplay(
  *  GM can name a specific person within the responsible role at a glance. */
 export function splitRosterByRole<T extends { role_group?: string | null }>(
   people: T[],
-  roleGroup: DutyRoleGroup | null | undefined,
+  rawRoleGroup: DutyRoleGroup | null | undefined,
 ): { inRole: T[]; others: T[] } {
+  const roleGroup = normalizeDutyRoleGroup(rawRoleGroup);
   if (!roleGroup) return { inRole: [], others: people };
-  const inRole = people.filter((person) => person.role_group === roleGroup);
-  return { inRole, others: people.filter((person) => person.role_group !== roleGroup) };
+  const matches = (person: T) => (
+    normalizeDutyRoleGroup(person.role_group as DutyRoleGroup | null) === roleGroup
+  );
+  return { inRole: people.filter(matches), others: people.filter((p) => !matches(p)) };
 }
