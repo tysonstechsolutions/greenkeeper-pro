@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coverageGaps,
   generateCoverageMonth,
+  openSlotsForDay,
   planDaySlots,
   type PlannedCoverageShift,
 } from "@/lib/pro-shop/coverage";
@@ -448,5 +449,55 @@ describe("coverageGaps", () => {
     ], rule);
     expect(gaps).toEqual([{ start: "08:00", end: "17:00" }]);
     expect(minutesOfDay(gaps[0].end)).toBeLessThan(minutesOfDay("20:00"));
+  });
+});
+
+describe("openSlotsForDay — what prints as a blank line", () => {
+  const monday = proShopRules().filter((r) => r.weekday === 1);
+  const thursday = proShopRules().filter((r) => r.weekday === 4);
+  const s = (group: ShiftGroup, start: string, end: string) =>
+    ({ group, start_time: start, end_time: end });
+
+  it("finds nothing when the day is fully staffed", () => {
+    expect(openSlotsForDay([
+      s("inside", "06:00", "13:00"), s("inside", "13:00", "20:00"),
+      s("outside", "08:00", "14:00"), s("outside", "14:00", "20:00"),
+    ], monday)).toEqual([]);
+  });
+
+  it("returns the uncovered stretch so it can be written on", () => {
+    const open = openSlotsForDay([
+      s("inside", "06:00", "13:00"), s("inside", "13:00", "20:00"),
+      s("outside", "08:00", "14:00"),
+    ], monday);
+    expect(open).toEqual([
+      { group: "outside", start: "14:00", end: "20:00", kind: "gap" },
+    ]);
+  });
+
+  it("names the missing third rec aid on a busy day", () => {
+    // Thursday wants 3 outside; the window is covered but only 2 are on.
+    const open = openSlotsForDay([
+      s("inside", "06:00", "13:00"), s("inside", "13:00", "20:00"),
+      s("outside", "08:00", "14:00"), s("outside", "14:00", "20:00"),
+    ], thursday);
+    expect(open).toEqual([
+      { group: "outside", start: "15:00", end: "20:00", kind: "extra" },
+    ]);
+  });
+
+  it("reports the whole window when nobody at all is scheduled", () => {
+    const open = openSlotsForDay([], monday);
+    expect(open).toContainEqual({ group: "inside", start: "06:00", end: "20:00", kind: "gap" });
+    expect(open).toContainEqual({ group: "outside", start: "08:00", end: "20:00", kind: "gap" });
+  });
+
+  it("does not double-count a gap as a headcount shortfall too", () => {
+    // One outside person and one hole: that is ONE open shift, not two.
+    const open = openSlotsForDay([
+      s("inside", "06:00", "13:00"), s("inside", "13:00", "20:00"),
+      s("outside", "08:00", "14:00"),
+    ], monday).filter((o) => o.group === "outside");
+    expect(open).toHaveLength(1);
   });
 });

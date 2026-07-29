@@ -422,6 +422,56 @@ function weekStartOf(date: string): string {
   return `${y}-${m}-${d}`;
 }
 
+/** A shift the day still needs somebody in. */
+export interface OpenSlot {
+  group: ShiftGroup;
+  start: string;
+  end: string;
+  /** "gap" leaves the window uncovered; "extra" is missing added cover. */
+  kind: "gap" | "extra" | "short";
+}
+
+/**
+ * The shifts a day is still missing, worked out from the rules against
+ * whatever is actually scheduled.
+ *
+ * Derived rather than stored, so an unstaffed shift is visible on the screen
+ * and on the printout at any time — not only in the moments after a rebuild.
+ * These are what print as a time with a blank line beside it, for whoever
+ * picks up the shift to write their name on.
+ */
+export function openSlotsForDay(
+  shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
+  rulesForDay: Pick<
+    CoverageRule,
+    "group" | "open_time" | "close_time" | "base_staff" | "extra_staff" | "extra_start"
+  >[],
+): OpenSlot[] {
+  const slots: OpenSlot[] = [];
+  for (const rule of rulesForDay) {
+    const list = shiftsForDay.filter((s) => s.group === rule.group);
+    const close = rule.close_time.slice(0, 5);
+
+    // An uncovered stretch is the most urgent kind: the shop is unattended.
+    for (const gap of coverageGaps(list, rule)) {
+      slots.push({ group: rule.group, start: gap.start, end: gap.end, kind: "gap" });
+    }
+
+    // Then anyone missing on headcount beyond those gaps — a day can be
+    // covered end to end and still be a person short.
+    const wanted = rule.base_staff + rule.extra_staff;
+    const shortfall = wanted - list.length - slots.filter((s) => s.group === rule.group).length;
+    for (let i = 0; i < shortfall; i++) {
+      slots.push(
+        rule.extra_staff > 0 && rule.extra_start
+          ? { group: rule.group, start: rule.extra_start.slice(0, 5), end: close, kind: "extra" }
+          : { group: rule.group, start: rule.open_time.slice(0, 5), end: close, kind: "short" },
+      );
+    }
+  }
+  return slots;
+}
+
 /**
  * Where the day is actually uncovered, as [start,end) minute ranges per group.
  * Derived from the shifts themselves rather than from the rules, so it stays

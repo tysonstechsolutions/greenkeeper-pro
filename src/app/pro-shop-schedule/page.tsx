@@ -33,6 +33,7 @@ import {
   Undo2,
   Lock,
   LockOpen,
+  Printer,
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,8 @@ import {
 } from "@/lib/pro-shop/schedule-engine";
 import { matchStaffName, sanitizeWeekly, validDate } from "@/lib/pro-shop/schedule-update";
 import { computeStaffHours, elapsedMinutes, formatHours, paidMinutes, staffDayKey } from "@/lib/pro-shop/hours";
+import { openSlotsForDay, type OpenSlot } from "@/lib/pro-shop/coverage";
+import { buildSchedulePrintHtml } from "@/lib/pro-shop/print-schedule";
 import { CoverageRulesSheet } from "@/components/features/pro-shop/coverage-rules-sheet";
 import {
   positionGroup,
@@ -172,6 +175,36 @@ function ProShopScheduleContent() {
   function rulesOn(dateStr: string) {
     const weekday = parseYmd(dateStr).getDay();
     return ps.rules.filter((r) => r.weekday === weekday);
+  }
+
+  /** Shifts that day still needs somebody in. Derived, so they survive a
+   *  reload and show up on the printout as a blank line to sign. */
+  function openOn(dateStr: string): OpenSlot[] {
+    const rules = rulesOn(dateStr);
+    if (rules.length === 0) return [];
+    return openSlotsForDay(
+      shiftsOn(dateStr).map((s) => ({
+        group: s.group, start_time: s.start_time, end_time: s.end_time,
+      })),
+      rules,
+    );
+  }
+
+  function handlePrint() {
+    const html = buildSchedulePrintHtml({
+      area, year: ps.year, month0: ps.month0,
+      shifts: ps.shifts, staff: ps.staff, rules: ps.rules,
+      settings: ps.settings, status: ps.schedule?.status, generatedOn: new Date(),
+    });
+    const win = window.open("", "_blank");
+    if (!win) {
+      window.alert("Allow pop-ups to print the schedule.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
   }
 
   function shiftsOn(dateStr: string): ProShopShift[] {
@@ -424,6 +457,9 @@ function ProShopScheduleContent() {
           <Button variant="outline" size="icon" onClick={() => changeMonth(1)} aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handlePrint}>
+            <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Print</span>
+          </Button>
           {ps.rules.length > 0 && (
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setRulesOpen(true)}>
               <SlidersHorizontal className="w-4 h-4" /> <span className="hidden sm:inline">Coverage</span>
@@ -637,6 +673,20 @@ function ProShopScheduleContent() {
                   {out.map(line)}
                   {ins.length > 0 && out.length > 0 && <div className="h-px bg-border my-0.5" />}
                   {ins.map(line)}
+                  {/* A shift with nobody on it, shown rather than left blank —
+                      it prints with a line to write a name on. */}
+                  {openOn(ds).map((slot, i) => (
+                    <div
+                      key={`open-${i}`}
+                      className="flex items-center gap-1 text-[10px] leading-tight px-1 rounded text-muted-foreground"
+                      title={`Open ${slot.group === "inside" ? "golf ops" : "rec aid"} shift`}
+                    >
+                      <span className="tabular-nums">
+                        {compactTime(slot.start)}-{compactTime(slot.end)}
+                      </span>
+                      <span className="flex-1 border-b border-dashed border-muted-foreground/60" />
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
