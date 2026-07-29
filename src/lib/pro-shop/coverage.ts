@@ -120,15 +120,29 @@ export function planDaySlots(rule: CoverageRule): CoverageSlot[] {
   return slots;
 }
 
-/** True when the person's standing pattern leaves that weekday open. */
-function availableOnWeekday(person: ProShopStaff, date: string): boolean {
+/**
+ * The window a person is actually free on a date, in minutes since midnight,
+ * or null when they are not available at all.
+ *
+ * The hours matter as much as the day: someone available Sunday 13:00–20:00
+ * must not be handed the 08:00–14:00 shift. A weekday with no pattern, or a
+ * pattern with no times, means nothing is ruled out yet (a new hire), so the
+ * whole day is open.
+ */
+function availableWindow(
+  person: ProShopStaff,
+  date: string,
+): { start: number; end: number } | null {
   const weekly = person.availability?.weekly;
-  // No pattern recorded at all (a new hire) means nothing is ruled out yet.
-  if (!weekly) return true;
+  const whole = { start: 0, end: 24 * 60 };
+  if (!weekly) return whole;
   const day = weekly[weekdayKeyForDate(parseYmd(date))];
-  // A weekday the pattern never mentions is likewise not a refusal.
-  if (!day) return true;
-  return day.works !== false;
+  if (!day) return whole;
+  if (day.works === false) return null;
+  if (!day.start || !day.end) return whole;
+  const start = minutesOfDay(day.start);
+  const end = minutesOfDay(day.end);
+  return end > start ? { start, end } : whole;
 }
 
 /**
@@ -153,7 +167,10 @@ export interface GenerateCoverageInput {
   month0: number;
   timeOff: ProShopTimeOff[];
   rules: CoverageRule[];
-  settings?: Pick<ScheduleSettings, "lunch_threshold_minutes" | "lunch_minutes">;
+  settings?: Pick<
+    ScheduleSettings,
+    "lunch_threshold_minutes" | "lunch_minutes" | "max_shift_hours"
+  >;
   /** Shifts the GM pinned. They hold their slot and their person's day. */
   lockedShifts?: ProShopShift[];
   area: ScheduleArea;
@@ -176,6 +193,7 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
 
   const shifts: PlannedCoverageShift[] = [];
   const unfilled: UnfilledSlot[] = [];
+  const maxShift = Math.max(60, (settings.max_shift_hours ?? 9) * 60);
 
   const roster = staff.filter(
     (person) => person.is_active && (person.area ?? "pro_shop") === area,
@@ -228,56 +246,165 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
       if (!rule) continue;
 
       const locked = lockedByDateGroup.get(`${date}|${group}`) ?? [];
+      const open = minutesOfDay(rule.open_time);
+      const close = minutesOfDay(rule.close_time);
 
-      // A locked shift stands in for one slot of its kind, so pinning a shift
-      // reduces what still needs filling rather than adding on top of it.
-      const slots = planDaySlots(rule);
-      const remaining = slots.slice(Math.min(locked.length, slots.length));
-
-      for (const slot of remaining) {
+      /** Everyone who could take work in this group on this date. */
+      const freeFor = (from: number) => {
         const booked = bookedOnDate.get(date) ?? new Set<string>();
-        const candidates = roster.filter((person) => {
-          if (booked.has(person.id)) return false;
-          if (person.employed_through && date > person.employed_through) return false;
-          if (isOff(person.id, date, timeOff)) return false;
-          if (!availableOnWeekday(person, date)) return false;
-          return eligibleForGroup(person, slot.group);
-        });
-
-        if (candidates.length === 0) {
-          unfilled.push({
-            ...slot,
-            date,
-            reason: "Nobody is available and cleared for this shift",
+        return roster
+          .filter((person) => {
+            if (booked.has(person.id)) return false;
+            if (person.employed_through && date > person.employed_through) return false;
+            if (isOff(person.id, date, timeOff)) return false;
+            if (!eligibleForGroup(person, group)) return false;
+            const window = availableWindow(person, date);
+            // They must actually be free at the moment cover is needed.
+            return !!window && window.start <= from && window.end > from;
+          })
+          .sort((a, b) => {
+            const nativeDiff = Number(isNative(b, group)) - Number(isNative(a, group));
+            if (nativeDiff !== 0) return nativeDiff;
+            // Reach furthest into the uncovered stretch first — that is what
+            // closes the day with the fewest people and the fewest seams.
+            const aEnd = Math.min(availableWindow(a, date)!.end, close);
+            const bEnd = Math.min(availableWindow(b, date)!.end, close);
+            if (aEnd !== bEnd) return bEnd - aEnd;
+            const aWeek = weekMinutes.get(`${a.id}|${week}`) ?? 0;
+            const bWeek = weekMinutes.get(`${b.id}|${week}`) ?? 0;
+            if (aWeek !== bWeek) return aWeek - bWeek;
+            const aTotal = totalMinutes.get(a.id) ?? 0;
+            const bTotal = totalMinutes.get(b.id) ?? 0;
+            if (aTotal !== bTotal) return aTotal - bTotal;
+            if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+            return a.id.localeCompare(b.id);
           });
+      };
+
+      const place = (person: ProShopStaff, from: number, to: number) => {
+        const start = timeFromMinutes(from);
+        const end = timeFromMinutes(to);
+        shifts.push({
+          staff_id: person.id, shift_date: date, group,
+          start_time: start, end_time: end, source: "template",
+        });
+        const booked = bookedOnDate.get(date) ?? new Set<string>();
+        booked.add(person.id);
+        bookedOnDate.set(date, booked);
+        bump(person.id, week, paidMinutes(start, end, settings));
+      };
+
+      // ── Base cover: walk open → close, handing each stretch to whoever is
+      // actually free for it. Shifts are cut to the person's own hours, so a
+      // 13:00–20:00 person is never given the 08:00 shift; consecutive shifts
+      // still meet exactly, which is what keeps the day gap-free.
+      const coveredUntil = new Map<number, number>();
+      for (const shift of locked) {
+        coveredUntil.set(minutesOfDay(shift.start_time), minutesOfDay(shift.end_time));
+      }
+      let cursor = open;
+      let placed = locked.length;
+      // Bounded: every pass either advances the cursor or breaks.
+      for (let guard = 0; guard < 24 && cursor < close; guard++) {
+        // A pinned shift already covering this moment carries the cursor on.
+        let jumped = false;
+        for (const [lockStart, lockEnd] of coveredUntil) {
+          if (lockStart <= cursor && lockEnd > cursor) { cursor = lockEnd; jumped = true; break; }
+        }
+        if (jumped) continue;
+
+        const candidates = freeFor(cursor);
+        if (candidates.length === 0) {
+          // Nobody can start now. Jump to the next moment somebody can, and
+          // report the stretch in between as the hole it is.
+          const nextStart = roster
+            .map((person) => {
+              const booked = bookedOnDate.get(date) ?? new Set<string>();
+              if (booked.has(person.id)) return null;
+              if (person.employed_through && date > person.employed_through) return null;
+              if (isOff(person.id, date, timeOff)) return null;
+              if (!eligibleForGroup(person, group)) return null;
+              const window = availableWindow(person, date);
+              return window && window.start > cursor && window.start < close ? window.start : null;
+            })
+            .filter((value): value is number => value !== null)
+            .sort((a, b) => a - b)[0];
+          const gapEnd = nextStart ?? close;
+          unfilled.push({
+            group, kind: "base", date,
+            start: timeFromMinutes(cursor), end: timeFromMinutes(gapEnd),
+            reason: "Nobody available for this stretch",
+          });
+          cursor = gapEnd;
           continue;
         }
 
-        candidates.sort((a, b) => {
-          const nativeDiff = Number(isNative(b, slot.group)) - Number(isNative(a, slot.group));
-          if (nativeDiff !== 0) return nativeDiff;
-          const aWeek = weekMinutes.get(`${a.id}|${week}`) ?? 0;
-          const bWeek = weekMinutes.get(`${b.id}|${week}`) ?? 0;
-          if (aWeek !== bWeek) return aWeek - bWeek;
-          const aTotal = totalMinutes.get(a.id) ?? 0;
-          const bTotal = totalMinutes.get(b.id) ?? 0;
-          if (aTotal !== bTotal) return aTotal - bTotal;
-          if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-          return a.id.localeCompare(b.id);
-        });
-
         const chosen = candidates[0];
-        shifts.push({
-          staff_id: chosen.id,
-          shift_date: date,
-          group: slot.group,
-          start_time: slot.start,
-          end_time: slot.end,
-          source: "template",
+        const window = availableWindow(chosen, date)!;
+        // Nobody works open-to-close on their own: a single shift is capped,
+        // so a 14-hour window becomes two shifts rather than one brutal day.
+        let end = Math.min(window.end, close, cursor + maxShift);
+
+        // Aim for an even hand-over — the rest of the window split between the
+        // people still to be placed — so a deep roster gets 08:00-14:00 and
+        // 14:00-20:00 rather than one 9-hour shift and one 3-hour one.
+        const stillNeeded = Math.max(1, rule.base_staff - placed);
+        const evenEnd = Math.min(
+          close,
+          cursor + Math.max(30, roundToHalfHour((close - cursor) / stillNeeded)),
+        );
+        // Only hand over early if somebody can actually take it from there;
+        // otherwise this person keeps going rather than opening a hole.
+        if (end > evenEnd && freeFor(evenEnd).some((p) => p.id !== chosen.id)) {
+          end = evenEnd;
+        }
+
+        place(chosen, cursor, end);
+        placed += 1;
+        cursor = end;
+      }
+
+      // ── Headcount top-up: the rule asks for a number of people, not just a
+      // covered window. If the walk closed the day with fewer than that, add
+      // whoever else is free, each within their own hours.
+      for (let i = placed; i < rule.base_staff; i++) {
+        const candidates = freeFor(open).filter((person) => {
+          const window = availableWindow(person, date)!;
+          return Math.min(window.end, close) - Math.max(window.start, open) >= 120;
         });
-        booked.add(chosen.id);
-        bookedOnDate.set(date, booked);
-        bump(chosen.id, week, paidMinutes(slot.start, slot.end, settings));
+        if (candidates.length === 0) {
+          // Covered but short-handed is still a problem worth naming — the
+          // rule asks for a number of people, not only a covered window.
+          unfilled.push({
+            group, kind: "base", date,
+            start: rule.open_time.slice(0, 5), end: rule.close_time.slice(0, 5),
+            reason: `Only ${placed} of ${rule.base_staff} people available all day`,
+          });
+          break;
+        }
+        const chosen = candidates[0];
+        const window = availableWindow(chosen, date)!;
+        place(chosen, Math.max(window.start, open), Math.min(window.end, close));
+        placed += 1;
+      }
+
+      // ── Extra cover layered on top, from extra_start to close.
+      if (rule.extra_staff > 0 && rule.extra_start) {
+        const extraStart = minutesOfDay(rule.extra_start);
+        for (let i = 0; i < rule.extra_staff && extraStart < close; i++) {
+          const candidates = freeFor(extraStart);
+          if (candidates.length === 0) {
+            unfilled.push({
+              group, kind: "extra", date,
+              start: timeFromMinutes(extraStart), end: timeFromMinutes(close),
+              reason: "Nobody available for this extra shift",
+            });
+            continue;
+          }
+          const chosen = candidates[0];
+          const window = availableWindow(chosen, date)!;
+          place(chosen, extraStart, Math.min(window.end, close));
+        }
       }
     }
   }

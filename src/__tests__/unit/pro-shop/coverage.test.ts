@@ -139,7 +139,8 @@ describe("generateCoverageMonth", () => {
     // 2026-08-03 is a Monday, 2026-08-06 a Thursday.
     expect(on(shifts, "2026-08-03", "outside")).toHaveLength(2);
     expect(on(shifts, "2026-08-06", "outside")).toHaveLength(3);
-    expect(on(shifts, "2026-08-06", "outside")[2].start_time).toBe("15:00");
+    expect(on(shifts, "2026-08-06", "outside").map((s) => s.start_time))
+      .toContain("15:00");
   });
 
   it("puts 2 golf ops on every day, opening and closing", () => {
@@ -235,6 +236,115 @@ describe("who may cover golf ops", () => {
     });
     expect(on(shifts, "2026-08-03", "inside").map((s) => s.staff_id).sort())
       .toEqual(["dj", "mike"]);
+  });
+});
+
+describe("respecting the HOURS people gave, not just the day", () => {
+  /** Sunday windows taken from the real roster. */
+  function sundayRoster(): ProShopStaff[] {
+    const win = (start: string, end: string) => ({
+      weekly: {
+        sun: { works: true, start, end },
+        mon: { works: false }, tue: { works: false }, wed: { works: false },
+        thu: { works: false }, fri: { works: false }, sat: { works: false },
+      },
+    });
+    return [
+      person({ id: "marty", position: "golf_ops_assistant", default_group: "inside", availability: win("14:00", "20:00") }),
+      person({ id: "mike", position: "golf_ops_assistant", default_group: "inside", availability: win("05:30", "14:30") }),
+      person({ id: "aniya", availability: win("13:00", "20:00") }),
+      person({ id: "joe", availability: win("08:00", "14:00") }),
+      person({ id: "devin", availability: win("12:00", "20:00") }),
+    ];
+  }
+
+  const sunday = () => generateCoverageMonth({
+    staff: sundayRoster(), year: 2026, month0: 10, timeOff: [],
+    rules: proShopRules(), area: "pro_shop",
+  });
+
+  it("never starts anyone before the hours they gave", () => {
+    // The bug: Aniya is free Sunday 13:00-20:00 and was handed 08:00-14:00.
+    const { shifts } = sunday();
+    for (const s of shifts) {
+      const windows: Record<string, [string, string]> = {
+        marty: ["14:00", "20:00"], mike: ["05:30", "14:30"],
+        aniya: ["13:00", "20:00"], joe: ["08:00", "14:00"], devin: ["12:00", "20:00"],
+      };
+      const [from, to] = windows[s.staff_id];
+      expect(s.start_time >= from).toBe(true);
+      expect(s.end_time <= to).toBe(true);
+    }
+  });
+
+  it("gives Aniya the afternoon, never the morning shift", () => {
+    const { shifts } = sunday();
+    for (const s of shifts.filter((x) => x.staff_id === "aniya")) {
+      expect(s.start_time >= "13:00").toBe(true);
+    }
+  });
+
+  it("still opens and closes the day around those windows", () => {
+    // Mike opens inside (he is the only one free at 05:30) and Marty closes.
+    const { shifts } = sunday();
+    const sun = "2026-11-01"; // a Sunday
+    const inside = on(shifts, sun, "inside");
+    expect(inside[0].staff_id).toBe("mike");
+    expect(inside[0].start_time).toBe("05:30");
+    expect(inside[inside.length - 1].end_time).toBe("20:00");
+  });
+
+  it("leaves no gap even when the split has to move off the halfway point", () => {
+    // Mike is free to 14:30 and Marty only from 14:00, so a rigid 13:00
+    // handover is impossible; the shifts must still meet.
+    const { shifts } = sunday();
+    for (const group of ["inside", "outside"] as const) {
+      const day = on(shifts, "2026-11-01", group)
+        .map((s) => ({ group, start_time: s.start_time, end_time: s.end_time }));
+      const rule = proShopRules().find((r) => r.group === group && r.weekday === 0)!;
+      expect(coverageGaps(day, rule)).toEqual([]);
+    }
+  });
+
+  it("reports the stretch nobody can cover instead of forcing someone into it", () => {
+    // Only a late person: the morning is genuinely uncoverable.
+    const staff = [
+      person({ id: "late", position: "golf_ops_assistant", default_group: "inside",
+        availability: { weekly: {
+          sun: { works: true, start: "15:00", end: "20:00" },
+          mon: { works: false }, tue: { works: false }, wed: { works: false },
+          thu: { works: false }, fri: { works: false }, sat: { works: false },
+        } } }),
+    ];
+    const { shifts, unfilled } = generateCoverageMonth({
+      staff, year: 2026, month0: 10, timeOff: [], rules: proShopRules(), area: "pro_shop",
+    });
+    expect(shifts.every((s) => s.start_time >= "15:00")).toBe(true);
+    const morning = unfilled.find((u) => u.date === "2026-11-01" && u.group === "inside");
+    expect(morning?.start).toBe("05:30");
+    expect(morning?.end).toBe("15:00");
+  });
+
+  it("caps one person's day rather than handing them open-to-close", () => {
+    const staff = [
+      person({ id: "anytime", position: "golf_ops_assistant", default_group: "inside",
+        availability: { weekly: {
+          sun: { works: true }, mon: { works: true }, tue: { works: true },
+          wed: { works: true }, thu: { works: true }, fri: { works: true }, sat: { works: true },
+        } } }),
+    ];
+    const { shifts, unfilled } = generateCoverageMonth({
+      staff, year: 2026, month0: 10, timeOff: [], rules: proShopRules(), area: "pro_shop",
+    });
+    const inside = on(shifts, "2026-11-01", "inside");
+    // A day with no recorded times is fully open, but the 9-hour cap still
+    // applies — one person cannot be given a 14.5-hour Sunday.
+    expect(inside).toHaveLength(1);
+    expect(inside[0].start_time).toBe("05:30");
+    expect(inside[0].end_time).toBe("14:30");
+    // …and the rest of the window is reported, not quietly dropped.
+    expect(unfilled.some((u) => u.date === "2026-11-01" && u.start === "14:30" && u.end === "20:00"))
+      .toBe(true);
   });
 });
 

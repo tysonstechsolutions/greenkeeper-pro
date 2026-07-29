@@ -540,7 +540,7 @@ function ProShopScheduleContent() {
             {ps.unfilled.slice(0, 6).map((slot, i) => (
               <li key={i}>
                 {shortDate(slot.date)} · {slot.group === "inside" ? "golf ops" : "rec aid"}{" "}
-                {compactTime(slot.start)}-{compactTime(slot.end)} — nobody available
+                {compactTime(slot.start)}-{compactTime(slot.end)} — {slot.reason.toLowerCase()}
               </li>
             ))}
             {ps.unfilled.length > 6 && <li>…and {ps.unfilled.length - 6} more</li>}
