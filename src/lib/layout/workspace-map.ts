@@ -34,7 +34,6 @@ const PREFIXES: [string, WorkspaceKey][] = [
   ["/ast-inspections", "course"],
   ["/photos", "course"],
   ["/voice-log", "course"],
-  ["/schedule", "course"],
   ["/tasks", "course"],
   ["/work-orders", "course"],
   ["/report-issue", "course"],

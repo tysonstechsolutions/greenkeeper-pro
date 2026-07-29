@@ -22,13 +22,15 @@ describe("notificationToUrl", () => {
     ).toBe("/assets");
   });
 
-  it("maps time_off_request to /schedule/time-off (ignores reference_id)", () => {
+  it("maps time_off_request to the staff schedule (ignores reference_id)", () => {
+    // The standalone /schedule/time-off page was removed; time off is handled
+    // on the staff schedule, and a push target must never 404.
     expect(
       notificationToUrl({
         reference_type: "time_off_request",
         reference_id: "req-42",
       })
-    ).toBe("/schedule/time-off");
+    ).toBe("/pro-shop-schedule");
   });
 
   it("falls back to /dashboard for unknown reference_type", () => {

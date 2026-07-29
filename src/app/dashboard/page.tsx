@@ -1117,7 +1117,7 @@ function LeadershipDashboardView() {
               <h2 className="font-semibold text-sm">Crew Today</h2>
             </div>
             <Link
-              href="/schedule"
+              href="/pro-shop-schedule"
               className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
             >
               Schedule

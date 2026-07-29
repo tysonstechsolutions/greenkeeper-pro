@@ -20,8 +20,11 @@ export function notificationToUrl(notification: {
       return reference_id ? `/tasks/view?id=${reference_id}` : "/tasks";
     case "equipment":
       return reference_id ? `/equipment/view?id=${reference_id}` : "/assets";
+    // The standalone request page was removed with the unused /schedule board
+    // (2026-07-29). Time off is handled on the staff schedule now, so that is
+    // where the notification lands.
     case "time_off_request":
-      return "/schedule/time-off";
+      return "/pro-shop-schedule";
     default:
       return "/dashboard";
   }

@@ -164,7 +164,11 @@ const TODAY: AppEntry = { href: "/operations", label: "Operations", icon: Sunris
 // Dashboard re-homed inside Course & Range for the leadership view (other
 // views keep the pinned DASHBOARD above).
 const TURF_DASHBOARD: AppEntry = { ...DASHBOARD, pinned: false, label: "Turf Dashboard", group: GROUPS.course };
-const SCHEDULE: AppEntry = { href: "/schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["time off", "pto", "vacation", "shifts", "crew"] };
+// The pinned Schedule door goes to the STAFF schedule — who works which days
+// and hours, across both areas. It used to open a task-assignment board at
+// /schedule that was never used (its `schedules` table held zero rows); that
+// page and its time-off sibling were removed on 2026-07-29.
+const SCHEDULE: AppEntry = { href: "/pro-shop-schedule", label: "Schedule", icon: Calendar, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["time off", "pto", "vacation", "shifts", "crew", "staff schedule", "hours", "days"] };
 // "My Work" (/my-day) was removed from the menu: it redirects to the same
 // Operations command center as the pinned Operations entry, so it was a
 // duplicate door. The route still exists for deep links.

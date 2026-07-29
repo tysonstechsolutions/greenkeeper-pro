@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -10,10 +10,7 @@ const migration = read(
 const calendarHook = read("src/lib/calendar/use-calendar.ts");
 const certificationsPage = read("src/app/certifications/page.tsx");
 const onboardingHook = read("src/lib/onboarding/use-onboarding-docs.ts");
-const scheduleHook = read("src/lib/hooks/useSchedule.ts");
-const scheduleBoardHook = read("src/lib/hooks/useScheduleBoard.ts");
 const crewsHook = read("src/lib/hooks/useCrews.ts");
-const timeOffHook = read("src/lib/hooks/useTimeOff.ts");
 const proShopHook = read("src/lib/pro-shop/use-pro-shop.ts");
 const oneOnOneActions = read("src/lib/oneonone/apply-actions.ts");
 
@@ -96,19 +93,27 @@ describe("Phase 0B.5 application callers", () => {
     expect(onboardingHook).toContain('directRpc("sync_onboarding_documents"');
   });
 
-  it("routes schedule and time-off state transitions through commands", () => {
-    expect(scheduleHook).toContain('directRpc<Schedule>("upsert_staff_schedule"');
-    expect(scheduleHook).toContain('directRpc("bulk_upsert_staff_schedules"');
-    expect(scheduleHook).toContain('directRpc("void_staff_schedule"');
-    expect(scheduleBoardHook).toContain('directRpc("upsert_staff_schedule"');
-    expect(scheduleBoardHook).toContain('directRpc("void_staff_schedule"');
-    expect(scheduleBoardHook).not.toContain('directDeleteRow(\n            "schedules"');
+  it("routes schedule state transitions through commands", () => {
     expect(crewsHook).toContain('directRpc("upsert_staff_schedule"');
     expect(crewsHook).toContain('directRpc("bulk_upsert_staff_schedules"');
     expect(crewsHook).not.toContain('.from("schedules")');
-    expect(timeOffHook).toContain('directRpc<TimeOffRequest>("submit_time_off_request"');
-    expect(timeOffHook).toContain('directRpc("review_time_off_request"');
-    expect(timeOffHook).toContain('directRpc("cancel_time_off_request"');
+  });
+
+  it("has no client left that can write schedules or time off outside a command", () => {
+    // The /schedule board, its time-off page, and their hooks (useSchedule,
+    // useScheduleBoard, useTimeOff) were removed on 2026-07-29 — the board was
+    // never used and its `schedules` table held zero rows. Their RPC-only
+    // routing used to be asserted here; deleting the writers is the stronger
+    // guarantee, so this pins that they stay gone.
+    for (const path of [
+      "src/app/schedule/page.tsx",
+      "src/app/schedule/time-off/page.tsx",
+      "src/lib/hooks/useSchedule.ts",
+      "src/lib/hooks/useScheduleBoard.ts",
+      "src/lib/hooks/useTimeOff.ts",
+    ]) {
+      expect(existsSync(join(process.cwd(), path))).toBe(false);
+    }
   });
 
   it("makes pro-shop generation retry-safe and removes hard-delete callers", () => {

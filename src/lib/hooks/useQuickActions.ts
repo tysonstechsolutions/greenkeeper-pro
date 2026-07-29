@@ -49,7 +49,7 @@ export const QUICK_ACTION_CATALOGUE: QuickActionDef[] = [
   { id: "report-issue", href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-red-600" },
   { id: "staff", href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-indigo-600" },
   { id: "tasks", href: "/tasks", label: "All Tasks", icon: ClipboardList, color: "from-blue-600 to-blue-700" },
-  { id: "schedule", href: "/schedule", label: "Schedule", icon: Calendar, color: "from-purple-500 to-purple-600" },
+  { id: "schedule", href: "/pro-shop-schedule", label: "Schedule", icon: Calendar, color: "from-purple-500 to-purple-600" },
   { id: "irrigation", href: "/irrigation", label: "Irrigation", icon: Droplets, color: "from-sky-500 to-sky-600" },
   { id: "order-list", href: "/order-list", label: "Order List", icon: ShoppingCart, color: "from-emerald-600 to-green-600" },
   { id: "clubhouse", href: "/clubhouse", label: "Clubhouse", icon: Building, color: "from-amber-600 to-orange-600" },
