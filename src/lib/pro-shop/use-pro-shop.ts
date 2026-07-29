@@ -6,16 +6,20 @@ import {
   directRpc,
 } from "@/lib/supabase/rest";
 import type {
+  CoverageRule,
   ProShopSchedule,
   ProShopShift,
   ProShopStaff,
   ProShopTimeOff,
   ScheduleArea,
+  ScheduleSettings,
   ShiftGroup,
   WarningCode,
   WeeklyAvailability,
 } from "./types";
+import { DEFAULT_SCHEDULE_SETTINGS } from "./types";
 import { datesInMonth, expandMonth, ymd } from "./schedule-engine";
+import { generateCoverageMonth, type UnfilledSlot } from "./coverage";
 
 /** Manual shift edit payload. */
 export interface ShiftInput {
@@ -26,6 +30,8 @@ export interface ShiftInput {
   end_time: string;
   note?: string | null;
   source?: "template" | "ai" | "manual";
+  /** Pin it so Regenerate rebuilds the month around it. */
+  locked?: boolean;
 }
 
 function firstOfMonth(year: number, month0: number): string {
@@ -52,8 +58,34 @@ export function useProShop(
   const [schedules, setSchedules] = useState<ProShopSchedule[]>([]);
   const [shifts, setShifts] = useState<ProShopShift[]>([]);
   const [timeOff, setTimeOff] = useState<ProShopTimeOff[]>([]);
+  const [rules, setRules] = useState<CoverageRule[]>([]);
+  const [settings, setSettings] = useState<ScheduleSettings>({
+    area,
+    ...DEFAULT_SCHEDULE_SETTINGS,
+  });
+  /** Slots the last generate could not fill — a real hole, not a silent drop. */
+  const [unfilled, setUnfilled] = useState<UnfilledSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const loadRules = useCallback(async () => {
+    const [rows, cfg] = await Promise.all([
+      directSelectList<CoverageRule>("pro_shop_coverage_rules", {
+        columns: "*",
+        filters: [`area=eq.${area}`],
+        orderBy: [{ column: "weekday", ascending: true }],
+        label: "proshop.coverage.rules",
+      }),
+      directSelectList<ScheduleSettings>("pro_shop_schedule_settings", {
+        columns: "*",
+        filters: [`area=eq.${area}`],
+        label: "proshop.coverage.settings",
+      }),
+    ]);
+    setRules(rows);
+    setSettings(cfg[0] ?? { area, ...DEFAULT_SCHEDULE_SETTINGS });
+    return { rules: rows, settings: cfg[0] ?? { area, ...DEFAULT_SCHEDULE_SETTINGS } };
+  }, [area]);
 
   const loadStatic = useCallback(async () => {
     const [st, sch, off] = await Promise.all([
@@ -100,13 +132,13 @@ export function useProShop(
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadStatic(), loadShifts()]);
+      await Promise.all([loadStatic(), loadShifts(), loadRules()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load the schedule.");
     } finally {
       setLoading(false);
     }
-  }, [loadStatic, loadShifts]);
+  }, [loadStatic, loadShifts, loadRules]);
 
   useEffect(() => {
     reload();
@@ -255,15 +287,43 @@ export function useProShop(
           label: "proshop.timeoff.fresh",
         }),
       ]);
-      const planned = expandMonth(freshStaff, year, month0, freshTimeOff);
-      const rows = planned.map((p) => ({
-        staff_id: p.staff_id,
-        shift_date: p.shift_date,
-        group: p.group,
-        start_time: p.start_time,
-        end_time: p.end_time,
-        source: p.source,
-      }));
+      // Coverage rules describe what the day REQUIRES, so when this area has
+      // them the generator fills the day. An area with no rules (the
+      // maintenance crew) keeps stamping standing weekly patterns exactly as
+      // before — that schedule is not run to a coverage target.
+      const fresh = await loadRules();
+      let rows: Array<{
+        staff_id: string; shift_date: string; group: ShiftGroup;
+        start_time: string; end_time: string; source: string;
+      }>;
+      if (fresh.rules.length > 0) {
+        // A locked shift is a decision already made: it holds its slot and its
+        // person's day, and the rest of the month is built around it.
+        const locked = await directSelectList<ProShopShift>("pro_shop_shifts", {
+          columns: "*",
+          filters: [
+            `shift_date=gte.${firstOfMonth(year, month0)}`,
+            `shift_date=lte.${lastOfMonth(year, month0)}`,
+            "is_active=eq.true", "locked=eq.true", `area=eq.${area}`,
+          ],
+          label: "proshop.shifts.locked",
+        });
+        const plan = generateCoverageMonth({
+          staff: freshStaff, year, month0, timeOff: freshTimeOff,
+          rules: fresh.rules, settings: fresh.settings, lockedShifts: locked, area,
+        });
+        setUnfilled(plan.unfilled);
+        rows = plan.shifts.map((p) => ({
+          staff_id: p.staff_id, shift_date: p.shift_date, group: p.group,
+          start_time: p.start_time, end_time: p.end_time, source: p.source,
+        }));
+      } else {
+        setUnfilled([]);
+        rows = expandMonth(freshStaff, year, month0, freshTimeOff).map((p) => ({
+          staff_id: p.staff_id, shift_date: p.shift_date, group: p.group,
+          start_time: p.start_time, end_time: p.end_time, source: p.source,
+        }));
+      }
       await directRpc("replace_pro_shop_schedule_shifts", {
         p_schedule_id: sched.id,
         p_rows: rows,
@@ -275,7 +335,7 @@ export function useProShop(
       await Promise.all([loadStatic(), loadShifts()]);
       return { inserted: rows.length };
     },
-    [schedules, monthKey, year, month0, loadStatic, loadShifts, area],
+    [schedules, monthKey, year, month0, loadStatic, loadShifts, loadRules, area],
   );
 
   const setScheduleNotes = useCallback(
@@ -328,6 +388,7 @@ export function useProShop(
           end_time: input.end_time,
           note: input.note ?? null,
           source: input.source ?? "manual",
+          locked: input.locked ?? false,
           // area is derived from the schedule inside save_pro_shop_shift.
           },
           p_reason: "Manual pro-shop shift added",
@@ -360,6 +421,80 @@ export function useProShop(
       await loadShifts();
     },
     [loadShifts],
+  );
+
+  /**
+   * Move a shift to another day and/or another person — the drag-and-drop
+   * backing. Moving it by hand implies the GM wants it kept, so the moved
+   * shift is locked; otherwise the next Regenerate would put it straight back.
+   */
+  const moveShift = useCallback(
+    async (shiftId: string, to: { shift_date?: string; staff_id?: string; group?: ShiftGroup }) => {
+      await directRpc("save_pro_shop_shift", {
+        p_shift_id: shiftId,
+        p_values: { ...to, locked: true },
+        p_reason: "Shift moved by hand on the schedule board",
+      }, "proshop.shift.move");
+      await loadShifts();
+    },
+    [loadShifts],
+  );
+
+  /** Pin a shift so Regenerate rebuilds the month around it. */
+  const setShiftLocked = useCallback(
+    async (shiftId: string, locked: boolean) => {
+      await directRpc("save_pro_shop_shift", {
+        p_shift_id: shiftId,
+        p_values: { locked },
+        p_reason: locked ? "Shift pinned against regeneration" : "Shift unpinned",
+      }, "proshop.shift.lock");
+      await loadShifts();
+    },
+    [loadShifts],
+  );
+
+  /** Who the GM has cleared to cover the other group (a rec aid on golf ops). */
+  const setStaffFlex = useCallback(
+    async (staffId: string, flex: boolean) => {
+      await directRpc("save_pro_shop_staff", {
+        p_staff_id: staffId,
+        p_values: { flex },
+        p_reason: flex
+          ? "Cleared to cover the other group"
+          : "No longer cleared to cover the other group",
+      }, "proshop.staff.flex");
+      await loadStatic();
+    },
+    [loadStatic],
+  );
+
+  const saveCoverageRule = useCallback(
+    async (rule: Pick<CoverageRule, "weekday" | "group"> & Partial<CoverageRule>) => {
+      await directRpc("save_pro_shop_coverage_rule", {
+        p_values: {
+          area,
+          weekday: rule.weekday,
+          group: rule.group,
+          open_time: rule.open_time,
+          close_time: rule.close_time,
+          base_staff: rule.base_staff,
+          extra_staff: rule.extra_staff,
+          extra_start: rule.extra_start ?? null,
+        },
+      }, "proshop.coverage.rule.save");
+      await loadRules();
+    },
+    [area, loadRules],
+  );
+
+  const saveScheduleSettings = useCallback(
+    async (next: Partial<Omit<ScheduleSettings, "area">>) => {
+      await directRpc("save_pro_shop_schedule_settings", {
+        p_values: { area, ...next },
+      }, "proshop.coverage.settings.save");
+      await loadRules();
+    },
+    [area, loadRules],
   );
 
   // ── Coverage-warning dismissals (per issue, per day) ──────────────────────
@@ -461,6 +596,14 @@ export function useProShop(
     addShift,
     updateShift,
     deleteShift,
+    moveShift,
+    setShiftLocked,
+    setStaffFlex,
+    rules,
+    settings,
+    unfilled,
+    saveCoverageRule,
+    saveScheduleSettings,
     addTimeOff,
     removeTimeOff,
     dismissWarning,

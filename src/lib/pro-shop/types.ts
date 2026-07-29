@@ -97,7 +97,49 @@ export interface ProShopShift {
   end_time: string;
   source: "template" | "ai" | "manual";
   note: string | null;
+  /**
+   * A hand-placed shift the GM pinned. Regenerate rebuilds the month around it
+   * instead of retiring it. Absent on rows read before the column existed.
+   */
+  locked?: boolean;
 }
+
+/**
+ * What a given weekday REQUIRES, rather than what the standing patterns happen
+ * to add up to. `base_staff` people split open..close back-to-back — that is
+ * what makes a day gap-free — and `extra_staff` more come in at `extra_start`
+ * and work to close (the Thu–Sun afternoon rec aid).
+ */
+export interface CoverageRule {
+  id: string;
+  area: ScheduleArea;
+  /** 0 = Sunday … 6 = Saturday, matching Date.getDay() and WEEKDAY_KEYS. */
+  weekday: number;
+  group: ShiftGroup;
+  open_time: string;
+  close_time: string;
+  base_staff: number;
+  extra_staff: number;
+  extra_start: string | null;
+}
+
+/** Per-area pay and shift settings. Staff are not paid for lunch. */
+export interface ScheduleSettings {
+  area: ScheduleArea;
+  /** Past this much time on shift, the shift carries an unpaid lunch. */
+  lunch_threshold_minutes: number;
+  /** How long that unpaid lunch is. */
+  lunch_minutes: number;
+  /** Longest single shift the generator will build. */
+  max_shift_hours: number;
+}
+
+/** Matches the column defaults, so the UI works before settings are loaded. */
+export const DEFAULT_SCHEDULE_SETTINGS: Omit<ScheduleSettings, "area"> = {
+  lunch_threshold_minutes: 360,
+  lunch_minutes: 30,
+  max_shift_hours: 9,
+};
 
 export interface ProShopTimeOff {
   id: string;
@@ -136,7 +178,13 @@ export type WarningCode =
   | "no_inside_opener"
   | "no_inside_closer"
   | "no_crew"
-  | "no_outside_closer";
+  | "no_outside_closer"
+  /** Part of the required window has nobody on it — the hole the rules exist to prevent. */
+  | "coverage_gap_inside"
+  | "coverage_gap_outside"
+  /** Fewer people than the day's rule asks for. */
+  | "short_staffed_inside"
+  | "short_staffed_outside";
 
 export interface DayWarning {
   code: WarningCode;

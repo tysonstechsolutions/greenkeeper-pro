@@ -31,6 +31,9 @@ import {
   ListChecks,
   Ban,
   Undo2,
+  Lock,
+  LockOpen,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -42,11 +45,14 @@ import {
   compactTime,
   dayWarnings,
   hhmm,
+  parseYmd,
   shortDate,
   summarizeWeekly,
   ymd,
 } from "@/lib/pro-shop/schedule-engine";
 import { matchStaffName, sanitizeWeekly, validDate } from "@/lib/pro-shop/schedule-update";
+import { computeStaffHours, elapsedMinutes, formatHours, paidMinutes, staffDayKey } from "@/lib/pro-shop/hours";
+import { CoverageRulesSheet } from "@/components/features/pro-shop/coverage-rules-sheet";
 import {
   positionGroup,
   emptyWeekly,
@@ -102,7 +108,11 @@ function ProShopScheduleContent() {
   >(null);
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** The shift currently being dragged, so a day cell knows what it is catching. */
+  const [dragShiftId, setDragShiftId] = useState<string | null>(null);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
   // AI quick-update box (plain-English change → availability/time-off → regenerate).
   const [quickText, setQuickText] = useState("");
@@ -117,6 +127,52 @@ function ProShopScheduleContent() {
     const end = endOfWeek(endOfMonth(monthDate));
     return eachDayOfInterval({ start, end });
   }, [monthDate]);
+
+  // Every hours figure the grid shows, in one pass over the month's shifts.
+  // Hours are PAID hours — the unpaid lunch is already out of them.
+  const hours = useMemo(
+    () => computeStaffHours(ps.shifts, ps.settings),
+    [ps.shifts, ps.settings],
+  );
+
+  /**
+   * Drop a dragged shift onto another day. The shift id travels in the drag's
+   * own DataTransfer rather than only in React state, so the drop never
+   * depends on a state update having committed first.
+   */
+  async function handleDropOnDate(date: string, transferred: string) {
+    const shiftId = transferred || dragShiftId;
+    setDragShiftId(null);
+    setDragOverDate(null);
+    if (!shiftId) return;
+    const shift = ps.shifts.find((s) => s.id === shiftId);
+    if (!shift || shift.shift_date === date) return;
+    // The generator never books one person twice in a day; a hand move must
+    // not either, or the same name silently lands on the day twice.
+    const clash = ps.shifts.find(
+      (s) => s.shift_date === date && s.staff_id === shift.staff_id && s.id !== shiftId,
+    );
+    if (clash) {
+      const who = ps.staffById[shift.staff_id]?.full_name ?? "That person";
+      window.alert(
+        `${who} already works ${shortDate(date)} (${compactTime(clash.start_time)}-${compactTime(clash.end_time)}).`
+        + " Move or delete that shift first, or edit this one to change the times.",
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      await ps.moveShift(shiftId, { shift_date: date });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The coverage rules that apply to a given date's weekday. */
+  function rulesOn(dateStr: string) {
+    const weekday = parseYmd(dateStr).getDay();
+    return ps.rules.filter((r) => r.weekday === weekday);
+  }
 
   function shiftsOn(dateStr: string): ProShopShift[] {
     return ps.shifts
@@ -135,8 +191,15 @@ function ProShopScheduleContent() {
   async function handleGenerate() {
     const exists = !!ps.schedule;
     if (exists) {
+      // Pinned shifts survive a regenerate, so say so rather than warning
+      // about losing work the GM has explicitly protected.
+      const pinned = ps.shifts.filter((s) => s.locked).length;
       const ok = window.confirm(
-        "Regenerate this month from everyone's weekly availability? This replaces all shifts for the month, including manual edits.",
+        ps.rules.length > 0
+          ? `Rebuild this month against the coverage rules? This replaces every unpinned shift.${
+              pinned ? ` ${pinned} pinned shift${pinned === 1 ? "" : "s"} will be kept.` : ""
+            }`
+          : "Regenerate this month from everyone's weekly availability? This replaces all shifts for the month, including manual edits.",
       );
       if (!ok) return;
     }
@@ -294,7 +357,7 @@ function ProShopScheduleContent() {
     const out: { date: string; active: DayWarning[] }[] = [];
     for (const d of days) {
       const ds = ymd(d);
-      const active = activeWarnings(dayWarnings(shiftsOn(ds), area), dismissedMap[ds]);
+      const active = activeWarnings(dayWarnings(shiftsOn(ds), area, rulesOn(ds)), dismissedMap[ds]);
       if (active.length) out.push({ date: ds, active });
     }
     return out;
@@ -305,7 +368,7 @@ function ProShopScheduleContent() {
   // Active + dismissed issues for the currently-open day (for the day editor).
   const openDayWarnings = useMemo(() => {
     if (!dayOpen) return { active: [] as DayWarning[], dismissed: [] as DayWarning[] };
-    const all = dayWarnings(shiftsOn(dayOpen), area);
+    const all = dayWarnings(shiftsOn(dayOpen), area, rulesOn(dayOpen));
     const codes = dismissedMap[dayOpen] ?? [];
     return {
       active: all.filter((w) => !codes.includes(w.code)),
@@ -361,6 +424,11 @@ function ProShopScheduleContent() {
           <Button variant="outline" size="icon" onClick={() => changeMonth(1)} aria-label="Next month">
             <ChevronRight className="w-4 h-4" />
           </Button>
+          {ps.rules.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setRulesOpen(true)}>
+              <SlidersHorizontal className="w-4 h-4" /> <span className="hidden sm:inline">Coverage</span>
+            </Button>
+          )}
           <Link href="/pro-shop-schedule/duties">
             <Button variant="outline" size="sm" className="gap-1.5">
               <ListChecks className="w-4 h-4" /> <span className="hidden sm:inline">Duties</span>
@@ -460,6 +528,29 @@ function ProShopScheduleContent() {
         )}
       </div>
 
+      {/* Shifts the last rebuild could not staff. Surfaced rather than dropped:
+          the generator will not invent people, so this is a real hole. */}
+      {ps.unfilled.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50/70 dark:bg-amber-950/30 dark:border-amber-800 p-3">
+          <p className="text-xs font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            {ps.unfilled.length} shift{ps.unfilled.length === 1 ? "" : "s"} couldn&apos;t be staffed
+          </p>
+          <ul className="mt-1 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
+            {ps.unfilled.slice(0, 6).map((slot, i) => (
+              <li key={i}>
+                {shortDate(slot.date)} · {slot.group === "inside" ? "golf ops" : "rec aid"}{" "}
+                {compactTime(slot.start)}-{compactTime(slot.end)} — nobody available
+              </li>
+            ))}
+            {ps.unfilled.length > 6 && <li>…and {ps.unfilled.length - 6} more</li>}
+          </ul>
+          <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+            Free someone up, clear another rec aid to cover golf ops, or lower the count in Coverage.
+          </p>
+        </div>
+      )}
+
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mb-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
@@ -467,6 +558,9 @@ function ProShopScheduleContent() {
         </span>
         <span className="flex items-center gap-1.5">
           <Moon className="w-3.5 h-3.5 text-indigo-500" /> Inside (golf ops)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Lock className="w-3.5 h-3.5" /> Pinned · drag a shift to another day
         </span>
       </div>
 
@@ -486,16 +580,49 @@ function ProShopScheduleContent() {
           const dayShifts = shiftsOn(ds);
           const out = dayShifts.filter((s) => s.group === "outside");
           const ins = dayShifts.filter((s) => s.group === "inside");
-          const warns = inMonth ? activeWarnings(dayWarnings(dayShifts, area), dismissedMap[ds]) : [];
+          const warns = inMonth ? activeWarnings(dayWarnings(dayShifts, area, rulesOn(ds)), dismissedMap[ds]) : [];
+          const line = (s: ProShopShift) => (
+            <ShiftLine
+              key={s.id}
+              shift={s}
+              name={firstName(ps.staffById[s.staff_id]?.full_name ?? "?")}
+              // Week-to-date paid hours for that person through this day, so
+              // the grid answers "how much has Mike had this week" in place.
+              runningHours={formatHours(
+                hours.runningByStaffDate.get(staffDayKey(s.staff_id, ds)) ?? 0,
+              )}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", s.id);
+                e.dataTransfer.effectAllowed = "move";
+                setDragShiftId(s.id);
+              }}
+              onDragEnd={() => { setDragShiftId(null); setDragOverDate(null); }}
+            />
+          );
           return (
-            <button
+            // A plain cell rather than a button: it hosts draggable shifts and
+            // is itself a drop target, neither of which may live in a button.
+            <div
               key={ds}
-              onClick={() => inMonth && setDayOpen(ds)}
-              className={`min-h-[6.5rem] border-r border-b border-border p-1 text-left align-top ${
-                inMonth ? "hover:bg-muted/40" : "bg-muted/30 cursor-default"
-              }`}
+              onDragOver={(e) => { if (inMonth) { e.preventDefault(); setDragOverDate(ds); } }}
+              onDragLeave={() => setDragOverDate((d) => (d === ds ? null : d))}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (inMonth) void handleDropOnDate(ds, e.dataTransfer.getData("text/plain"));
+              }}
+              className={`relative min-h-[6.5rem] border-r border-b border-border p-1 align-top ${
+                inMonth ? "hover:bg-muted/40" : "bg-muted/30"
+              } ${dragOverDate === ds ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
             >
-              <div className="flex items-center justify-between mb-0.5">
+              {inMonth && (
+                <button
+                  type="button"
+                  onClick={() => setDayOpen(ds)}
+                  className="absolute inset-0 w-full h-full"
+                  aria-label={`Open ${shortDate(ds)}`}
+                />
+              )}
+              <div className="relative pointer-events-none flex items-center justify-between mb-0.5">
                 <span
                   className={`text-[11px] w-5 h-5 flex items-center justify-center rounded-full ${
                     isToday ? "bg-primary text-primary-foreground font-bold" : inMonth ? "text-foreground" : "text-muted-foreground"
@@ -506,17 +633,13 @@ function ProShopScheduleContent() {
                 {warns.length > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}
               </div>
               {inMonth && (
-                <div className="space-y-px">
-                  {out.map((s) => (
-                    <ShiftLine key={s.id} shift={s} name={firstName(ps.staffById[s.staff_id]?.full_name ?? "?")} />
-                  ))}
+                <div className="relative space-y-px">
+                  {out.map(line)}
                   {ins.length > 0 && out.length > 0 && <div className="h-px bg-border my-0.5" />}
-                  {ins.map((s) => (
-                    <ShiftLine key={s.id} shift={s} name={firstName(ps.staffById[s.staff_id]?.full_name ?? "?")} />
-                  ))}
+                  {ins.map(line)}
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
@@ -538,10 +661,9 @@ function ProShopScheduleContent() {
         ) : (
           <div className="grid sm:grid-cols-2 gap-2">
             {ps.staff.map((s) => (
-              <button
+              <div
                 key={s.id}
-                onClick={() => setAvailabilityStaff(s)}
-                className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted text-left"
+                className="flex items-start gap-3 p-3 rounded-lg border border-border"
               >
                 <div
                   className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white ${
@@ -553,21 +675,36 @@ function ProShopScheduleContent() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate flex items-center gap-1.5">
                     {s.full_name}
-                    {s.flex && (
-                      <span className="text-[10px] px-1.5 py-px rounded-full bg-sky-100 text-sky-700 border border-sky-300 font-normal">
-                        Flex
-                      </span>
-                    )}
                     {!s.is_active && <span className="text-xs text-muted-foreground font-normal"> · inactive</span>}
+                    {/* Paid hours for the whole month, next to the name. */}
+                    <span className="ml-auto shrink-0 text-xs tabular-nums font-semibold">
+                      {formatHours(hours.totalByStaff.get(s.id) ?? 0)}h
+                    </span>
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     {s.position === "golf_ops_assistant" ? "Golf Ops Assistant" : "Rec Aid"}
-                    {s.flex ? " · covers any area" : ""}
+                    <span className="text-muted-foreground/70"> · this month</span>
                   </p>
                   <p className="text-[11px] text-muted-foreground truncate mt-0.5">{summarizeWeekly(s)}</p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setAvailabilityStaff(s)}>
+                      <Pencil className="w-3 h-3" /> Availability
+                    </Button>
+                    {/* Only a rec aid the GM ticks here may be pulled inside. */}
+                    {s.position === "rec_aid" && (
+                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 accent-sky-600"
+                          checked={s.flex === true}
+                          onChange={(e) => void ps.setStaffFlex(s.id, e.target.checked)}
+                        />
+                        Can cover golf ops
+                      </label>
+                    )}
+                  </div>
                 </div>
-                <Pencil className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-1" />
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -644,6 +781,21 @@ function ProShopScheduleContent() {
         <AddStaffSheet onClose={() => setAddStaffOpen(false)} addStaff={ps.addStaff} />
       )}
 
+      {/* ── Coverage rules ────────────────────────────────────────────────── */}
+      {rulesOpen && (
+        <Overlay title="Coverage rules" onClose={() => setRulesOpen(false)}>
+          <div className="p-4">
+            <CoverageRulesSheet
+              area={area}
+              rules={ps.rules}
+              settings={ps.settings}
+              onSaveRule={ps.saveCoverageRule}
+              onSaveSettings={ps.saveScheduleSettings}
+            />
+          </div>
+        </Overlay>
+      )}
+
       {/* ── Attention: days needing coverage ──────────────────────────────── */}
       {attentionOpen && (
         <Overlay
@@ -691,19 +843,43 @@ function ProShopScheduleContent() {
 
 // ── Pieces ──────────────────────────────────────────────────────────────────
 
-function ShiftLine({ shift, name }: { shift: ProShopShift; name: string }) {
+function ShiftLine({
+  shift,
+  name,
+  runningHours,
+  onDragStart,
+  onDragEnd,
+}: {
+  shift: ProShopShift;
+  name: string;
+  /** Week-to-date paid hours for this person through this shift's day. */
+  runningHours?: string;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+}) {
   return (
     <div
-      className={`truncate text-[10px] leading-tight px-1 rounded ${
-        shift.group === "inside" ? "text-indigo-700" : "text-amber-800"
-      }`}
-      title={shift.note ?? undefined}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`flex items-center gap-1 truncate text-[10px] leading-tight px-1 rounded ${
+        shift.group === "inside" ? "text-indigo-700 dark:text-indigo-300" : "text-amber-800 dark:text-amber-300"
+      } ${onDragStart ? "cursor-grab active:cursor-grabbing hover:bg-muted" : ""}`}
+      title={[
+        shift.note,
+        shift.locked ? "Pinned — Regenerate will not move this" : null,
+        runningHours ? `${runningHours}h this week through today` : null,
+      ].filter(Boolean).join(" · ") || undefined}
     >
       <span className="tabular-nums">
         {compactTime(shift.start_time)}-{compactTime(shift.end_time)}
-      </span>{" "}
-      {name}
-      {shift.note ? " *" : ""}
+      </span>
+      <span className="truncate">{name}</span>
+      {shift.locked && <Lock className="w-2.5 h-2.5 shrink-0 opacity-70" />}
+      {shift.note ? <span>*</span> : null}
+      {runningHours && (
+        <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">{runningHours}h</span>
+      )}
     </div>
   );
 }
@@ -885,6 +1061,11 @@ function ShiftEditor({
   const [start, setStart] = useState(hhmm(existing?.start_time) || "08:00");
   const [end, setEnd] = useState(hhmm(existing?.end_time) || "14:00");
   const [note, setNote] = useState(existing?.note ?? "");
+  // Defaults to pinned whether adding or editing: opening this editor at all
+  // is a hand edit, and leaving it unpinned would let the next Regenerate
+  // quietly undo the change that was just made. Untick to hand it back to the
+  // generator.
+  const [locked, setLocked] = useState(true);
   const [saving, setSaving] = useState(false);
 
   function onPickStaff(id: string) {
@@ -904,9 +1085,10 @@ function ShiftEditor({
           start_time: start,
           end_time: end,
           note: note || null,
+          locked,
         });
       } else {
-        await addShift({ staff_id: staffId, shift_date: date, group, start_time: start, end_time: end, note });
+        await addShift({ staff_id: staffId, shift_date: date, group, start_time: start, end_time: end, note, locked });
       }
       onClose();
     } finally {
@@ -958,6 +1140,29 @@ function ShiftEditor({
         <div className="space-y-1.5">
           <Label className="text-xs">Note (optional)</Label>
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. covering for Aniya" />
+        </div>
+        <div className="text-sm">
+          <p className="text-xs text-muted-foreground mb-1">
+            Paid hours: <strong className="text-foreground tabular-nums">{formatHours(paidMinutes(start, end))}h</strong>
+            {paidMinutes(start, end) < elapsedMinutes(start, end) && " (30 min unpaid lunch deducted)"}
+          </p>
+          <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-border p-2.5">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-emerald-700"
+              checked={locked}
+              onChange={(e) => setLocked(e.target.checked)}
+            />
+            <span>
+              <span className="flex items-center gap-1.5 font-medium">
+                {locked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                Pin this shift
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Regenerate rebuilds the month around it instead of replacing it.
+              </span>
+            </span>
+          </label>
         </div>
         <div className="flex gap-2 pt-1">
           {editing && (

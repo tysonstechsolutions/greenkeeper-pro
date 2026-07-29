@@ -8,7 +8,7 @@
  * logic backs both the UI preview and the saved shifts.
  */
 import {
-  WEEKDAY_KEYS,
+  type CoverageRule,
   type DayPattern,
   type DayWarning,
   type ProShopStaff,
@@ -18,32 +18,14 @@ import {
   type WarningCode,
   type WeekdayKey,
 } from "./types";
+import { coverageGaps } from "./coverage";
 
-/** Local YYYY-MM-DD for a Date (no UTC shift). */
-export function ymd(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/** Parse a "YYYY-MM-DD" into a local Date (midnight). */
-export function parseYmd(s: string): Date {
-  const [y, m, d] = s.split("-").map((n) => parseInt(n, 10));
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-export function weekdayKeyForDate(date: Date): WeekdayKey {
-  return WEEKDAY_KEYS[date.getDay()];
-}
-
-/** Every calendar date (YYYY-MM-DD) in a given month. month0 is 0-based. */
-export function datesInMonth(year: number, month0: number): string[] {
-  const out: string[] = [];
-  const days = new Date(year, month0 + 1, 0).getDate();
-  for (let d = 1; d <= days; d++) out.push(ymd(new Date(year, month0, d)));
-  return out;
-}
+// Imported for use below AND re-exported, so every existing
+// `from "./schedule-engine"` import keeps working. They live in ./dates so
+// coverage.ts can use them without this module and that one importing each
+// other.
+import { datesInMonth, isOff, parseYmd, weekdayKeyForDate, ymd } from "./dates";
+export { datesInMonth, isOff, parseYmd, weekdayKeyForDate, ymd };
 
 /** "14:00" or "14:00:00" → "1400" (the PDF's compact 24h form). */
 export function compactTime(t: string | null | undefined): string {
@@ -57,17 +39,6 @@ export function hhmm(t: string | null | undefined): string {
   if (!t) return "";
   const [h, m] = t.split(":");
   return `${(h ?? "00").padStart(2, "0")}:${(m ?? "00").padStart(2, "0")}`;
-}
-
-/** Is `date` (YYYY-MM-DD) inside any of the staff member's time-off ranges? */
-export function isOff(
-  staffId: string,
-  date: string,
-  timeOff: ProShopTimeOff[],
-): boolean {
-  return timeOff.some(
-    (t) => t.staff_id === staffId && date >= t.start_date && date <= t.end_date,
-  );
 }
 
 export interface PlannedShift {
@@ -125,6 +96,8 @@ export function expandMonth(
 export function dayWarnings(
   shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
   area: ScheduleArea = "pro_shop",
+  /** The day's coverage rules. When present they replace the old heuristics. */
+  rulesForDay: CoverageRule[] = [],
 ): DayWarning[] {
   const warnings: DayWarning[] = [];
   const add = (code: WarningCode, message: string) => warnings.push({ code, message });
@@ -142,6 +115,32 @@ export function dayWarnings(
 
   if (outside.length === 0) add("no_outside", "No outside staff (rec aids) scheduled");
   if (inside.length === 0) add("no_inside", "No inside staff (golf ops) scheduled");
+
+  // With coverage rules recorded, "is the day covered" is answerable exactly:
+  // check the window against the shifts rather than guessing from an opener
+  // and a closer time. Those heuristics only run when no rule exists.
+  if (rulesForDay.length > 0) {
+    for (const rule of rulesForDay) {
+      const list = rule.group === "inside" ? inside : outside;
+      if (list.length === 0) continue; // already reported as no_inside/no_outside
+      const label = rule.group === "inside" ? "golf ops" : "rec aids";
+      for (const gap of coverageGaps(list, rule)) {
+        add(
+          rule.group === "inside" ? "coverage_gap_inside" : "coverage_gap_outside",
+          `Nobody on ${label} ${compactTime(gap.start)}-${compactTime(gap.end)}`,
+        );
+      }
+      const wanted = rule.base_staff + rule.extra_staff;
+      if (list.length < wanted) {
+        add(
+          rule.group === "inside" ? "short_staffed_inside" : "short_staffed_outside",
+          `Only ${list.length} of ${wanted} ${label} scheduled`,
+        );
+      }
+    }
+    return warnings;
+  }
+
   // "Opener" = someone starting at or before 07:00 inside.
   const hasOpener = inside.some((s) => hhmm(s.start_time) <= "07:00");
   if (inside.length > 0 && !hasOpener) add("no_inside_opener", "No early inside opener (no one starts by 07:00)");
