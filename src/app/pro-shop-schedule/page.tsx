@@ -25,12 +25,9 @@ import {
   Users,
   Pencil,
   Trash2,
-  UserMinus,
   Sun,
   Moon,
   ListChecks,
-  Ban,
-  Undo2,
   Lock,
   LockOpen,
   Printer,
@@ -46,11 +43,11 @@ import {
   compactTime,
   dayWarnings,
   hhmm,
-  parseYmd,
   shortDate,
   summarizeWeekly,
   ymd,
 } from "@/lib/pro-shop/schedule-engine";
+import { effectiveRulesForDay, isDayLocked } from "@/lib/pro-shop/day-overrides";
 import { matchStaffName, sanitizeWeekly, validDate } from "@/lib/pro-shop/schedule-update";
 import { computeStaffHours, elapsedMinutes, formatHours, paidMinutes, staffDayKey } from "@/lib/pro-shop/hours";
 import { openSlotsForDay, type OpenSlot } from "@/lib/pro-shop/coverage";
@@ -59,15 +56,17 @@ import { CoverageRulesSheet } from "@/components/features/pro-shop/coverage-rule
 import {
   positionGroup,
   emptyWeekly,
+  AREA_GROUPS,
   type DayWarning,
   type ProShopShift,
   type ProShopStaff,
   type ShiftGroup,
-  type WarningCode,
 } from "@/lib/pro-shop/types";
 import { Overlay } from "@/components/features/pro-shop/overlay";
 import { AvailabilitySheet } from "@/components/features/pro-shop/availability-sheet";
 import { CoverSheet } from "@/components/features/pro-shop/cover-sheet";
+import { DayEditor } from "@/components/features/pro-shop/day-editor";
+import { RebuildSheet } from "@/components/features/pro-shop/rebuild-sheet";
 import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 
 const selectCls = "w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm";
@@ -112,6 +111,9 @@ function ProShopScheduleContent() {
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
+  /** What the last rebuild did, so a scoped one says what it left alone. */
+  const [rebuildResult, setRebuildResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** The shift currently being dragged, so a day cell knows what it is catching. */
   const [dragShiftId, setDragShiftId] = useState<string | null>(null);
@@ -171,10 +173,14 @@ function ProShopScheduleContent() {
     }
   }
 
-  /** The coverage rules that apply to a given date's weekday. */
+  /**
+   * What a given date requires: its weekday's coverage rules, with any per-day
+   * override applied. Every "how many does this day need" question on this
+   * screen goes through here, so the grid, the warnings and the printout can
+   * never disagree.
+   */
   function rulesOn(dateStr: string) {
-    const weekday = parseYmd(dateStr).getDay();
-    return ps.rules.filter((r) => r.weekday === weekday);
+    return effectiveRulesForDay(dateStr, ps.rules, ps.dayOverrides);
   }
 
   /** Shifts that day still needs somebody in. Derived, so they survive a
@@ -193,7 +199,7 @@ function ProShopScheduleContent() {
   function handlePrint() {
     const html = buildSchedulePrintHtml({
       area, year: ps.year, month0: ps.month0,
-      shifts: ps.shifts, staff: ps.staff, rules: ps.rules,
+      shifts: ps.shifts, staff: ps.staff, rules: ps.rules, overrides: ps.dayOverrides,
       settings: ps.settings, status: ps.schedule?.status, generatedOn: new Date(),
     });
     const win = window.open("", "_blank");
@@ -221,24 +227,27 @@ function ProShopScheduleContent() {
     ps.setMonth(d.getFullYear(), d.getMonth());
   }
 
-  async function handleGenerate() {
+  /**
+   * Rebuild the days the GM picked in the sheet. The window is already free of
+   * held days by the time it gets here; the hook drops them again on its way to
+   * the RPC, so neither route can rebuild a day that is being held.
+   */
+  async function handleRebuild(dates: string[]) {
     const exists = !!ps.schedule;
-    if (exists) {
-      // Pinned shifts survive a regenerate, so say so rather than warning
-      // about losing work the GM has explicitly protected.
-      const pinned = ps.shifts.filter((s) => s.locked).length;
-      const ok = window.confirm(
-        ps.rules.length > 0
-          ? `Rebuild this month against the coverage rules? This replaces every unpinned shift.${
-              pinned ? ` ${pinned} pinned shift${pinned === 1 ? "" : "s"} will be kept.` : ""
-            }`
-          : "Regenerate this month from everyone's weekly availability? This replaces all shifts for the month, including manual edits.",
-      );
-      if (!ok) return;
-    }
     setBusy(true);
     try {
-      await ps.generateMonth(exists);
+      const result = await ps.generateMonth(exists, { dates });
+      const days = result.rebuiltDates.length;
+      setRebuildResult(
+        `Rebuilt ${days} day${days === 1 ? "" : "s"}`
+        + (result.skippedLocked.length
+          ? `, left ${result.skippedLocked.length} held day${result.skippedLocked.length === 1 ? "" : "s"} alone`
+          : "")
+        + ".",
+      );
+      setRebuildOpen(false);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "The rebuild didn't run.");
     } finally {
       setBusy(false);
     }
@@ -500,7 +509,7 @@ function ProShopScheduleContent() {
           </button>
         )}
         <div className="flex-1" />
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleGenerate} disabled={busy || ps.staff.length === 0}>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setRebuildOpen(true)} disabled={busy || ps.staff.length === 0}>
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           {ps.schedule ? "Regenerate" : "Generate schedule"}
         </Button>
@@ -513,6 +522,20 @@ function ProShopScheduleContent() {
 
       {ps.error && (
         <div className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{ps.error}</div>
+      )}
+
+      {rebuildResult && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/30 dark:border-emerald-900 p-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">{rebuildResult}</span>
+          <button
+            type="button"
+            onClick={() => setRebuildResult(null)}
+            className="shrink-0 underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
       {/* AI quick update — plain-English change → availability/time-off → rebuild */}
@@ -671,7 +694,14 @@ function ProShopScheduleContent() {
                 >
                   {format(day, "d")}
                 </span>
-                {warns.length > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                <span className="flex items-center gap-1">
+                  {/* A held day is skipped by every rebuild — worth seeing on
+                      the month, not only inside the day. */}
+                  {inMonth && isDayLocked(ds, ps.dayOverrides) && (
+                    <Lock className="w-3 h-3 text-emerald-600" aria-label="Held — rebuilds skip this day" />
+                  )}
+                  {warns.length > 0 && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                </span>
               </div>
               {inMonth && (
                 <div className="relative space-y-px">
@@ -783,16 +813,42 @@ function ProShopScheduleContent() {
           <DayEditor
             date={dayOpen}
             shifts={shiftsOn(dayOpen)}
+            staff={ps.staff}
             staffById={ps.staffById}
+            rules={ps.rules}
+            overrides={ps.dayOverrides}
+            settings={ps.settings}
+            groups={AREA_GROUPS[area]}
             activeIssues={openDayWarnings.active}
             dismissedIssues={openDayWarnings.dismissed}
             onDismiss={(code) => ps.dismissWarning(dayOpen, code)}
             onRestore={(code) => ps.restoreWarning(dayOpen, code)}
-            onEdit={(shift) => setEditShift({ mode: "edit", shift })}
+            onEditFull={(shift) => setEditShift({ mode: "edit", shift })}
             onAdd={() => setEditShift({ mode: "new", date: dayOpen })}
             onCover={() => setCoverDate({ date: dayOpen })}
+            updateShift={ps.updateShift}
+            deleteShift={ps.deleteShift}
+            addShift={ps.addShift}
+            setDayCounts={ps.setDayCounts}
+            setDayLock={ps.setDayLock}
+            resetDay={ps.resetDay}
           />
         </Overlay>
+      )}
+
+      {/* ── Rebuild scope ─────────────────────────────────────────────────── */}
+      {rebuildOpen && (
+        <RebuildSheet
+          year={ps.year}
+          month0={ps.month0}
+          today={TODAY}
+          overrides={ps.dayOverrides}
+          shifts={ps.shifts}
+          hasExisting={!!ps.schedule}
+          busy={busy}
+          onClose={() => setRebuildOpen(false)}
+          onRebuild={handleRebuild}
+        />
       )}
 
       {/* ── Shift add/edit ────────────────────────────────────────────────── */}
@@ -947,157 +1003,6 @@ function ShiftLine({
       {runningHours && (
         <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">{runningHours}h</span>
       )}
-    </div>
-  );
-}
-
-function ShiftGroupList({
-  title,
-  list,
-  staffById,
-  onEdit,
-  icon,
-}: {
-  title: string;
-  list: ProShopShift[];
-  staffById: Record<string, ProShopStaff>;
-  onEdit: (s: ProShopShift) => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-1">
-        {icon} {title}
-      </p>
-      {list.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">No one scheduled</p>
-      ) : (
-        <div className="space-y-1">
-          {list.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onEdit(s)}
-              className="w-full flex items-center gap-2 p-2 rounded-lg border border-border hover:bg-muted text-left"
-            >
-              <span className="text-sm tabular-nums w-24 shrink-0">
-                {compactTime(s.start_time)}-{compactTime(s.end_time)}
-              </span>
-              <span className="text-sm font-medium flex-1 truncate">
-                {staffById[s.staff_id]?.full_name ?? "Unknown"}
-              </span>
-              {s.note && <span className="text-[10px] text-muted-foreground truncate max-w-[7rem]">{s.note}</span>}
-              <Pencil className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DayEditor({
-  date,
-  shifts,
-  staffById,
-  activeIssues,
-  dismissedIssues,
-  onDismiss,
-  onRestore,
-  onEdit,
-  onAdd,
-  onCover,
-}: {
-  date: string;
-  shifts: ProShopShift[];
-  staffById: Record<string, ProShopStaff>;
-  activeIssues: DayWarning[];
-  dismissedIssues: DayWarning[];
-  onDismiss: (code: WarningCode) => void;
-  onRestore: (code: WarningCode) => void;
-  onEdit: (s: ProShopShift) => void;
-  onAdd: () => void;
-  onCover: () => void;
-}) {
-  const out = shifts.filter((s) => s.group === "outside");
-  const ins = shifts.filter((s) => s.group === "inside");
-  void date;
-
-  return (
-    <div className="p-4 space-y-4">
-      {/* Needs attention — the specific coverage issues + how to clear them. */}
-      {(activeIssues.length > 0 || dismissedIssues.length > 0) && (
-        <div className="rounded-lg border border-red-200 bg-red-50/70 p-3 space-y-2">
-          {activeIssues.length > 0 && (
-            <>
-              <p className="text-xs font-semibold text-red-800 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" /> Needs attention
-              </p>
-              <ul className="space-y-1.5">
-                {activeIssues.map((w) => (
-                  <li key={w.code} className="flex items-start justify-between gap-2">
-                    <span className="text-xs text-red-700 flex items-start gap-1.5">
-                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" /> {w.message}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onDismiss(w.code)}
-                      className="shrink-0 text-[11px] px-2 py-0.5 rounded-full border border-red-300 text-red-700 hover:bg-red-100 inline-flex items-center gap-1"
-                      title="Bypass this — I'm fine with it"
-                    >
-                      <Ban className="w-3 h-3" /> Looks fine
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[11px] text-red-600/80">
-                Fix by adding or covering a shift below — or dismiss an issue you&apos;re fine with.
-              </p>
-            </>
-          )}
-          {dismissedIssues.length > 0 && (
-            <div className={activeIssues.length > 0 ? "pt-1.5 border-t border-red-200" : ""}>
-              <p className="text-[11px] font-medium text-muted-foreground mb-1">Dismissed</p>
-              <ul className="space-y-1">
-                {dismissedIssues.map((w) => (
-                  <li key={w.code} className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-muted-foreground line-through">{w.message}</span>
-                    <button
-                      type="button"
-                      onClick={() => onRestore(w.code)}
-                      className="shrink-0 text-[11px] px-2 py-0.5 rounded-full border border-border text-muted-foreground hover:bg-muted inline-flex items-center gap-1"
-                      title="Restore this warning"
-                    >
-                      <Undo2 className="w-3 h-3" /> Undo
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-      <ShiftGroupList
-        title="Outside (rec aids)"
-        list={out}
-        staffById={staffById}
-        onEdit={onEdit}
-        icon={<Sun className="w-3.5 h-3.5 text-amber-500" />}
-      />
-      <ShiftGroupList
-        title="Inside (golf ops)"
-        list={ins}
-        staffById={staffById}
-        onEdit={onEdit}
-        icon={<Moon className="w-3.5 h-3.5 text-indigo-500" />}
-      />
-      <div className="flex flex-col sm:flex-row gap-2 pt-1">
-        <Button variant="outline" className="flex-1 gap-1.5" onClick={onAdd}>
-          <Plus className="w-4 h-4" /> Add shift
-        </Button>
-        <Button variant="outline" className="flex-1 gap-1.5" onClick={onCover}>
-          <UserMinus className="w-4 h-4" /> Day off / cover
-        </Button>
-      </div>
     </div>
   );
 }

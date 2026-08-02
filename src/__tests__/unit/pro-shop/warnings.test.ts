@@ -125,3 +125,47 @@ describe("dayWarnings against recorded coverage rules", () => {
     expect(dayWarnings([], "maintenance", monday).map((w) => w.code)).toEqual(["no_crew"]);
   });
 });
+
+describe("days a per-day override has emptied", () => {
+  function rule(group: ShiftGroup, base: number, extra = 0): CoverageRule {
+    return {
+      id: `${group}-1`, area: "pro_shop", weekday: 1, group,
+      open_time: group === "inside" ? "06:00" : "08:00", close_time: "20:00",
+      base_staff: base, extra_staff: extra, extra_start: extra > 0 ? "15:00" : null,
+    };
+  }
+
+  it("does not flag an empty group the day is meant to have nobody in", () => {
+    // Outside cut to zero for this date: an empty outside is now correct, and
+    // warning about it would train the GM to ignore the ⚠ that matters.
+    const codes = dayWarnings(
+      [shift("inside", "06:00", "13:00"), shift("inside", "13:00", "20:00")],
+      "pro_shop",
+      [rule("inside", 2), rule("outside", 0)],
+    ).map((w) => w.code);
+    expect(codes).toEqual([]);
+  });
+
+  it("still flags the group that IS meant to be staffed", () => {
+    const codes = dayWarnings(
+      [],
+      "pro_shop",
+      [rule("inside", 2), rule("outside", 0)],
+    ).map((w) => w.code);
+    expect(codes).toContain("no_inside");
+    expect(codes).not.toContain("no_outside");
+  });
+
+  it("reports a shortfall against the overridden number, not the rule's", () => {
+    // The day was cut to one rec aid, and one is scheduled — that is not short.
+    const codes = dayWarnings(
+      [
+        shift("inside", "06:00", "13:00"), shift("inside", "13:00", "20:00"),
+        shift("outside", "08:00", "20:00"),
+      ],
+      "pro_shop",
+      [rule("inside", 2), rule("outside", 1)],
+    ).map((w) => w.code);
+    expect(codes).toEqual([]);
+  });
+});

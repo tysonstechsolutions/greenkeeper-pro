@@ -501,3 +501,120 @@ describe("openSlotsForDay — what prints as a blank line", () => {
     expect(open).toHaveLength(1);
   });
 });
+
+describe("per-day overrides", () => {
+  // 2026-08-15 is a Saturday.
+  const SATURDAY = "2026-08-15";
+
+  it("builds a day to the overridden headcount, not the weekday rule's", () => {
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+      overrides: { [SATURDAY]: { groups: { outside: { base: 2, extra: 0 } } } },
+    });
+    // Two rec aids splitting the Saturday window instead of two plus an extra…
+    expect(on(shifts, SATURDAY, "outside")).toHaveLength(2);
+    // …while the following Saturday still gets the rule's three.
+    expect(on(shifts, "2026-08-22", "outside")).toHaveLength(3);
+    // …and the other group that day is untouched.
+    expect(on(shifts, SATURDAY, "inside")).toHaveLength(2);
+  });
+
+  it("treats a hand-set number as a ceiling, and shows what that leaves open", () => {
+    // One person cannot cover 08:00–20:00 under the 9-hour cap. On an ordinary
+    // day the generator would add a second; on a day the GM set to one it
+    // honours the one and lets the shortfall show as an open shift.
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+      overrides: { [SATURDAY]: { groups: { outside: { base: 1, extra: 0 } } } },
+    });
+    const outside = on(shifts, SATURDAY, "outside");
+    expect(outside).toHaveLength(1);
+    expect(outside[0].end_time).toBe("17:00");
+    // The uncovered evening is visible rather than silently filled.
+    const open = openSlotsForDay(
+      outside.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
+      [{
+        group: "outside", open_time: "08:00", close_time: "20:00",
+        base_staff: 1, extra_staff: 0, extra_start: null,
+      }],
+    );
+    expect(open).toContainEqual({ group: "outside", start: "17:00", end: "20:00", kind: "gap" });
+  });
+
+  it("still adds a fourth person on an ordinary day when hours leave a hole", () => {
+    // The ceiling applies ONLY to days the GM set a number for. A normal day
+    // keeps covering the window whatever that takes.
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+    });
+    const outside = on(shifts, SATURDAY, "outside");
+    expect(outside.length).toBeGreaterThanOrEqual(2);
+    expect(outside[0].start_time).toBe("08:00");
+    expect(outside[outside.length - 1].end_time).toBe("20:00");
+  });
+
+  it("places nobody, and reports no hole, on a group set to zero", () => {
+    const { shifts, unfilled } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+      overrides: { [SATURDAY]: { groups: { outside: { base: 0, extra: 0 } } } },
+    });
+    expect(on(shifts, SATURDAY, "outside")).toHaveLength(0);
+    // A day deliberately left unstaffed is not an unfilled slot. Reporting it
+    // would train the GM to ignore the warning that matters.
+    expect(unfilled.filter((u) => u.date === SATURDAY && u.group === "outside")).toEqual([]);
+  });
+
+  it("shows no open shifts for a group set to zero", () => {
+    const zeroed: CoverageRule[] = [{
+      id: "out-6", area: "pro_shop", weekday: 6, group: "outside",
+      open_time: "08:00", close_time: "20:00",
+      base_staff: 0, extra_staff: 0, extra_start: null,
+    }];
+    expect(openSlotsForDay([], zeroed)).toEqual([]);
+  });
+
+  it("leaves a held day entirely alone", () => {
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+      overrides: { [SATURDAY]: { locked: true } },
+    });
+    expect(shifts.filter((s) => s.shift_date === SATURDAY)).toEqual([]);
+    // Every other day is still built.
+    expect(shifts.filter((s) => s.shift_date === "2026-08-22").length).toBeGreaterThan(0);
+  });
+});
+
+describe("rebuilding a chosen window", () => {
+  it("builds only the dates it was given", () => {
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+      dates: ["2026-08-17", "2026-08-18"],
+    });
+    expect([...new Set(shifts.map((s) => s.shift_date))].sort())
+      .toEqual(["2026-08-17", "2026-08-18"]);
+  });
+
+  it("drops a held day out of the window it was handed", () => {
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+      dates: ["2026-08-17", "2026-08-18"],
+      overrides: { "2026-08-18": { locked: true } },
+    });
+    expect([...new Set(shifts.map((s) => s.shift_date))]).toEqual(["2026-08-17"]);
+  });
+
+  it("builds the whole month when given no window, as it always has", () => {
+    const { shifts } = generateCoverageMonth({
+      staff: roster(), year: 2026, month0: 7, timeOff: [], rules: proShopRules(),
+      area: "pro_shop",
+    });
+    expect(new Set(shifts.map((s) => s.shift_date)).size).toBe(31);
+  });
+});

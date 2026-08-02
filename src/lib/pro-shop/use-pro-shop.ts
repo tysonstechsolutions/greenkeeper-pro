@@ -7,6 +7,8 @@ import {
 } from "@/lib/supabase/rest";
 import type {
   CoverageRule,
+  DayGroupOverride,
+  DayOverrides,
   ProShopSchedule,
   ProShopShift,
   ProShopStaff,
@@ -20,6 +22,13 @@ import type {
 import { DEFAULT_SCHEDULE_SETTINGS } from "./types";
 import { datesInMonth, expandMonth, ymd } from "./schedule-engine";
 import { generateCoverageMonth, type UnfilledSlot } from "./coverage";
+import {
+  clearDayOverride,
+  isDayLocked,
+  sanitizeDayOverrides,
+  withDayCounts,
+  withDayLocked,
+} from "./day-overrides";
 
 /** Manual shift edit payload. */
 export interface ShiftInput {
@@ -157,6 +166,102 @@ export function useProShop(
     return m;
   }, [staff]);
 
+  /**
+   * Per-day coverage exceptions for the open month. Sanitized on the way in:
+   * the column is schemaless JSONB, and a malformed entry must not be able to
+   * quietly blank out a day's required staffing.
+   */
+  const dayOverrides = useMemo<DayOverrides>(
+    () => sanitizeDayOverrides(schedule?.day_overrides),
+    [schedule],
+  );
+
+  /**
+   * The month's schedule row, created if this is the first thing to need it.
+   * Day overrides live on that row, so setting one on a month that has never
+   * been generated has to bring the row into existence first.
+   */
+  const ensureSchedule = useCallback(async (): Promise<ProShopSchedule> => {
+    const existing = schedules.find((s) => s.month === monthKey);
+    if (existing) return existing;
+    const title = `${new Date(year, month0, 1).toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    })} Pro Shop Schedule`;
+    const created = await directRpc<ProShopSchedule>(
+      "save_pro_shop_schedule",
+      {
+        p_schedule_id: null,
+        p_values: { month: monthKey, title, area },
+        p_reason: "Monthly pro-shop schedule created",
+      },
+      "proshop.schedule.create",
+    );
+    await loadStatic();
+    return created;
+  }, [schedules, monthKey, year, month0, area, loadStatic]);
+
+  /**
+   * Write the whole overrides map back. Every edit goes through here so the
+   * optimistic local update and the saved row can never diverge in shape.
+   */
+  const saveDayOverrides = useCallback(
+    async (next: DayOverrides, reason: string) => {
+      const sched = await ensureSchedule();
+      setSchedules((prev) =>
+        prev.map((s) => (s.id === sched.id ? { ...s, day_overrides: next } : s)),
+      );
+      try {
+        await directRpc("save_pro_shop_schedule", {
+          p_schedule_id: sched.id,
+          p_values: { day_overrides: next },
+          p_reason: reason,
+        }, "proshop.schedule.day-overrides");
+      } catch (e) {
+        console.error("[pro-shop] day override save failed:", e);
+        await loadStatic();
+        throw e;
+      }
+    },
+    [ensureSchedule, loadStatic],
+  );
+
+  /** Set (or clear, with null) how many people one group needs on one date. */
+  const setDayCounts = useCallback(
+    async (date: string, group: ShiftGroup, counts: DayGroupOverride | null) => {
+      const next = withDayCounts(dayOverrides, date, group, counts);
+      await saveDayOverrides(
+        next,
+        counts
+          ? `Coverage for ${date} set to ${counts.base} base + ${counts.extra} extra`
+          : `Coverage for ${date} returned to the weekday rule`,
+      );
+    },
+    [dayOverrides, saveDayOverrides],
+  );
+
+  /** Hold a whole day as-is: no rebuild touches any shift on it. */
+  const setDayLock = useCallback(
+    async (date: string, locked: boolean) => {
+      await saveDayOverrides(
+        withDayLocked(dayOverrides, date, locked),
+        locked ? `${date} locked against rebuilds` : `${date} unlocked`,
+      );
+    },
+    [dayOverrides, saveDayOverrides],
+  );
+
+  /** Drop every exception on a date — back to a normal weekday. */
+  const resetDay = useCallback(
+    async (date: string) => {
+      await saveDayOverrides(
+        clearDayOverride(dayOverrides, date),
+        `${date} returned to the standard weekday coverage`,
+      );
+    },
+    [dayOverrides, saveDayOverrides],
+  );
+
   // ── Availability ──────────────────────────────────────────────────────────
   const saveAvailability = useCallback(
     async (
@@ -250,25 +355,21 @@ export function useProShop(
   );
 
   // ── Month generation (deterministic) ──────────────────────────────────────
-  /** Create/find the month's schedule, then stamp everyone's pattern into it. */
+  /**
+   * Rebuild the schedule and stamp it into the month.
+   *
+   * @param replace Retire the shifts this run supersedes, rather than adding to them.
+   * @param scope   Restrict the rebuild to these dates. Omitted, the whole month
+   *   is rebuilt, which is what Regenerate has always done. Either way LOCKED
+   *   DAYS ARE DROPPED from the window before anything is retired — that is what
+   *   makes a locked day survive a full-month Regenerate, not just a scoped one.
+   */
   const generateMonth = useCallback(
-    async (replace: boolean): Promise<{ inserted: number }> => {
-      let sched = schedules.find((s) => s.month === monthKey) ?? null;
-      if (!sched) {
-        const title = `${new Date(year, month0, 1).toLocaleDateString(undefined, {
-          month: "long",
-          year: "numeric",
-        })} Pro Shop Schedule`;
-        sched = await directRpc<ProShopSchedule>(
-          "save_pro_shop_schedule",
-          {
-            p_schedule_id: null,
-            p_values: { month: monthKey, title, area },
-            p_reason: "Monthly pro-shop schedule created",
-          },
-          "proshop.schedule.create",
-        );
-      }
+    async (
+      replace: boolean,
+      scope?: { dates?: string[] },
+    ): Promise<{ inserted: number; rebuiltDates: string[]; skippedLocked: string[] }> => {
+      const sched = await ensureSchedule();
       // Read staff + time-off FRESH so a change applied moments earlier (e.g. the
       // AI quick-update) is reflected — the closed-over state may be a render behind.
       const [freshStaff, freshTimeOff] = await Promise.all([
@@ -292,6 +393,19 @@ export function useProShop(
       // maintenance crew) keeps stamping standing weekly patterns exactly as
       // before — that schedule is not run to a coverage target.
       const fresh = await loadRules();
+
+      // The exact days this run will touch. Both halves of the operation are
+      // held to this list — the generator builds only these, and the RPC is
+      // told to retire only within them — so a day left out of scope, or
+      // locked, keeps every shift it already has.
+      const monthDates = datesInMonth(year, month0);
+      const requested = scope?.dates
+        ? monthDates.filter((date) => scope.dates!.includes(date))
+        : monthDates;
+      const skippedLocked = requested.filter((date) => isDayLocked(date, dayOverrides));
+      const rebuiltDates = requested.filter((date) => !isDayLocked(date, dayOverrides));
+      const inScope = new Set(rebuiltDates);
+
       let rows: Array<{
         staff_id: string; shift_date: string; group: ShiftGroup;
         start_time: string; end_time: string; source: string;
@@ -311,6 +425,7 @@ export function useProShop(
         const plan = generateCoverageMonth({
           staff: freshStaff, year, month0, timeOff: freshTimeOff,
           rules: fresh.rules, settings: fresh.settings, lockedShifts: locked, area,
+          overrides: dayOverrides, dates: rebuiltDates,
         });
         setUnfilled(plan.unfilled);
         rows = plan.shifts.map((p) => ({
@@ -319,7 +434,10 @@ export function useProShop(
         }));
       } else {
         setUnfilled([]);
-        rows = expandMonth(freshStaff, year, month0, freshTimeOff).map((p) => ({
+        // The pattern-stamping path knows nothing about scope, so trim it here.
+        rows = expandMonth(freshStaff, year, month0, freshTimeOff)
+          .filter((p) => inScope.has(p.shift_date))
+          .map((p) => ({
           staff_id: p.staff_id, shift_date: p.shift_date, group: p.group,
           start_time: p.start_time, end_time: p.end_time, source: p.source,
         }));
@@ -331,11 +449,14 @@ export function useProShop(
         p_reason: replace
           ? "Monthly schedule regenerated and prior active shifts replaced"
           : "Monthly schedule generated without replacing unmatched shifts",
+        // Always sent, never left null: a locked day is only safe from a
+        // full-month Regenerate because it is absent from this list.
+        p_dates: rebuiltDates,
       }, "proshop.shifts.generate");
       await Promise.all([loadStatic(), loadShifts()]);
-      return { inserted: rows.length };
+      return { inserted: rows.length, rebuiltDates, skippedLocked };
     },
-    [schedules, monthKey, year, month0, loadStatic, loadShifts, loadRules, area],
+    [ensureSchedule, year, month0, loadStatic, loadShifts, loadRules, area, dayOverrides],
   );
 
   const setScheduleNotes = useCallback(
@@ -608,6 +729,10 @@ export function useProShop(
     removeTimeOff,
     dismissWarning,
     restoreWarning,
+    dayOverrides,
+    setDayCounts,
+    setDayLock,
+    resetDay,
     datesInMonth: () => datesInMonth(year, month0),
   };
 }

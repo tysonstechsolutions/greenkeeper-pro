@@ -113,14 +113,30 @@ export function dayWarnings(
   const inside = shiftsForDay.filter((s) => s.group === "inside");
   const outside = shiftsForDay.filter((s) => s.group === "outside");
 
-  if (outside.length === 0) add("no_outside", "No outside staff (rec aids) scheduled");
-  if (inside.length === 0) add("no_inside", "No inside staff (golf ops) scheduled");
+  // How many each group is actually meant to have today. With rules in play
+  // that is the rule (as adjusted for this date); a group with no rule, or one
+  // a per-day override has set to zero, is meant to be empty — warning about it
+  // would flag a day the GM deliberately cleared and train him to ignore the ⚠.
+  const wantedFor = (group: ShiftGroup): number => {
+    if (rulesForDay.length === 0) return 1;
+    return rulesForDay
+      .filter((rule) => rule.group === group)
+      .reduce((total, rule) => total + rule.base_staff + rule.extra_staff, 0);
+  };
+
+  if (outside.length === 0 && wantedFor("outside") > 0) {
+    add("no_outside", "No outside staff (rec aids) scheduled");
+  }
+  if (inside.length === 0 && wantedFor("inside") > 0) {
+    add("no_inside", "No inside staff (golf ops) scheduled");
+  }
 
   // With coverage rules recorded, "is the day covered" is answerable exactly:
   // check the window against the shifts rather than guessing from an opener
   // and a closer time. Those heuristics only run when no rule exists.
   if (rulesForDay.length > 0) {
     for (const rule of rulesForDay) {
+      if (rule.base_staff + rule.extra_staff <= 0) continue; // nobody wanted today
       const list = rule.group === "inside" ? inside : outside;
       if (list.length === 0) continue; // already reported as no_inside/no_outside
       const label = rule.group === "inside" ? "golf ops" : "rec aids";

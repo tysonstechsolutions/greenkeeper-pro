@@ -84,7 +84,30 @@ export interface ProShopSchedule {
   notes: string | null;
   /** Per-day dismissed coverage-warning codes (see DismissedWarnings). */
   dismissed_warnings: DismissedWarnings;
+  /** Per-day exceptions to the coverage rules (see DayOverrides). */
+  day_overrides?: DayOverrides;
 }
+
+/** How many people one group needs on one specific date. */
+export interface DayGroupOverride {
+  /** People splitting open..close back-to-back. */
+  base: number;
+  /** Added cover on top, arriving at the rule's extra_start. */
+  extra: number;
+}
+
+/**
+ * One date's exception to the weekday coverage rules. A group with no entry
+ * falls back to the rule, so a day nobody has touched behaves as it always did.
+ */
+export interface DayOverride {
+  /** A rebuild skips this day entirely and keeps every shift already on it. */
+  locked?: boolean;
+  groups?: Partial<Record<ShiftGroup, DayGroupOverride>>;
+}
+
+/** Per-day coverage exceptions, keyed by YYYY-MM-DD. Lives on the schedule row. */
+export type DayOverrides = Record<string, DayOverride>;
 
 export interface ProShopShift {
   id: string;
@@ -193,6 +216,14 @@ export interface DayWarning {
 
 /** Per-day dismissed warning codes, keyed by YYYY-MM-DD. Lives on the schedule row. */
 export type DismissedWarnings = Record<string, WarningCode[]>;
+
+/** What each shift group is called on screen and on the printout. */
+export const GROUP_LABELS: Record<ShiftGroup, string> = {
+  outside: "Rec aids (outside)",
+  inside: "Golf ops (inside)",
+  grounds: "Grounds crew",
+  shop: "Shop / mechanic",
+};
 
 export const DUTY_AREA_LABELS: Record<DutyArea, string> = {
   outside: "Rec Aids (Outside)",

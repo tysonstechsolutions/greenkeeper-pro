@@ -9,8 +9,9 @@
  * posted copy — a hole you can see and fill beats a hole you cannot see.
  */
 import { openSlotsForDay, type OpenSlot } from "./coverage";
+import { effectiveRulesForDay, type DayOverrides } from "./day-overrides";
 import { computeStaffHours, formatHours } from "./hours";
-import { compactTime, parseYmd } from "./schedule-engine";
+import { compactTime } from "./schedule-engine";
 import {
   SCHEDULE_AREA_LABELS,
   type CoverageRule,
@@ -43,6 +44,12 @@ export interface PrintScheduleInput {
   shifts: ProShopShift[];
   staff: ProShopStaff[];
   rules: CoverageRule[];
+  /**
+   * Per-day exceptions to those rules. The printout has to agree with the
+   * screen about how many open lines a day carries — a day the GM cut to two
+   * rec aids must not print a third blank line for someone to sign.
+   */
+  overrides?: DayOverrides;
   settings: Pick<ScheduleSettings, "lunch_threshold_minutes" | "lunch_minutes">;
   status?: "draft" | "published";
   generatedOn: Date;
@@ -82,7 +89,7 @@ function openRow(slot: OpenSlot): string {
 }
 
 export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
-  const { area, year, month0, shifts, staff, rules, settings, status, generatedOn } = input;
+  const { area, year, month0, shifts, staff, rules, overrides = {}, settings, status, generatedOn } = input;
   const nameById = new Map(staff.map((person) => [person.id, person.full_name]));
   const hours = computeStaffHours(shifts, settings);
 
@@ -105,8 +112,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
       if (a.group !== b.group) return a.group === "outside" ? -1 : 1;
       return a.start_time.localeCompare(b.start_time);
     });
-    const weekday = parseYmd(date).getDay();
-    const dayRules = rules.filter((rule) => rule.weekday === weekday);
+    const dayRules = effectiveRulesForDay(date, rules, overrides);
     const open = openSlotsForDay(
       dayShifts.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
       dayRules,
@@ -145,10 +151,9 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   const openCount = printGrid(year, month0).reduce((sum, date) => {
     if (!date) return sum;
     const dayShifts = byDate.get(date) ?? [];
-    const weekday = parseYmd(date).getDay();
     return sum + openSlotsForDay(
       dayShifts.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
-      rules.filter((rule) => rule.weekday === weekday),
+      effectiveRulesForDay(date, rules, overrides),
     ).length;
   }, 0);
 

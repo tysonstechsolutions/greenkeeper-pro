@@ -17,6 +17,7 @@
  */
 import { minutesOfDay, paidMinutes, timeFromMinutes } from "./hours";
 import { datesInMonth, isOff, parseYmd, weekdayKeyForDate } from "./dates";
+import { effectiveRulesForDay, isDayLocked, type DayOverrides } from "./day-overrides";
 import {
   AREA_GROUPS,
   DEFAULT_SCHEDULE_SETTINGS,
@@ -174,6 +175,14 @@ export interface GenerateCoverageInput {
   /** Shifts the GM pinned. They hold their slot and their person's day. */
   lockedShifts?: ProShopShift[];
   area: ScheduleArea;
+  /** Per-day exceptions to the rules: headcounts, and days locked as-is. */
+  overrides?: DayOverrides;
+  /**
+   * Rebuild only these dates. Omitted, the whole month is rebuilt — which is
+   * what Regenerate has always done. Locked days are dropped from whatever
+   * this resolves to, so they are never rebuilt by either route.
+   */
+  dates?: string[];
 }
 
 /**
@@ -189,6 +198,8 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
     staff, year, month0, timeOff, rules, area,
     settings = DEFAULT_SCHEDULE_SETTINGS,
     lockedShifts = [],
+    overrides = {},
+    dates,
   } = input;
 
   const shifts: PlannedCoverageShift[] = [];
@@ -198,11 +209,15 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
   const roster = staff.filter(
     (person) => person.is_active && (person.area ?? "pro_shop") === area,
   );
-  const ruleFor = new Map<string, CoverageRule>();
-  for (const rule of rules) {
-    if (rule.area !== area) continue;
-    ruleFor.set(`${rule.weekday}|${rule.group}`, rule);
-  }
+  const areaRules = rules.filter((rule) => rule.area === area);
+
+  // The days this run will actually build. A locked day is a decision already
+  // made — it drops out here, once, so no later step has to remember it.
+  const monthDates = datesInMonth(year, month0);
+  const inScope = dates ? new Set(dates) : null;
+  const buildDates = monthDates.filter(
+    (date) => (!inScope || inScope.has(date)) && !isDayLocked(date, overrides),
+  );
 
   // Paid minutes booked so far, tracked two ways so the fairness sort is fair
   // in both directions: per week, so no one week lands on one person; and
@@ -237,13 +252,34 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
     );
   }
 
-  for (const date of datesInMonth(year, month0)) {
-    const weekday = parseYmd(date).getDay();
+  for (const date of buildDates) {
     const week = weekStartOf(date);
+    // What THIS date needs — the weekday rule, with any per-day override
+    // applied. Resolved in one place so the generator, the open-shift lines and
+    // the printout can never disagree about a day's headcount.
+    const rulesToday = new Map<ShiftGroup, CoverageRule>();
+    for (const rule of effectiveRulesForDay(date, areaRules, overrides)) {
+      rulesToday.set(rule.group, rule);
+    }
 
     for (const group of AREA_GROUPS[area]) {
-      const rule = ruleFor.get(`${weekday}|${group}`);
+      const rule = rulesToday.get(group);
       if (!rule) continue;
+      // Set to nobody today: place nobody, and report no hole for a stretch
+      // the GM deliberately left unstaffed.
+      if (rule.base_staff + rule.extra_staff <= 0) continue;
+
+      /**
+       * On an ordinary day base_staff is a MINIMUM: the walk covers open..close
+       * whatever that takes, adding a fourth person if three people's hours
+       * leave a hole, because a covered shop beats a tidy headcount.
+       *
+       * On a day the GM has explicitly set a number for, it is a MAXIMUM. He
+       * said two people today; handing him three is ignoring him. Any stretch
+       * that leaves uncovered shows up as an open shift and a coverage warning,
+       * so the trade he made stays visible rather than being quietly undone.
+       */
+      const cappedByHand = !!overrides[date]?.groups?.[group];
 
       const locked = lockedByDateGroup.get(`${date}|${group}`) ?? [];
       const open = minutesOfDay(rule.open_time);
@@ -304,8 +340,15 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
       }
       let cursor = open;
       let placed = locked.length;
-      // Bounded: every pass either advances the cursor or breaks.
-      for (let guard = 0; guard < 24 && cursor < close; guard++) {
+      // Bounded: every pass either advances the cursor or breaks. Skipped
+      // entirely when the day asks for no base cover — an extra-only day is
+      // afternoon help on top of nothing, not a window to walk end to end.
+      for (
+        let guard = 0;
+        guard < 24 && rule.base_staff > 0 && cursor < close
+          && (!cappedByHand || placed < rule.base_staff);
+        guard++
+      ) {
         // A pinned shift already covering this moment carries the cursor on.
         let jumped = false;
         for (const [lockStart, lockEnd] of coveredUntil) {
@@ -449,6 +492,10 @@ export function openSlotsForDay(
 ): OpenSlot[] {
   const slots: OpenSlot[] = [];
   for (const rule of rulesForDay) {
+    // A day set to need nobody in this group needs nobody: no blank lines, and
+    // above all no "uncovered window", which would otherwise report the entire
+    // open..close stretch as a hole on a day deliberately left unstaffed.
+    if (rule.base_staff + rule.extra_staff <= 0) continue;
     const list = shiftsForDay.filter((s) => s.group === rule.group);
     const close = rule.close_time.slice(0, 5);
 
