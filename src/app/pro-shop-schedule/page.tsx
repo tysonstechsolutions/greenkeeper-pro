@@ -1,7 +1,8 @@
 "use client";
-import { SCHEDULE_AREA_LABELS, type ScheduleArea } from "@/lib/pro-shop/types";
+import { SCHEDULE_AREA_BLURBS, SCHEDULE_AREA_LABELS, type ScheduleArea } from "@/lib/pro-shop/types";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   startOfMonth,
   endOfMonth,
@@ -32,6 +33,9 @@ import {
   LockOpen,
   Printer,
   SlidersHorizontal,
+  Sprout,
+  UtensilsCrossed,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -57,9 +61,15 @@ import {
   positionGroup,
   emptyWeekly,
   AREA_GROUPS,
+  AREA_POSITIONS,
+  GROUP_LABELS,
+  GROUP_SHORT_LABELS,
+  POSITION_LABELS,
   type DayWarning,
+  type ProShopPosition,
   type ProShopShift,
   type ProShopStaff,
+  type ScheduleSettings,
   type ShiftGroup,
 } from "@/lib/pro-shop/types";
 import { Overlay } from "@/components/features/pro-shop/overlay";
@@ -72,6 +82,53 @@ import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 const selectCls = "w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm";
 const NOW = new Date();
 const TODAY = ymd(NOW);
+
+/**
+ * One colour per job, used everywhere that job appears: the shift line on the
+ * grid, the open-shift line, the legend and the roster card. Written out as
+ * whole class strings rather than built from pieces, because Tailwind only
+ * ships the classes it can literally see in the source.
+ */
+const GROUP_STYLE: Record<
+  ShiftGroup,
+  { icon: typeof Sun; text: string; dot: string; wash: string; rule: string }
+> = {
+  outside: {
+    icon: Sun,
+    text: "text-amber-800 dark:text-amber-300",
+    dot: "bg-amber-500",
+    wash: "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+    rule: "border-amber-600",
+  },
+  inside: {
+    icon: Moon,
+    text: "text-indigo-700 dark:text-indigo-300",
+    dot: "bg-indigo-500",
+    wash: "bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300",
+    rule: "border-indigo-500",
+  },
+  grounds: {
+    icon: Sprout,
+    text: "text-emerald-700 dark:text-emerald-300",
+    dot: "bg-emerald-600",
+    wash: "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+    rule: "border-emerald-600",
+  },
+  shop: {
+    icon: Wrench,
+    text: "text-violet-700 dark:text-violet-300",
+    dot: "bg-violet-500",
+    wash: "bg-violet-50 text-violet-900 dark:bg-violet-950/40 dark:text-violet-300",
+    rule: "border-violet-500",
+  },
+  restaurant: {
+    icon: UtensilsCrossed,
+    text: "text-rose-700 dark:text-rose-300",
+    dot: "bg-rose-500",
+    wash: "bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
+    rule: "border-rose-500",
+  },
+};
 
 function firstName(name: string): string {
   return name.split(" ")[0];
@@ -118,6 +175,31 @@ function ProShopScheduleContent() {
   /** The shift currently being dragged, so a day cell knows what it is catching. */
   const [dragShiftId, setDragShiftId] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  /**
+   * The shift a right-click landed on, and where to put the menu. Position is
+   * worked out in the event handler rather than at render, so this stays safe
+   * to render on the server where there is no window to measure against.
+   */
+  const [shiftMenu, setShiftMenu] = useState<
+    { shift: ProShopShift; x: number; y: number } | null
+  >(null);
+  /**
+   * Where the menu is portalled to, set once the component is on a real page.
+   * This route is prerendered, so `document.body` cannot be read while the
+   * markup is being built — reading it at render time throws.
+   */
+  const [menuHost, setMenuHost] = useState<HTMLElement | null>(null);
+  useEffect(() => setMenuHost(document.body), []);
+
+  // Escape closes the right-click menu, same as clicking away from it.
+  useEffect(() => {
+    if (!shiftMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShiftMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [shiftMenu]);
 
   // AI quick-update box (plain-English change → availability/time-off → regenerate).
   const [quickText, setQuickText] = useState("");
@@ -139,6 +221,31 @@ function ProShopScheduleContent() {
     () => computeStaffHours(ps.shifts, ps.settings),
     [ps.shifts, ps.settings],
   );
+
+  /**
+   * The roster split by job, in the area's own group order — so the panel
+   * answers "who can work where" at a glance instead of listing nine names in
+   * one column. Anybody whose position is not one of this area's groups (a
+   * leftover from a move between schedules) lands in the last bucket rather
+   * than disappearing off the screen.
+   */
+  const staffByGroup = useMemo(() => {
+    const groups = AREA_GROUPS[area];
+    const buckets = new Map<ShiftGroup, ProShopStaff[]>(groups.map((group) => [group, []]));
+    const fallback = buckets.get(groups[groups.length - 1])!;
+    for (const person of ps.staff) {
+      (buckets.get(positionGroup(person.position)) ?? fallback).push(person);
+    }
+    return groups.map((group) => {
+      // Anyone stood down keeps their card — their past shifts and hours are
+      // still worth reading — but drops to the bottom, and is not counted as
+      // somebody the schedule can call on.
+      const people = (buckets.get(group) ?? [])
+        .slice()
+        .sort((a, b) => Number(b.is_active) - Number(a.is_active));
+      return { group, people, working: people.filter((p) => p.is_active).length };
+    });
+  }, [ps.staff, area]);
 
   /**
    * Drop a dragged shift onto another day. The shift id travels in the drag's
@@ -214,12 +321,39 @@ function ProShopScheduleContent() {
   }
 
   function shiftsOn(dateStr: string): ProShopShift[] {
+    const order = AREA_GROUPS[area];
+    const rank = (group: ShiftGroup) => {
+      const index = order.indexOf(group);
+      return index === -1 ? order.length : index;
+    };
     return ps.shifts
       .filter((s) => s.shift_date === dateStr)
       .sort((a, b) => {
-        if (a.group !== b.group) return a.group === "outside" ? -1 : 1;
+        if (a.group !== b.group) return rank(a.group) - rank(b.group);
         return hhmm(a.start_time).localeCompare(hhmm(b.start_time));
       });
+  }
+
+  /**
+   * Take a shift off the schedule from the right-click menu. Named here rather
+   * than inside the menu so the confirm reads the same as the one in the day
+   * editor — deleting a shift is the same act wherever it is started from.
+   */
+  async function removeShift(shift: ProShopShift) {
+    const who = ps.staffById[shift.staff_id]?.full_name ?? "this shift";
+    const ok = window.confirm(
+      `Delete ${who}'s ${compactTime(shift.start_time)}-${compactTime(shift.end_time)}`
+      + ` shift on ${shortDate(shift.shift_date)}?`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await ps.deleteShift(shift.id);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "That shift didn't delete. Try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function changeMonth(delta: number) {
@@ -446,11 +580,7 @@ function ProShopScheduleContent() {
           <CalendarClock className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-xl font-bold leading-tight">{SCHEDULE_AREA_LABELS[area]} Schedule</h1>
-            <p className="text-xs text-muted-foreground">
-              {area === "pro_shop"
-                ? "Rec aids & golf ops — days & hours"
-                : "Grounds crew & mechanic — days & hours"}
-            </p>
+            <p className="text-xs text-muted-foreground">{SCHEDULE_AREA_BLURBS[area]}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -598,32 +728,39 @@ function ProShopScheduleContent() {
           <ul className="mt-1 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
             {ps.unfilled.slice(0, 6).map((slot, i) => (
               <li key={i}>
-                {shortDate(slot.date)} · {slot.group === "inside" ? "golf ops" : "rec aid"}{" "}
+                {shortDate(slot.date)} · {GROUP_SHORT_LABELS[slot.group]}{" "}
                 {compactTime(slot.start)}-{compactTime(slot.end)} — {slot.reason.toLowerCase()}
               </li>
             ))}
             {ps.unfilled.length > 6 && <li>…and {ps.unfilled.length - 6} more</li>}
           </ul>
           <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-            Free someone up, clear another rec aid to cover golf ops, or lower the count in Coverage.
+            Free someone up, clear somebody else to cover that job, or lower the count in Coverage.
           </p>
         </div>
       )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mb-2 text-xs text-muted-foreground">
+        {AREA_GROUPS[area].map((group) => {
+          const style = GROUP_STYLE[group];
+          const Icon = style.icon;
+          return (
+            <span key={group} className="flex items-center gap-1.5">
+              <Icon className={`w-3.5 h-3.5 ${style.text}`} /> {GROUP_LABELS[group]}
+            </span>
+          );
+        })}
         <span className="flex items-center gap-1.5">
-          <Sun className="w-3.5 h-3.5 text-amber-500" /> Outside (rec aids)
+          <Lock className="w-3.5 h-3.5" /> Pinned · drag to another day · right-click to remove
         </span>
         <span className="flex items-center gap-1.5">
-          <Moon className="w-3.5 h-3.5 text-indigo-500" /> Inside (golf ops)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <Lock className="w-3.5 h-3.5" /> Pinned · drag a shift to another day
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block w-6 border-b border-amber-600 bg-amber-50 dark:bg-amber-950/40" />
-          <span className="inline-block w-6 border-b border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40" />
+          {AREA_GROUPS[area].map((group) => (
+            <span
+              key={group}
+              className={`inline-block w-6 border-b ${GROUP_STYLE[group].rule} ${GROUP_STYLE[group].wash}`}
+            />
+          ))}
           Open shift — colour says which job
         </span>
       </div>
@@ -661,6 +798,17 @@ function ProShopScheduleContent() {
                 setDragShiftId(s.id);
               }}
               onDragEnd={() => { setDragShiftId(null); setDragOverDate(null); }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Clamped here, where the viewport is real, so the menu never
+                // opens half off the right or bottom edge of a phone.
+                setShiftMenu({
+                  shift: s,
+                  x: Math.min(e.clientX, window.innerWidth - 200),
+                  y: Math.min(e.clientY, window.innerHeight - 170),
+                });
+              }}
             />
           );
           return (
@@ -712,24 +860,18 @@ function ProShopScheduleContent() {
                       Solid underline with room for a name, tinted in the
                       group's colour — the same as it prints. */}
                   {openOn(ds).map((slot, i) => {
-                    const inside = slot.group === "inside";
+                    const style = GROUP_STYLE[slot.group];
                     return (
                       <div
                         key={`open-${i}`}
-                        className={`flex items-end gap-1 text-[10px] leading-tight px-1 rounded ${
-                          inside
-                            ? "bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300"
-                            : "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
-                        }`}
-                        title={`Open ${inside ? "golf ops assistant" : "rec aid"} shift — nobody scheduled`}
+                        className={`flex items-end gap-1 text-[10px] leading-tight px-1 rounded ${style.wash}`}
+                        title={`Open ${GROUP_SHORT_LABELS[slot.group]} shift — nobody scheduled`}
                       >
                         <span className="tabular-nums font-semibold">
                           {compactTime(slot.start)}-{compactTime(slot.end)}
                         </span>
                         <span
-                          className={`flex-1 min-w-[2.5rem] h-[0.9rem] border-b ${
-                            inside ? "border-indigo-500" : "border-amber-600"
-                          }`}
+                          className={`flex-1 min-w-[2.5rem] h-[0.9rem] border-b ${style.rule}`}
                         />
                       </div>
                     );
@@ -756,56 +898,158 @@ function ProShopScheduleContent() {
             <Loader2 className="w-4 h-4 animate-spin" /> Loading…
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-2">
-            {ps.staff.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-start gap-3 p-3 rounded-lg border border-border"
-              >
-                <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white ${
-                    positionGroup(s.position) === "inside" ? "bg-indigo-500" : "bg-amber-500"
-                  }`}
-                >
-                  {positionGroup(s.position) === "inside" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate flex items-center gap-1.5">
-                    {s.full_name}
-                    {!s.is_active && <span className="text-xs text-muted-foreground font-normal"> · inactive</span>}
-                    {/* Paid hours for the whole month, next to the name. */}
-                    <span className="ml-auto shrink-0 text-xs tabular-nums font-semibold">
-                      {formatHours(hours.totalByStaff.get(s.id) ?? 0)}h
+          <div className="space-y-4">
+            {staffByGroup.map(({ group, people, working }) => {
+              const style = GROUP_STYLE[group];
+              const Icon = style.icon;
+              // Everything except the group being listed — "can also cover" only
+              // means anything when there is somewhere else to cover.
+              const otherGroups = AREA_GROUPS[area].filter((g) => g !== group);
+              return (
+                <div key={group}>
+                  <h3 className={`text-xs font-semibold mb-1.5 flex items-center gap-1.5 ${style.text}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                    {GROUP_LABELS[group]}
+                    <span className="font-normal text-muted-foreground">
+                      · {working} {working === 1 ? "person" : "people"}
+                      {people.length > working && ` · ${people.length - working} stood down`}
                     </span>
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {s.position === "golf_ops_assistant" ? "Golf Ops Assistant" : "Rec Aid"}
-                    <span className="text-muted-foreground/70"> · this month</span>
-                  </p>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">{summarizeWeekly(s)}</p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setAvailabilityStaff(s)}>
-                      <Pencil className="w-3 h-3" /> Availability
-                    </Button>
-                    {/* Only a rec aid the GM ticks here may be pulled inside. */}
-                    {s.position === "rec_aid" && (
-                      <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="h-3.5 w-3.5 accent-sky-600"
-                          checked={s.flex === true}
-                          onChange={(e) => void ps.setStaffFlex(s.id, e.target.checked)}
-                        />
-                        Can cover golf ops
-                      </label>
-                    )}
-                  </div>
+                  </h3>
+                  {people.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic pl-5">
+                      Nobody on this job yet — add someone below.
+                    </p>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {people.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-start gap-3 p-3 rounded-lg border border-border"
+                        >
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-white ${style.dot}`}
+                          >
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate flex items-center gap-1.5">
+                              {s.full_name}
+                              {!s.is_active && (
+                                <span className="text-xs text-muted-foreground font-normal"> · inactive</span>
+                              )}
+                              {/* Paid hours for the whole month, next to the name. */}
+                              <span className="ml-auto shrink-0 text-xs tabular-nums font-semibold">
+                                {formatHours(hours.totalByStaff.get(s.id) ?? 0)}h
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {POSITION_LABELS[s.position]}
+                              <span className="text-muted-foreground/70"> · this month</span>
+                            </p>
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                              {summarizeWeekly(s)}
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                              <Button
+                                variant="outline" size="sm" className="h-7 gap-1.5 text-xs"
+                                onClick={() => setAvailabilityStaff(s)}
+                              >
+                                <Pencil className="w-3 h-3" /> Availability
+                              </Button>
+                              {/* Somebody is only pulled onto another job when the
+                                  GM has ticked them for it. */}
+                              {otherGroups.length > 0 && (
+                                <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 accent-sky-600"
+                                    checked={s.flex === true}
+                                    onChange={(e) => void ps.setStaffFlex(s.id, e.target.checked)}
+                                  />
+                                  Can cover {otherGroups.map((g) => GROUP_SHORT_LABELS[g]).join(" / ")}
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* ── Right-click a shift ───────────────────────────────────────────── */}
+      {/*
+        Portalled to <body> on purpose. The route-enter animation puts a
+        `transform` on an ancestor, and a transformed ancestor becomes the
+        containing block for `position: fixed` — which offset the menu by the
+        width of the sidebar and pushed it clean off the right of the screen.
+      */}
+      {shiftMenu && menuHost && createPortal(
+        <>
+          {/* Catches the click (or second right-click) that dismisses the menu. */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setShiftMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setShiftMenu(null); }}
+          />
+          <div
+            role="menu"
+            aria-label="Shift actions"
+            style={{ top: shiftMenu.y, left: shiftMenu.x }}
+            className="fixed z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg"
+          >
+            <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-b border-border truncate">
+              {ps.staffById[shiftMenu.shift.staff_id]?.full_name ?? "Shift"}
+              {" · "}
+              {compactTime(shiftMenu.shift.start_time)}-{compactTime(shiftMenu.shift.end_time)}
+            </p>
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                const shift = shiftMenu.shift;
+                setShiftMenu(null);
+                setEditShift({ mode: "edit", shift });
+              }}
+            >
+              <Pencil className="w-3.5 h-3.5" /> Edit shift…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                const shift = shiftMenu.shift;
+                setShiftMenu(null);
+                void ps.setShiftLocked(shift.id, !shift.locked);
+              }}
+            >
+              {shiftMenu.shift.locked
+                ? <><LockOpen className="w-3.5 h-3.5" /> Unpin</>
+                : <><Lock className="w-3.5 h-3.5" /> Pin this shift</>}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+              onClick={() => {
+                const shift = shiftMenu.shift;
+                setShiftMenu(null);
+                void removeShift(shift);
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Remove shift
+            </button>
+          </div>
+        </>,
+        menuHost,
+      )}
 
       {/* ── Day editor ────────────────────────────────────────────────────── */}
       {dayOpen && (
@@ -856,6 +1100,8 @@ function ProShopScheduleContent() {
         <ShiftEditor
           state={editShift}
           staff={ps.staff}
+          groups={AREA_GROUPS[area]}
+          settings={ps.settings}
           onClose={() => setEditShift(null)}
           addShift={ps.addShift}
           updateShift={ps.updateShift}
@@ -901,7 +1147,11 @@ function ProShopScheduleContent() {
 
       {/* ── Add staff ─────────────────────────────────────────────────────── */}
       {addStaffOpen && (
-        <AddStaffSheet onClose={() => setAddStaffOpen(false)} addStaff={ps.addStaff} />
+        <AddStaffSheet
+          area={area}
+          onClose={() => setAddStaffOpen(false)}
+          addStaff={ps.addStaff}
+        />
       )}
 
       {/* ── Coverage rules ────────────────────────────────────────────────── */}
@@ -972,6 +1222,7 @@ function ShiftLine({
   runningHours,
   onDragStart,
   onDragEnd,
+  onContextMenu,
 }: {
   shift: ProShopShift;
   name: string;
@@ -979,19 +1230,22 @@ function ShiftLine({
   runningHours?: string;
   onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
+  onContextMenu?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }) {
   return (
     <div
       draggable={!!onDragStart}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onContextMenu={onContextMenu}
       className={`flex items-center gap-1 truncate text-[10px] leading-tight px-1 rounded ${
-        shift.group === "inside" ? "text-indigo-700 dark:text-indigo-300" : "text-amber-800 dark:text-amber-300"
+        GROUP_STYLE[shift.group].text
       } ${onDragStart ? "cursor-grab active:cursor-grabbing hover:bg-muted" : ""}`}
       title={[
         shift.note,
         shift.locked ? "Pinned — Regenerate will not move this" : null,
         runningHours ? `${runningHours}h this week through today` : null,
+        onContextMenu ? "Right-click to remove or pin" : null,
       ].filter(Boolean).join(" · ") || undefined}
     >
       <span className="tabular-nums">
@@ -1010,6 +1264,8 @@ function ShiftLine({
 function ShiftEditor({
   state,
   staff,
+  groups,
+  settings,
   onClose,
   addShift,
   updateShift,
@@ -1017,6 +1273,9 @@ function ShiftEditor({
 }: {
   state: { mode: "new"; date: string } | { mode: "edit"; shift: ProShopShift };
   staff: ProShopStaff[];
+  /** The jobs this area schedules, in display order. */
+  groups: ShiftGroup[];
+  settings: ScheduleSettings;
   onClose: () => void;
   addShift: (input: ShiftInput) => Promise<void>;
   updateShift: (id: string, patch: Partial<ProShopShift>) => Promise<void>;
@@ -1028,7 +1287,7 @@ function ShiftEditor({
 
   const [staffId, setStaffId] = useState(existing?.staff_id ?? staff[0]?.id ?? "");
   const [group, setGroup] = useState<ShiftGroup>(
-    existing?.group ?? (staff[0] ? positionGroup(staff[0].position) : "outside"),
+    existing?.group ?? (staff[0] ? positionGroup(staff[0].position) : groups[0]),
   );
   const [start, setStart] = useState(hhmm(existing?.start_time) || "08:00");
   const [end, setEnd] = useState(hhmm(existing?.end_time) || "14:00");
@@ -1087,16 +1346,17 @@ function ShiftEditor({
           <select value={staffId} onChange={(e) => onPickStaff(e.target.value)} className={selectCls}>
             {staff.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.full_name} ({s.position === "golf_ops_assistant" ? "inside" : "outside"})
+                {s.full_name} ({POSITION_LABELS[s.position]})
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Group</Label>
+          <Label className="text-xs">Job</Label>
           <select value={group} onChange={(e) => setGroup(e.target.value as ShiftGroup)} className={selectCls}>
-            <option value="outside">Outside (rec aids)</option>
-            <option value="inside">Inside (golf ops)</option>
+            {groups.map((g) => (
+              <option key={g} value={g}>{GROUP_LABELS[g]}</option>
+            ))}
           </select>
         </div>
         <div className="flex gap-2">
@@ -1115,8 +1375,12 @@ function ShiftEditor({
         </div>
         <div className="text-sm">
           <p className="text-xs text-muted-foreground mb-1">
-            Paid hours: <strong className="text-foreground tabular-nums">{formatHours(paidMinutes(start, end))}h</strong>
-            {paidMinutes(start, end) < elapsedMinutes(start, end) && " (30 min unpaid lunch deducted)"}
+            Paid hours:{" "}
+            <strong className="text-foreground tabular-nums">
+              {formatHours(paidMinutes(start, end, settings))}h
+            </strong>
+            {paidMinutes(start, end, settings) < elapsedMinutes(start, end)
+              && ` (${settings.lunch_minutes} min unpaid lunch deducted)`}
           </p>
           <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-border p-2.5">
             <input
@@ -1155,28 +1419,28 @@ function ShiftEditor({
 }
 
 function AddStaffSheet({
+  area,
   onClose,
   addStaff,
 }: {
+  area: ScheduleArea;
   onClose: () => void;
   addStaff: (p: {
     full_name: string;
-    position: "rec_aid" | "golf_ops_assistant";
+    position: ProShopPosition;
     default_group: ShiftGroup;
     flex: boolean;
     phone?: string | null;
   }) => Promise<void>;
 }) {
+  // The jobs this schedule has. Adding somebody to Buckley's must not offer to
+  // make them a golf ops assistant.
+  const positions = AREA_POSITIONS[area];
   const [name, setName] = useState("");
-  const [position, setPosition] = useState<"rec_aid" | "golf_ops_assistant">("rec_aid");
-  const [flex, setFlex] = useState(true);
+  const [position, setPosition] = useState<ProShopPosition>(positions[0]);
+  const [flex, setFlex] = useState(positions.length === 1);
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
-
-  function onPickPosition(p: "rec_aid" | "golf_ops_assistant") {
-    setPosition(p);
-    setFlex(p === "rec_aid"); // sensible default; user can override
-  }
 
   async function save() {
     if (!name.trim()) return;
@@ -1196,7 +1460,7 @@ function AddStaffSheet({
   }
 
   return (
-    <Overlay title="Add pro shop staff" onClose={onClose}>
+    <Overlay title={`Add ${SCHEDULE_AREA_LABELS[area]} staff`} onClose={onClose}>
       <div className="p-4 space-y-3">
         <div className="space-y-1.5">
           <Label className="text-xs">Full name</Label>
@@ -1206,20 +1470,27 @@ function AddStaffSheet({
           <Label className="text-xs">Position</Label>
           <select
             value={position}
-            onChange={(e) => onPickPosition(e.target.value as "rec_aid" | "golf_ops_assistant")}
+            onChange={(e) => setPosition(e.target.value as ProShopPosition)}
             className={selectCls}
           >
-            <option value="rec_aid">Rec Aid (outside)</option>
-            <option value="golf_ops_assistant">Golf Ops Assistant (inside)</option>
+            {positions.map((p) => (
+              <option key={p} value={p}>
+                {POSITION_LABELS[p]} ({GROUP_SHORT_LABELS[positionGroup(p)]})
+              </option>
+            ))}
           </select>
         </div>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" checked={flex} onChange={(e) => setFlex(e.target.checked)} className="w-4 h-4 mt-0.5" />
-          <span>
-            Flex employee
-            <span className="block text-xs text-muted-foreground">Can cover any area (inside or outside) when needed.</span>
-          </span>
-        </label>
+        {AREA_GROUPS[area].length > 1 && (
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={flex} onChange={(e) => setFlex(e.target.checked)} className="w-4 h-4 mt-0.5" />
+            <span>
+              Flex employee
+              <span className="block text-xs text-muted-foreground">
+                Can be pulled onto the other jobs in {SCHEDULE_AREA_LABELS[area]} when needed.
+              </span>
+            </span>
+          </label>
+        )}
         <div className="space-y-1.5">
           <Label className="text-xs">Phone (optional)</Label>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} />

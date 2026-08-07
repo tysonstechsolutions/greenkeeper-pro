@@ -9,6 +9,7 @@ import type {
   CoverageRule,
   DayGroupOverride,
   DayOverrides,
+  ProShopPosition,
   ProShopSchedule,
   ProShopShift,
   ProShopStaff,
@@ -19,7 +20,7 @@ import type {
   WarningCode,
   WeeklyAvailability,
 } from "./types";
-import { DEFAULT_SCHEDULE_SETTINGS } from "./types";
+import { DEFAULT_SCHEDULE_SETTINGS, SCHEDULE_AREA_LABELS } from "./types";
 import { datesInMonth, expandMonth, ymd } from "./schedule-engine";
 import { generateCoverageMonth, type UnfilledSlot } from "./coverage";
 import {
@@ -187,7 +188,7 @@ export function useProShop(
     const title = `${new Date(year, month0, 1).toLocaleDateString(undefined, {
       month: "long",
       year: "numeric",
-    })} Pro Shop Schedule`;
+    })} ${SCHEDULE_AREA_LABELS[area]} Schedule`;
     const created = await directRpc<ProShopSchedule>(
       "save_pro_shop_schedule",
       {
@@ -286,7 +287,7 @@ export function useProShop(
   const addStaff = useCallback(
     async (payload: {
       full_name: string;
-      position: "rec_aid" | "golf_ops_assistant";
+      position: ProShopPosition;
       default_group: ShiftGroup;
       flex?: boolean;
       phone?: string | null;

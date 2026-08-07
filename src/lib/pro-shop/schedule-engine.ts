@@ -8,6 +8,7 @@
  * logic backs both the UI preview and the saved shifts.
  */
 import {
+  GROUP_SHORT_LABELS,
   type CoverageRule,
   type DayPattern,
   type DayWarning,
@@ -88,6 +89,15 @@ export function expandMonth(
   return out;
 }
 
+/** "There is nobody at all in this group today", said in that group's words. */
+const NOBODY_SCHEDULED: Record<ShiftGroup, string> = {
+  outside: "No outside staff (rec aids) scheduled",
+  inside: "No inside staff (golf ops) scheduled",
+  grounds: "No grounds crew scheduled",
+  shop: "No shop staff scheduled",
+  restaurant: "No restaurant staff scheduled",
+};
+
 /**
  * Coverage warnings for a single day, as structured {code, message}. Light on
  * purpose — flags what actually leaves the shop short: an empty group, or no
@@ -124,11 +134,17 @@ export function dayWarnings(
       .reduce((total, rule) => total + rule.base_staff + rule.extra_staff, 0);
   };
 
-  if (outside.length === 0 && wantedFor("outside") > 0) {
-    add("no_outside", "No outside staff (rec aids) scheduled");
-  }
-  if (inside.length === 0 && wantedFor("inside") > 0) {
-    add("no_inside", "No inside staff (golf ops) scheduled");
+  // The groups worth checking: the ones this day has rules for, or — with no
+  // rules recorded — the two pro-shop groups the old heuristics assumed.
+  const groups: ShiftGroup[] = rulesForDay.length > 0
+    ? [...new Set(rulesForDay.map((rule) => rule.group))]
+    : ["outside", "inside"];
+
+  for (const group of groups) {
+    const list = shiftsForDay.filter((s) => s.group === group);
+    if (list.length === 0 && wantedFor(group) > 0) {
+      add(`no_${group}`, NOBODY_SCHEDULED[group]);
+    }
   }
 
   // With coverage rules recorded, "is the day covered" is answerable exactly:
@@ -137,21 +153,18 @@ export function dayWarnings(
   if (rulesForDay.length > 0) {
     for (const rule of rulesForDay) {
       if (rule.base_staff + rule.extra_staff <= 0) continue; // nobody wanted today
-      const list = rule.group === "inside" ? inside : outside;
-      if (list.length === 0) continue; // already reported as no_inside/no_outside
-      const label = rule.group === "inside" ? "golf ops" : "rec aids";
+      const list = shiftsForDay.filter((s) => s.group === rule.group);
+      if (list.length === 0) continue; // already reported as no_<group>
+      const label = GROUP_SHORT_LABELS[rule.group];
       for (const gap of coverageGaps(list, rule)) {
         add(
-          rule.group === "inside" ? "coverage_gap_inside" : "coverage_gap_outside",
+          `coverage_gap_${rule.group}`,
           `Nobody on ${label} ${compactTime(gap.start)}-${compactTime(gap.end)}`,
         );
       }
       const wanted = rule.base_staff + rule.extra_staff;
       if (list.length < wanted) {
-        add(
-          rule.group === "inside" ? "short_staffed_inside" : "short_staffed_outside",
-          `Only ${list.length} of ${wanted} ${label} scheduled`,
-        );
+        add(`short_staffed_${rule.group}`, `Only ${list.length} of ${wanted} ${label} scheduled`);
       }
     }
     return warnings;

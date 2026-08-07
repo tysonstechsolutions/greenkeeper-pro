@@ -4,36 +4,56 @@
  */
 
 /**
- * Which schedule a person and their shifts belong to. The two areas are kept
+ * Which schedule a person and their shifts belong to. The areas are kept
  * entirely separate — separate staff, separate months, separate shifts.
  *
- * (The `pro_shop_*` table names predate this and now cover both areas.)
+ * (The `pro_shop_*` table names predate this and now cover every area.)
  */
-export type ScheduleArea = "pro_shop" | "maintenance";
+export type ScheduleArea = "pro_shop" | "maintenance" | "buckleys";
 
 export const SCHEDULE_AREA_LABELS: Record<ScheduleArea, string> = {
   pro_shop: "Pro Shop",
   maintenance: "Maintenance Crew",
+  buckleys: "Buckley's Restaurant",
+};
+
+/** The one-line "what this schedule covers" under each area's heading. */
+export const SCHEDULE_AREA_BLURBS: Record<ScheduleArea, string> = {
+  pro_shop: "Rec aids & golf ops — days & hours",
+  maintenance: "Grounds crew & mechanic — days & hours",
+  buckleys: "Restaurant staff — days & hours",
 };
 
 export type ProShopPosition =
   | "rec_aid"
   | "golf_ops_assistant"
   | "maintenance_crew"
-  | "mechanic";
+  | "mechanic"
+  | "restaurant_staff";
 
-export type ShiftGroup = "inside" | "outside" | "grounds" | "shop";
+export type ShiftGroup = "inside" | "outside" | "grounds" | "shop" | "restaurant";
+
+/** Every group, for validating a value that arrived as loose text. */
+export const SHIFT_GROUPS: ShiftGroup[] = [
+  "inside",
+  "outside",
+  "grounds",
+  "shop",
+  "restaurant",
+];
 
 /** The groups that belong to each area's schedule. */
 export const AREA_GROUPS: Record<ScheduleArea, ShiftGroup[]> = {
   pro_shop: ["inside", "outside"],
   maintenance: ["grounds", "shop"],
+  buckleys: ["restaurant"],
 };
 
 /** The positions that belong to each area. */
 export const AREA_POSITIONS: Record<ScheduleArea, ProShopPosition[]> = {
   pro_shop: ["rec_aid", "golf_ops_assistant"],
   maintenance: ["maintenance_crew", "mechanic"],
+  buckleys: ["restaurant_staff"],
 };
 export type WeekdayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 
@@ -153,15 +173,22 @@ export interface ScheduleSettings {
   lunch_threshold_minutes: number;
   /** How long that unpaid lunch is. */
   lunch_minutes: number;
-  /** Longest single shift the generator will build. */
-  max_shift_hours: number;
+  /**
+   * Longest single shift the generator will build, in MINUTES on site.
+   *
+   * Minutes rather than hours because the real cap is 8h30 — nobody drives to
+   * the course for four hours — and the old `max_shift_hours` column is a
+   * SMALLINT that cannot hold 8.5. That column is left in place for old rows
+   * and is no longer read.
+   */
+  max_shift_minutes: number;
 }
 
 /** Matches the column defaults, so the UI works before settings are loaded. */
 export const DEFAULT_SCHEDULE_SETTINGS: Omit<ScheduleSettings, "area"> = {
   lunch_threshold_minutes: 360,
   lunch_minutes: 30,
-  max_shift_hours: 9,
+  max_shift_minutes: 510,
 };
 
 export interface ProShopTimeOff {
@@ -194,20 +221,24 @@ export interface ProShopDuty {
   sort_order: number;
 }
 
-/** Stable coverage-warning codes (see dayWarnings). */
+/**
+ * Stable coverage-warning codes (see dayWarnings).
+ *
+ * The per-group codes are built from the group name, which is what keeps the
+ * existing `no_inside` / `coverage_gap_outside` strings — already sitting in
+ * saved `dismissed_warnings` rows — valid while a new group adds its own set.
+ */
 export type WarningCode =
-  | "no_outside"
-  | "no_inside"
+  /** Nobody at all in that group today. */
+  | `no_${ShiftGroup}`
+  /** Part of the required window has nobody on it — the hole the rules exist to prevent. */
+  | `coverage_gap_${ShiftGroup}`
+  /** Fewer people than the day's rule asks for. */
+  | `short_staffed_${ShiftGroup}`
   | "no_inside_opener"
   | "no_inside_closer"
   | "no_crew"
-  | "no_outside_closer"
-  /** Part of the required window has nobody on it — the hole the rules exist to prevent. */
-  | "coverage_gap_inside"
-  | "coverage_gap_outside"
-  /** Fewer people than the day's rule asks for. */
-  | "short_staffed_inside"
-  | "short_staffed_outside";
+  | "no_outside_closer";
 
 export interface DayWarning {
   code: WarningCode;
@@ -223,6 +254,25 @@ export const GROUP_LABELS: Record<ShiftGroup, string> = {
   inside: "Golf ops (inside)",
   grounds: "Grounds crew",
   shop: "Shop / mechanic",
+  restaurant: "Restaurant",
+};
+
+/** The same thing said in two words, for mid-sentence use in a warning. */
+export const GROUP_SHORT_LABELS: Record<ShiftGroup, string> = {
+  outside: "rec aids",
+  inside: "golf ops",
+  grounds: "grounds crew",
+  shop: "shop",
+  restaurant: "restaurant staff",
+};
+
+/** One person's job title, as it reads on the roster and the printout. */
+export const POSITION_LABELS: Record<ProShopPosition, string> = {
+  rec_aid: "Rec Aid",
+  golf_ops_assistant: "Golf Ops Assistant",
+  maintenance_crew: "Grounds Crew",
+  mechanic: "Mechanic",
+  restaurant_staff: "Restaurant Staff",
 };
 
 export const DUTY_AREA_LABELS: Record<DutyArea, string> = {
@@ -251,8 +301,29 @@ export const WEEKDAY_LABELS: Record<WeekdayKey, string> = {
   sat: "Saturday",
 };
 
+/**
+ * The group a job belongs to — the group the generator fills with that person
+ * FIRST, before borrowing anybody flex.
+ *
+ * Every position is mapped explicitly. The old version returned "outside" for
+ * anything that wasn't a golf ops assistant, which quietly filed the grounds
+ * crew and the mechanic under rec aids; that was harmless only because the
+ * maintenance schedule runs off weekly patterns rather than coverage rules.
+ * Buckley's does run off coverage rules, so a real mapping is now load-bearing.
+ */
 export function positionGroup(position: ProShopPosition): ShiftGroup {
-  return position === "golf_ops_assistant" ? "inside" : "outside";
+  switch (position) {
+    case "golf_ops_assistant":
+      return "inside";
+    case "rec_aid":
+      return "outside";
+    case "maintenance_crew":
+      return "grounds";
+    case "mechanic":
+      return "shop";
+    case "restaurant_staff":
+      return "restaurant";
+  }
 }
 
 /** Empty 7-day "off" pattern — the starting point for a new hire's availability. */

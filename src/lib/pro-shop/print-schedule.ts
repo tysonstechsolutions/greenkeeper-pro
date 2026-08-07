@@ -13,15 +13,38 @@ import { effectiveRulesForDay, type DayOverrides } from "./day-overrides";
 import { computeStaffHours, formatHours } from "./hours";
 import { compactTime } from "./schedule-engine";
 import {
+  AREA_GROUPS,
+  POSITION_LABELS,
   SCHEDULE_AREA_LABELS,
+  SHIFT_GROUPS,
   type CoverageRule,
   type ProShopShift,
   type ProShopStaff,
   type ScheduleArea,
   type ScheduleSettings,
+  type ShiftGroup,
 } from "./types";
 
 const WEEKDAY_HEADS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/**
+ * How each group reads on paper: the CSS class that colours it, and the job
+ * title on the legend. Every area's groups are here, so a sheet for a schedule
+ * that has nothing to do with the pro shop still prints colour-coded.
+ */
+const GROUP_PRINT: Record<ShiftGroup, { css: string; legend: string; ink: string; wash: string }> = {
+  outside: { css: "out", legend: "Rec aid (outside)", ink: "#7a4b00", wash: "#fff3e0" },
+  inside: { css: "in", legend: "Golf ops assistant (inside)", ink: "#23408e", wash: "#e8eeff" },
+  grounds: { css: "grd", legend: "Grounds crew", ink: "#1b5e20", wash: "#e7f4e8" },
+  shop: { css: "shp", legend: "Shop / mechanic", ink: "#5b3a86", wash: "#f0e9f8" },
+  restaurant: { css: "rst", legend: "Restaurant", ink: "#8a1c3b", wash: "#fdeaf0" },
+};
+
+/** Groups sort in the order their area lists them, so a day always reads the same. */
+function groupRank(area: ScheduleArea, group: ShiftGroup): number {
+  const index = AREA_GROUPS[area].indexOf(group);
+  return index === -1 ? AREA_GROUPS[area].length : index;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -74,18 +97,18 @@ export function printGrid(year: number, month0: number): Array<string | null> {
   return cells;
 }
 
-function shiftRow(time: string, name: string, inside: boolean): string {
-  return `<div class="s ${inside ? "in" : "out"}"><span class="t">${escapeHtml(time)}</span><span class="n">${escapeHtml(name)}</span></div>`;
+function shiftRow(time: string, name: string, group: ShiftGroup): string {
+  return `<div class="s ${GROUP_PRINT[group].css}"><span class="t">${escapeHtml(time)}</span><span class="n">${escapeHtml(name)}</span></div>`;
 }
 
 /**
  * A shift with nobody on it: the time, then a solid underline with room to
  * write a name. Tinted and ruled in the group's colour so it is obvious at a
- * glance whether the open shift wants a rec aid or a golf ops assistant.
+ * glance which job the open shift wants.
  */
 function openRow(slot: OpenSlot): string {
   const time = `${compactTime(slot.start)}-${compactTime(slot.end)}`;
-  return `<div class="s open ${slot.group === "inside" ? "in" : "out"}"><span class="t">${escapeHtml(time)}</span><span class="blank"></span></div>`;
+  return `<div class="s open ${GROUP_PRINT[slot.group].css}"><span class="t">${escapeHtml(time)}</span><span class="blank"></span></div>`;
 }
 
 export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
@@ -109,7 +132,8 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   const cells = printGrid(year, month0).map((date) => {
     if (!date) return `<td class="blankday"></td>`;
     const dayShifts = [...(byDate.get(date) ?? [])].sort((a, b) => {
-      if (a.group !== b.group) return a.group === "outside" ? -1 : 1;
+      const rank = groupRank(area, a.group) - groupRank(area, b.group);
+      if (rank !== 0) return rank;
       return a.start_time.localeCompare(b.start_time);
     });
     const dayRules = effectiveRulesForDay(date, rules, overrides);
@@ -121,7 +145,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
     const rows = dayShifts.map((shift) => shiftRow(
       `${compactTime(shift.start_time)}-${compactTime(shift.end_time)}`,
       firstName(nameById.get(shift.staff_id) ?? "?"),
-      shift.group === "inside",
+      shift.group,
     )).join("");
     const openRows = open.map(openRow).join("");
 
@@ -145,7 +169,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
 
   const totalsRows = totals.map(({ person, minutes }) => `
     <tr><td>${escapeHtml(person.full_name)}</td>
-        <td>${escapeHtml(person.position === "golf_ops_assistant" ? "Golf Ops" : person.position === "rec_aid" ? "Rec Aid" : person.position.replaceAll("_", " "))}</td>
+        <td>${escapeHtml(POSITION_LABELS[person.position] ?? person.position.replaceAll("_", " "))}</td>
         <td class="num">${escapeHtml(formatHours(minutes))}</td></tr>`).join("");
 
   const openCount = printGrid(year, month0).reduce((sum, date) => {
@@ -156,6 +180,22 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
       effectiveRulesForDay(date, rules, overrides),
     ).length;
   }, 0);
+
+  // One colour block per group. Generated for every group rather than only
+  // this area's, so a shift filed under the wrong group still prints legibly
+  // instead of falling back to black on white.
+  const groupCss = SHIFT_GROUPS.map((group) => {
+    const ink = GROUP_PRINT[group];
+    return `.${ink.css} { color: ${ink.ink}; }
+    .open.${ink.css} { background: ${ink.wash}; }
+    .open.${ink.css} .blank { border-bottom-color: ${ink.ink}; }`;
+  }).join("\n    ");
+
+  const legendItems = AREA_GROUPS[area].map((group) => {
+    const ink = GROUP_PRINT[group];
+    return `<span><span class="swatch" style="background:${ink.wash};border-color:${ink.ink}"></span>`
+      + `<b style="color:${ink.ink}">${escapeHtml(ink.legend)}</b></span>`;
+  }).join("\n    ");
 
   return `<!doctype html>
 <html lang="en">
@@ -182,18 +222,13 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
     .s .t { font-variant-numeric: tabular-nums; }
     .s .n { overflow: hidden; text-overflow: ellipsis; }
     .in .t { font-weight: 600; }
-    .out { color: #7a4b00; }
-    .in { color: #23408e; }
     /* An unstaffed shift: the time, then a solid underline with room to write
        a name on. Tinted and ruled in the group's own colour so it reads at a
-       glance as a rec aid shift or a golf ops one. */
+       glance which job the open shift is. */
     .open { align-items: flex-end; margin: 2px 0; padding: 0 2px; border-radius: 2px; }
     .open .t { font-weight: 600; }
     .open .blank { flex: 1; min-width: 56px; height: 15px; border-bottom: 1.2px solid #333; }
-    .open.out { background: #fff3e0; }
-    .open.in  { background: #e8eeff; }
-    .open.out .blank { border-bottom-color: #7a4b00; }
-    .open.in  .blank { border-bottom-color: #23408e; }
+    ${groupCss}
     .legend { display: flex; gap: 14px; font-size: 10px; color: #444; margin: 8px 0 4px; }
     .legend .swatch { display: inline-block; width: 10px; height: 10px; border: 1px solid #999; vertical-align: -1px; margin-right: 3px; }
     h2 { font-size: 13px; margin: 14px 0 4px; }
@@ -214,8 +249,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   </header>
 
   <div class="legend">
-    <span><span class="swatch" style="background:#fff3e0;border-color:#7a4b00"></span><b style="color:#7a4b00">Rec aid</b> (outside)</span>
-    <span><span class="swatch" style="background:#e8eeff;border-color:#23408e"></span><b style="color:#23408e">Golf ops assistant</b> (inside)</span>
+    ${legendItems}
     <span>A time with a line after it is an <b>open shift</b> &mdash; write your name on the line. The colour says which job it is.</span>
   </div>
 

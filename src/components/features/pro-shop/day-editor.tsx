@@ -63,6 +63,12 @@ const STEP_MINUTES = 30;
 const MIN_SHIFT_MINUTES = 30;
 /** How long to wait after the last ± before saving, so a run of taps is one write. */
 const SAVE_DELAY_MS = 600;
+/**
+ * The "take this shift off the schedule" entry in the who-works-it dropdown.
+ * Deleting is the other half of reassigning, and this is where the GM is
+ * already looking when he decides a shift should not happen at all.
+ */
+const REMOVE_OPTION = "__remove__";
 
 const selectCls =
   "px-2 py-1 rounded-lg border border-input bg-background text-sm max-w-full";
@@ -442,6 +448,9 @@ function ShiftRow({
   const savedStart = hhmm(shift.start_time);
   const savedEnd = hhmm(shift.end_time);
 
+  /** Bumped on every remove attempt, purely to re-key the dropdown. */
+  const [removeAttempt, setRemoveAttempt] = useState(0);
+
   /**
    * Times being nudged but not yet written. Null means "whatever the server
    * says" — which is how the row re-syncs without an effect copying props into
@@ -509,15 +518,27 @@ function ShiftRow({
     <div className="rounded-lg border border-border p-2 space-y-1.5">
       <div className="flex items-center gap-2">
         <select
+          // Re-keyed on every remove attempt. A cancelled confirm changes no
+          // state, so without this the dropdown would sit there still reading
+          // "Remove this shift" for a shift that is still very much there.
+          key={removeAttempt}
           className={`${selectCls} flex-1 min-w-0`}
           value={shift.staff_id}
           disabled={busy}
-          onChange={(e) => onPerson(e.target.value)}
+          onChange={(e) => {
+            if (e.target.value === REMOVE_OPTION) {
+              setRemoveAttempt((n) => n + 1);
+              onDelete();
+              return;
+            }
+            onPerson(e.target.value);
+          }}
           aria-label="Who works this shift"
         >
           {options.map((person) => (
             <option key={person.id} value={person.id}>{person.full_name}</option>
           ))}
+          <option value={REMOVE_OPTION}>— Remove this shift —</option>
         </select>
         <span className="text-xs tabular-nums font-semibold shrink-0">
           {formatHours(paidMinutes(start, end, settings))}h

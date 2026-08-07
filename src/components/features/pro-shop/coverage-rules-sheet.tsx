@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { hhmm } from "@/lib/pro-shop/schedule-engine";
 import {
   AREA_GROUPS,
+  GROUP_LABELS,
   WEEKDAY_KEYS,
   WEEKDAY_LABELS,
   type CoverageRule,
@@ -24,13 +25,6 @@ import {
   type ScheduleSettings,
   type ShiftGroup,
 } from "@/lib/pro-shop/types";
-
-const GROUP_LABELS: Partial<Record<ShiftGroup, string>> = {
-  outside: "Rec aids (outside)",
-  inside: "Golf ops (inside)",
-  grounds: "Grounds",
-  shop: "Shop",
-};
 
 export function CoverageRulesSheet({
   area,
@@ -51,6 +45,7 @@ export function CoverageRulesSheet({
     String(settings.lunch_threshold_minutes / 60),
   );
   const [lunchMinutes, setLunchMinutes] = useState(String(settings.lunch_minutes));
+  const [maxShift, setMaxShift] = useState(String(settings.max_shift_minutes / 60));
 
   async function save(
     key: string,
@@ -73,13 +68,19 @@ export function CoverageRulesSheet({
     try {
       const hours = Number(lunchThreshold);
       const minutes = Number(lunchMinutes);
+      const longest = Number(maxShift);
       if (!Number.isFinite(hours) || hours < 0 || !Number.isFinite(minutes) || minutes < 0) {
         setError("Enter the lunch threshold in hours and the lunch itself in minutes.");
+        return;
+      }
+      if (!Number.isFinite(longest) || longest < 1 || longest > 24) {
+        setError("The longest shift has to be between 1 and 24 hours.");
         return;
       }
       await onSaveSettings({
         lunch_threshold_minutes: Math.round(hours * 60),
         lunch_minutes: Math.round(minutes),
+        max_shift_minutes: Math.round(longest * 60),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save those settings.");
@@ -91,16 +92,17 @@ export function CoverageRulesSheet({
   return (
     <div className="space-y-5">
       <p className="text-xs text-muted-foreground">
-        What each day needs. <strong>On shift</strong> people split the open-to-close window
-        back-to-back, which is what keeps the day gap-free. <strong>Extra</strong> come in at the
-        later time and work to close.
+        What each day needs. <strong>On shift</strong> people each work the longest shift allowed
+        below, spread evenly across the open-to-close window — so they overlap over the busy
+        middle instead of handing over. <strong>Extra</strong> come in at the later time and work
+        to close.
       </p>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
 
       {AREA_GROUPS[area].map((group) => (
         <div key={group}>
-          <h3 className="text-sm font-semibold mb-2">{GROUP_LABELS[group] ?? group}</h3>
+          <h3 className="text-sm font-semibold mb-2">{GROUP_LABELS[group]}</h3>
           <div className="space-y-1.5">
             {WEEKDAY_KEYS.map((_, weekday) => {
               const rule = rules.find((r) => r.weekday === weekday && r.group === group);
@@ -122,14 +124,24 @@ export function CoverageRulesSheet({
       ))}
 
       <div className="border-t border-border pt-4">
-        <h3 className="text-sm font-semibold mb-1">Unpaid lunch</h3>
+        <h3 className="text-sm font-semibold mb-1">Shift length &amp; unpaid lunch</h3>
         <p className="text-xs text-muted-foreground mb-2">
-          Staff are not paid for lunch, so every hours figure in the schedule already has it
-          taken out. A shift longer than the threshold loses the lunch.
+          Nobody drives in for three hours, so the generator gives everyone the longest shift
+          allowed and spreads the starts across the day. Staff are not paid for lunch, so every
+          hours figure in the schedule already has it taken out — a shift longer than the
+          threshold loses the lunch. <strong>8.5 on site is 8 paid.</strong>
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <Label className="text-xs">Longer than (hours)</Label>
+            <Label className="text-xs">Longest shift (hours)</Label>
+            <Input
+              type="number" step="0.5" min="1" max="24" className="w-32"
+              value={maxShift}
+              onChange={(e) => setMaxShift(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Lunch after (hours)</Label>
             <Input
               type="number" step="0.5" min="0" className="w-28"
               value={lunchThreshold}

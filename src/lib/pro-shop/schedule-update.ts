@@ -8,6 +8,7 @@
  * schedule, so a pattern with no valid working day is rejected (returns null).
  */
 import {
+  SHIFT_GROUPS,
   WEEKDAY_KEYS,
   emptyWeekly,
   type DayPattern,
@@ -84,8 +85,12 @@ export function sanitizeWeekly(
       out[k] = { works: false };
       continue;
     }
-    const group: ShiftGroup =
-      d.group === "inside" || d.group === "outside" ? d.group : fallbackGroup;
+    // Any real group is accepted; anything else falls back to the person's own,
+    // so an AI reply naming a group that does not exist cannot file a shift
+    // under it.
+    const group: ShiftGroup = SHIFT_GROUPS.includes(d.group as ShiftGroup)
+      ? (d.group as ShiftGroup)
+      : fallbackGroup;
     out[k] = { works: true, group, start, end };
     anyWorks = true;
   }

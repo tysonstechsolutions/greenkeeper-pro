@@ -104,9 +104,36 @@ describe("buildSchedulePrintHtml", () => {
     expect(out).toContain('class="s open in"');
     // …and those classes are tinted and ruled in different colours.
     expect(out).toContain(".open.out { background: #fff3e0; }");
-    expect(out).toContain(".open.in  { background: #e8eeff; }");
+    expect(out).toContain(".open.in { background: #e8eeff; }");
     expect(out).toContain(".open.out .blank { border-bottom-color: #7a4b00; }");
-    expect(out).toContain(".open.in  .blank { border-bottom-color: #23408e; }");
+    expect(out).toContain(".open.in .blank { border-bottom-color: #23408e; }");
+  });
+
+  it("colour-codes the other schedules' jobs too", () => {
+    // The restaurant sheet has to read as clearly as the pro shop's does.
+    const out = buildSchedulePrintHtml({
+      ...base,
+      area: "buckleys",
+      staff: [{
+        id: "nathan", full_name: "Nathan Dupont", position: "restaurant_staff",
+        default_group: "restaurant", availability_text: null, availability: {},
+        flex: true, phone: null, is_active: true, area: "buckleys", sort_order: 0, notes: null,
+      }],
+      rules: [{
+        id: "rst-1", area: "buckleys", weekday: 1, group: "restaurant",
+        open_time: "11:00", close_time: "20:00", base_staff: 2, extra_staff: 0, extra_start: null,
+      }],
+      shifts: [shift({
+        staff_id: "nathan", shift_date: "2026-08-03", group: "restaurant",
+        start_time: "11:00", end_time: "19:30",
+      })],
+    });
+    expect(out).toContain("Buckley&#39;s Restaurant Schedule");
+    expect(out).toContain('class="s rst"');
+    expect(out).toContain(".open.rst { background: #fdeaf0; }");
+    // The legend names the jobs of THIS schedule, not the pro shop's.
+    expect(out).toContain(">Restaurant</b>");
+    expect(out).not.toContain("Golf ops assistant");
   });
 
   it("keeps those backgrounds when the page is actually printed", () => {
