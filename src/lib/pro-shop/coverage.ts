@@ -1,24 +1,27 @@
 /**
  * Coverage-driven schedule generation. Pure, deterministic, no AI, no network.
  *
- * The day states what it REQUIRES — a window to cover and how many people —
- * and this fills it. What changed on 2026-08-07 is HOW the window is split.
+ * The day states what it REQUIRES — a window to cover — and this fills it with
+ * THE HOURS PEOPLE ACTUALLY GAVE. There are no manufactured shift blocks: if
+ * Marty told the GM he can do Mondays 12:30–20:00, that is his Monday. The
+ * generator walks the window from open to close and hands each stretch to
+ * whoever is genuinely free for it, cut to their own hours.
  *
- * It used to be split back-to-back: two people on a 06:00–20:00 day got
- * 06:00–13:00 and 13:00–20:00, seven hours each. Nobody drives to the course
- * for a short day, so the split is now by LONGEST SHIFT instead:
+ * Two rules shape the result:
  *
- *   every base shift is the same length — the cap, 8h30 on site — and the
- *   starts are spread evenly from open to close-minus-that. Two people on
- *   06:00–20:00 get 06:00–14:30 and 11:30–20:00: both full days, both the same
- *   length, overlapping over the busy middle instead of handing over.
+ *   1. Nobody works more than the cap (8h30 on site, 8h paid). Somebody whose
+ *      availability is wider than that gets the cap, starting where cover is
+ *      needed — not a token three-hour shift, and not an eleven-hour one.
  *
- * The window is still covered end to end, and still by construction: shifts
- * that overlap cannot leave a hole between them. What can leave a hole is a
- * window longer than the people times the cap, and that is reported.
+ *   2. Golf ops is a counter with one person behind it, so its shifts do not
+ *      run alongside each other: the next assistant comes on half an hour
+ *      before the last one leaves, to hand over, and that is the only overlap.
+ *      Rec aids, grounds and the restaurant have no such limit — several
+ *      people on at once is the normal state there, so they simply work the
+ *      hours they said they could.
  *
- * What it will not do is invent staff. If nobody is available for a slot the
- * slot comes back UNFILLED so the GM sees a real hole to solve, rather than the
+ * What it will not do is invent staff. If nobody is available for a stretch it
+ * comes back UNFILLED so the GM sees a real hole to solve, rather than the
  * schedule quietly booking someone who told him they can't work Tuesdays.
  */
 import { minutesOfDay, paidMinutes, timeFromMinutes } from "./hours";
@@ -27,6 +30,7 @@ import { effectiveRulesForDay, isDayLocked, type DayOverrides } from "./day-over
 import {
   AREA_GROUPS,
   DEFAULT_SCHEDULE_SETTINGS,
+  GROUP_HANDOVER_MINUTES,
   positionGroup,
   type CoverageRule,
   type ProShopShift,
@@ -42,7 +46,7 @@ export interface CoverageSlot {
   group: ShiftGroup;
   start: string;
   end: string;
-  /** "base" splits the open..close window; "extra" is added cover on top. */
+  /** "base" covers the open..close window; "extra" is added cover on top. */
   kind: "base" | "extra";
 }
 
@@ -67,55 +71,50 @@ export interface CoveragePlan {
 }
 
 /**
- * Shortest stretch worth handing anybody. Below this it is not a shift, it is
- * a drive — which is the whole reason the split changed.
+ * Shortest stretch worth calling somebody in for. Preferred, not enforced: if
+ * the only person who can cover a hole can only do an hour, an hour of cover
+ * beats none — but they are picked last.
  */
-const MIN_SHIFT_MINUTES = 120;
-
-/** Round to the nearest half hour — schedules are written in :00 and :30. */
-function roundToHalfHour(minutes: number): number {
-  return Math.round(minutes / 30) * 30;
-}
+const PREFERRED_MIN_MINUTES = 120;
 
 type Window = { start: number; end: number };
 
 /**
- * Spread `people` shifts of the longest allowed length across one contiguous
- * stretch, evenly.
+ * The shift one person would work if they took over at `cursor`.
  *
- * The first starts at `from`, the last ENDS at `to`, and the ones between are
- * spaced evenly and rounded to the half hour. When the stretch is shorter than
- * the cap everyone simply works all of it.
- *
- * Two people, 06:00–20:00, 8h30 cap → 06:00–14:30 and 11:30–20:00.
+ * Their own hours decide the shape of it. The cap trims the end, the day's
+ * open and close trim both, and a group with a handover limit pulls the start
+ * no further back than that. Returns null when nothing usable is left.
  */
-export function spreadShifts(
-  from: number,
-  to: number,
-  people: number,
-  maxShiftMinutes: number,
-): Window[] {
-  const span = to - from;
-  if (span <= 0 || people <= 0) return [];
-  const length = Math.min(maxShiftMinutes, span);
-  if (people === 1) return [{ start: from, end: from + length }];
+export function shiftFromAvailability(options: {
+  /** The hours this person said they can work, in minutes since midnight. */
+  free: Window;
+  open: number;
+  close: number;
+  /** The moment cover is needed from. */
+  cursor: number;
+  /** Minutes this group may overlap; null means their hours decide. */
+  handover: number | null;
+  maxShiftMinutes: number;
+}): Window | null {
+  const { free, open, close, cursor, handover, maxShiftMinutes } = options;
+  const earliest = Math.max(free.start, open);
+  const latest = Math.min(free.end, close);
 
-  // How far the last start sits after the first. Zero when one shift already
-  // covers the stretch — then everybody works the same full hours.
-  const drift = span - length;
-  const windows: Window[] = [];
-  let previous = from;
-  for (let i = 0; i < people; i++) {
-    let start: number;
-    if (i === 0) start = from;
-    else if (i === people - 1) start = to - length; // pinned, so the day closes exactly
-    else start = roundToHalfHour(from + (drift * i) / (people - 1));
-    // Never step backwards, never start so late the shift runs past close.
-    start = Math.min(Math.max(start, previous, from), to - length);
-    windows.push({ start, end: start + length });
-    previous = start;
-  }
-  return windows;
+  const start = handover === null
+    // No handover limit, so the only question is which part of their hours to
+    // spend. As late as they can while still being on duty when cover is
+    // needed — otherwise a fully-available person burns their whole day on
+    // hours somebody else is already working, and the evening needs a third.
+    ? Math.max(earliest, Math.min(cursor, latest - maxShiftMinutes))
+    // A handover limit, so they come on a fixed half hour before the last
+    // person leaves, or when their own hours start, whichever is later.
+    : Math.max(earliest, cursor - handover);
+
+  const end = Math.min(latest, start + maxShiftMinutes);
+  // Nothing to offer if it would not be a shift, or would not carry the day
+  // any further forward than it already is.
+  return end > start && end > cursor ? { start, end } : null;
 }
 
 /** Where a set of spans leaves [from,to) uncovered, as minute ranges. */
@@ -131,48 +130,6 @@ function uncoveredWithin(from: number, to: number, spans: Window[]): Window[] {
   }
   if (cursor < to) holes.push({ start: cursor, end: to });
   return holes.filter((hole) => hole.end > hole.start);
-}
-
-/**
- * The shifts one weekday needs, before anyone is put in them.
- *
- * Base shifts spread across the whole open..close window; extra cover is
- * layered on top from `extra_start` to close.
- */
-export function planDaySlots(
-  rule: CoverageRule,
-  maxShiftMinutes: number = DEFAULT_SCHEDULE_SETTINGS.max_shift_minutes,
-): CoverageSlot[] {
-  const open = minutesOfDay(rule.open_time);
-  const close = minutesOfDay(rule.close_time);
-  const slots: CoverageSlot[] = [];
-  if (close <= open) return slots;
-
-  for (const window of spreadShifts(open, close, Math.max(0, rule.base_staff), maxShiftMinutes)) {
-    slots.push({
-      group: rule.group,
-      start: timeFromMinutes(window.start),
-      end: timeFromMinutes(window.end),
-      kind: "base",
-    });
-  }
-
-  const extra = Math.max(0, rule.extra_staff);
-  if (extra > 0 && rule.extra_start) {
-    const start = minutesOfDay(rule.extra_start);
-    if (start < close) {
-      for (let i = 0; i < extra; i++) {
-        slots.push({
-          group: rule.group,
-          start: timeFromMinutes(start),
-          end: timeFromMinutes(close),
-          kind: "extra",
-        });
-      }
-    }
-  }
-
-  return slots;
 }
 
 /**
@@ -239,12 +196,13 @@ export interface GenerateCoverageInput {
 /**
  * Fill every day of the month against the coverage rules.
  *
- * Assignment order per planned shift, most important first:
+ * Whoever takes the next stretch is decided in this order:
  *   1. someone whose own position owns the group, before borrowing anyone
- *   2. whoever can cover most of that shift — the person free 06:00–14:30 takes
- *      the opening shift, not the one who only starts at 13:00
- *   3. fewest paid minutes booked so far that week — spreads the hours
- *   4. sort_order, then id, so the same inputs always produce the same month
+ *   2. whoever carries the day furthest forward from where cover runs out
+ *   3. of those, whoever's own hours end soonest — spend the person with the
+ *      tight availability now and keep the flexible one for the evening
+ *   4. fewest paid minutes booked so far that week — spreads the hours
+ *   5. sort_order, then id, so the same inputs always produce the same month
  */
 export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePlan {
   const {
@@ -327,8 +285,8 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
 
       /**
        * On an ordinary day base_staff is a MINIMUM: the day is covered
-       * open..close whatever that takes, adding a third person if two people's
-       * hours leave a hole, because a covered shop beats a tidy headcount.
+       * open..close whatever that takes, because a covered shop beats a tidy
+       * headcount.
        *
        * On a day the GM has explicitly set a number for, it is a MAXIMUM. He
        * said two people today; handing him three is ignoring him. Any stretch
@@ -337,49 +295,11 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
        */
       const cappedByHand = !!overrides[date]?.groups?.[group];
 
+      const handover = GROUP_HANDOVER_MINUTES[group] ?? null;
       const locked = lockedByDateGroup.get(`${date}|${group}`) ?? [];
       const open = minutesOfDay(rule.open_time);
       const close = minutesOfDay(rule.close_time);
       if (close <= open) continue;
-
-      /** Everyone who could take work in this group on this date. */
-      const availableFor = (window: Window) => {
-        const booked = bookedOnDate.get(date) ?? new Set<string>();
-        return roster
-          .map((person) => {
-            if (booked.has(person.id)) return null;
-            if (person.employed_through && date > person.employed_through) return null;
-            if (isOff(person.id, date, timeOff)) return null;
-            if (!eligibleForGroup(person, group)) return null;
-            const free = availableWindow(person, date);
-            if (!free) return null;
-            // What they could actually work of this shift, inside their hours.
-            const start = Math.max(window.start, free.start);
-            const end = Math.min(window.end, free.end);
-            const covers = end - start;
-            if (covers < Math.min(MIN_SHIFT_MINUTES, window.end - window.start)) return null;
-            return { person, start, end, covers };
-          })
-          .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
-          .sort((a, b) => {
-            const nativeDiff = Number(isNative(b.person, group)) - Number(isNative(a.person, group));
-            if (nativeDiff !== 0) return nativeDiff;
-            // Whoever can cover most of this shift takes it. That is what keeps
-            // the day whole: the person free from open gets the opening shift,
-            // rather than an afternoon person being cut back to fit it.
-            if (a.covers !== b.covers) return b.covers - a.covers;
-            const aWeek = weekMinutes.get(`${a.person.id}|${week}`) ?? 0;
-            const bWeek = weekMinutes.get(`${b.person.id}|${week}`) ?? 0;
-            if (aWeek !== bWeek) return aWeek - bWeek;
-            const aTotal = totalMinutes.get(a.person.id) ?? 0;
-            const bTotal = totalMinutes.get(b.person.id) ?? 0;
-            if (aTotal !== bTotal) return aTotal - bTotal;
-            if (a.person.sort_order !== b.person.sort_order) {
-              return a.person.sort_order - b.person.sort_order;
-            }
-            return a.person.id.localeCompare(b.person.id);
-          });
-      };
 
       const placedSpans: Window[] = locked.map((shift) => ({
         start: minutesOfDay(shift.start_time),
@@ -387,9 +307,34 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
       }));
       let placedCount = locked.length;
 
-      const place = (person: ProShopStaff, from: number, to: number) => {
-        const start = timeFromMinutes(from);
-        const end = timeFromMinutes(to);
+      /**
+       * Who is owed work, most owed first — by PAID minutes across the whole
+       * month, with the week as the tiebreak.
+       *
+       * The month has to lead. Balancing the week first sounds fairer and is
+       * not: a week rarely divides evenly (seven openers and seven closers
+       * across three assistants cannot come out level), so the same person
+       * takes the light end of every week and drifts a full day behind by the
+       * end of the month. Leading on the month total costs nothing weekly and
+       * cut the golf ops spread from 26 hours a month to 4.
+       *
+       * Used by every placement below — base cover, top-up and the afternoon
+       * extra — so none of them can quietly develop its own idea of fair.
+       */
+      const owedFirst = (a: ProShopStaff, b: ProShopStaff) => {
+        const aTotal = totalMinutes.get(a.id) ?? 0;
+        const bTotal = totalMinutes.get(b.id) ?? 0;
+        if (aTotal !== bTotal) return aTotal - bTotal;
+        const aWeek = weekMinutes.get(`${a.id}|${week}`) ?? 0;
+        const bWeek = weekMinutes.get(`${b.id}|${week}`) ?? 0;
+        if (aWeek !== bWeek) return aWeek - bWeek;
+        if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+        return a.id.localeCompare(b.id);
+      };
+
+      const place = (person: ProShopStaff, span: Window) => {
+        const start = timeFromMinutes(span.start);
+        const end = timeFromMinutes(span.end);
         shifts.push({
           staff_id: person.id, shift_date: date, group,
           start_time: start, end_time: end, source: "template",
@@ -398,66 +343,107 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
         booked.add(person.id);
         bookedOnDate.set(date, booked);
         bump(person.id, week, paidMinutes(start, end, settings));
-        placedSpans.push({ start: from, end: to });
+        placedSpans.push(span);
         placedCount += 1;
       };
 
-      /** Fill one planned shift; returns false when nobody could take it. */
-      const fill = (window: Window): boolean => {
-        const candidates = availableFor(window);
-        if (candidates.length === 0) return false;
-        const best = candidates[0];
-        place(best.person, best.start, best.end);
-        return true;
+      /** Everybody who could still take work in this group on this date. */
+      const freeToday = () => {
+        const booked = bookedOnDate.get(date) ?? new Set<string>();
+        return roster
+          .filter((person) => {
+            if (booked.has(person.id)) return false;
+            if (person.employed_through && date > person.employed_through) return false;
+            if (isOff(person.id, date, timeOff)) return false;
+            return eligibleForGroup(person, group);
+          })
+          .map((person) => ({ person, free: availableWindow(person, date) }))
+          .filter((entry): entry is { person: ProShopStaff; free: Window } => entry.free !== null);
       };
 
-      // ── Base cover ────────────────────────────────────────────────────────
-      // Plan the shifts the day wants, then put people in them. With nothing
-      // pinned that is one even spread across open..close; with a pinned shift
-      // in the way it is a spread across whatever that leaves uncovered.
-      if (rule.base_staff > 0) {
-        const stretches = locked.length > 0
-          ? uncoveredWithin(open, close, placedSpans)
-          : [{ start: open, end: close }];
-        const wanted = Math.max(0, rule.base_staff - locked.length);
+      /**
+       * Who should take over at `cursor`, and the hours they would work.
+       *
+       * Only people who can actually be on duty at that moment are considered —
+       * a shift that starts later leaves the stretch in between uncovered, and
+       * an uncovered stretch is reported rather than papered over.
+       */
+      const takeOverAt = (cursor: number) => {
+        const options = freeToday()
+          .map(({ person, free }) => ({
+            person,
+            free,
+            span: shiftFromAvailability({
+              free, open, close, cursor, handover, maxShiftMinutes: maxShift,
+            }),
+          }))
+          .filter((option): option is typeof option & { span: Window } =>
+            option.span !== null && option.span.start <= cursor && option.span.end > cursor);
+        if (options.length === 0) return null;
 
-        // How many each stretch needs to be covered end to end. On an ordinary
-        // day that is the floor; on a hand-set day the headcount is the ceiling
-        // and a short stretch simply stays open.
-        const needs = stretches.map((s) => Math.ceil((s.end - s.start) / maxShift));
-        const totalNeeded = needs.reduce((sum, n) => sum + n, 0);
-        let budget = cappedByHand ? Math.min(wanted, totalNeeded) : Math.max(wanted, totalNeeded);
+        // A stretch long enough to be worth the drive wins over a token hour —
+        // but a token hour of cover still beats an empty shop, so the short
+        // ones stay in the running rather than being dropped.
+        const worthwhile = Math.min(PREFERRED_MIN_MINUTES, close - cursor);
+        return options.sort((a, b) => {
+          const nativeDiff = Number(isNative(b.person, group)) - Number(isNative(a.person, group));
+          if (nativeDiff !== 0) return nativeDiff;
+          const aWorth = Number(a.span.end - a.span.start >= worthwhile);
+          const bWorth = Number(b.span.end - b.span.start >= worthwhile);
+          if (aWorth !== bWorth) return bWorth - aWorth;
+          // Carry the day as far forward as possible…
+          if (a.span.end !== b.span.end) return b.span.end - a.span.end;
+          // …and where two people would carry it equally far, spend the one
+          // whose own hours run out first. Keeping the flexible one back is
+          // what stops the evening being left with nobody who can work it.
+          if (a.free.end !== b.free.end) return a.free.end - b.free.end;
+          return owedFirst(a.person, b.person);
+        })[0];
+      };
 
-        for (let i = 0; i < stretches.length && budget > 0; i++) {
-          // Everything this stretch needs, plus a share of any headcount asked
-          // for beyond the minimum — the longest stretch takes the surplus.
-          const surplus = budget - needs.slice(i).reduce((sum, n) => sum + n, 0);
-          const here = Math.min(budget, needs[i] + Math.max(0, i === 0 ? surplus : 0));
-          for (const window of spreadShifts(stretches[i].start, stretches[i].end, here, maxShift)) {
-            if (fill(window)) budget -= 1;
-          }
+      /** Carry the cursor past anything already covering it (pinned or placed). */
+      const pastCover = (at: number) => {
+        let value = at;
+        for (let guard = 0; guard < placedSpans.length + 1; guard++) {
+          const covering = placedSpans.find((span) => span.start <= value && span.end > value);
+          if (!covering) break;
+          value = covering.end;
         }
-      }
+        return value;
+      };
 
-      // ── Whatever the plan could not close ─────────────────────────────────
-      // Derived from the shifts actually placed, not from the plan, so a person
-      // cut back to their own hours shows up as the hole it leaves. On an
-      // ordinary day one more pass tries to fill it; on a hand-set day the
-      // ceiling holds and the hole is simply reported.
-      for (let pass = 0; pass < 4; pass++) {
-        const holes = uncoveredWithin(open, close, placedSpans);
-        if (holes.length === 0) break;
+      // ── Walk the window, handing each stretch to whoever is free for it ───
+      let cursor = pastCover(open);
+      for (let guard = 0; guard < 24 && cursor < close; guard++) {
         if (cappedByHand && placedCount >= rule.base_staff) break;
-        let progressed = false;
-        for (const hole of holes) {
-          if (cappedByHand && placedCount >= rule.base_staff) break;
-          const capped = { start: hole.start, end: Math.min(hole.end, hole.start + maxShift) };
-          if (fill(capped)) progressed = true;
+
+        const choice = takeOverAt(cursor);
+        if (choice) {
+          place(choice.person, choice.span);
+          cursor = pastCover(choice.span.end);
+          continue;
         }
-        if (!progressed) break;
+
+        // Nobody can be on at this moment. Jump to the next time somebody can,
+        // and report the stretch in between as the hole it is.
+        const nextStart = freeToday()
+          .map(({ free }) => Math.max(free.start, open))
+          .filter((start) => start > cursor && start < close)
+          .sort((a, b) => a - b)[0];
+        const until = nextStart ?? close;
+        unfilled.push({
+          group, kind: "base", date,
+          start: timeFromMinutes(cursor), end: timeFromMinutes(until),
+          reason: "Nobody available for this stretch",
+        });
+        cursor = pastCover(until);
       }
 
+      // Anything the walk could not close, as it finally stands.
       for (const hole of uncoveredWithin(open, close, placedSpans)) {
+        if (unfilled.some((slot) =>
+          slot.date === date && slot.group === group
+          && slot.start === timeFromMinutes(hole.start))) continue;
         unfilled.push({
           group, kind: "base", date,
           start: timeFromMinutes(hole.start), end: timeFromMinutes(hole.end),
@@ -465,31 +451,71 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
         });
       }
 
-      // Covered but short-handed is still a problem worth naming — the rule
-      // asks for a number of people, not only a covered window.
-      if (!cappedByHand && placedCount < rule.base_staff) {
-        unfilled.push({
-          group, kind: "base", date,
-          start: rule.open_time.slice(0, 5), end: rule.close_time.slice(0, 5),
-          reason: `Only ${placedCount} of ${rule.base_staff} people available all day`,
-        });
+      // ── Headcount top-up ─────────────────────────────────────────────────
+      // The rule asks for a number of people, not only a covered window. Only
+      // groups that may work alongside each other can take one: adding a
+      // second golf ops assistant to a covered day is two people doing one
+      // job, which is exactly what the handover limit exists to prevent.
+      if (handover === null && !cappedByHand) {
+        for (let i = placedCount; i < rule.base_staff; i++) {
+          const extra = freeToday()
+            .map(({ person, free }) => ({
+              person,
+              free,
+              span: shiftFromAvailability({
+                free, open, close, cursor: open, handover, maxShiftMinutes: maxShift,
+              }),
+            }))
+            .filter((option): option is typeof option & { span: Window } =>
+              option.span !== null && option.span.end - option.span.start >= PREFERRED_MIN_MINUTES)
+            .sort((a, b) => {
+              const nativeDiff = Number(isNative(b.person, group)) - Number(isNative(a.person, group));
+              if (nativeDiff !== 0) return nativeDiff;
+              return owedFirst(a.person, b.person);
+            })[0];
+          if (!extra) {
+            // Covered but short-handed is still worth naming.
+            unfilled.push({
+              group, kind: "base", date,
+              start: rule.open_time.slice(0, 5), end: rule.close_time.slice(0, 5),
+              reason: `Only ${placedCount} of ${rule.base_staff} people available all day`,
+            });
+            break;
+          }
+          place(extra.person, extra.span);
+        }
       }
 
       // ── Extra cover layered on top, from extra_start to close. ────────────
       if (rule.extra_staff > 0 && rule.extra_start) {
         const extraStart = minutesOfDay(rule.extra_start);
         for (let i = 0; i < rule.extra_staff && extraStart < close; i++) {
-          const window = {
-            start: extraStart,
-            end: Math.min(close, extraStart + maxShift),
-          };
-          if (!fill(window)) {
+          const choice = freeToday()
+            .map(({ person, free }) => ({
+              person,
+              free,
+              span: shiftFromAvailability({
+                free, open: extraStart, close, cursor: extraStart,
+                handover, maxShiftMinutes: maxShift,
+              }),
+            }))
+            .filter((option): option is typeof option & { span: Window } =>
+              option.span !== null && option.span.start <= extraStart)
+            .sort((a, b) => {
+              const nativeDiff = Number(isNative(b.person, group)) - Number(isNative(a.person, group));
+              if (nativeDiff !== 0) return nativeDiff;
+              if (a.span.end !== b.span.end) return b.span.end - a.span.end;
+              return owedFirst(a.person, b.person);
+            })[0];
+          if (!choice) {
             unfilled.push({
               group, kind: "extra", date,
-              start: timeFromMinutes(window.start), end: timeFromMinutes(close),
+              start: timeFromMinutes(extraStart), end: timeFromMinutes(close),
               reason: "Nobody available for this extra shift",
             });
+            continue;
           }
+          place(choice.person, choice.span);
         }
       }
     }

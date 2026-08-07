@@ -3,8 +3,7 @@ import {
   coverageGaps,
   generateCoverageMonth,
   openSlotsForDay,
-  planDaySlots,
-  spreadShifts,
+  shiftFromAvailability,
   type PlannedCoverageShift,
 } from "@/lib/pro-shop/coverage";
 import { elapsedMinutes, minutesOfDay, paidMinutes, timeFromMinutes } from "@/lib/pro-shop/hours";
@@ -71,120 +70,58 @@ function on(shifts: PlannedCoverageShift[], date: string, group: ShiftGroup) {
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 }
 
-describe("spreadShifts — the longest-shift split", () => {
-  const fmt = (windows: ReturnType<typeof spreadShifts>) =>
-    windows.map((w) => `${timeFromMinutes(w.start)}-${timeFromMinutes(w.end)}`);
+describe("shiftFromAvailability — the hours one person would work", () => {
+  const at = (free: [string, string], cursor: string, handover: number | null, window: [string, string] = ["06:00", "20:00"]) =>
+    shiftFromAvailability({
+      free: { start: minutesOfDay(free[0]), end: minutesOfDay(free[1]) },
+      open: minutesOfDay(window[0]),
+      close: minutesOfDay(window[1]),
+      cursor: minutesOfDay(cursor),
+      handover,
+      maxShiftMinutes: MAX,
+    });
+  const fmt = (w: ReturnType<typeof shiftFromAvailability>) =>
+    w && `${timeFromMinutes(w.start)}-${timeFromMinutes(w.end)}`;
 
-  it("gives two people on a 14-hour day a full day each, overlapping", () => {
-    // The whole point of the change: 06:00–20:00 used to be 7 hours each.
-    expect(fmt(spreadShifts(minutesOfDay("06:00"), minutesOfDay("20:00"), 2, MAX)))
-      .toEqual(["06:00-14:30", "11:30-20:00"]);
+  it("gives somebody exactly the hours they said they could work", () => {
+    // Marty's Monday really is 12:30–20:00. That is his Monday, untouched.
+    expect(fmt(at(["12:30", "20:00"], "12:30", 30))).toBe("12:30-20:00");
+    expect(fmt(at(["06:00", "12:30"], "06:00", 30))).toBe("06:00-12:30");
   });
 
-  it("pins the first to open and the last to close", () => {
-    const windows = spreadShifts(minutesOfDay("05:30"), minutesOfDay("20:00"), 2, MAX);
-    expect(timeFromMinutes(windows[0].start)).toBe("05:30");
-    expect(timeFromMinutes(windows[windows.length - 1].end)).toBe("20:00");
+  it("trims anyone who listed more than the cap", () => {
+    // Mike's Sunday is 05:30–14:30 — nine hours. He works 8h30 of it.
+    expect(fmt(at(["05:30", "14:30"], "05:30", 30, ["05:30", "20:00"]))).toBe("05:30-14:00");
   });
 
-  it("gives everyone the same length, whatever the headcount", () => {
-    for (const people of [1, 2, 3, 4, 5]) {
-      const windows = spreadShifts(minutesOfDay("06:00"), minutesOfDay("20:00"), people, MAX);
-      expect(windows).toHaveLength(people);
-      for (const window of windows) expect(window.end - window.start).toBe(MAX);
-    }
+  it("brings golf ops on half an hour early, to hand over", () => {
+    expect(fmt(at(["06:00", "20:00"], "14:30", 30))).toBe("14:00-20:00");
   });
 
-  it("gives everyone the whole stretch when it is shorter than the cap", () => {
-    // A six-hour window cannot be spread — two people both work all of it.
-    expect(fmt(spreadShifts(minutesOfDay("12:00"), minutesOfDay("18:00"), 2, MAX)))
-      .toEqual(["12:00-18:00", "12:00-18:00"]);
+  it("never starts golf ops earlier than that, however free they are", () => {
+    // A whole-day-available assistant still comes on at the handover, not at
+    // open — two people behind the counter is two people doing one job.
+    const shift = at(["00:00", "24:00"], "14:30", 30)!;
+    expect(timeFromMinutes(shift.start)).toBe("14:00");
   });
 
-  it("never exceeds the cap, and never starts anyone before open", () => {
-    for (const [open, close, people] of [
-      ["05:30", "20:00", 2], ["06:00", "20:00", 3], ["07:15", "19:45", 4], ["08:00", "20:00", 5],
-    ] as const) {
-      const windows = spreadShifts(minutesOfDay(open), minutesOfDay(close), people, MAX);
-      for (const window of windows) {
-        expect(window.end - window.start).toBeLessThanOrEqual(MAX);
-        expect(window.start).toBeGreaterThanOrEqual(minutesOfDay(open));
-        expect(window.end).toBeLessThanOrEqual(minutesOfDay(close));
-      }
-      // Starts only ever move forward, so the day reads in order.
-      for (let i = 1; i < windows.length; i++) {
-        expect(windows[i].start).toBeGreaterThanOrEqual(windows[i - 1].start);
-      }
-    }
+  it("never starts golf ops before their own hours, either", () => {
+    // The handover is a floor, not an instruction to come in early.
+    expect(fmt(at(["15:00", "20:00"], "14:30", 30))).toBe("15:00-20:00");
   });
 
-  it("returns nothing for a stretch that ends before it starts", () => {
-    expect(spreadShifts(minutesOfDay("20:00"), minutesOfDay("08:00"), 2, MAX)).toEqual([]);
-  });
-});
-
-describe("planDaySlots", () => {
-  it("gives the inside weekday window two full-length overlapping shifts", () => {
-    const [rule] = proShopRules().filter((r) => r.group === "inside" && r.weekday === 3);
-    expect(planDaySlots(rule, MAX).map((s) => `${s.start}-${s.end}`)).toEqual([
-      "06:00-14:30",
-      "11:30-20:00",
-    ]);
+  it("lets an unrestricted job take the hours it needs to reach close", () => {
+    // Rec aids may overlap, so a fully-free one starts late enough to carry
+    // the day to close rather than doubling up on the morning.
+    expect(fmt(at(["08:00", "20:00"], "16:30", null, ["08:00", "20:00"]))).toBe("11:30-20:00");
   });
 
-  it("covers the longer weekend window without a gap or a short shift", () => {
-    // 05:30–20:00 is 14h30; two 8h30 shifts cover it with an hour to spare.
-    const [rule] = proShopRules().filter((r) => r.group === "inside" && r.weekday === 6);
-    const slots = planDaySlots(rule, MAX);
-    expect(slots.map((s) => `${s.start}-${s.end}`)).toEqual([
-      "05:30-14:00",
-      "11:30-20:00",
-    ]);
-    expect(slots[1].start < slots[0].end).toBe(true);
+  it("still starts an unrestricted job at open when that is where cover is needed", () => {
+    expect(fmt(at(["08:00", "20:00"], "08:00", null, ["08:00", "20:00"]))).toBe("08:00-16:30");
   });
 
-  it("gives a quiet outside day two shifts and no extra", () => {
-    const [rule] = proShopRules().filter((r) => r.group === "outside" && r.weekday === 1);
-    expect(planDaySlots(rule, MAX).map((s) => `${s.start}-${s.end}`)).toEqual([
-      "08:00-16:30",
-      "11:30-20:00",
-    ]);
-  });
-
-  it("adds the third rec aid from 15:00 on a busy day", () => {
-    const [rule] = proShopRules().filter((r) => r.group === "outside" && r.weekday === 4);
-    const slots = planDaySlots(rule, MAX);
-    expect(slots.map((s) => `${s.start}-${s.end}`)).toEqual([
-      "08:00-16:30",
-      "11:30-20:00",
-      "15:00-20:00",
-    ]);
-    expect(slots[2].kind).toBe("extra");
-  });
-
-  it("never leaves a gap in the window, whatever the headcount", () => {
-    for (const [open, close, base] of [
-      ["05:30", "20:00", 2], ["06:00", "20:00", 3], ["07:15", "19:45", 4], ["08:00", "20:00", 5],
-    ] as const) {
-      const rule = {
-        id: "x", area: "pro_shop" as const, weekday: 1, group: "inside" as const,
-        open_time: open, close_time: close, base_staff: base, extra_staff: 0, extra_start: null,
-      };
-      const slots = planDaySlots(rule, MAX).filter((s) => s.kind === "base");
-      expect(slots[0].start).toBe(open);
-      expect(slots[slots.length - 1].end).toBe(close);
-      expect(coverageGaps(
-        slots.map((s) => ({ group: s.group, start_time: s.start, end_time: s.end })),
-        rule,
-      )).toEqual([]);
-    }
-  });
-
-  it("returns nothing for a window that closes before it opens", () => {
-    expect(planDaySlots({
-      id: "x", area: "pro_shop", weekday: 1, group: "inside",
-      open_time: "20:00", close_time: "08:00", base_staff: 2, extra_staff: 0, extra_start: null,
-    }, MAX)).toEqual([]);
+  it("returns nothing once their hours are behind the cursor", () => {
+    expect(at(["08:00", "14:00"], "16:00", null, ["08:00", "20:00"])).toBeNull();
   });
 });
 
@@ -212,17 +149,45 @@ describe("generateCoverageMonth", () => {
   });
 
   it("gives everybody a full day rather than half of one", () => {
-    // The change Tyson asked for: nobody drives to the course for four hours.
-    // Every base shift is the cap, and no shift anywhere exceeds it.
+    // Nobody drives to the course for four hours: a shift runs as long as
+    // their hours and the cap allow, and no shift anywhere exceeds the cap.
     const { shifts } = generateCoverageMonth(base);
     for (const shift of shifts) {
       expect(elapsedMinutes(shift.start_time, shift.end_time)).toBeLessThanOrEqual(MAX);
     }
     const monday = on(shifts, "2026-08-03", "inside");
     expect(monday.map((s) => `${s.start_time}-${s.end_time}`))
-      .toEqual(["06:00-14:30", "11:30-20:00"]);
+      .toEqual(["06:00-14:30", "14:00-20:00"]);
     // 8h30 on site is 8h paid.
     expect(paidMinutes(monday[0].start_time, monday[0].end_time)).toBe(480);
+  });
+
+  it("never puts two golf ops on together beyond the handover", () => {
+    // Golf ops is one counter with one person behind it. The only overlap
+    // allowed anywhere in the month is the half hour they hand over in.
+    const { shifts } = generateCoverageMonth(base);
+    const byDate = new Map<string, PlannedCoverageShift[]>();
+    for (const shift of shifts.filter((s) => s.group === "inside")) {
+      byDate.set(shift.shift_date, [...(byDate.get(shift.shift_date) ?? []), shift]);
+    }
+    for (const [, day] of byDate) {
+      const spans = day
+        .map((s) => ({ start: minutesOfDay(s.start_time), end: minutesOfDay(s.end_time) }))
+        .sort((a, b) => a.start - b.start);
+      for (let i = 1; i < spans.length; i++) {
+        const overlap = Math.min(spans[i - 1].end, spans[i].end) - spans[i].start;
+        expect(overlap).toBeLessThanOrEqual(30);
+      }
+    }
+  });
+
+  it("lets rec aids work alongside each other, which is the point of them", () => {
+    const { shifts } = generateCoverageMonth(base);
+    const monday = on(shifts, "2026-08-03", "outside");
+    expect(monday.map((s) => `${s.start_time}-${s.end_time}`))
+      .toEqual(["08:00-16:30", "11:30-20:00"]);
+    // Five hours of two rec aids on at once — allowed here, unlike inside.
+    expect(minutesOfDay(monday[0].end_time) - minutesOfDay(monday[1].start_time)).toBe(300);
   });
 
   it("never books anybody more than the cap in one day", () => {
@@ -671,6 +636,91 @@ describe("per-day overrides", () => {
     expect(shifts.filter((s) => s.shift_date === SATURDAY)).toEqual([]);
     // Every other day is still built.
     expect(shifts.filter((s) => s.shift_date === "2026-08-22").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the real pro-shop roster, scheduled on the hours they gave", () => {
+  /** Availability as it actually stands in pro_shop_staff. */
+  function shifts(days: Record<string, [string, string]>) {
+    const weekly: Record<string, { works: boolean; start?: string; end?: string }> = {
+      sun: { works: false }, mon: { works: false }, tue: { works: false },
+      wed: { works: false }, thu: { works: false }, fri: { works: false }, sat: { works: false },
+    };
+    for (const [day, hours] of Object.entries(days)) {
+      weekly[day] = { works: true, start: hours[0], end: hours[1] };
+    }
+    return { weekly } as ProShopStaff["availability"];
+  }
+
+  const roster: ProShopStaff[] = [
+    person({ id: "DJ", position: "golf_ops_assistant", default_group: "inside", sort_order: 10,
+      availability: shifts({ mon: ["06:00", "12:30"], tue: ["06:00", "13:00"], wed: ["06:00", "12:30"], thu: ["06:00", "12:30"] }) }),
+    person({ id: "Marty", position: "golf_ops_assistant", default_group: "inside", sort_order: 11,
+      availability: shifts({ sun: ["14:00", "20:00"], mon: ["12:30", "20:00"], sat: ["14:00", "20:00"] }) }),
+    person({ id: "Mike", position: "golf_ops_assistant", default_group: "inside", sort_order: 12,
+      availability: shifts({ sun: ["05:30", "14:30"], wed: ["12:30", "20:00"], thu: ["12:30", "20:00"], fri: ["11:30", "20:00"], sat: ["05:30", "14:30"] }) }),
+    person({ id: "Joe", sort_order: 20,
+      availability: shifts({ sun: ["08:00", "14:00"], mon: ["08:00", "14:00"], tue: ["14:00", "20:00"], sat: ["08:00", "14:00"] }) }),
+    person({ id: "Tony", sort_order: 22,
+      availability: shifts({ wed: ["08:00", "14:00"], thu: ["08:00", "14:00"], fri: ["08:00", "14:00"], sat: ["12:00", "18:00"] }) }),
+    person({ id: "Aniya", flex: true, sort_order: 23,
+      availability: shifts({ sun: ["13:00", "20:00"], tue: ["13:00", "20:00"], wed: ["13:00", "20:00"], thu: ["13:00", "20:00"], fri: ["13:00", "20:00"] }) }),
+    person({ id: "Colin", sort_order: 25,
+      availability: shifts({ tue: ["08:00", "14:00"], wed: ["08:00", "14:00"], thu: ["08:00", "14:00"], fri: ["08:00", "14:00"], sat: ["08:00", "14:00"] }) }),
+  ];
+
+  const september = () => generateCoverageMonth({
+    staff: roster, year: 2026, month0: 8, timeOff: [],
+    rules: proShopRules(), area: "pro_shop",
+  });
+
+  it("gives people the hours they actually gave, to the minute", () => {
+    // 2026-09-02 is a Wednesday: DJ said 06:00–12:30, Mike said 12:30–20:00.
+    // That is their Wednesday — no invented boundary anywhere near it.
+    const { shifts: placed } = september();
+    expect(on(placed, "2026-09-02", "inside").map((s) => `${s.start_time}-${s.end_time} ${s.staff_id}`))
+      .toEqual(["06:00-12:30 DJ", "12:30-20:00 Mike"]);
+  });
+
+  it("trims the one person who listed more than the cap", () => {
+    // Mike's Sunday is 05:30–14:30 — nine hours on site. He works 8h30 of it,
+    // and Marty picks the counter up at 14:00 exactly as he said he would.
+    const { shifts: placed } = september();
+    expect(on(placed, "2026-09-06", "inside").map((s) => `${s.start_time}-${s.end_time} ${s.staff_id}`))
+      .toEqual(["05:30-14:00 Mike", "14:00-20:00 Marty"]);
+  });
+
+  it("never has two golf ops on together for more than the handover", () => {
+    const { shifts: placed } = september();
+    const byDate = new Map<string, PlannedCoverageShift[]>();
+    for (const shift of placed.filter((s) => s.group === "inside")) {
+      byDate.set(shift.shift_date, [...(byDate.get(shift.shift_date) ?? []), shift]);
+    }
+    for (const [date, day] of byDate) {
+      const spans = day
+        .map((s) => ({ start: minutesOfDay(s.start_time), end: minutesOfDay(s.end_time) }))
+        .sort((a, b) => a.start - b.start);
+      for (let i = 1; i < spans.length; i++) {
+        const overlap = Math.min(spans[i - 1].end, spans[i].end) - spans[i].start;
+        expect({ date, overlap }).toEqual({ date, overlap: Math.min(overlap, 30) });
+      }
+    }
+  });
+
+  it("still lets two rec aids work the afternoon together", () => {
+    const { shifts: placed } = september();
+    const wednesday = on(placed, "2026-09-02", "outside");
+    expect(wednesday.map((s) => `${s.start_time}-${s.end_time} ${s.staff_id}`))
+      .toEqual(["08:00-14:00 Tony", "13:00-20:00 Aniya"]);
+  });
+
+  it("reports the stretches this roster genuinely cannot cover", () => {
+    // Nobody on the golf ops roster works a Friday morning. That is a real
+    // hole in the staffing, and it is named rather than papered over.
+    const { unfilled } = september();
+    expect(unfilled.some((slot) =>
+      slot.date === "2026-09-04" && slot.group === "inside"
+      && slot.start === "06:00" && slot.end === "11:30")).toBe(true);
   });
 });
 

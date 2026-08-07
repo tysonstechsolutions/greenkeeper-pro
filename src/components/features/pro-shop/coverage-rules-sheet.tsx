@@ -92,10 +92,15 @@ export function CoverageRulesSheet({
   return (
     <div className="space-y-5">
       <p className="text-xs text-muted-foreground">
-        What each day needs. <strong>On shift</strong> people each work the longest shift allowed
-        below, spread evenly across the open-to-close window — so they overlap over the busy
-        middle instead of handing over. <strong>Extra</strong> come in at the later time and work
-        to close.
+        What each day needs. The generator fills open-to-close with{" "}
+        <strong>the hours people actually gave you</strong> — nobody is put on outside their own
+        availability. <strong>On shift</strong> is how many that should take;{" "}
+        <strong>Extra</strong> come in at the later time and work to close.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Golf ops never doubles up: the next assistant comes on 30 minutes before the last one
+        leaves, to hand over, and that is the only overlap. Rec aids, grounds and the restaurant
+        can all work alongside each other.
       </p>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
@@ -126,10 +131,10 @@ export function CoverageRulesSheet({
       <div className="border-t border-border pt-4">
         <h3 className="text-sm font-semibold mb-1">Shift length &amp; unpaid lunch</h3>
         <p className="text-xs text-muted-foreground mb-2">
-          Nobody drives in for three hours, so the generator gives everyone the longest shift
-          allowed and spreads the starts across the day. Staff are not paid for lunch, so every
-          hours figure in the schedule already has it taken out — a shift longer than the
-          threshold loses the lunch. <strong>8.5 on site is 8 paid.</strong>
+          A ceiling, not a target: somebody who lists more hours than this gets trimmed to it,
+          and somebody who lists fewer just works what they listed. Staff are not paid for lunch,
+          so every hours figure in the schedule already has it taken out — a shift longer than
+          the threshold loses the lunch. <strong>8.5 on site is 8 paid.</strong>
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">

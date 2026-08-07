@@ -257,6 +257,20 @@ export const GROUP_LABELS: Record<ShiftGroup, string> = {
   restaurant: "Restaurant",
 };
 
+/**
+ * How long two shifts in a group may overlap, in minutes.
+ *
+ * Golf ops is a counter with one person behind it: two assistants inside at
+ * once is two people doing one job, so the changeover is a fixed half hour to
+ * hand over and no more. Rec aids, grounds and the restaurant are the
+ * opposite — several people working at once is the normal state — so a group
+ * absent from this map takes whatever hours its people said they can work,
+ * overlapping or not.
+ */
+export const GROUP_HANDOVER_MINUTES: Partial<Record<ShiftGroup, number>> = {
+  inside: 30,
+};
+
 /** The same thing said in two words, for mid-sentence use in a warning. */
 export const GROUP_SHORT_LABELS: Record<ShiftGroup, string> = {
   outside: "rec aids",
