@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Ban,
+  CalendarOff,
   Lock,
   LockOpen,
   Minus,
@@ -42,8 +43,10 @@ import {
   isDayLocked,
   MAX_DAY_STAFF,
   ruleCountsForDay,
+  unstaffedFor,
   type DayGroupOverride,
   type DayOverrides,
+  type TimeRange,
 } from "@/lib/pro-shop/day-overrides";
 import {
   GROUP_LABELS,
@@ -100,6 +103,8 @@ export interface DayEditorProps {
   }) => Promise<void>;
   setDayCounts: (date: string, group: ShiftGroup, counts: DayGroupOverride | null) => Promise<void>;
   setDayLock: (date: string, locked: boolean) => Promise<void>;
+  /** Excuse a stretch (needed=false) or ask for cover on it again. */
+  onUnstaffed: (group: ShiftGroup, range: TimeRange, needed: boolean) => Promise<void>;
   resetDay: (date: string) => Promise<void>;
 }
 
@@ -108,7 +113,7 @@ export function DayEditor(props: DayEditorProps) {
     date, shifts, staff, staffById, rules, overrides, settings, groups,
     activeIssues, dismissedIssues, onDismiss, onRestore,
     onEditFull, onAdd, onCover,
-    updateShift, deleteShift, addShift, setDayCounts, setDayLock, resetDay,
+    updateShift, deleteShift, addShift, setDayCounts, setDayLock, onUnstaffed, resetDay,
   } = props;
 
   const [busy, setBusy] = useState(false);
@@ -393,6 +398,38 @@ export function DayEditor(props: DayEditorProps) {
                         <option key={person.id} value={person.id}>{person.full_name}</option>
                       ))}
                     </select>
+                    {/* …or say the shop simply doesn't need anybody then. */}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void run(() =>
+                        onUnstaffed(group, { start: slot.start, end: slot.end }, false))}
+                      title="Nobody is needed for this stretch — stop asking for it"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    >
+                      <CalendarOff className="w-3 h-3" /> Nobody needed
+                    </button>
+                  </div>
+                ))}
+
+                {/* Stretches already excused, so they can be put back. */}
+                {unstaffedFor(date, group, overrides).map((range) => (
+                  <div
+                    key={`off-${group}-${range.start}`}
+                    className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 p-2"
+                  >
+                    <span className="text-sm tabular-nums font-medium text-muted-foreground line-through">
+                      {compactTime(range.start)}-{compactTime(range.end)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">Nobody needed</span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void run(() => onUnstaffed(group, range, true))}
+                      className="ml-auto inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    >
+                      <Undo2 className="w-3 h-3" /> Need cover again
+                    </button>
                   </div>
                 ))}
               </div>

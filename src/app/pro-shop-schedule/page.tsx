@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import {
   CalendarClock,
+  CalendarOff,
   ChevronLeft,
   ChevronRight,
   ChevronRight as ChevronRightIcon,
@@ -71,6 +72,7 @@ import {
   type ProShopStaff,
   type ScheduleSettings,
   type ShiftGroup,
+  type TimeRange,
 } from "@/lib/pro-shop/types";
 import { Overlay } from "@/components/features/pro-shop/overlay";
 import { AvailabilitySheet } from "@/components/features/pro-shop/availability-sheet";
@@ -134,6 +136,17 @@ function firstName(name: string): string {
   return name.split(" ")[0];
 }
 
+/**
+ * Where to put a right-click menu. Clamped here, where the viewport is real,
+ * so it never opens half off the right or bottom edge of a phone.
+ */
+function menuAt(e: React.MouseEvent): { x: number; y: number } {
+  return {
+    x: Math.min(e.clientX, window.innerWidth - 200),
+    y: Math.min(e.clientY, window.innerHeight - 170),
+  };
+}
+
 export default function ProShopSchedulePage() {
   return (
     <RoleGuard
@@ -181,7 +194,19 @@ function ProShopScheduleContent() {
    * to render on the server where there is no window to measure against.
    */
   const [shiftMenu, setShiftMenu] = useState<
-    { shift: ProShopShift; x: number; y: number } | null
+    | ({ x: number; y: number } & (
+      | { kind: "shift"; shift: ProShopShift }
+      | { kind: "open"; date: string; slot: OpenSlot }
+    ))
+    | null
+  >(null);
+  /**
+   * After excusing a stretch, the other days of the month carrying the very
+   * same gap — offered in one go, because a 14:00–16:00 hole is rarely a
+   * one-day thing and nobody wants to do it seven times.
+   */
+  const [spreadOffer, setSpreadOffer] = useState<
+    { group: ShiftGroup; range: TimeRange; dates: string[] } | null
   >(null);
   /**
    * Where the menu is portalled to, set once the component is on a real page.
@@ -339,6 +364,28 @@ function ProShopScheduleContent() {
    * than inside the menu so the confirm reads the same as the one in the day
    * editor — deleting a shift is the same act wherever it is started from.
    */
+  /**
+   * Say a stretch needs nobody, then offer to do the same to every other day
+   * in the month carrying an identical gap.
+   */
+  async function excuseWindow(date: string, group: ShiftGroup, range: TimeRange) {
+    setBusy(true);
+    try {
+      await ps.setDayUnstaffed(date, group, range, false);
+      // Read off the pre-change overrides, which is why the day just excused
+      // has to be filtered out by hand rather than falling out naturally.
+      const others = ps.datesInMonth().filter((other) =>
+        other !== date
+        && openOn(other).some((slot) =>
+          slot.group === group && slot.start === range.start && slot.end === range.end));
+      setSpreadOffer(others.length > 0 ? { group, range, dates: others } : null);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "That didn't save. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeShift(shift: ProShopShift) {
     const who = ps.staffById[shift.staff_id]?.full_name ?? "this shift";
     const ok = window.confirm(
@@ -537,8 +584,12 @@ function ProShopScheduleContent() {
       if (active.length) out.push({ date: ds, active });
     }
     return out;
+    // `ps.dayOverrides` and `area` are read through shiftsOn/rulesOn, which
+    // are plain functions this memo cannot list. Leaving them out left the
+    // "needs attention" list still naming a stretch that had just been
+    // excused, while the grid beside it had already stopped showing it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ps.shifts, monthDate, dismissedMap]);
+  }, [ps.shifts, ps.rules, ps.dayOverrides, area, monthDate, dismissedMap]);
   const warningDays = flaggedDays.length;
 
   // Active + dismissed issues for the currently-open day (for the day editor).
@@ -550,8 +601,9 @@ function ProShopScheduleContent() {
       active: all.filter((w) => !codes.includes(w.code)),
       dismissed: all.filter((w) => codes.includes(w.code)),
     };
+    // Same reason as flaggedDays above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayOpen, ps.shifts, dismissedMap]);
+  }, [dayOpen, ps.shifts, ps.rules, ps.dayOverrides, area, dismissedMap]);
 
   return (
     <div className="p-3 md:p-6 pb-28 max-w-6xl mx-auto">
@@ -664,6 +716,48 @@ function ProShopScheduleContent() {
             className="shrink-0 underline hover:no-underline"
           >
             Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* A gap the GM has just excused is rarely a one-day thing. */}
+      {spreadOffer && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/70 dark:bg-sky-950/30 dark:border-sky-900 p-2.5 text-xs text-sky-900 dark:text-sky-200">
+          <CalendarOff className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">
+            {spreadOffer.dates.length} other day{spreadOffer.dates.length === 1 ? "" : "s"} in{" "}
+            {format(monthDate, "MMMM")} {spreadOffer.dates.length === 1 ? "has" : "have"} the same{" "}
+            <strong className="tabular-nums">
+              {compactTime(spreadOffer.range.start)}-{compactTime(spreadOffer.range.end)}
+            </strong>{" "}
+            gap for {GROUP_SHORT_LABELS[spreadOffer.group]}.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs shrink-0"
+            disabled={busy}
+            onClick={async () => {
+              const offer = spreadOffer;
+              setSpreadOffer(null);
+              setBusy(true);
+              try {
+                await ps.setManyDaysUnstaffed(offer.dates, offer.group, offer.range);
+              } catch (e) {
+                window.alert(e instanceof Error ? e.message : "Those didn't save. Try again.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Clear those too
+          </Button>
+          <button
+            type="button"
+            className="shrink-0 underline hover:no-underline"
+            onClick={() => setSpreadOffer(null)}
+          >
+            Just this day
           </button>
         </div>
       )}
@@ -809,13 +903,7 @@ function ProShopScheduleContent() {
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                // Clamped here, where the viewport is real, so the menu never
-                // opens half off the right or bottom edge of a phone.
-                setShiftMenu({
-                  shift: s,
-                  x: Math.min(e.clientX, window.innerWidth - 200),
-                  y: Math.min(e.clientY, window.innerHeight - 170),
-                });
+                setShiftMenu({ kind: "shift", shift: s, ...menuAt(e) });
               }}
             />
           );
@@ -875,8 +963,14 @@ function ProShopScheduleContent() {
                     return (
                       <div
                         key={`open-${i}`}
-                        className={`flex items-end gap-1 text-[10px] leading-tight px-1 rounded ${style.wash}`}
-                        title={`Open ${GROUP_SHORT_LABELS[slot.group]} shift — nobody scheduled`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShiftMenu({ kind: "open", date: ds, slot, ...menuAt(e) });
+                        }}
+                        className={`relative flex items-end gap-1 text-[10px] leading-tight px-1 rounded ${style.wash}`}
+                        title={`Open ${GROUP_SHORT_LABELS[slot.group]} shift — nobody scheduled.`
+                          + " Right-click if nobody is needed."}
                       >
                         <span className="tabular-nums font-semibold">
                           {compactTime(slot.start)}-{compactTime(slot.end)}
@@ -1014,49 +1108,87 @@ function ProShopScheduleContent() {
             style={{ top: shiftMenu.y, left: shiftMenu.x }}
             className="fixed z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg"
           >
-            <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-b border-border truncate">
-              {ps.staffById[shiftMenu.shift.staff_id]?.full_name ?? "Shift"}
-              {" · "}
-              {compactTime(shiftMenu.shift.start_time)}-{compactTime(shiftMenu.shift.end_time)}
-            </p>
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
-              onClick={() => {
-                const shift = shiftMenu.shift;
-                setShiftMenu(null);
-                setEditShift({ mode: "edit", shift });
-              }}
-            >
-              <Pencil className="w-3.5 h-3.5" /> Edit shift…
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
-              onClick={() => {
-                const shift = shiftMenu.shift;
-                setShiftMenu(null);
-                void ps.setShiftLocked(shift.id, !shift.locked);
-              }}
-            >
-              {shiftMenu.shift.locked
-                ? <><LockOpen className="w-3.5 h-3.5" /> Unpin</>
-                : <><Lock className="w-3.5 h-3.5" /> Pin this shift</>}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-              onClick={() => {
-                const shift = shiftMenu.shift;
-                setShiftMenu(null);
-                void removeShift(shift);
-              }}
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Remove shift
-            </button>
+            {shiftMenu.kind === "shift" ? (
+              <>
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-b border-border truncate">
+                  {ps.staffById[shiftMenu.shift.staff_id]?.full_name ?? "Shift"}
+                  {" · "}
+                  {compactTime(shiftMenu.shift.start_time)}-{compactTime(shiftMenu.shift.end_time)}
+                </p>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => {
+                    const shift = shiftMenu.shift;
+                    setShiftMenu(null);
+                    setEditShift({ mode: "edit", shift });
+                  }}
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit shift…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => {
+                    const shift = shiftMenu.shift;
+                    setShiftMenu(null);
+                    void ps.setShiftLocked(shift.id, !shift.locked);
+                  }}
+                >
+                  {shiftMenu.shift.locked
+                    ? <><LockOpen className="w-3.5 h-3.5" /> Unpin</>
+                    : <><Lock className="w-3.5 h-3.5" /> Pin this shift</>}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                  onClick={() => {
+                    const shift = shiftMenu.shift;
+                    setShiftMenu(null);
+                    void removeShift(shift);
+                  }}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remove shift
+                </button>
+              </>
+            ) : (
+              /* An OPEN shift — nobody is on it yet. The useful thing to say
+                 about one of these is usually "and nobody needs to be". */
+              <>
+                <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-b border-border truncate">
+                  Open {GROUP_SHORT_LABELS[shiftMenu.slot.group]}
+                  {" · "}
+                  {compactTime(shiftMenu.slot.start)}-{compactTime(shiftMenu.slot.end)}
+                </p>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => {
+                    const { date, slot } = shiftMenu;
+                    setShiftMenu(null);
+                    void excuseWindow(date, slot.group, { start: slot.start, end: slot.end });
+                  }}
+                >
+                  <CalendarOff className="w-3.5 h-3.5" /> Nobody needed
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => {
+                    const { date } = shiftMenu;
+                    setShiftMenu(null);
+                    setDayOpen(date);
+                  }}
+                >
+                  <Users className="w-3.5 h-3.5" /> Put someone on…
+                </button>
+              </>
+            )}
           </div>
         </>,
         menuHost,
@@ -1086,6 +1218,10 @@ function ProShopScheduleContent() {
             addShift={ps.addShift}
             setDayCounts={ps.setDayCounts}
             setDayLock={ps.setDayLock}
+            onUnstaffed={(group, range, needed) =>
+              needed
+                ? ps.setDayUnstaffed(dayOpen, group, range, true)
+                : excuseWindow(dayOpen, group, range)}
             resetDay={ps.resetDay}
           />
         </Overlay>

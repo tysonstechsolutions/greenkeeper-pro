@@ -116,6 +116,12 @@ export interface DayGroupOverride {
   extra: number;
 }
 
+/** A stretch of one day, as "HH:MM" times. */
+export interface TimeRange {
+  start: string;
+  end: string;
+}
+
 /**
  * One date's exception to the weekday coverage rules. A group with no entry
  * falls back to the rule, so a day nobody has touched behaves as it always did.
@@ -124,6 +130,16 @@ export interface DayOverride {
   /** A rebuild skips this day entirely and keeps every shift already on it. */
   locked?: boolean;
   groups?: Partial<Record<ShiftGroup, DayGroupOverride>>;
+  /**
+   * Stretches of this day that need NOBODY, per group.
+   *
+   * The rules say a job is covered open to close, which is right until the
+   * afternoon one rec aid finishes at 14:00 and the next starts at 16:00 and
+   * the GM is happy with that. Excusing the stretch is how he says so: it
+   * stops being a hole, stops printing a blank line to sign, and no rebuild
+   * sends anyone in to fill it.
+   */
+  unstaffed?: Partial<Record<ShiftGroup, TimeRange[]>>;
 }
 
 /** Per-day coverage exceptions, keyed by YYYY-MM-DD. Lives on the schedule row. */

@@ -17,6 +17,7 @@ import type {
   ScheduleArea,
   ScheduleSettings,
   ShiftGroup,
+  TimeRange,
   WarningCode,
   WeeklyAvailability,
 } from "./types";
@@ -29,6 +30,7 @@ import {
   sanitizeDayOverrides,
   withDayCounts,
   withDayLocked,
+  withDayUnstaffed,
 } from "./day-overrides";
 
 /** Manual shift edit payload. */
@@ -236,6 +238,40 @@ export function useProShop(
         counts
           ? `Coverage for ${date} set to ${counts.base} base + ${counts.extra} extra`
           : `Coverage for ${date} returned to the weekday rule`,
+      );
+    },
+    [dayOverrides, saveDayOverrides],
+  );
+
+  /**
+   * Say a stretch of one day needs nobody (or take that back).
+   *
+   * @param needed false to excuse the stretch, true to want cover there again.
+   */
+  const setDayUnstaffed = useCallback(
+    async (date: string, group: ShiftGroup, range: TimeRange, needed: boolean) => {
+      await saveDayOverrides(
+        withDayUnstaffed(dayOverrides, date, group, range, needed),
+        needed
+          ? `${range.start}-${range.end} on ${date} needs cover again`
+          : `${range.start}-${range.end} on ${date} marked as needing nobody`,
+      );
+    },
+    [dayOverrides, saveDayOverrides],
+  );
+
+  /**
+   * Excuse the same stretch on several dates at once — the "and the other six
+   * days with this gap" button. One write, so the month cannot end up half
+   * applied if the tab is closed mid-way.
+   */
+  const setManyDaysUnstaffed = useCallback(
+    async (dates: string[], group: ShiftGroup, range: TimeRange) => {
+      let next = dayOverrides;
+      for (const date of dates) next = withDayUnstaffed(next, date, group, range, false);
+      await saveDayOverrides(
+        next,
+        `${range.start}-${range.end} marked as needing nobody on ${dates.length} days`,
       );
     },
     [dayOverrides, saveDayOverrides],
@@ -733,6 +769,8 @@ export function useProShop(
     dayOverrides,
     setDayCounts,
     setDayLock,
+    setDayUnstaffed,
+    setManyDaysUnstaffed,
     resetDay,
     datesInMonth: () => datesInMonth(year, month0),
   };

@@ -26,7 +26,12 @@
  */
 import { minutesOfDay, paidMinutes, timeFromMinutes } from "./hours";
 import { datesInMonth, isOff, parseYmd, weekdayKeyForDate } from "./dates";
-import { effectiveRulesForDay, isDayLocked, type DayOverrides } from "./day-overrides";
+import {
+  effectiveRulesForDay,
+  isDayLocked,
+  type DayOverrides,
+  type EffectiveRule,
+} from "./day-overrides";
 import {
   AREA_GROUPS,
   DEFAULT_SCHEDULE_SETTINGS,
@@ -39,6 +44,7 @@ import {
   type ScheduleArea,
   type ScheduleSettings,
   type ShiftGroup,
+  type TimeRange,
 } from "./types";
 
 /** One shift the day needs somebody in. */
@@ -96,10 +102,25 @@ export function shiftFromAvailability(options: {
   /** Minutes this group may overlap; null means their hours decide. */
   handover: number | null;
   maxShiftMinutes: number;
+  /**
+   * A floor on the start, past any stretch the GM excused. Without it the
+   * hours-maximising start would reach back across a window he has said needs
+   * nobody and quietly staff it after all.
+   */
+  notBefore?: number;
+  /**
+   * A ceiling on the end, at the next excused stretch. Without it the person
+   * who carries the day furthest simply works straight through the window —
+   * covering it, which is the one thing it must not be.
+   */
+  notAfter?: number;
 }): Window | null {
-  const { free, open, close, cursor, handover, maxShiftMinutes } = options;
-  const earliest = Math.max(free.start, open);
-  const latest = Math.min(free.end, close);
+  const {
+    free, open, close, cursor, handover, maxShiftMinutes,
+    notBefore = 0, notAfter = Number.POSITIVE_INFINITY,
+  } = options;
+  const earliest = Math.max(free.start, open, notBefore);
+  const latest = Math.min(free.end, close, notAfter);
 
   const start = handover === null
     // No handover limit, so the only question is which part of their hours to
@@ -271,7 +292,7 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
     // What THIS date needs — the weekday rule, with any per-day override
     // applied. Resolved in one place so the generator, the open-shift lines and
     // the printout can never disagree about a day's headcount.
-    const rulesToday = new Map<ShiftGroup, CoverageRule>();
+    const rulesToday = new Map<ShiftGroup, EffectiveRule>();
     for (const rule of effectiveRulesForDay(date, areaRules, overrides)) {
       rulesToday.set(rule.group, rule);
     }
@@ -301,11 +322,30 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
       const close = minutesOfDay(rule.close_time);
       if (close <= open) continue;
 
-      const placedSpans: Window[] = locked.map((shift) => ({
-        start: minutesOfDay(shift.start_time),
-        end: minutesOfDay(shift.end_time),
+      // Stretches the GM excused stand alongside pinned shifts as "already
+      // settled": the walk steps over them, and they never come back as holes.
+      const excused: Window[] = (rule.unstaffed ?? []).map((range) => ({
+        start: minutesOfDay(range.start),
+        end: minutesOfDay(range.end),
       }));
+      const placedSpans: Window[] = [
+        ...locked.map((shift) => ({
+          start: minutesOfDay(shift.start_time),
+          end: minutesOfDay(shift.end_time),
+        })),
+        ...excused,
+      ];
       let placedCount = locked.length;
+
+      /** The end of the last excused stretch behind the cursor, if any. */
+      const notBefore = (cursor: number) =>
+        excused.reduce((floor, range) => (range.end <= cursor ? Math.max(floor, range.end) : floor), 0);
+      /** The start of the next excused stretch ahead of the cursor, if any. */
+      const notAfter = (cursor: number) =>
+        excused.reduce(
+          (ceiling, range) => (range.start >= cursor ? Math.min(ceiling, range.start) : ceiling),
+          Number.POSITIVE_INFINITY,
+        );
 
       /**
        * Who is owed work, most owed first — by PAID minutes across the whole
@@ -374,7 +414,9 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
             person,
             free,
             span: shiftFromAvailability({
-              free, open, close, cursor, handover, maxShiftMinutes: maxShift,
+              free, open, close, cursor, handover,
+              maxShiftMinutes: maxShift,
+              notBefore: notBefore(cursor), notAfter: notAfter(cursor),
             }),
           }))
           .filter((option): option is typeof option & { span: Window } =>
@@ -464,6 +506,7 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
               free,
               span: shiftFromAvailability({
                 free, open, close, cursor: open, handover, maxShiftMinutes: maxShift,
+                notBefore: notBefore(open), notAfter: notAfter(open),
               }),
             }))
             .filter((option): option is typeof option & { span: Window } =>
@@ -497,6 +540,7 @@ export function generateCoverageMonth(input: GenerateCoverageInput): CoveragePla
               span: shiftFromAvailability({
                 free, open: extraStart, close, cursor: extraStart,
                 handover, maxShiftMinutes: maxShift,
+                notBefore: notBefore(extraStart), notAfter: notAfter(extraStart),
               }),
             }))
             .filter((option): option is typeof option & { span: Window } =>
@@ -554,10 +598,10 @@ export interface OpenSlot {
  */
 export function openSlotsForDay(
   shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
-  rulesForDay: Pick<
+  rulesForDay: (Pick<
     CoverageRule,
     "group" | "open_time" | "close_time" | "base_staff" | "extra_staff" | "extra_start"
-  >[],
+  > & { unstaffed?: TimeRange[] })[],
 ): OpenSlot[] {
   const slots: OpenSlot[] = [];
   for (const rule of rulesForDay) {
@@ -595,13 +639,20 @@ export function openSlotsForDay(
  */
 export function coverageGaps(
   shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
-  rule: Pick<CoverageRule, "open_time" | "close_time" | "group">,
+  rule: Pick<CoverageRule, "open_time" | "close_time" | "group"> & { unstaffed?: TimeRange[] },
 ): Array<{ start: string; end: string }> {
   const open = minutesOfDay(rule.open_time);
   const close = minutesOfDay(rule.close_time);
   const spans = shiftsForDay
     .filter((s) => s.group === rule.group)
     .map((s) => ({ start: minutesOfDay(s.start_time), end: minutesOfDay(s.end_time) }));
+
+  // A stretch the GM has excused is not a hole. He has said the job needs
+  // nobody there, so it counts as settled — no warning, and no blank line on
+  // the printout for somebody to sign.
+  for (const range of rule.unstaffed ?? []) {
+    spans.push({ start: minutesOfDay(range.start), end: minutesOfDay(range.end) });
+  }
 
   return uncoveredWithin(open, close, spans).map((hole) => ({
     start: timeFromMinutes(hole.start),

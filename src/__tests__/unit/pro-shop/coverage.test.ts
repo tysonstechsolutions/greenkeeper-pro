@@ -820,6 +820,93 @@ describe("Buckley's Restaurant — the third schedule", () => {
   });
 });
 
+describe("stretches the GM says need nobody", () => {
+  // 2026-08-17 is a Monday. One rec aid finishes at 14:00, the next starts at
+  // 16:00, and Tyson is happy with that — 14:00–16:00 needs nobody.
+  const MONDAY = "2026-08-17";
+  const AFTERNOON = { start: "14:00", end: "16:00" };
+  const monday = proShopRules().filter((r) => r.weekday === 1);
+  const excused = monday.map((rule) =>
+    rule.group === "outside" ? { ...rule, unstaffed: [AFTERNOON] } : rule);
+  const s = (group: ShiftGroup, start: string, end: string) =>
+    ({ group, start_time: start, end_time: end });
+  const day = [
+    s("inside", "06:00", "14:30"), s("inside", "14:00", "20:00"),
+    s("outside", "08:00", "14:00"), s("outside", "16:00", "20:00"),
+  ];
+
+  it("stops calling the excused stretch a gap", () => {
+    expect(coverageGaps(day, { group: "outside", open_time: "08:00", close_time: "20:00" }))
+      .toEqual([{ start: "14:00", end: "16:00" }]);
+    expect(coverageGaps(day, {
+      group: "outside", open_time: "08:00", close_time: "20:00", unstaffed: [AFTERNOON],
+    })).toEqual([]);
+  });
+
+  it("stops printing a blank line for it", () => {
+    expect(openSlotsForDay(day, monday))
+      .toContainEqual({ group: "outside", start: "14:00", end: "16:00", kind: "gap" });
+    expect(openSlotsForDay(day, excused)).toEqual([]);
+  });
+
+  it("leaves the other group's holes alone", () => {
+    const short = [s("outside", "08:00", "14:00"), s("outside", "16:00", "20:00")];
+    const open = openSlotsForDay(short, excused);
+    expect(open.every((slot) => slot.group === "inside")).toBe(true);
+    expect(open.length).toBeGreaterThan(0);
+  });
+
+  it("does not send anybody in to cover it, or report it unfilled", () => {
+    // A rec aid free all day would otherwise be walked straight through it.
+    const staff = [
+      person({ id: "early", availability: { weekly: {
+        sun: { works: true, start: "08:00", end: "14:00" },
+        mon: { works: true, start: "08:00", end: "14:00" },
+        tue: { works: true, start: "08:00", end: "14:00" },
+        wed: { works: true, start: "08:00", end: "14:00" },
+        thu: { works: true, start: "08:00", end: "14:00" },
+        fri: { works: true, start: "08:00", end: "14:00" },
+        sat: { works: true, start: "08:00", end: "14:00" },
+      } } }),
+      person({ id: "anytime", sort_order: 5 }),
+    ];
+    const { shifts, unfilled } = generateCoverageMonth({
+      staff, year: 2026, month0: 7, timeOff: [], rules: proShopRules(), area: "pro_shop",
+      overrides: { [MONDAY]: { unstaffed: { outside: [AFTERNOON] } } },
+    });
+    const outside = on(shifts, MONDAY, "outside");
+    // Nobody is on between 14:00 and 16:00…
+    for (const shift of outside) {
+      expect(shift.start_time >= "16:00" || shift.end_time <= "14:00").toBe(true);
+    }
+    // …the window is still covered either side of it…
+    expect(outside.map((x) => `${x.start_time}-${x.end_time}`))
+      .toEqual(["08:00-14:00", "16:00-20:00"]);
+    // …and it is not reported as a hole, because it is not one.
+    expect(unfilled.filter((slot) =>
+      slot.date === MONDAY && slot.group === "outside")).toEqual([]);
+  });
+
+  it("still reports a genuine hole on the same day", () => {
+    const staff = [person({ id: "morning", availability: { weekly: {
+      sun: { works: true, start: "08:00", end: "14:00" },
+      mon: { works: true, start: "08:00", end: "14:00" },
+      tue: { works: false }, wed: { works: false }, thu: { works: false },
+      fri: { works: false }, sat: { works: false },
+    } } })];
+    const { unfilled } = generateCoverageMonth({
+      staff, year: 2026, month0: 7, timeOff: [], rules: proShopRules(), area: "pro_shop",
+      overrides: { [MONDAY]: { unstaffed: { outside: [AFTERNOON] } } },
+    });
+    // 14:00–16:00 is excused; 16:00–20:00 is a real hole and is named.
+    expect(unfilled.some((slot) =>
+      slot.date === MONDAY && slot.group === "outside"
+      && slot.start === "16:00" && slot.end === "20:00")).toBe(true);
+    expect(unfilled.some((slot) =>
+      slot.date === MONDAY && slot.group === "outside" && slot.start === "14:00")).toBe(false);
+  });
+});
+
 describe("rebuilding a chosen window", () => {
   it("builds only the dates it was given", () => {
     const { shifts } = generateCoverageMonth({

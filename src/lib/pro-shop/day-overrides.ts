@@ -24,12 +24,50 @@ import type {
   DayOverride,
   DayOverrides,
   ShiftGroup,
+  TimeRange,
 } from "./types";
 
 // The shapes live in types.ts, next to DismissedWarnings and the schedule row
 // that carries them. Re-exported so callers can take the type and the helpers
 // from one import.
-export type { DayGroupOverride, DayOverride, DayOverrides };
+export type { DayGroupOverride, DayOverride, DayOverrides, TimeRange };
+
+/**
+ * A weekday rule with this date's exceptions folded in.
+ *
+ * `unstaffed` is the one field that has no column behind it — it comes from
+ * the day override, and everything that asks "is this day covered" reads it
+ * off the rule so the grid, the warnings, the generator and the printout
+ * cannot disagree about a stretch the GM has excused.
+ */
+export type EffectiveRule = CoverageRule & { unstaffed?: TimeRange[] };
+
+/** Most excused stretches one group may carry on one day. A sanity bound. */
+const MAX_UNSTAFFED_PER_GROUP = 12;
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function cleanRange(value: unknown): TimeRange | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { start, end } = value as { start?: unknown; end?: unknown };
+  if (typeof start !== "string" || typeof end !== "string") return null;
+  if (!TIME_RE.test(start) || !TIME_RE.test(end)) return null;
+  // A backwards or empty stretch would excuse nothing and read as a bug.
+  return start < end ? { start, end } : null;
+}
+
+export function sameRange(a: TimeRange, b: TimeRange): boolean {
+  return a.start === b.start && a.end === b.end;
+}
+
+/** The stretches one group needs nobody on, for one date. */
+export function unstaffedFor(
+  date: string,
+  group: ShiftGroup,
+  overrides: DayOverrides,
+): TimeRange[] {
+  return overrides[date]?.unstaffed?.[group] ?? [];
+}
 
 /**
  * Ceiling on a per-day headcount. Not a business rule — a guard so a typo or a
@@ -57,7 +95,7 @@ export function sanitizeDayOverrides(raw: unknown): DayOverrides {
   for (const [date, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!DATE_RE.test(date)) continue;
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const entry = value as { locked?: unknown; groups?: unknown };
+    const entry = value as { locked?: unknown; groups?: unknown; unstaffed?: unknown };
     const next: DayOverride = {};
     if (entry.locked === true) next.locked = true;
     if (entry.groups && typeof entry.groups === "object" && !Array.isArray(entry.groups)) {
@@ -73,9 +111,26 @@ export function sanitizeDayOverrides(raw: unknown): DayOverrides {
       }
       if (Object.keys(groups).length > 0) next.groups = groups;
     }
+    if (entry.unstaffed && typeof entry.unstaffed === "object" && !Array.isArray(entry.unstaffed)) {
+      const unstaffed: Partial<Record<ShiftGroup, TimeRange[]>> = {};
+      for (const [group, ranges] of Object.entries(entry.unstaffed as Record<string, unknown>)) {
+        if (!Array.isArray(ranges)) continue;
+        const clean: TimeRange[] = [];
+        for (const raw of ranges) {
+          const range = cleanRange(raw);
+          // Dropping duplicates keeps "undo this one" unambiguous.
+          if (range && !clean.some((kept) => sameRange(kept, range))) clean.push(range);
+          if (clean.length >= MAX_UNSTAFFED_PER_GROUP) break;
+        }
+        if (clean.length > 0) {
+          unstaffed[group as ShiftGroup] = clean.sort((a, b) => a.start.localeCompare(b.start));
+        }
+      }
+      if (Object.keys(unstaffed).length > 0) next.unstaffed = unstaffed;
+    }
     // Drop entries that ended up saying nothing, so `{}` never counts as
     // "this day is customised" in the UI.
-    if (next.locked || next.groups) out[date] = next;
+    if (next.locked || next.groups || next.unstaffed) out[date] = next;
   }
   return out;
 }
@@ -87,7 +142,7 @@ export function overrideFor(date: string, overrides: DayOverrides): DayOverride 
 /** Does this date carry any exception at all? Drives the "customised" badge. */
 export function hasDayOverride(date: string, overrides: DayOverrides): boolean {
   const entry = overrides[date];
-  return !!entry && (entry.locked === true || !!entry.groups);
+  return !!entry && (entry.locked === true || !!entry.groups || !!entry.unstaffed);
 }
 
 /** A locked day is held as-is: no rebuild touches it. */
@@ -104,15 +159,20 @@ export function effectiveRulesForDay(
   date: string,
   rules: CoverageRule[],
   overrides: DayOverrides = {},
-): CoverageRule[] {
+): EffectiveRule[] {
   const weekday = parseYmd(date).getDay();
-  const groups = overrides[date]?.groups;
+  const entry = overrides[date];
   const forWeekday = rules.filter((rule) => rule.weekday === weekday);
-  if (!groups) return forWeekday;
+  if (!entry?.groups && !entry?.unstaffed) return forWeekday;
   return forWeekday.map((rule) => {
-    const counts = groups[rule.group];
-    if (!counts) return rule;
-    return { ...rule, base_staff: counts.base, extra_staff: counts.extra };
+    const counts = entry.groups?.[rule.group];
+    const excused = entry.unstaffed?.[rule.group];
+    if (!counts && !excused?.length) return rule;
+    return {
+      ...rule,
+      ...(counts ? { base_staff: counts.base, extra_staff: counts.extra } : {}),
+      ...(excused?.length ? { unstaffed: excused } : {}),
+    };
   });
 }
 
@@ -152,7 +212,41 @@ export function withDayCounts(
   }
   if (Object.keys(groups).length > 0) entry.groups = groups;
   else delete entry.groups;
-  if (entry.locked || entry.groups) next[date] = entry;
+  if (entry.locked || entry.groups || entry.unstaffed) next[date] = entry;
+  else delete next[date];
+  return next;
+}
+
+/**
+ * Excuse (or un-excuse) one stretch of one date for one group.
+ *
+ * @param needed false to say nobody is needed then; true to want cover back.
+ */
+export function withDayUnstaffed(
+  overrides: DayOverrides,
+  date: string,
+  group: ShiftGroup,
+  range: TimeRange,
+  needed: boolean,
+): DayOverrides {
+  const next: DayOverrides = { ...overrides };
+  const entry: DayOverride = { ...(next[date] ?? {}) };
+  const unstaffed = { ...(entry.unstaffed ?? {}) };
+  const current = unstaffed[group] ?? [];
+
+  if (needed) {
+    const kept = current.filter((r) => !sameRange(r, range));
+    if (kept.length > 0) unstaffed[group] = kept;
+    else delete unstaffed[group];
+  } else if (!current.some((r) => sameRange(r, range))) {
+    unstaffed[group] = [...current, range]
+      .slice(0, MAX_UNSTAFFED_PER_GROUP)
+      .sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  if (Object.keys(unstaffed).length > 0) entry.unstaffed = unstaffed;
+  else delete entry.unstaffed;
+  if (entry.locked || entry.groups || entry.unstaffed) next[date] = entry;
   else delete next[date];
   return next;
 }
@@ -166,7 +260,7 @@ export function withDayLocked(
   const entry: DayOverride = { ...(next[date] ?? {}) };
   if (locked) entry.locked = true;
   else delete entry.locked;
-  if (entry.locked || entry.groups) next[date] = entry;
+  if (entry.locked || entry.groups || entry.unstaffed) next[date] = entry;
   else delete next[date];
   return next;
 }
