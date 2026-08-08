@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { callApi } from "@/lib/api/client";
 import { Overlay } from "./overlay";
 import {
+  AREA_GROUPS,
+  GROUP_LABELS,
   WEEKDAY_KEYS,
   WEEKDAY_LABELS,
   emptyWeekly,
@@ -57,9 +59,23 @@ export function AvailabilitySheet({
   const [saving, setSaving] = useState(false);
 
   const defaultGroup = positionGroup(staff.position);
+  /** The jobs this person's own schedule runs — never another area's. */
+  const jobs = AREA_GROUPS[staff.area ?? "pro_shop"];
 
   function setDay(key: WeekdayKey, patch: Partial<DayPattern>) {
     setWeekly((w) => ({ ...w, [key]: { ...w[key], ...patch } }));
+  }
+
+  /**
+   * Keep a day's job inside this person's own schedule.
+   *
+   * The AI reply is free text and the stored value may predate the areas, so
+   * anything that is not one of their schedule's jobs falls back to their own.
+   * A grounds day filed as "outside" is invisible on the maintenance board —
+   * that is the bug this guard exists to stop coming back.
+   */
+  function ownJob(value: unknown): ShiftGroup {
+    return jobs.includes(value as ShiftGroup) ? (value as ShiftGroup) : defaultGroup;
   }
 
   async function runAi() {
@@ -84,7 +100,7 @@ export function AvailabilitySheet({
         if (d && d.works) {
           next[k] = {
             works: true,
-            group: (d.group as ShiftGroup) ?? defaultGroup,
+            group: ownJob(d.group),
             start: d.start ?? "08:00",
             end: d.end ?? "14:00",
           };
@@ -114,7 +130,7 @@ export function AvailabilitySheet({
         if (d?.works) {
           cleanWeekly[k] = {
             works: true,
-            group: d.group ?? defaultGroup,
+            group: ownJob(d.group),
             start: d.start || "08:00",
             end: d.end || "14:00",
           };
@@ -206,14 +222,23 @@ export function AvailabilitySheet({
                 </label>
                 {d?.works ? (
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <select
-                      value={d.group ?? defaultGroup}
-                      onChange={(e) => setDay(k, { group: e.target.value as ShiftGroup })}
-                      className={selectCls}
-                    >
-                      <option value="outside">Outside</option>
-                      <option value="inside">Inside</option>
-                    </select>
+                    {/* Only the jobs this person's own schedule has. Offering
+                        Inside/Outside to everybody is how the whole grounds
+                        crew ended up with their days filed under the pro
+                        shop's groups. A schedule with one job needs no picker
+                        at all. */}
+                    {jobs.length > 1 && (
+                      <select
+                        value={d.group ?? defaultGroup}
+                        onChange={(e) => setDay(k, { group: e.target.value as ShiftGroup })}
+                        className={selectCls}
+                        aria-label={`Which job on ${WEEKDAY_LABELS[k]}`}
+                      >
+                        {jobs.map((group) => (
+                          <option key={group} value={group}>{GROUP_LABELS[group]}</option>
+                        ))}
+                      </select>
+                    )}
                     <input
                       type="time"
                       value={d.start ?? "08:00"}

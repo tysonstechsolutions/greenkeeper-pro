@@ -2,15 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarClock, Sun, Moon, ChevronRight, UserPlus, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  CalendarClock, Sun, Moon, ChevronRight, UserPlus, Loader2, CheckCircle, AlertCircle,
+  Sprout, UtensilsCrossed, Wrench,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { ProShopStaff, ShiftGroup } from "@/lib/pro-shop/types";
 import { directSelectList } from "@/lib/supabase/rest";
-import type { ProShopStaff } from "@/lib/pro-shop/types";
 import { positionGroup } from "@/lib/pro-shop/types";
 import {
   findUnimportedScheduleStaff,
   importScheduleStaff,
 } from "@/lib/staff/import-schedule-staff";
+
+/** The icon each job wears on its name chip, for every schedule. */
+const JOB_CHIP: Record<ShiftGroup, { icon: typeof Sun; tint: string }> = {
+  inside: { icon: Moon, tint: "text-indigo-500" },
+  outside: { icon: Sun, tint: "text-amber-500" },
+  grounds: { icon: Sprout, tint: "text-emerald-600" },
+  shop: { icon: Wrench, tint: "text-violet-500" },
+  restaurant: { icon: UtensilsCrossed, tint: "text-rose-500" },
+};
 
 interface ProShopRosterCardProps {
   /** Names of existing profiles, for spotting schedule staff not yet in Staff. */
@@ -105,11 +117,10 @@ export function ProShopRosterCard({ profileNames, onImported }: ProShopRosterCar
                 missingNames.has(s.id) ? "border-amber-400/60 border-dashed" : "border-border"
               }`}
             >
-              {positionGroup(s.position) === "inside" ? (
-                <Moon className="w-3 h-3 text-indigo-500" />
-              ) : (
-                <Sun className="w-3 h-3 text-amber-500" />
-              )}
+              {(() => {
+                const { icon: Icon, tint } = JOB_CHIP[positionGroup(s.position)];
+                return <Icon className={`w-3 h-3 ${tint}`} />;
+              })()}
               {s.full_name}
             </span>
           ))}

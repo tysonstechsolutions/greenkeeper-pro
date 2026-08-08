@@ -8,6 +8,7 @@
  * schedule, so a pattern with no valid working day is rejected (returns null).
  */
 import {
+  AREA_GROUPS,
   SHIFT_GROUPS,
   WEEKDAY_KEYS,
   emptyWeekly,
@@ -53,6 +54,14 @@ export function validDate(raw: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : s;
 }
 
+/** Do these two jobs belong to the same schedule? */
+function sameArea(candidate: unknown, own: ShiftGroup): boolean {
+  if (!SHIFT_GROUPS.includes(candidate as ShiftGroup)) return false;
+  return (Object.values(AREA_GROUPS) as ShiftGroup[][]).some(
+    (groups) => groups.includes(candidate as ShiftGroup) && groups.includes(own),
+  );
+}
+
 /**
  * Validate an AI weekly pattern into a clean 7-day map. A day is only "works"
  * if it has valid start+end times; group falls back to `fallbackGroup`. Returns
@@ -85,10 +94,11 @@ export function sanitizeWeekly(
       out[k] = { works: false };
       continue;
     }
-    // Any real group is accepted; anything else falls back to the person's own,
-    // so an AI reply naming a group that does not exist cannot file a shift
-    // under it.
-    const group: ShiftGroup = SHIFT_GROUPS.includes(d.group as ShiftGroup)
+    // Only a group from the SAME SCHEDULE as the person's own is accepted;
+    // anything else falls back to theirs. An AI reply calling a grounds day
+    // "outside" would otherwise file it under a job the maintenance board
+    // does not have, where it is invisible.
+    const group: ShiftGroup = sameArea(d.group, fallbackGroup)
       ? (d.group as ShiftGroup)
       : fallbackGroup;
     out[k] = { works: true, group, start, end };

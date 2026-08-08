@@ -1,7 +1,7 @@
 "use client";
 import { SCHEDULE_AREA_BLURBS, SCHEDULE_AREA_LABELS, type ScheduleArea } from "@/lib/pro-shop/types";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   startOfMonth,
@@ -779,8 +779,16 @@ function ProShopScheduleContent() {
           const inMonth = isSameMonth(day, monthDate);
           const isToday = ds === TODAY;
           const dayShifts = shiftsOn(ds);
-          const out = dayShifts.filter((s) => s.group === "outside");
-          const ins = dayShifts.filter((s) => s.group === "inside");
+          // One block per job, in the area's own order, with a rule between
+          // them. Built from the area rather than from a hard-coded
+          // inside/outside pair — that pair silently rendered nothing at all
+          // on the maintenance and restaurant schedules, whose shifts are
+          // neither. Anything filed under a job this area does not have still
+          // shows, at the end, rather than disappearing off the day.
+          const blocks = [
+            ...AREA_GROUPS[area].map((group) => dayShifts.filter((s) => s.group === group)),
+            dayShifts.filter((s) => !AREA_GROUPS[area].includes(s.group)),
+          ].filter((list) => list.length > 0);
           const warns = inMonth ? activeWarnings(dayWarnings(dayShifts, area, rulesOn(ds)), dismissedMap[ds]) : [];
           const line = (s: ProShopShift) => (
             <ShiftLine
@@ -853,9 +861,12 @@ function ProShopScheduleContent() {
               </div>
               {inMonth && (
                 <div className="relative space-y-px">
-                  {out.map(line)}
-                  {ins.length > 0 && out.length > 0 && <div className="h-px bg-border my-0.5" />}
-                  {ins.map(line)}
+                  {blocks.map((list, i) => (
+                    <Fragment key={list[0].group}>
+                      {i > 0 && <div className="h-px bg-border my-0.5" />}
+                      {list.map(line)}
+                    </Fragment>
+                  ))}
                   {/* A shift with nobody on it, shown rather than left blank.
                       Solid underline with room for a name, tinted in the
                       group's colour — the same as it prints. */}

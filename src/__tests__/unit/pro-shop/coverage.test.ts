@@ -8,6 +8,7 @@ import {
 } from "@/lib/pro-shop/coverage";
 import { elapsedMinutes, minutesOfDay, paidMinutes, timeFromMinutes } from "@/lib/pro-shop/hours";
 import {
+  AREA_GROUPS,
   DEFAULT_SCHEDULE_SETTINGS,
   type CoverageRule,
   type ProShopShift,
@@ -636,6 +637,50 @@ describe("per-day overrides", () => {
     expect(shifts.filter((s) => s.shift_date === SATURDAY)).toEqual([]);
     // Every other day is still built.
     expect(shifts.filter((s) => s.shift_date === "2026-08-22").length).toBeGreaterThan(0);
+  });
+});
+
+describe("every shift belongs to a job its own schedule has", () => {
+  // The maintenance crew's shifts were once filed under the pro shop's
+  // "outside" group. They showed on the month grid only because the grid
+  // happened to render that group, and vanished the moment it stopped.
+  // A shift outside its area's jobs is invisible on that area's board.
+  it("never files a shift under another schedule's job", () => {
+    const crew = ["jorge", "payton", "bart"].map((id, i) =>
+      person({
+        id, area: "maintenance", position: "maintenance_crew",
+        default_group: "grounds", sort_order: i,
+      }));
+    const groundsRules: CoverageRule[] = Array.from({ length: 7 }, (_, weekday) => ({
+      id: `grd-${weekday}`, area: "maintenance" as const, weekday, group: "grounds" as const,
+      open_time: "05:00", close_time: "13:30",
+      base_staff: 2, extra_staff: 0, extra_start: null,
+    }));
+    const { shifts: placed } = generateCoverageMonth({
+      staff: crew, year: 2026, month0: 8, timeOff: [],
+      rules: groundsRules, area: "maintenance",
+    });
+    expect(placed.length).toBeGreaterThan(0);
+    for (const shift of placed) expect(AREA_GROUPS.maintenance).toContain(shift.group);
+  });
+
+  it("keeps each area's generated shifts inside that area's jobs", () => {
+    const everyone = [
+      ...roster(),
+      person({ id: "jorge", area: "maintenance", position: "maintenance_crew", default_group: "grounds" }),
+      person({ id: "nathan", area: "buckleys", position: "restaurant_staff", default_group: "restaurant" }),
+    ];
+    for (const area of ["pro_shop", "maintenance", "buckleys"] as const) {
+      const rules: CoverageRule[] = [{
+        id: `r-${area}`, area, weekday: 1, group: AREA_GROUPS[area][0],
+        open_time: "09:00", close_time: "17:00",
+        base_staff: 1, extra_staff: 0, extra_start: null,
+      }];
+      const { shifts: placed } = generateCoverageMonth({
+        staff: everyone, year: 2026, month0: 8, timeOff: [], rules, area,
+      });
+      for (const shift of placed) expect(AREA_GROUPS[area]).toContain(shift.group);
+    }
   });
 });
 
