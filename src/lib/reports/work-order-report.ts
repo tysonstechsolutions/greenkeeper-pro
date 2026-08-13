@@ -55,7 +55,13 @@ export interface WorkOrderData {
   numberOfEnclosures: string;
   secondaryPocName: string;
   secondaryPocPhone: string;
-  /** Base64 data-URL strings for attached photos (appended as enclosure pages). */
+  /**
+   * Base64 data-URL strings for attached photos (appended as enclosure pages).
+   * Stored references are resolved to data URLs by
+   * `resolveWorkOrderPhotoDataUrls` in `lib/work-orders/photos` — this module
+   * stays fetch-free so it can be unit-tested in Node.
+   * When this is non-empty it also drives the enclosure COUNT on the form.
+   */
   photos?: string[];
 }
 
@@ -206,36 +212,45 @@ export async function fillWorkOrderPdf(
   setDropdown(FIELD.workType, data.workType);
   setText(FIELD.primaryPocEmail, data.primaryPocEmail, { nativeSize: 10 });
   setText(FIELD.primaryPocPhone, data.primaryPocPhone);
-  setText(FIELD.numberOfEnclosures, data.numberOfEnclosures);
   setText(FIELD.secondaryPocName, data.secondaryPocName);
   setText(FIELD.secondaryPocPhone, data.secondaryPocPhone);
 
   // Photo enclosure pages (appended after the form page).
+  let embedded = 0;
   if (data.photos && data.photos.length > 0) {
     for (const dataUrl of data.photos) {
-      await appendPhotoPage(pdf, dataUrl);
+      if (await appendPhotoPage(pdf, dataUrl)) embedded += 1;
     }
   }
+
+  // The enclosure count must match the pages we actually appended — a form
+  // that claims enclosures it doesn't carry is what sent the reader looking
+  // for attachments that were never there. With no photos supplied at all
+  // (e.g. an older row), keep whatever count the caller recorded.
+  setText(
+    FIELD.numberOfEnclosures,
+    data.photos && data.photos.length > 0 ? String(embedded) : data.numberOfEnclosures,
+  );
 
   return pdf.save();
 }
 
-async function appendPhotoPage(pdf: PDFDocument, dataUrl: string): Promise<void> {
+async function appendPhotoPage(pdf: PDFDocument, dataUrl: string): Promise<boolean> {
   const comma = dataUrl.indexOf(",");
-  if (comma === -1) return;
+  if (comma === -1) return false;
   const meta = dataUrl.slice(0, comma);
   const b64 = dataUrl.slice(comma + 1);
   let bytes: Uint8Array;
   try {
     bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   } catch {
-    return;
+    return false;
   }
   let img;
   try {
     img = /png/i.test(meta) ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
   } catch {
-    return;
+    return false;
   }
   const PW = 612;
   const PH = 792;
@@ -245,6 +260,7 @@ async function appendPhotoPage(pdf: PDFDocument, dataUrl: string): Promise<void>
   const w = img.width * scale;
   const h = img.height * scale;
   page.drawImage(img, { x: (PW - w) / 2, y: (PH - h) / 2, width: w, height: h });
+  return true;
 }
 
 // ── Browser entry points ────────────────────────────────────────────────────────

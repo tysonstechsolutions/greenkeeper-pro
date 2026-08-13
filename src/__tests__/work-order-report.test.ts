@@ -71,6 +71,31 @@ describe("fillWorkOrderPdf", () => {
     expect(pdf.getPageCount()).toBe(2);
   });
 
+  it("counts the enclosures it actually embedded, not the ones it was told about", async () => {
+    const templateBytes = fs.readFileSync(TEMPLATE);
+    const out = await fillWorkOrderPdf(templateBytes, {
+      ...sample,
+      numberOfEnclosures: "3", // caller over-counted
+      photos: [TINY_PNG, "data:image/png;base64,!!not-base64!!", TINY_PNG],
+    });
+    const pdf = await PDFDocument.load(out);
+    // Two good photos → two extra pages, and the form says 2.
+    expect(pdf.getPageCount()).toBe(3);
+    expect(pdf.getForm().getTextField("Text14").getText()).toBe("2");
+  });
+
+  it("keeps the recorded count when no photos are supplied at all", async () => {
+    const templateBytes = fs.readFileSync(TEMPLATE);
+    const out = await fillWorkOrderPdf(templateBytes, {
+      ...sample,
+      numberOfEnclosures: "4",
+      photos: undefined,
+    });
+    const pdf = await PDFDocument.load(out);
+    expect(pdf.getPageCount()).toBe(1);
+    expect(pdf.getForm().getTextField("Text14").getText()).toBe("4");
+  });
+
   it("ignores a facility/work-type value that isn't a valid option", async () => {
     const templateBytes = fs.readFileSync(TEMPLATE);
     const out = await fillWorkOrderPdf(templateBytes, {

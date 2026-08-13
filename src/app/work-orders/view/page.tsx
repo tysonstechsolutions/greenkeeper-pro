@@ -10,12 +10,26 @@ import {
   AlertTriangle,
   Loader2,
   Wrench,
+  ImagePlus,
+  Camera,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import { generateWorkOrderBlob, type WorkOrderData } from "@/lib/reports/work-order-report";
 import { workOrderPdfFilename, workOrderDisplayName } from "@/lib/reports/wo-naming";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
+import { isNative, capturePhoto } from "@/lib/utils/native-camera";
+import { directPatchRow, getCachedUserId } from "@/lib/supabase/rest";
+import {
+  deleteWorkOrderPhoto,
+  prepareWorkOrderPhoto,
+  resolveWorkOrderPhotoDataUrls,
+  uploadWorkOrderPhotos,
+  workOrderPhotoUrl,
+} from "@/lib/work-orders/photos";
+
+const MAX_PHOTOS = 10;
 
 // ── DB row type ──────────────────────────────────────────────────────────────
 
@@ -84,6 +98,12 @@ function ViewWorkOrderInner() {
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingPhotos, setSavingPhotos] = useState(false);
+  const [onNative, setOnNative] = useState(false);
+
+  useEffect(() => {
+    isNative().then(setOnNative);
+  }, []);
 
   useEffect(() => {
     if (!id) {
@@ -116,6 +136,9 @@ function ViewWorkOrderInner() {
     setDownloading(true);
     setError(null);
     try {
+      // Stored photos are storage paths — pull them back down as data URLs so
+      // they get appended as enclosure pages, not just counted on the form.
+      const photos = await resolveWorkOrderPhotoDataUrls(wo.photos);
       const data: WorkOrderData = {
         date: formatDateMmDdYyyy(wo.date_submitted),
         facilityBldg: wo.facility_bldg ?? "",
@@ -128,7 +151,7 @@ function ViewWorkOrderInner() {
         numberOfEnclosures: wo.number_of_enclosures ?? "0",
         secondaryPocName: wo.secondary_poc_name ?? "",
         secondaryPocPhone: wo.secondary_poc_phone ?? "",
-        photos: wo.photos ?? undefined,
+        photos,
       };
       const blob = await generateWorkOrderBlob(data);
       const filename = workOrderPdfFilename(
@@ -146,6 +169,79 @@ function ViewWorkOrderInner() {
       );
     } finally {
       setDownloading(false);
+    }
+  }
+
+  /** Persist a new enclosure list on the row and mirror it into the count. */
+  async function savePhotoList(next: string[]) {
+    if (!wo) return;
+    await directPatchRow(
+      "work_orders",
+      "id",
+      wo.id,
+      { photos: next, number_of_enclosures: String(next.length) },
+      "work-orders.updatePhotos",
+    );
+    setWo({ ...wo, photos: next, number_of_enclosures: String(next.length) });
+  }
+
+  async function handleAddPhotos(files: File[]) {
+    if (!wo || files.length === 0) return;
+    const existing = wo.photos ?? [];
+    const room = MAX_PHOTOS - existing.length;
+    if (room <= 0) return;
+
+    setSavingPhotos(true);
+    setError(null);
+    try {
+      const prepared: File[] = [];
+      for (const f of files.slice(0, room)) {
+        try {
+          prepared.push((await prepareWorkOrderPhoto(f)).file);
+        } catch {
+          /* skip a photo the browser can't decode */
+        }
+      }
+      if (prepared.length === 0) throw new Error("None of those files could be read as images.");
+
+      const paths = await uploadWorkOrderPhotos(
+        prepared,
+        profile?.id ?? getCachedUserId(),
+      );
+      await savePhotoList([...existing, ...paths]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't add the photos.");
+    } finally {
+      setSavingPhotos(false);
+    }
+  }
+
+  async function handleCameraCapture() {
+    let file: File;
+    try {
+      file = (await capturePhoto()).file;
+    } catch {
+      return; // user cancelled
+    }
+    await handleAddPhotos([file]);
+  }
+
+  async function handleRemovePhoto(index: number) {
+    if (!wo) return;
+    const existing = wo.photos ?? [];
+    const ref = existing[index];
+    if (!ref) return;
+    if (!confirm("Remove this enclosure from the work order?")) return;
+
+    setSavingPhotos(true);
+    setError(null);
+    try {
+      await savePhotoList(existing.filter((_, i) => i !== index));
+      await deleteWorkOrderPhoto(ref);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't remove the photo.");
+    } finally {
+      setSavingPhotos(false);
     }
   }
 
@@ -201,6 +297,8 @@ function ViewWorkOrderInner() {
     wo.wo_sequence_number,
     wo.date_submitted,
   );
+  const photoRefs = wo.photos ?? [];
+  const claimedEnclosures = Number.parseInt(wo.number_of_enclosures ?? "0", 10) || 0;
 
   return (
     <div className="p-3 pb-32 max-w-2xl mx-auto overflow-x-hidden">
@@ -319,12 +417,99 @@ function ViewWorkOrderInner() {
         />
       </SectionCard>
 
-      <SectionCard title="Enclosures">
-        <Detail
-          label="Number of Enclosures"
-          value={wo.number_of_enclosures || "0"}
-        />
-      </SectionCard>
+      {/* Enclosures — the photos that ride along as extra PDF pages. */}
+      <section className="mt-3 rounded-xl border border-border bg-card p-3">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <h2 className="font-semibold text-sm">Enclosures</h2>
+          <span className="text-xs text-muted-foreground">
+            {photoRefs.length}/{MAX_PHOTOS} attached
+          </span>
+        </div>
+
+        {claimedEnclosures > photoRefs.length && (
+          <div className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              This work order lists {claimedEnclosures} enclosure
+              {claimedEnclosures === 1 ? "" : "s"} but only {photoRefs.length} photo
+              {photoRefs.length === 1 ? " is" : "s are"} saved, so the rest can&apos;t
+              be printed. Add them below and download again.
+            </p>
+          </div>
+        )}
+
+        {photoRefs.length > 0 ? (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {photoRefs.map((ref, idx) => (
+              <div
+                key={`${ref}-${idx}`}
+                className="relative group aspect-square rounded-lg overflow-hidden border border-border"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={workOrderPhotoUrl(ref)}
+                  alt={`Enclosure ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {isManagement && (
+                  <button
+                    type="button"
+                    aria-label={`Remove enclosure ${idx + 1}`}
+                    onClick={() => handleRemovePhoto(idx)}
+                    disabled={savingPhotos}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 transition-opacity disabled:opacity-50"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No photos attached — the PDF is the form page only.
+          </p>
+        )}
+
+        {isManagement && photoRefs.length < MAX_PHOTOS && (
+          <div className="flex items-center gap-2 mt-3">
+            <label
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-dashed border-border bg-background transition-colors ${
+                savingPhotos ? "opacity-50" : "hover:bg-muted/50 cursor-pointer"
+              }`}
+            >
+              <ImagePlus className="w-4 h-4 text-muted-foreground" />
+              Add Photos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={savingPhotos}
+                className="sr-only"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? []);
+                  e.target.value = "";
+                  handleAddPhotos(picked);
+                }}
+              />
+            </label>
+            {onNative && (
+              <button
+                type="button"
+                onClick={handleCameraCapture}
+                disabled={savingPhotos}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-border bg-background hover:bg-muted/50 transition-colors disabled:opacity-50"
+              >
+                <Camera className="w-4 h-4 text-muted-foreground" />
+                Take Photo
+              </button>
+            )}
+            {savingPhotos && (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Delete */}
       {isManagement && (

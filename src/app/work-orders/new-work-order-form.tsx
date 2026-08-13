@@ -29,10 +29,13 @@ import {
 import { workOrderPdfFilename } from "@/lib/reports/wo-naming";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayCentralMmDdYyyy } from "@/lib/utils/date";
-import { resizeImageFile } from "@/lib/utils/image-resize";
 import { isNative, capturePhoto } from "@/lib/utils/native-camera";
-import { directInsertRow } from "@/lib/supabase/rest";
+import { directInsertRow, getCachedUserId } from "@/lib/supabase/rest";
 import { createClubhouseIssueForWO } from "@/lib/work-orders/clubhouse-sync";
+import {
+  prepareWorkOrderPhoto,
+  uploadWorkOrderPhotos,
+} from "@/lib/work-orders/photos";
 import { PR_COST_CENTERS } from "@/lib/pr-accounting-codes";
 
 // ── Fixed SECTION 2 values ──────────────────────────────────────────────────────
@@ -130,6 +133,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
   const [generating, setGenerating] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoWarning, setPhotoWarning] = useState<string | null>(null);
   const [lastData, setLastData] = useState<WorkOrderData | null>(null);
   const [lastFilename, setLastFilename] = useState<string | null>(null);
 
@@ -155,11 +159,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
     const results: { file: File; dataUrl: string }[] = [];
     for (const f of batch) {
       try {
-        const resized = await resizeImageFile(f, { maxDim: 1600, quality: 0.82 });
-        results.push({
-          file: resized.file,
-          dataUrl: `data:${resized.mediaType};base64,${resized.base64}`,
-        });
+        results.push(await prepareWorkOrderPhoto(f));
       } catch {
         /* skip unreadable files */
       }
@@ -170,11 +170,8 @@ export function NewWorkOrderForm({ onCreated }: Props) {
   const handleCameraCapture = async () => {
     try {
       const captured = await capturePhoto();
-      const resized = await resizeImageFile(captured.file, { maxDim: 1600, quality: 0.82 });
-      setPhotos((prev) => [
-        ...prev,
-        { file: resized.file, dataUrl: `data:${resized.mediaType};base64,${resized.base64}` },
-      ]);
+      const prepared = await prepareWorkOrderPhoto(captured.file);
+      setPhotos((prev) => (prev.length >= MAX_PHOTOS ? prev : [...prev, prepared]));
     } catch {
       /* user cancelled */
     }
@@ -257,6 +254,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
     if (!preview) return;
     setGenerating(true);
     setError(null);
+    setPhotoWarning(null);
     try {
       const formattedDescription = preview.desc.trim() || description;
       const workType = preview.workType.trim() || "Routine";
@@ -271,6 +269,27 @@ export function NewWorkOrderForm({ onCreated }: Props) {
       });
 
       const photoDataUrls = photos.map((p) => p.dataUrl);
+
+      // Upload the enclosures FIRST so the saved row can point at them. Without
+      // this the row kept only the count, and every later download rebuilt a
+      // form that claimed enclosures with nothing behind it.
+      let photoPaths: string[] = [];
+      if (photos.length > 0) {
+        try {
+          photoPaths = await uploadWorkOrderPhotos(
+            photos.map((p) => p.file),
+            profile?.id ?? getCachedUserId(),
+          );
+        } catch (err) {
+          // Never lose the work order over a photo upload — save it, and say
+          // plainly that the pictures didn't stick so they can be re-added.
+          console.warn("[work-orders] photo upload failed:", err);
+          setPhotoWarning(
+            "The photos couldn't be uploaded, so they aren't saved with this work order. The PDF below still has them — open the work order later to attach them again.",
+          );
+        }
+      }
+
       const enclosureCount = photos.length > 0 ? String(photos.length) : "0";
 
       const data: WorkOrderData = {
@@ -304,7 +323,8 @@ export function NewWorkOrderForm({ onCreated }: Props) {
           primary_poc_phone: WO_POC.primaryPhone,
           secondary_poc_name: WO_POC.secondaryName,
           secondary_poc_phone: WO_POC.secondaryPhone,
-          number_of_enclosures: enclosureCount,
+          number_of_enclosures: String(photoPaths.length),
+          photos: photoPaths,
           status: "submitted",
           created_by: profile?.id ?? null,
         },
@@ -367,6 +387,7 @@ export function NewWorkOrderForm({ onCreated }: Props) {
     setPreview(null);
     setDone(false);
     setError(null);
+    setPhotoWarning(null);
     setLastData(null);
     setLastFilename(null);
   };
@@ -386,6 +407,11 @@ export function NewWorkOrderForm({ onCreated }: Props) {
               it to <span className="font-medium">grlkmwrworkorders@us.navy.mil</span> to submit.
             </p>
           </div>
+          {photoWarning && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 text-left">
+              {photoWarning}
+            </div>
+          )}
           <div className="flex gap-3 justify-center pt-1">
             <Button onClick={handleDownloadAgain} variant="outline" disabled={generating}>
               {generating ? (
