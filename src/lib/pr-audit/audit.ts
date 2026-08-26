@@ -19,7 +19,8 @@
  *      (non-fee, non-tax) subtotal.
  *   4. Sales tax (when present) is a single line and is excluded from the fee
  *      base — surfaced for visibility.
- *   5. The "Other" attachment box is labeled "Vendor Quote".
+ *   5. The "Other" attachment box names the quote — either its filename
+ *      ("QUOTE-FY26-GC-0001-…") or the older literal "Vendor Quote".
  *   6. The grand total printed on the PR matches the sum of the line items.
  *   7. (Info) the PR doesn't unexpectedly span multiple cost centers.
  */
@@ -38,6 +39,14 @@ import {
   CC_FEE_RATE,
 } from "@/lib/pr-cc-fee";
 import type { PurchaseRequestItem } from "@/types/database";
+
+/**
+ * The quote filename the PR builder puts in the "Other" box, e.g.
+ * "QUOTE-FY26-GC-0001-AceHardware-Golf Course-August2026". The sequence slot
+ * may still read "####" on a PR that was printed before it was saved.
+ * See `quoteFilenameBase` in reports/pr-naming.
+ */
+const QUOTE_LABEL_RE = /^QUOTE-FY\d{2}-[A-Z]{2}-(?:\d+|#{2,})-/i;
 
 // ── Inputs ────────────────────────────────────────────────────────────────
 
@@ -462,17 +471,20 @@ export function auditPr(
     });
   }
 
-  // 5. "Other" attachment must read "Vendor Quote".
+  // 5. "Other" attachment must name the quote. The builder writes the name
+  //    the quote is filed under ("QUOTE-FY26-GC-0001-…"); PRs typed before
+  //    that, and ones filled by hand, say "Vendor Quote". Both are fine —
+  //    a blank box, or anything else, is not.
   const other = (pr.attached_other ?? "").trim();
-  if (!/vendor\s*quote/i.test(other)) {
+  if (!QUOTE_LABEL_RE.test(other) && !/vendor\s*quote/i.test(other)) {
     findings.push({
       code: "other_not_vendor_quote",
       severity: "warning",
-      title: `"Other" attachment isn't marked "Vendor Quote"`,
+      title: `"Other" attachment doesn't name the quote`,
       detail: other
         ? `The "Other" box reads "${other}".`
         : `The "Other" attachment box is blank.`,
-      suggestion: `Check the "Other" box and label it "Vendor Quote".`,
+      suggestion: `Check the "Other" box and label it with the quote's filename (QUOTE-FY##-GC-####-…), or "Vendor Quote".`,
       itemIndex: null,
       field: null,
     });

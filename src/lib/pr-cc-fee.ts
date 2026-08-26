@@ -5,9 +5,11 @@
  * so the request total matches what the card actually gets charged. The rate
  * defaults to 3% but is editable per-PR — some vendors charge a different
  * surcharge (e.g. 3.5%). This module owns the rate math and the invariant
- * that the fee line is always present, always last, and always equal to
- * `rate × the extended subtotal of every OTHER non-tax line item on the PR`
- * (sales tax is a line item but is excluded from the surcharge base).
+ * that WHEN the fee line is on the PR it is the only one, always last, and
+ * always equal to `rate × the extended subtotal of every OTHER non-tax line
+ * item on the PR` (sales tax is a line item but is excluded from the
+ * surcharge base). The requestor can drop the fee entirely — see
+ * `stripCcFee` — for requests that aren't paid by card.
  *
  * The fee line is identified by its description ("<rate>% Credit Card Fee"),
  * so `isCcFeeItem` matches any rate and `parseCcFeeRate` recovers the rate
@@ -160,6 +162,33 @@ function itemsShallowEqual(
     (a.unit || "") === (b.unit || "") &&
     (Number(a.unit_price) || 0) === (Number(b.unit_price) || 0)
   );
+}
+
+/**
+ * Remove every CC-fee line from `items` and renumber the rest 1..N.
+ *
+ * The inverse of `rebalanceWithCcFee`, used when the requestor deletes the
+ * fee line — some PRs are paid by check or through the contracting office
+ * and carry no card surcharge at all.
+ *
+ * Returns the SAME ARRAY REFERENCE when nothing changed, for the same
+ * reason `rebalanceWithCcFee` does: the caller is a useEffect that feeds
+ * the result back into setItems, and a fresh array every pass would loop.
+ */
+export function stripCcFee(
+  items: PurchaseRequestItem[],
+): PurchaseRequestItem[] {
+  const next = items
+    .filter((it) => !isCcFeeItem(it))
+    .map((it, i) => ({ ...it, item: i + 1 }));
+
+  if (
+    items.length === next.length &&
+    items.every((it, i) => itemsShallowEqual(it, next[i]))
+  ) {
+    return items;
+  }
+  return next;
 }
 
 /**

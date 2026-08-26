@@ -27,10 +27,15 @@ import {
   PDFDropdown,
   PDFTextField,
   StandardFonts,
+  type PDFFont,
   type PDFForm,
 } from "pdf-lib";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
-import { PR_ACCOUNTING_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
+import {
+  PR_ACCOUNTING_DEFAULTS,
+  PR_REQUESTOR_DEFAULTS,
+  PR_REQUEST_VIA_OPTIONS,
+} from "@/lib/pr-defaults";
 import { findVendorDefaults } from "@/lib/vendor-defaults";
 import { getCachedUserId, directSelectRow } from "@/lib/supabase/rest";
 import type { PurchaseRequest, PurchaseRequestItem } from "@/types/database";
@@ -109,6 +114,143 @@ function setText(
   }
 }
 
+/** Font size out of a `/DA` string like "/Calibri 8 Tf 0 g", if it has one. */
+function daFontSize(da: string | undefined): number | undefined {
+  const m = /\/[^\0\t\n\f\r ]+[\0\t\n\f\r ]+(\d*\.\d+|\d+)[\0\t\n\f\r ]+Tf/.exec(
+    da ?? "",
+  );
+  if (!m) return undefined;
+  const size = Number(m[1]);
+  return Number.isFinite(size) && size > 0 ? size : undefined;
+}
+
+/** Smallest size we'll shrink a field to. Below this it stops being legible. */
+const MIN_FITTED_FONT_SIZE = 5;
+
+/**
+ * Would `text` stay inside `bounds` at `size`?
+ *
+ * Only horizontal overrun counts against a single-line field — that's what
+ * loses characters to the widget's clip region. (Vertically the template's
+ * boxes are snug by design; pdf-lib's own auto-sizer would drop every one of
+ * them a point for that, changing how the whole form reads.)
+ *
+ * A multiline field wraps on spaces, so it fits when no single word is wider
+ * than the box AND the wrapped lines don't run past the bottom of it. Line
+ * counting mirrors pdf-lib's, erring toward one line too many.
+ */
+function textFitsBounds(
+  text: string,
+  font: PDFFont,
+  size: number,
+  bounds: { width: number; height: number },
+  multiline: boolean,
+): boolean {
+  if (!multiline) {
+    return font.widthOfTextAtSize(text.replace(/\n/g, " "), size) <= bounds.width;
+  }
+  let linesUsed = 0;
+  for (const line of text.split("\n")) {
+    linesUsed += 1;
+    const words = line.split(" ");
+    let remaining = bounds.width;
+    for (let i = 0; i < words.length; i++) {
+      const word = i === words.length - 1 ? words[i] : `${words[i]} `;
+      const wordWidth = font.widthOfTextAtSize(word, size);
+      // A word too wide for an empty line can never be wrapped — it would
+      // render as one long line running out of the box.
+      if (wordWidth > bounds.width) return false;
+      remaining -= wordWidth;
+      if (remaining <= 0) {
+        linesUsed += 1;
+        remaining = bounds.width - wordWidth;
+      }
+    }
+  }
+  const height = font.heightAtSize(size);
+  return (height + height * 0.2) * linesUsed <= Math.abs(bounds.height);
+}
+
+/**
+ * The largest whole-point size at or below `preferred` that fits, or
+ * MIN_FITTED_FONT_SIZE when even that doesn't.
+ */
+function fittedFontSize(
+  text: string,
+  font: PDFFont,
+  preferred: number,
+  bounds: { width: number; height: number },
+  multiline: boolean,
+): number {
+  for (
+    let size = Math.floor(preferred);
+    size >= MIN_FITTED_FONT_SIZE;
+    size -= 1
+  ) {
+    if (textFitsBounds(text, font, size, bounds, multiline)) return size;
+  }
+  return MIN_FITTED_FONT_SIZE;
+}
+
+/**
+ * Like `setText`, but shrinks the font when the value is too long for the
+ * field's box instead of letting it render clipped.
+ *
+ * Used for the two free-text fields that now carry the quote's full filename
+ * ("IGE Based On" and the "Other (specify)" attachment box). A long vendor
+ * name makes that name wider than the box, and because the name has no space
+ * to wrap at, pdf-lib would draw one long line and the clip region would cut
+ * it off mid-word. We pick the size ourselves rather than handing pdf-lib a
+ * size of 0 (its "auto" mode), because its auto-sizer gives up on a word that
+ * can't be wrapped and leaves the overflowing line in place.
+ *
+ * The template's own size is always the starting point, so a short value —
+ * every value this form carried before quote filenames — renders exactly as
+ * it always has.
+ */
+function setTextFitted(
+  form: PDFForm,
+  name: string,
+  value: string,
+  written: Set<string>,
+  font: PDFFont,
+): void {
+  setText(form, name, value, written);
+  if (!value) return;
+  try {
+    const f = form.getField(name);
+    if (!(f instanceof PDFTextField)) return;
+    let smallest: number | null = null;
+    for (const widget of f.acroField.getWidgets()) {
+      // pdf-lib reads the size off the widget's /DA first, then the field's.
+      const preferred =
+        daFontSize(widget.getDefaultAppearance()) ??
+        daFontSize(f.acroField.getDefaultAppearance());
+      // No explicit size means pdf-lib is already auto-fitting this field.
+      if (!preferred) continue;
+      const rect = widget.getRectangle();
+      // Same inset pdf-lib applies: the border plus one point of padding.
+      const inset = (widget.getBorderStyle()?.getWidth() ?? 0) + 1;
+      const size = fittedFontSize(
+        value,
+        font,
+        preferred,
+        {
+          width: rect.width - inset * 2,
+          height: rect.height - inset * 2,
+        },
+        f.isMultiline(),
+      );
+      if (size < preferred && (smallest === null || size < smallest)) {
+        smallest = size;
+      }
+    }
+    if (smallest !== null) f.setFontSize(smallest);
+  } catch {
+    // Best-effort — a field we can't measure just keeps the template size.
+  }
+}
+
 function setCheckbox(
   form: PDFForm,
   name: string,
@@ -132,11 +274,18 @@ function setDropdown(
   name: string,
   value: string,
   written: Set<string>,
+  extraOptions: readonly string[] = [],
 ): void {
   if (!value) return;
   try {
     const f = form.getField(name);
     if (f instanceof PDFDropdown) {
+      // The government template ships a fixed option list. Anything in
+      // `extraOptions` that it doesn't already carry is added here, in the
+      // generated copy only — the template file on disk is never edited.
+      const missing = extraOptions.filter((o) => !f.getOptions().includes(o));
+      if (missing.length > 0) f.addOptions([...missing]);
+
       const options = f.getOptions();
       if (options.includes(value)) {
         f.select(value);
@@ -188,6 +337,9 @@ export async function generatePurchaseRequestReport(
     step = "parse-pdf";
     const pdfDoc = await PDFDocument.load(templateBytes);
     const form = pdfDoc.getForm();
+    // Embedded up front because `setTextFitted` measures against it while
+    // filling, not just when appearances are refreshed at the end.
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     // Track every field we modify. Only THESE get fresh appearance streams
     // generated below. Untouched fields keep their cached appearances —
@@ -200,7 +352,10 @@ export async function generatePurchaseRequestReport(
     step = "fill-header";
     setText(form, "DATE SUBMITTED", fmtDate(pr.date_prepared), written);
     setText(form, "RDD", fmtDate(pr.required_delivery_date), written);
-    setDropdown(form, "Via", pr.request_via, written);
+    // The template's "Via" dropdown only lists CONTRACTING OFFICE and
+    // PURCHASE CARD; the facility also pays some requests by check, so we
+    // widen the list to every value the form offers.
+    setDropdown(form, "Via", pr.request_via, written, PR_REQUEST_VIA_OPTIONS);
     setDropdown(form, "Currency", pr.currency, written);
 
     // ── Vendor 1 (uses unprefixed field names) ─────────────────────────
@@ -406,11 +561,15 @@ export async function generatePurchaseRequestReport(
     setText(form, "subTotal", fmtMoney(totalIge), written);
     if (pg2Total > 0) setText(form, "subTotalpg2", fmtMoney(pg2Total), written);
     setText(form, "Exceed", `${pr.ige_excess_pct ?? 0}%`, written);
-    setText(form, "IGE", pr.ige_based_on || "", written);
+    // IGE Based On and the "Other (specify)" box carry the quote's filename,
+    // which can outrun its box on a long vendor name — fit them.
+    setTextFitted(form, "IGE", pr.ige_based_on || "", written, helvetica);
     setText(form, "Justifications", pr.justification || "", written);
     setText(form, "APPROVING_OFFICIAL", pr.approving_authority || "", written);
     setText(form, "SECOND_APPROVAL", pr.second_approval || "", written);
-    if (pr.attached_other) setText(form, "Attachment", pr.attached_other, written);
+    if (pr.attached_other) {
+      setTextFitted(form, "Attachment", pr.attached_other, written, helvetica);
+    }
 
     // ── Attached-item checkboxes ───────────────────────────────────────
     step = "fill-checkboxes";
@@ -431,7 +590,6 @@ export async function generatePurchaseRequestReport(
     //     the form's pre-formatted "$0.00" empty Price / Extended cells
     //     (which come from the template's Acrobat JS format scripts and
     //      would render as raw "0" if pdf-lib regenerated them)
-    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     for (const name of written) {
       try {
         const f = form.getField(name);

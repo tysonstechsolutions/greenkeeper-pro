@@ -33,8 +33,11 @@ import {
   PR_DELIVERY_DEFAULTS,
   PR_ACCOUNTING_DEFAULTS,
   PR_REQUEST_VIA_DEFAULT,
+  PR_REQUEST_VIA_OPTIONS,
+  PR_REQUEST_VIA_LABELS,
   PR_DELIVERY_DAYS,
   PR_REQUESTOR_DEFAULTS,
+  type PrRequestVia,
 } from "@/lib/pr-defaults";
 import {
   PR_SITES,
@@ -47,6 +50,7 @@ import {
   isSalesTaxItem,
   orderPurchaseItems,
   rebalanceWithCcFee,
+  stripCcFee,
   CC_FEE_RATE,
   parseCcFeeRate,
   formatCcFeePct,
@@ -59,7 +63,11 @@ import {
   PurchaseRequestReportError,
 } from "@/lib/reports/purchase-request-report";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
-import { formatLocalDate, todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
+import {
+  quoteFilenameBase,
+  resolveIoSeqPlaceholder,
+} from "@/lib/reports/pr-naming";
+import { addDaysLocal, todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 import { usePartHistory, type PartHistoryEntry } from "@/lib/hooks/usePartHistory";
 import { History as HistoryIcon } from "lucide-react";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
@@ -91,11 +99,25 @@ function todayIso(): string {
   return todayLocal();
 }
 
-/** Today + N days, ISO. */
-function plusDaysIso(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return formatLocalDate(d);
+/**
+ * The required delivery date that goes with a given prepared date: one week
+ * out (PR_DELIVERY_DAYS). Blank in, blank out.
+ */
+function deliveryDateFor(datePrepared: string): string {
+  if (!datePrepared) return "";
+  return addDaysLocal(datePrepared, PR_DELIVERY_DAYS);
+}
+
+/**
+ * Narrow a saved `request_via` string to one of the form's options. Rows
+ * written before an option existed (or typed by hand) fall back to the
+ * default rather than leaving the toggle with nothing selected.
+ */
+function asRequestVia(value: string | null | undefined): PrRequestVia {
+  const upper = (value || "").trim().toUpperCase();
+  return (
+    PR_REQUEST_VIA_OPTIONS.find((o) => o === upper) ?? PR_REQUEST_VIA_DEFAULT
+  );
 }
 
 function emptyItem(n: number): PurchaseRequestItem {
@@ -123,8 +145,10 @@ function formatMoney(n: number): string {
 // ── Quote source / IGE methodology ───────────────────────────────────────────
 // The "IGE Based On" field captures the methodology used to determine the
 // Independent Government Estimate. These are the common evaluation factors
-// procurement accepts. The selected option drives auto-fill of both
-// "IGE Based On" and the "Other (specify)" attachment field.
+// procurement accepts. Picking one turns on the auto-fill of "IGE Based On"
+// and the "Other (specify)" attachment field — both of which get the QUOTE
+// filename (see quoteAttachmentLabel below), not the methodology label, so
+// procurement can match the line on the form to the file in the bundle.
 type QuoteSource =
   | "vendor_quote"
   | "vendor_website"
@@ -138,6 +162,27 @@ const QUOTE_SOURCE_LABELS: Record<Exclude<QuoteSource, "">, string> = {
   vendor_cart: "Vendor Cart",
   in_store: "In Store Pricing",
 };
+
+/**
+ * What "IGE Based On" and the "Other (specify)" box print: the name the
+ * quote will carry in the download bundle, e.g.
+ * "QUOTE-FY26-GC-0001-AceHardware-Golf Course-August2026".
+ *
+ * On an unsaved PR the sequence number doesn't exist yet, so the label shows
+ * "FY26-GC-####"; the real digits are patched in right after the insert
+ * assigns them (see the `resolveIoSeqPlaceholder` call in handleSave).
+ */
+function quoteAttachmentLabel(
+  datePrepared: string,
+  vendorName: string,
+  prSequenceNumber: number | null,
+): string {
+  return quoteFilenameBase({
+    date_prepared: datePrepared || todayIso(),
+    vendor1_name: vendorName.trim() || null,
+    pr_sequence_number: prSequenceNumber,
+  } as PurchaseRequest);
+}
 
 // ── SOW constants (same as /sow page) ────────────────────────────────────────
 
@@ -776,9 +821,13 @@ function NewPurchaseRequestPageInner() {
   // ── State ────────────────────────────────────────────────────────────────
   const [datePrepared, setDatePrepared] = useState(todayIso());
   const [requiredDeliveryDate, setRequiredDeliveryDate] = useState(() =>
-    editId ? "" : plusDaysIso(PR_DELIVERY_DAYS),
+    editId ? "" : deliveryDateFor(todayIso()),
   );
-  const [requestVia, setRequestVia] = useState(PR_REQUEST_VIA_DEFAULT);
+  // The required delivery date rides a week behind the prepared date until
+  // the requestor picks their own — then we stop moving it for them.
+  const [rddPinned, setRddPinned] = useState(false);
+  const [requestVia, setRequestVia] =
+    useState<PrRequestVia>(PR_REQUEST_VIA_DEFAULT);
   const [currency, setCurrency] = useState("US Dollar $");
   const [prSequenceNumber, setPrSequenceNumber] = useState<number | null>(null);
 
@@ -868,16 +917,25 @@ function NewPurchaseRequestPageInner() {
   const [items, setItems] = useState<PurchaseRequestItem[]>(() =>
     editId || fromId ? [emptyItem(1)] : rebalanceWithCcFee([], CC_FEE_RATE),
   );
+  // Whether this PR carries the surcharge line at all. Most do, but a request
+  // paid by check or routed through the contracting office never gets charged
+  // one — deleting the fee row turns this off and keeps the effect below from
+  // putting it straight back. Edit/clone modes take their cue from whether
+  // the loaded PR had a fee line.
+  const [ccFeeEnabled, setCcFeeEnabled] = useState(true);
 
   // Keep the CC-fee line invariant after every items/rate change:
   //   • exactly one fee row
   //   • always the last row
   //   • unit_price always = ccFeeRate × the other items' extended subtotal
-  // rebalanceWithCcFee returns the same array reference when nothing
-  // changed, so React bails out of the re-render and we don't loop.
+  // …or no fee row at all when the requestor removed it.
+  // Both helpers return the same array reference when nothing changed, so
+  // React bails out of the re-render and we don't loop.
   useEffect(() => {
-    setItems((prev) => rebalanceWithCcFee(prev, ccFeeRate));
-  }, [items, ccFeeRate]);
+    setItems((prev) =>
+      ccFeeEnabled ? rebalanceWithCcFee(prev, ccFeeRate) : stripCcFee(prev),
+    );
+  }, [items, ccFeeRate, ccFeeEnabled]);
 
   // IGE / approvals
   const [igeExcessPct, setIgeExcessPct] = useState(0);
@@ -1097,9 +1155,12 @@ function NewPurchaseRequestPageInner() {
       // and drop signatures so the new draft starts unsigned.
       setDatePrepared(isClone ? todayIso() : row.date_prepared);
       setRequiredDeliveryDate(
-        isClone ? plusDaysIso(PR_DELIVERY_DAYS) : row.required_delivery_date || "",
+        isClone ? deliveryDateFor(todayIso()) : row.required_delivery_date || "",
       );
-      setRequestVia(row.request_via);
+      // A saved PR's delivery date was chosen deliberately — don't let a
+      // later tweak to Date Prepared drag it around. A clone starts fresh.
+      setRddPinned(!isClone);
+      setRequestVia(asRequestVia(row.request_via));
       setCurrency(row.currency);
       setPrSequenceNumber(isClone ? null : row.pr_sequence_number);
       setVendorId(row.vendor_id);
@@ -1165,6 +1226,9 @@ function NewPurchaseRequestPageInner() {
       // Recover the surcharge rate from the saved fee line (e.g. 3.5%).
       const savedFee = loadedItems.find(isCcFeeItem);
       if (savedFee) setCcFeePctText(formatCcFeePct(parseCcFeeRate(savedFee.description)));
+      // A saved PR without a fee line had it removed on purpose (or predates
+      // the fee entirely) — don't re-add one behind the user's back.
+      setCcFeeEnabled(!!savedFee);
       setIgeExcessPct(Number(row.ige_excess_pct) || 0);
       setJustification(row.justification || "");
       setIgeBasedOn(row.ige_based_on || "");
@@ -1174,8 +1238,14 @@ function NewPurchaseRequestPageInner() {
       // the methodology dropdown expanded say "Online Pricing"; treat them
       // as the equivalent "Vendor Website Pricing" so the dropdown reflects
       // the current taxonomy without losing the user's prior selection.
+      //
+      // PRs saved once the field started carrying the quote FILENAME
+      // ("QUOTE-FY26-GC-0001-…") no longer record which methodology was
+      // picked, so they come back as the default, Vendor Quote.
       const savedIge = (row.ige_based_on || "").toLowerCase();
-      if (savedIge.includes("vendor quote")) {
+      if (/^quote-fy\d{2}-gc-/.test(savedIge.trim())) {
+        setQuoteSource("vendor_quote");
+      } else if (savedIge.includes("vendor quote")) {
         setQuoteSource("vendor_quote");
       } else if (savedIge.includes("vendor website")) {
         setQuoteSource("vendor_website");
@@ -1225,18 +1295,19 @@ function NewPurchaseRequestPageInner() {
     [items],
   );
 
-  // Auto-fill IGE Based On + attached "Other" when the quote source changes.
-  // The IGE Based On field captures METHODOLOGY only — just the label, no
-  // dollar amount. The subtotal is already shown elsewhere on the form.
+  // Auto-fill IGE Based On + attached "Other" with the name the quote will be
+  // saved under, so procurement can match the line on the form to the file in
+  // the bundle. Re-runs whenever any part of that name moves (vendor, prepared
+  // date, or the sequence number once the PR is saved).
+  const quoteLabel = quoteAttachmentLabel(datePrepared, v1.name, prSequenceNumber);
   useEffect(() => {
     if (!quoteSource) return;
-    const label = QUOTE_SOURCE_LABELS[quoteSource];
-    setIgeBasedOn(label);
+    setIgeBasedOn(quoteLabel);
     // Keep the SOW mention if one is attached (the form has no SOW checkbox,
-    // so it rides along in the "Other" box: "Vendor Quote and SOW").
-    setAttachedOther(withSowSuffix(label, attached.sow));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fill only on quote-source change; the SOW checkbox keeps its own suffix in sync
-  }, [quoteSource]);
+    // so it rides along in the "Other" box: "QUOTE-… and SOW").
+    setAttachedOther(withSowSuffix(quoteLabel, attached.sow));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fill on quote-source / label change only; the SOW checkbox keeps its own suffix in sync
+  }, [quoteSource, quoteLabel]);
 
   // ── Item helpers ─────────────────────────────────────────────────────────
   function updateItem(idx: number, patch: Partial<PurchaseRequestItem>) {
@@ -1287,10 +1358,14 @@ function NewPurchaseRequestPageInner() {
     });
   }
   function removeItem(idx: number) {
+    // Deleting the auto-managed fee line means "this PR has no card
+    // surcharge". Flip the switch and let the rebalance effect strip the
+    // row — removing it here would just have the effect re-add it.
+    if (isCcFeeItem(items[idx] ?? {})) {
+      setCcFeeEnabled(false);
+      return;
+    }
     setItems((prev) => {
-      // The CC-fee line is auto-managed; ignore the click so the user
-      // doesn't have to fight the rebalance effect re-adding it.
-      if (isCcFeeItem(prev[idx])) return prev;
       const out = prev.filter((_, i) => i !== idx);
       // Renumber non-fee items 1..N. If this was the user's last real
       // item, leave only the fee — no phantom blank item is re-added.
@@ -1705,7 +1780,7 @@ function NewPurchaseRequestPageInner() {
         id: editId || "preview",
         date_prepared: datePrepared,
         required_delivery_date: requiredDeliveryDate || null,
-        request_via: requestVia.trim() || "CONTRACTING OFFICE",
+        request_via: requestVia,
         currency: currency.trim() || "US Dollar $",
         vendor_id: vendorId,
         quote_storage_path: null,
@@ -2000,7 +2075,7 @@ function NewPurchaseRequestPageInner() {
     const payload = {
       date_prepared: datePrepared,
       required_delivery_date: requiredDeliveryDate || null,
-      request_via: requestVia.trim() || "CONTRACTING OFFICE",
+      request_via: requestVia,
       currency: currency.trim() || "US Dollar $",
       vendor_id: vendorId,
       ...(quoteStoragePath
@@ -2100,7 +2175,7 @@ function NewPurchaseRequestPageInner() {
       } else {
         const { data, error: insertErr } = await timedStep(
           "insert PR",
-          restFetch<{ id: string }>(
+          restFetch<{ id: string; pr_sequence_number: number | null }>(
             "POST",
             "purchase_requests",
             { ...payload, created_by: user.id },
@@ -2118,6 +2193,47 @@ function NewPurchaseRequestPageInner() {
         }
         const newId = data.id;
         recordBreadcrumb("click", `[pr-save] inserted id=${newId.slice(-8)}`);
+
+        // The quote label we saved says "FY26-GC-####" — the sequence number
+        // only exists once Postgres has handed one out on insert. Now that it
+        // has, write the real filename back so the PR and its PDF name the
+        // quote exactly as the bundle will.
+        const assignedSeq = data.pr_sequence_number ?? null;
+        const resolvedIge = resolveIoSeqPlaceholder(
+          payload.ige_based_on,
+          assignedSeq,
+        );
+        const resolvedOther = resolveIoSeqPlaceholder(
+          payload.attached_other,
+          assignedSeq,
+        );
+        if (
+          resolvedIge !== (payload.ige_based_on ?? "") ||
+          resolvedOther !== (payload.attached_other ?? "")
+        ) {
+          const { error: seqErr } = await timedStep(
+            "resolve quote label",
+            restFetch(
+              "PATCH",
+              `purchase_requests?id=eq.${encodeURIComponent(newId)}`,
+              {
+                ige_based_on: resolvedIge || null,
+                attached_other: resolvedOther || null,
+              },
+              false,
+            ),
+          );
+          if (cancel.cancelled) return;
+          if (seqErr) {
+            // Non-fatal: the PR is saved, the label just still reads "####".
+            // Editing and re-saving the PR fixes it, since the sequence is
+            // known by then.
+            recordBreadcrumb(
+              "warn",
+              `[pr-save] quote-label resolve failed: ${seqErr.message}`,
+            );
+          }
+        }
 
         // If this PR was submitted (not a draft), flip matching order-list
         // items to "ordered". Best-effort — never blocks the save.
@@ -2376,19 +2492,17 @@ function NewPurchaseRequestPageInner() {
           </p>
         )}
 
-        {/* Request Via — gov form accepts only two values; render them
-            as a binary toggle right under the vendor picker so the user
-            picks once at the top. The values feed straight into the
-            AcroForm dropdown on the generated PR PDF. */}
+        {/* Request Via — rendered as a toggle right under the vendor picker
+            so the user picks once at the top. The values feed straight into
+            the AcroForm dropdown on the generated PR PDF (which the report
+            widens to carry CHECK, a value the government template omits). */}
         <div className="mt-3 pt-3 border-t border-border">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
             Request Via
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            {(["PURCHASE CARD", "CONTRACTING OFFICE"] as const).map((opt) => {
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {PR_REQUEST_VIA_OPTIONS.map((opt) => {
               const selected = requestVia === opt;
-              const label =
-                opt === "PURCHASE CARD" ? "Purchase Card" : "Contracting Office";
               return (
                 <button
                   key={opt}
@@ -2401,8 +2515,8 @@ function NewPurchaseRequestPageInner() {
                       : "border-border bg-background hover:bg-muted"
                   }`}
                 >
-                  {selected && <CheckCircle2 className="w-4 h-4" />}
-                  {label}
+                  {selected && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                  {PR_REQUEST_VIA_LABELS[opt]}
                 </button>
               );
             })}
@@ -2653,15 +2767,31 @@ function NewPurchaseRequestPageInner() {
           <input
             type="date"
             value={datePrepared}
-            onChange={(e) => setDatePrepared(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setDatePrepared(next);
+              // Move the delivery date along with it, unless the user has
+              // already set one themselves.
+              if (!rddPinned) setRequiredDeliveryDate(deliveryDateFor(next));
+            }}
             className={inputCls}
           />
         </Field>
-        <Field label="Required Delivery Date">
+        <Field
+          label="Required Delivery Date"
+          hint={
+            rddPinned
+              ? undefined
+              : `Defaults to ${PR_DELIVERY_DAYS} days after Date Prepared.`
+          }
+        >
           <input
             type="date"
             value={requiredDeliveryDate}
-            onChange={(e) => setRequiredDeliveryDate(e.target.value)}
+            onChange={(e) => {
+              setRequiredDeliveryDate(e.target.value);
+              setRddPinned(true);
+            }}
             className={inputCls}
           />
         </Field>
@@ -3073,16 +3203,21 @@ function NewPurchaseRequestPageInner() {
                       </span>
                     )}
                   </span>
-                  {!isFee && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(idx)}
-                      className="p-1.5 rounded-md text-red-600 hover:bg-red-500/10"
-                      aria-label="Remove item"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    className="p-1.5 rounded-md text-red-600 hover:bg-red-500/10"
+                    aria-label={
+                      isFee ? "Remove credit card fee" : "Remove item"
+                    }
+                    title={
+                      isFee
+                        ? "Remove the credit card fee from this request"
+                        : undefined
+                    }
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
                 <Field
                   label="Item Name / Description"
@@ -3239,6 +3374,17 @@ function NewPurchaseRequestPageInner() {
               <Truck className="w-4 h-4" /> + Freight / Shipping
             </button>
           </div>
+          {!ccFeeEnabled && (
+            <button
+              type="button"
+              onClick={() => setCcFeeEnabled(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 text-sm font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 transition-colors"
+              title="Put the credit card surcharge line back on this request"
+            >
+              <Plus className="w-4 h-4" /> Add {formatCcFeePct(ccFeeRate)}%
+              Credit Card Fee
+            </button>
+          )}
         </div>
       </Section>
 
@@ -3263,7 +3409,7 @@ function NewPurchaseRequestPageInner() {
         </Field>
         <Field
           label="Quote Source"
-          hint="How you determined the price — drives IGE Based On and the Other attachment label."
+          hint="How you determined the price. Picking one fills IGE Based On and the Other attachment box with the quote's filename."
         >
           <select
             value={quoteSource}
@@ -3271,13 +3417,23 @@ function NewPurchaseRequestPageInner() {
             className={inputCls}
           >
             <option value="">Select quote source…</option>
-            <option value="vendor_quote">Vendor Quote</option>
-            <option value="vendor_website">Vendor Website Pricing</option>
-            <option value="vendor_cart">Vendor Cart</option>
-            <option value="in_store">In Store Pricing</option>
+            {(
+              Object.keys(QUOTE_SOURCE_LABELS) as Exclude<QuoteSource, "">[]
+            ).map((key) => (
+              <option key={key} value={key}>
+                {QUOTE_SOURCE_LABELS[key]}
+              </option>
+            ))}
           </select>
         </Field>
-        <Field label="IGE Based On">
+        <Field
+          label="IGE Based On"
+          hint={
+            quoteSource
+              ? "The name the quote is saved under in the PR bundle."
+              : undefined
+          }
+        >
           <textarea
             value={igeBasedOn}
             onChange={(e) => setIgeBasedOn(e.target.value)}
@@ -3285,8 +3441,8 @@ function NewPurchaseRequestPageInner() {
             className={`${inputCls} resize-none`}
             placeholder={
               quoteSource
-                ? "Auto-filled from quote source"
-                : "Select a quote source above, or type manually (e.g. 'Vendor Cart')"
+                ? "Auto-filled with the quote filename"
+                : "Select a quote source above, or type manually"
             }
           />
         </Field>
