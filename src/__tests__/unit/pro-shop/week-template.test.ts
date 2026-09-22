@@ -145,8 +145,26 @@ describe("deriveWeekFromShifts", () => {
 describe("slotsFromPatterns", () => {
   it("turns weekly patterns into slots", () => {
     const weekly = { ...emptyWeekly(), mon: { works: true, start: "05:00", end: "13:30" } };
-    const slots = slotsFromPatterns([person("jorge", { default_group: "grounds", availability: { weekly } })]);
+    const slots = slotsFromPatterns([person("jorge", {
+      position: "maintenance_crew", default_group: "grounds", availability: { weekly },
+    })]);
     expect(slots).toMatchObject([{ weekday: 1, group: "grounds", staff_id: "jorge", start: "05:00", end: "13:30" }]);
+  });
+
+  it("files the slot under the person's job, not the group left on their availability", () => {
+    // Brittany's availability was entered while she was restaurant staff.
+    const weekly = { ...emptyWeekly(), wed: { works: true, group: "restaurant" as const, start: "09:00", end: "19:30" } };
+    const [slot] = slotsFromPatterns([person("brittany", {
+      position: "restaurant_manager", default_group: "restaurant_manager", availability: { weekly },
+    })]);
+    expect(slot.group).toBe("restaurant_manager");
+
+    // Being cleared to cover another job doesn't change their standing week.
+    const [flex] = slotsFromPatterns([person("aniya", {
+      flex: true, position: "restaurant_manager", default_group: "restaurant_manager",
+      availability: { weekly },
+    })]);
+    expect(flex.group).toBe("restaurant_manager");
   });
 });
 

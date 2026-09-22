@@ -337,7 +337,12 @@ export function slotsFromPatterns(staff: ProShopStaff[]): WeekSlot[] {
       out.push({
         id: newSlotId(),
         weekday,
-        group: pat.group ?? person.default_group,
+        // Their job decides the slot, never the group stored on the pattern:
+        // that was written when the availability was entered and goes stale
+        // the moment somebody changes jobs (Brittany's still said
+        // "restaurant" after she took over managing Buckley's). Covering
+        // another job is a decision for a particular day, not a standing one.
+        group: positionGroup(person.position),
         staff_id: person.id,
         start,
         end,

@@ -36,6 +36,7 @@ import {
   Printer,
   SlidersHorizontal,
   Sprout,
+  ChefHat,
   UtensilsCrossed,
   Wrench,
 } from "lucide-react";
@@ -133,6 +134,13 @@ const GROUP_STYLE: Record<
     dot: "bg-rose-500",
     wash: "bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
     rule: "border-rose-500",
+  },
+  restaurant_manager: {
+    icon: ChefHat,
+    text: "text-teal-700 dark:text-teal-300",
+    dot: "bg-teal-600",
+    wash: "bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-300",
+    rule: "border-teal-600",
   },
 };
 

@@ -14,7 +14,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, CalendarRange, Copy, Loader2, Plus, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarRange, Copy, Loader2, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,6 +67,7 @@ const GROUP_SHORT: Record<ShiftGroup, string> = {
   grounds: "Grounds",
   shop: "Shop",
   restaurant: "Restaurant",
+  restaurant_manager: "Manager",
 };
 
 interface Draft {
@@ -135,25 +136,42 @@ export function StandardWeekSheet({
   const later = nextVersionAfter(effectiveFrom, templates);
 
   // ── Starting points for a first standard week ─────────────────────────────
-  function startFrom(kind: "shifts" | "availability" | "blank") {
+  function startFrom(kind: "shifts" | "availability" | "coverage" | "blank") {
     const hours = hoursFromRules(rules);
     let slots: WeekSlot[] = [];
     if (kind === "shifts") {
       slots = deriveWeekFromShifts(monthShifts, monthDates);
     } else if (kind === "availability") {
-      if (hasRules) {
-        const now = new Date();
-        const week = firstFullWeek(now.getFullYear(), now.getMonth());
-        const plan = generateCoverageMonth({
-          staff: active, year: now.getFullYear(), month0: now.getMonth(), timeOff: [],
-          rules, settings, area, dates: week,
-        });
-        slots = slotsFromPlannedWeek(plan.shifts);
-      } else {
-        slots = slotsFromPatterns(active);
-      }
+      slots = slotsFromPatterns(active);
+    } else if (kind === "coverage") {
+      const now = new Date();
+      const week = firstFullWeek(now.getFullYear(), now.getMonth());
+      const plan = generateCoverageMonth({
+        staff: active, year: now.getFullYear(), month0: now.getMonth(), timeOff: [],
+        rules, settings, area, dates: week,
+      });
+      slots = slotsFromPlannedWeek(plan.shifts);
     }
     setDraft({ slots, hours });
+  }
+
+  /**
+   * Put the week back to exactly what everyone's availability says — the way
+   * Buckley's is run: whoever is available on a day works that day, their own
+   * hours. Kept as a button rather than done automatically, because the week
+   * is otherwise the GM's to edit by hand.
+   */
+  function rebuildFromAvailability() {
+    const listed = slotsFromPatterns(active);
+    if (listed.length === 0) {
+      setError("Nobody has availability set yet — add it on each person's card first.");
+      return;
+    }
+    if (!window.confirm(
+      `Set the week to everyone's availability? That replaces the ${draft?.slots.length ?? 0} shifts below with the ${listed.length} days people say they can work.`,
+    )) return;
+    setError(null);
+    setDraft((d) => (d ? { ...d, slots: listed } : { slots: listed, hours: hoursFromRules(rules) }));
   }
 
   // ── Edits ─────────────────────────────────────────────────────────────────
@@ -285,10 +303,20 @@ export function StandardWeekSheet({
               <span>
                 <span className="block font-medium">Everyone&apos;s availability</span>
                 <span className="block text-xs text-muted-foreground">
-                  {hasRules ? "Fills the day from the hours people gave you" : "Each person's usual weekly days"}
+                  Each person works the days and hours they said they can
                 </span>
               </span>
             </Button>
+            {hasRules && (
+              <Button variant="outline" className="justify-start h-auto py-2.5 text-left" onClick={() => startFrom("coverage")}>
+                <span>
+                  <span className="block font-medium">Cover the day, open to close</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Splits the open hours between whoever is available
+                  </span>
+                </span>
+              </Button>
+            )}
             <Button variant="outline" className="justify-start h-auto py-2.5 text-left" onClick={() => startFrom("blank")}>
               <span>
                 <span className="block font-medium">A blank week</span>
@@ -385,6 +413,15 @@ export function StandardWeekSheet({
             </div>
           </div>
         )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={rebuildFromAvailability}>
+            <RefreshCw className="w-3.5 h-3.5" /> Set the week from everyone&apos;s availability
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
+            Use this after changing someone&apos;s availability.
+          </span>
+        </div>
 
         {/* The week */}
         <div className="space-y-2">

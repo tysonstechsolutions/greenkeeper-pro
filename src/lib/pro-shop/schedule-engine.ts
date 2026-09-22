@@ -97,6 +97,7 @@ const NOBODY_SCHEDULED: Record<ShiftGroup, string> = {
   grounds: "No grounds crew scheduled",
   shop: "No shop staff scheduled",
   restaurant: "No restaurant staff scheduled",
+  restaurant_manager: "No manager scheduled",
 };
 
 /**

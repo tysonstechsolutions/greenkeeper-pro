@@ -40,6 +40,7 @@ const GROUP_PRINT: Record<ShiftGroup, { css: string; legend: string; ink: string
   grounds: { css: "grd", legend: "Grounds crew", ink: "#1b5e20", wash: "#e7f4e8" },
   shop: { css: "shp", legend: "Shop / mechanic", ink: "#5b3a86", wash: "#f0e9f8" },
   restaurant: { css: "rst", legend: "Restaurant", ink: "#8a1c3b", wash: "#fdeaf0" },
+  restaurant_manager: { css: "mgr", legend: "Manager", ink: "#0f5f5c", wash: "#e3f5f3" },
 };
 
 /** Groups sort in the order their area lists them, so a day always reads the same. */

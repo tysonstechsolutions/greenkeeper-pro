@@ -29,9 +29,16 @@ export type ProShopPosition =
   | "golf_ops_assistant"
   | "maintenance_crew"
   | "mechanic"
-  | "restaurant_staff";
+  | "restaurant_staff"
+  | "restaurant_manager";
 
-export type ShiftGroup = "inside" | "outside" | "grounds" | "shop" | "restaurant";
+export type ShiftGroup =
+  | "inside"
+  | "outside"
+  | "grounds"
+  | "shop"
+  | "restaurant"
+  | "restaurant_manager";
 
 /** Every group, for validating a value that arrived as loose text. */
 export const SHIFT_GROUPS: ShiftGroup[] = [
@@ -40,20 +47,24 @@ export const SHIFT_GROUPS: ShiftGroup[] = [
   "grounds",
   "shop",
   "restaurant",
+  "restaurant_manager",
 ];
 
 /** The groups that belong to each area's schedule. */
 export const AREA_GROUPS: Record<ScheduleArea, ShiftGroup[]> = {
   pro_shop: ["inside", "outside"],
   maintenance: ["grounds", "shop"],
-  buckleys: ["restaurant"],
+  // The manager is her own job: she runs the place rather than filling a slot
+  // on the rota, so she is listed and coloured separately and the restaurant's
+  // coverage rules do not count her towards the staff a day needs.
+  buckleys: ["restaurant", "restaurant_manager"],
 };
 
 /** The positions that belong to each area. */
 export const AREA_POSITIONS: Record<ScheduleArea, ProShopPosition[]> = {
   pro_shop: ["rec_aid", "golf_ops_assistant"],
   maintenance: ["maintenance_crew", "mechanic"],
-  buckleys: ["restaurant_staff"],
+  buckleys: ["restaurant_staff", "restaurant_manager"],
 };
 export type WeekdayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 
@@ -321,6 +332,7 @@ export const GROUP_LABELS: Record<ShiftGroup, string> = {
   grounds: "Grounds crew",
   shop: "Shop / mechanic",
   restaurant: "Restaurant",
+  restaurant_manager: "Manager",
 };
 
 /**
@@ -344,6 +356,7 @@ export const GROUP_SHORT_LABELS: Record<ShiftGroup, string> = {
   grounds: "grounds crew",
   shop: "shop",
   restaurant: "restaurant staff",
+  restaurant_manager: "manager",
 };
 
 /** One person's job title, as it reads on the roster and the printout. */
@@ -353,6 +366,7 @@ export const POSITION_LABELS: Record<ProShopPosition, string> = {
   maintenance_crew: "Grounds Crew",
   mechanic: "Mechanic",
   restaurant_staff: "Restaurant Staff",
+  restaurant_manager: "Restaurant Manager",
 };
 
 export const DUTY_AREA_LABELS: Record<DutyArea, string> = {
@@ -403,6 +417,8 @@ export function positionGroup(position: ProShopPosition): ShiftGroup {
       return "shop";
     case "restaurant_staff":
       return "restaurant";
+    case "restaurant_manager":
+      return "restaurant_manager";
   }
 }
 

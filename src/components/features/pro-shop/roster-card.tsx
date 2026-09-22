@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CalendarClock, Sun, Moon, ChevronRight, UserPlus, Loader2, CheckCircle, AlertCircle,
+  ChefHat,
   Sprout, UtensilsCrossed, Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ const JOB_CHIP: Record<ShiftGroup, { icon: typeof Sun; tint: string }> = {
   grounds: { icon: Sprout, tint: "text-emerald-600" },
   shop: { icon: Wrench, tint: "text-violet-500" },
   restaurant: { icon: UtensilsCrossed, tint: "text-rose-500" },
+  restaurant_manager: { icon: ChefHat, tint: "text-teal-600" },
 };
 
 interface ProShopRosterCardProps {
