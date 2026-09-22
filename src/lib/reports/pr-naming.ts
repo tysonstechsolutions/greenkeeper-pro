@@ -64,7 +64,7 @@ export function currentMonthYearCompact(now: Date = new Date()): string {
  * Falls back to "YYYYMMDD" when the sequence hasn't been assigned (drafts).
  */
 function ioTag(pr: PurchaseRequest): string {
-  const io = formatInternalOrder(pr.pr_sequence_number, pr.date_prepared);
+  const io = formatInternalOrder(pr.pr_sequence_number, pr.date_prepared, pr.pr_fiscal_year);
   if (io) return io;
   // Draft fallback — use the prepared date so the name is still unique.
   return pr.date_prepared.replace(/-/g, "");

@@ -72,7 +72,7 @@ export function purchaseRequestToAuditPayload(
 ): Record<string, unknown> {
   const items = (pr.items ?? []).map(itemToExtracted);
   const internalOrder =
-    formatInternalOrder(pr.pr_sequence_number, pr.date_prepared) ?? pr.internal_order ?? null;
+    formatInternalOrder(pr.pr_sequence_number, pr.date_prepared, pr.pr_fiscal_year) ?? pr.internal_order ?? null;
 
   const extracted: ExtractedPr = {
     date_prepared: pr.date_prepared,

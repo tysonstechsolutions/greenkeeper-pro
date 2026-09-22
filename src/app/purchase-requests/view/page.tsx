@@ -1566,7 +1566,7 @@ function ViewPurchaseRequestInner() {
           <Detail
             label="Internal Order"
             value={
-              formatInternalOrder(pr.pr_sequence_number, pr.date_prepared) ||
+              formatInternalOrder(pr.pr_sequence_number, pr.date_prepared, pr.pr_fiscal_year) ||
               pr.internal_order ||
               "—"
             }

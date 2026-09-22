@@ -302,7 +302,7 @@ export async function generatePurchaseRequestReport(
       written,
     );
     const internalOrder =
-      formatInternalOrder(pr.pr_sequence_number, pr.date_prepared) ||
+      formatInternalOrder(pr.pr_sequence_number, pr.date_prepared, pr.pr_fiscal_year) ||
       pr.internal_order ||
       "";
     setText(form, "INTERNAL_ORDER", internalOrder, written);

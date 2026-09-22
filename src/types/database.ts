@@ -1706,10 +1706,13 @@ export interface PurchaseRequest {
   quote_uploaded_at: string | null;
   quote_paths?: { path: string; filename: string }[] | null;
 
-  // Auto-assigned monotonic sequence (added in 20260504 migration). The
-  // PDF's "Internal Order" field is rendered as `FY{YY}-FM-{NNNN}` from
-  // this number + date_prepared.
+  // Auto-assigned on insert; restarts every fiscal year (20260922120000
+  // migration). The PDF's "Internal Order" field is rendered as
+  // `FY{YY}-GC-{NNNN}` from this number + pr_fiscal_year.
   pr_sequence_number: number | null;
+  // Fiscal year the number belongs to (full year, e.g. 2027). Optional so
+  // older fixtures/previews without it fall back to date_prepared.
+  pr_fiscal_year?: number | null;
 
   // Requestor
   requestor_name: string;

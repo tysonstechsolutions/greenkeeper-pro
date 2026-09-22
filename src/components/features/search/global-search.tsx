@@ -104,12 +104,13 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
           directSelectList<{
             id: string;
             pr_sequence_number: number | null;
+            pr_fiscal_year: number | null;
             date_prepared: string;
             vendor1_name: string | null;
             requestor_name: string | null;
           }>("purchase_requests", {
             columns:
-              "id,pr_sequence_number,date_prepared,vendor1_name,requestor_name",
+              "id,pr_sequence_number,pr_fiscal_year,date_prepared,vendor1_name,requestor_name",
             orderBy: [{ column: "created_at", ascending: false }],
             limit: 150,
             label: "search.prs",
@@ -140,7 +141,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
         setPrs(
           prRows.map((r) => {
             const num =
-              formatInternalOrder(r.pr_sequence_number, r.date_prepared) ?? "Draft PR";
+              formatInternalOrder(r.pr_sequence_number, r.date_prepared, r.pr_fiscal_year) ?? "Draft PR";
             const sub = [r.vendor1_name, r.requestor_name].filter(Boolean).join(" · ");
             return {
               id: r.id,

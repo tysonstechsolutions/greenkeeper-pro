@@ -781,6 +781,7 @@ function NewPurchaseRequestPageInner() {
   const [requestVia, setRequestVia] = useState(PR_REQUEST_VIA_DEFAULT);
   const [currency, setCurrency] = useState("US Dollar $");
   const [prSequenceNumber, setPrSequenceNumber] = useState<number | null>(null);
+  const [prFiscalYear, setPrFiscalYear] = useState<number | null>(null);
 
   const [requestorName, setRequestorName] = useState("");
   const [requestorEmail, setRequestorEmail] = useState("");
@@ -834,7 +835,7 @@ function NewPurchaseRequestPageInner() {
 
   // Accounting — Company Code is set by facility default; the rest is
   // user-editable. Internal Order is auto-generated on save and shown
-  // read-only (computed from prSequenceNumber + datePrepared).
+  // read-only (computed from prSequenceNumber + prFiscalYear).
   const [companyCode, setCompanyCode] = useState(() =>
     editId ? "" : PR_ACCOUNTING_DEFAULTS.company_code,
   );
@@ -1102,6 +1103,7 @@ function NewPurchaseRequestPageInner() {
       setRequestVia(row.request_via);
       setCurrency(row.currency);
       setPrSequenceNumber(isClone ? null : row.pr_sequence_number);
+      setPrFiscalYear(isClone ? null : row.pr_fiscal_year ?? null);
       setVendorId(row.vendor_id);
       // Don't carry the source PR's uploaded quote file — the new request
       // will get its own.
@@ -1188,6 +1190,11 @@ function NewPurchaseRequestPageInner() {
         setQuoteSource("in_store");
       } else if (savedIge.includes("online pricing")) {
         setQuoteSource("vendor_website");
+      } else if (isClone) {
+        // Not a pricing method (e.g. a quote filename typed into the box).
+        // A new request starts from the procurement default instead of
+        // carrying the source PR's text forward.
+        setQuoteSource("vendor_quote");
       }
       // Clone: drop signatures and approver names so the new draft starts
       // unsigned. Edit: keep what was there.
@@ -1716,6 +1723,7 @@ function NewPurchaseRequestPageInner() {
         // and we leave that null too so the IO field is just blank in the
         // preview.
         pr_sequence_number: prSequenceNumber,
+        pr_fiscal_year: prFiscalYear,
         requestor_name: requestorName.trim(),
         requestor_email: requestorEmail.trim() || null,
         requestor_phone: requestorPhone.trim() || null,
@@ -2843,14 +2851,14 @@ function NewPurchaseRequestPageInner() {
           label="Internal Order"
           hint={
             prSequenceNumber == null
-              ? "Auto-assigned at save (next available FY26-FM-NNNN)."
+              ? "Auto-assigned at save: the next number in the current fiscal year (FY{YY}-GC-NNNN)."
               : "Locked once a PR is saved — used for procurement filing."
           }
         >
           <input
             type="text"
             value={
-              formatInternalOrder(prSequenceNumber, datePrepared) ||
+              formatInternalOrder(prSequenceNumber, datePrepared, prFiscalYear) ||
               "(auto-assigned at save)"
             }
             readOnly
