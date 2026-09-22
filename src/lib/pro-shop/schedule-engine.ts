@@ -9,6 +9,7 @@
  */
 import {
   GROUP_SHORT_LABELS,
+  MIN_OPEN_SHIFT_MINUTES,
   type CoverageRule,
   type DayPattern,
   type DayWarning,
@@ -156,7 +157,9 @@ export function dayWarnings(
       const list = shiftsForDay.filter((s) => s.group === rule.group);
       if (list.length === 0) continue; // already reported as no_<group>
       const label = GROUP_SHORT_LABELS[rule.group];
-      for (const gap of coverageGaps(list, rule)) {
+      // Same floor the open-shift lines use: a gap too small to call anyone
+      // in for is not something to warn about either.
+      for (const gap of coverageGaps(list, rule, MIN_OPEN_SHIFT_MINUTES[area] ?? 0)) {
         add(
           `coverage_gap_${rule.group}`,
           `Nobody on ${label} ${compactTime(gap.start)}-${compactTime(gap.end)}`,

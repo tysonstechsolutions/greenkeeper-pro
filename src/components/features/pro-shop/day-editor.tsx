@@ -57,6 +57,7 @@ import {
   type ProShopShift,
   type ProShopStaff,
   type ScheduleSettings,
+  type ScheduleArea,
   type ShiftGroup,
   type WarningCode,
   type WeekTemplate,
@@ -89,6 +90,8 @@ export interface DayEditorProps {
   settings: ScheduleSettings;
   /** The groups this area schedules, in display order. */
   groups: ShiftGroup[];
+  /** Which schedule this day belongs to — sets the smallest gap worth showing. */
+  area?: ScheduleArea;
   activeIssues: DayWarning[];
   dismissedIssues: DayWarning[];
   onDismiss: (code: WarningCode) => void;
@@ -126,7 +129,7 @@ export function DayEditor(props: DayEditorProps) {
     activeIssues, dismissedIssues, onDismiss, onRestore,
     onEditFull, onAdd, onCover,
     updateShift, deleteShift, addShift, setDayCounts, setDayLock, onUnstaffed, resetDay,
-    templates = [], onChangeEveryWeek, onRemoveSlot,
+    templates = [], onChangeEveryWeek, onRemoveSlot, area,
   } = props;
 
   const [busy, setBusy] = useState(false);
@@ -140,7 +143,7 @@ export function DayEditor(props: DayEditorProps) {
   const customised = hasDayOverride(date, overrides);
   const todaysRules = effectiveRulesForDay(date, rules, overrides, templates);
   const normalCounts = ruleCountsForDay(date, rules);
-  const openSlots = openShiftsForDay(date, shifts, rules, overrides, templates);
+  const openSlots = openShiftsForDay(date, shifts, rules, overrides, templates, area);
 
   /** Route a change to this day, or to the standard week from this day on. */
   function change(shift: ProShopShift, patch: { staff_id?: string; start_time?: string; end_time?: string }) {

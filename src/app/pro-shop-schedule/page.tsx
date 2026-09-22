@@ -325,7 +325,7 @@ function ProShopScheduleContent() {
   /** Shifts that day still needs somebody in. Derived, so they survive a
    *  reload and show up on the printout as a blank line to sign. */
   function openOn(dateStr: string): OpenSlot[] {
-    return openShiftsForDay(dateStr, shiftsOn(dateStr), ps.rules, ps.dayOverrides, ps.templates);
+    return openShiftsForDay(dateStr, shiftsOn(dateStr), ps.rules, ps.dayOverrides, ps.templates, area);
   }
 
   /** Who could take a shift on a date, best first (see replacementCandidates). */
@@ -1288,6 +1288,7 @@ function ProShopScheduleContent() {
             overrides={ps.dayOverrides}
             settings={ps.settings}
             groups={AREA_GROUPS[area]}
+            area={area}
             activeIssues={openDayWarnings.active}
             dismissedIssues={openDayWarnings.dismissed}
             onDismiss={(code) => ps.dismissWarning(dayOpen, code)}

@@ -140,7 +140,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
       if (rank !== 0) return rank;
       return a.start_time.localeCompare(b.start_time);
     });
-    const open = openShiftsForDay(date, dayShifts, rules, overrides, templates);
+    const open = openShiftsForDay(date, dayShifts, rules, overrides, templates, area);
 
     const rows = dayShifts.map((shift) => shiftRow(
       `${compactTime(shift.start_time)}-${compactTime(shift.end_time)}`,
@@ -175,7 +175,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   const openCount = printGrid(year, month0).reduce((sum, date) => {
     if (!date) return sum;
     const dayShifts = byDate.get(date) ?? [];
-    return sum + openShiftsForDay(date, dayShifts, rules, overrides, templates).length;
+    return sum + openShiftsForDay(date, dayShifts, rules, overrides, templates, area).length;
   }, 0);
 
   // One colour block per group. Generated for every group rather than only

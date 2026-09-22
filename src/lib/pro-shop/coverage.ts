@@ -604,6 +604,8 @@ export function openSlotsForDay(
     CoverageRule,
     "group" | "open_time" | "close_time" | "base_staff" | "extra_staff" | "extra_start"
   > & { unstaffed?: TimeRange[] })[],
+  /** Gaps shorter than this aren't worth calling anyone in for (see MIN_OPEN_SHIFT_MINUTES). */
+  minGapMinutes = 0,
 ): OpenSlot[] {
   const slots: OpenSlot[] = [];
   for (const rule of rulesForDay) {
@@ -615,7 +617,7 @@ export function openSlotsForDay(
     const close = rule.close_time.slice(0, 5);
 
     // An uncovered stretch is the most urgent kind: the shop is unattended.
-    for (const gap of coverageGaps(list, rule)) {
+    for (const gap of coverageGaps(list, rule, minGapMinutes)) {
       slots.push({ group: rule.group, start: gap.start, end: gap.end, kind: "gap" });
     }
 
@@ -642,6 +644,8 @@ export function openSlotsForDay(
 export function coverageGaps(
   shiftsForDay: { group: ShiftGroup; start_time: string; end_time: string }[],
   rule: Pick<CoverageRule, "open_time" | "close_time" | "group"> & { unstaffed?: TimeRange[] },
+  /** Ignore holes shorter than this — too small to call anyone in for. */
+  minGapMinutes = 0,
 ): Array<{ start: string; end: string }> {
   const open = minutesOfDay(rule.open_time);
   const close = minutesOfDay(rule.close_time);
@@ -656,8 +660,10 @@ export function coverageGaps(
     spans.push({ start: minutesOfDay(range.start), end: minutesOfDay(range.end) });
   }
 
-  return uncoveredWithin(open, close, spans).map((hole) => ({
-    start: timeFromMinutes(hole.start),
-    end: timeFromMinutes(hole.end),
-  }));
+  return uncoveredWithin(open, close, spans)
+    .filter((hole) => hole.end - hole.start >= minGapMinutes)
+    .map((hole) => ({
+      start: timeFromMinutes(hole.start),
+      end: timeFromMinutes(hole.end),
+    }));
 }

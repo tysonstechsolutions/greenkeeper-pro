@@ -81,15 +81,24 @@ describe("dayWarnings against recorded coverage rules", () => {
   });
 
   it("names the hole a hand-moved shift leaves, with its times", () => {
-    // The GM drags the opener to 10:00 — 08:00-10:00 now has nobody on it.
+    // The GM drags the opener to 12:00 — 08:00-12:00 now has nobody on it.
     const shifts = [
       shift("inside", "06:00", "13:00"), shift("inside", "13:00", "20:00"),
-      shift("outside", "10:00", "16:30"), shift("outside", "14:00", "20:00"),
+      shift("outside", "12:00", "16:30"), shift("outside", "14:00", "20:00"),
     ];
     const warnings = dayWarnings(shifts, "pro_shop", monday);
     expect(warnings.map((w) => w.code)).toContain("coverage_gap_outside");
     expect(warnings.find((w) => w.code === "coverage_gap_outside")?.message)
-      .toBe("Nobody on rec aids 0800-1000");
+      .toBe("Nobody on rec aids 0800-1200");
+  });
+
+  it("leaves a shorter hole alone — the pro shop doesn't call anyone in for two hours", () => {
+    const shifts = [
+      shift("inside", "06:00", "13:00"), shift("inside", "13:00", "20:00"),
+      shift("outside", "10:00", "16:30"), shift("outside", "14:00", "20:00"),
+    ];
+    expect(dayWarnings(shifts, "pro_shop", monday).map((w) => w.code))
+      .not.toContain("coverage_gap_outside");
   });
 
   it("flags a day that is short a person even with no gap", () => {
@@ -167,5 +176,25 @@ describe("days a per-day override has emptied", () => {
       [rule("inside", 2), rule("outside", 1)],
     ).map((w) => w.code);
     expect(codes).toEqual([]);
+  });
+});
+
+describe("small pro shop gaps raise no warning either", () => {
+  const rule = {
+    id: "r", area: "pro_shop", weekday: 1, group: "outside",
+    open_time: "07:00", close_time: "19:00", base_staff: 1, extra_staff: 0, extra_start: null,
+  } as CoverageRule;
+  const day = [
+    { group: "outside" as const, start_time: "08:00", end_time: "14:00" },
+    { group: "outside" as const, start_time: "16:00", end_time: "19:00" },
+  ];
+
+  it("says nothing about 07:00-08:00 or 14:00-16:00", () => {
+    expect(dayWarnings(day, "pro_shop", [rule]).map((w) => w.code)).toEqual([]);
+  });
+
+  it("but still flags a four-hour hole", () => {
+    const short = [{ group: "outside" as const, start_time: "07:00", end_time: "14:00" }];
+    expect(dayWarnings(short, "pro_shop", [rule]).map((w) => w.code)).toContain("coverage_gap_outside");
   });
 });

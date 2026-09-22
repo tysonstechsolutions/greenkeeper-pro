@@ -237,6 +237,19 @@ export interface ScheduleSettings {
   max_shift_minutes: number;
 }
 
+/**
+ * Shortest open stretch worth asking anyone to cover, per area.
+ *
+ * The pro shop is open 07:00-19:00 and the hours people give rarely tile it
+ * exactly, so an hour here and two hours there fall out between shifts. Nobody
+ * is called in for that: below this the gap is not an open shift, does not
+ * print a blank line, and does not raise a warning. An area that is not listed
+ * reports every gap.
+ */
+export const MIN_OPEN_SHIFT_MINUTES: Partial<Record<ScheduleArea, number>> = {
+  pro_shop: 240,
+};
+
 /** Matches the column defaults, so the UI works before settings are loaded. */
 export const DEFAULT_SCHEDULE_SETTINGS: Omit<ScheduleSettings, "area"> = {
   lunch_threshold_minutes: 360,

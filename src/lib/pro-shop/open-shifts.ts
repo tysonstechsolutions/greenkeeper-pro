@@ -13,7 +13,7 @@
 import { openSlotsForDay, type OpenSlot } from "./coverage";
 import { effectiveRulesForDay, type DayOverrides } from "./day-overrides";
 import { missingSlots } from "./week-template";
-import type { CoverageRule, ShiftGroup, WeekTemplate } from "./types";
+import { MIN_OPEN_SHIFT_MINUTES, type CoverageRule, type ScheduleArea, type ShiftGroup, type WeekTemplate } from "./types";
 
 export function openShiftsForDay(
   date: string,
@@ -21,12 +21,15 @@ export function openShiftsForDay(
   rules: CoverageRule[],
   overrides: DayOverrides,
   templates: WeekTemplate[] = [],
+  /** Sets the smallest gap worth reporting (see MIN_OPEN_SHIFT_MINUTES). */
+  area?: ScheduleArea,
 ): OpenSlot[] {
   const dayRules = effectiveRulesForDay(date, rules, overrides, templates);
   if (dayRules.length > 0) {
     return openSlotsForDay(
       shiftsForDay.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
       dayRules,
+      area ? MIN_OPEN_SHIFT_MINUTES[area] ?? 0 : 0,
     );
   }
   if (rules.length > 0) return []; // rules exist, just none for this weekday
