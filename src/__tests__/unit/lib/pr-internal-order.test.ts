@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
-import { quoteFilename, purchaseRequestPdfFilename, quoteAttachmentName } from "@/lib/reports/pr-naming";
+import { quoteFilename, purchaseRequestPdfFilename, quoteFilenameBase, resolveIoSeqPlaceholder } from "@/lib/reports/pr-naming";
 import type { PurchaseRequest } from "@/types/database";
 
 describe("formatInternalOrder", () => {
@@ -44,15 +44,29 @@ describe("PR filenames carry the fiscal-year number", () => {
   });
 });
 
-describe("quoteAttachmentName", () => {
-  it("is the bundle's quote PDF name without the extension", () => {
-    const pr = {
-      pr_sequence_number: 2,
-      pr_fiscal_year: 2027,
-      date_prepared: "2026-09-22",
-      vendor1_name: "Russo Power Equipment",
-    } as PurchaseRequest;
-    expect(quoteAttachmentName(pr, new Date(2026, 8, 22))).toBe(
+describe("quote label before and after the number exists", () => {
+  const base = {
+    pr_sequence_number: null,
+    pr_fiscal_year: 2027,
+    date_prepared: "2026-09-22",
+    vendor1_name: "Russo Power Equipment",
+  } as unknown as PurchaseRequest;
+
+  it("previews the fiscal year procurement opened, not the one the date implies", () => {
+    expect(quoteFilenameBase(base)).toBe("QUOTE-FY27-GC-####-RussoPowerEquipment-Golf Course-September2026");
+  });
+
+  it("fills in the number — and the year — the database assigned", () => {
+    // A label written with the date's year (FY26) still resolves to FY27.
+    const saved = "QUOTE-FY26-GC-####-RussoPowerEquipment-Golf Course-September2026 and SOW";
+    expect(resolveIoSeqPlaceholder(saved, 2, 2027)).toBe(
+      "QUOTE-FY27-GC-0002-RussoPowerEquipment-Golf Course-September2026 and SOW",
+    );
+    expect(resolveIoSeqPlaceholder("Vendor Quote", 2, 2027)).toBe("Vendor Quote");
+  });
+
+  it("names the saved PR's quote with its stored fiscal year", () => {
+    expect(quoteFilenameBase({ ...base, pr_sequence_number: 2 })).toBe(
       "QUOTE-FY27-GC-0002-RussoPowerEquipment-Golf Course-September2026",
     );
   });

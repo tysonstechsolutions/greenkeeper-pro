@@ -12,6 +12,7 @@ import {
   orderPurchaseItems,
   computeCcFeeAmount,
   rebalanceWithCcFee,
+  stripCcFee,
   formatCcFeePct,
   ccFeeDescription,
   parseCcFeeRate,
@@ -355,5 +356,63 @@ describe("sales tax is excluded from the 3% fee base", () => {
     expect(fee.unit_price).toBe(3);
     // Fee remains the last row.
     expect(isCcFeeItem(after[after.length - 1])).toBe(true);
+  });
+});
+
+describe("stripCcFee", () => {
+  it("removes the fee line and renumbers what's left", () => {
+    const out = stripCcFee([
+      mkItem({ item: 1, description: "Blade", qty: 2, unit_price: 50 }),
+      mkItem({ item: 2, description: "Freight", qty: 1, unit_price: 10 }),
+      mkItem({ item: 3, description: CC_FEE_DESCRIPTION, qty: 1, unit_price: 3.3 }),
+    ]);
+    expect(out.map((i) => i.description)).toEqual(["Blade", "Freight"]);
+    expect(out.map((i) => i.item)).toEqual([1, 2]);
+  });
+
+  it("removes a fee line at a non-default rate too", () => {
+    const out = stripCcFee([
+      mkItem({ item: 1, description: "Blade", qty: 1, unit_price: 100 }),
+      mkItem({ item: 2, description: ccFeeDescription(0.035), qty: 1, unit_price: 3.5 }),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(isCcFeeItem(out[0])).toBe(false);
+  });
+
+  it("renumbers even when the fee was not last", () => {
+    const out = stripCcFee([
+      mkItem({ item: 1, description: CC_FEE_DESCRIPTION, qty: 1, unit_price: 1 }),
+      mkItem({ item: 2, description: "Blade", qty: 1, unit_price: 50 }),
+    ]);
+    expect(out).toEqual([
+      expect.objectContaining({ item: 1, description: "Blade" }),
+    ]);
+  });
+
+  it("returns the SAME array reference when there is no fee to strip", () => {
+    // The form feeds this back into setItems from an effect — a fresh array
+    // every pass would re-render forever.
+    const items = [
+      mkItem({ item: 1, description: "Blade", qty: 1, unit_price: 50 }),
+      mkItem({ item: 2, description: "Freight", qty: 1, unit_price: 10 }),
+    ];
+    expect(stripCcFee(items)).toBe(items);
+  });
+
+  it("returns the same reference for an empty list", () => {
+    const items: PurchaseRequestItem[] = [];
+    expect(stripCcFee(items)).toBe(items);
+  });
+
+  it("still returns a new array when only the numbering was wrong", () => {
+    const items = [mkItem({ item: 7, description: "Blade", qty: 1, unit_price: 50 })];
+    const out = stripCcFee(items);
+    expect(out).not.toBe(items);
+    expect(out[0].item).toBe(1);
+  });
+
+  it("is the inverse of rebalanceWithCcFee", () => {
+    const base = [mkItem({ item: 1, description: "Blade", qty: 2, unit_price: 50 })];
+    expect(stripCcFee(rebalanceWithCcFee(base, CC_FEE_RATE))).toEqual(base);
   });
 });

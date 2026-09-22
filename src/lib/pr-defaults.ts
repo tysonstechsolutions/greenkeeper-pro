@@ -3,7 +3,9 @@
  *
  * Sourced from the procurement office's filled example. Updated 2026-05
  * after the office moved Joseph Caprez from invoice POC to delivery POC
- * and replaced the invoice contact with the MWR Business Office.
+ * and replaced the invoice contact with the MWR Business Office, then
+ * 2026-08 to match how the business office writes its own street line
+ * ("2601E Paul Jones" — no space after the number, no "Street").
  *
  * Updating: change the values below and rebuild. They aren't user-editable
  * inside the app yet because they only change when the facility relocates,
@@ -14,7 +16,7 @@
  */
 
 export const PR_INVOICE_DEFAULTS = {
-  address: "2601 E Paul Jones Street",
+  address: "2601E Paul Jones",
   line2: "BLDG 1 RM 129",
   city_state_zip: "Great Lakes, IL 60088",
   poc: "MWR Buisness Office",
@@ -59,8 +61,35 @@ export const PR_REQUESTOR_DEFAULTS = {
   email: "Tyson.k.bruce.naf@us.navy.mil",
 } as const;
 
-/** Default request method. Overridable in the form. */
-export const PR_REQUEST_VIA_DEFAULT = "PURCHASE CARD";
+/**
+ * How the request is paid/routed. The official PR template ships a "Via"
+ * dropdown with only CONTRACTING OFFICE and PURCHASE CARD; CHECK is added to
+ * that dropdown at PDF-generation time (see purchase-request-report.ts) so the
+ * form can offer all three without editing the government template file.
+ *
+ * Values are stored verbatim in `purchase_requests.request_via` and written
+ * straight into the PDF, so they must stay upper-case exactly as written.
+ */
+export const PR_REQUEST_VIA_OPTIONS = [
+  "CONTRACTING OFFICE",
+  "PURCHASE CARD",
+  "CHECK",
+] as const;
 
-/** Days to add to date_prepared for the default delivery date. */
-export const PR_DELIVERY_DAYS = 30;
+export type PrRequestVia = (typeof PR_REQUEST_VIA_OPTIONS)[number];
+
+/** Human-readable label for each Request Via value. */
+export const PR_REQUEST_VIA_LABELS: Record<PrRequestVia, string> = {
+  "CONTRACTING OFFICE": "Contracting Office",
+  "PURCHASE CARD": "Purchase Card",
+  CHECK: "Check",
+};
+
+/** Default request method. Overridable in the form. */
+export const PR_REQUEST_VIA_DEFAULT: PrRequestVia = "PURCHASE CARD";
+
+/**
+ * Days to add to date_prepared for the default required delivery date.
+ * One week — procurement's standard turnaround for a card purchase.
+ */
+export const PR_DELIVERY_DAYS = 7;

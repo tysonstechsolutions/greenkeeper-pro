@@ -16,7 +16,10 @@
  */
 
 import type { PurchaseRequest, VendorWith889 } from "@/types/database";
-import { formatInternalOrder } from "@/lib/pr-internal-order";
+import {
+  fiscalYearTwoDigit,
+  formatInternalOrder,
+} from "@/lib/pr-internal-order";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -71,6 +74,22 @@ function ioTag(pr: PurchaseRequest): string {
 }
 
 /**
+ * Stand-in for the 4-digit sequence in a filename shown BEFORE the PR is
+ * saved. Postgres hands out the real number on insert, so a draft can only
+ * promise the shape. `resolveIoSeqPlaceholder` swaps in the real digits once
+ * the insert comes back.
+ */
+export const IO_SEQ_PLACEHOLDER = "####";
+
+/** The PR's own month/year ("May2026"), not the current wall-clock month. */
+function prMonthYearCompact(pr: PurchaseRequest, now: Date): string {
+  const d = new Date(`${pr.date_prepared}T12:00:00`);
+  return Number.isNaN(d.getTime())
+    ? currentMonthYearCompact(now)
+    : currentMonthYearCompact(d);
+}
+
+/**
  * PR PDF filename: "PR-{IO} - {Vendor} - Golf Course - {Month} {Year}.pdf"
  * Example: "PR-FY26-GC-0001 - Ace Hardware - Golf Course - May 2026.pdf"
  */
@@ -93,20 +112,73 @@ export function quoteFilename(
   originalExt: string,
   now: Date = new Date(),
 ): string {
-  const vendor = compactVendor(pr.vendor1_name || "Vendor");
-  return `QUOTE-${ioTag(pr)}-${vendor}-${PROGRAM}-${currentMonthYearCompact(now)}.${originalExt}`;
+  return `${quoteFilenameBase(pr, now)}.${originalExt}`;
 }
 
 /**
- * The quote's name as written in the PR's "Other (specify)" box — the bundle's
- * merged quote PDF name without the extension:
- * "QUOTE-FY27-GC-0002-AceHardware-Golf Course-September2026".
+ * The quote filename without its extension:
+ * "QUOTE-FY26-GC-0001-AceHardware-Golf Course-May2026".
+ *
+ * This is what the PR form prints in "IGE Based On" and in the "Other
+ * (specify)" attachment box, so the procurement office can match the line on
+ * the form to the file in the bundle. The extension is left off on purpose —
+ * a quote can arrive as a PDF or as photos that get stitched into one, so the
+ * form can't promise it, and the name up to the extension is what identifies
+ * the document.
+ *
+ * The month/year comes from the PR's own `date_prepared` rather than the
+ * clock, so re-downloading a May PR in August doesn't rename the file out
+ * from under the label already printed on the saved form.
+ *
+ * Before the PR is saved the sequence number doesn't exist yet, so the slot
+ * reads `####` (see IO_SEQ_PLACEHOLDER).
  */
-export function quoteAttachmentName(
+export function quoteFilenameBase(
   pr: PurchaseRequest,
   now: Date = new Date(),
 ): string {
-  return quoteFilename(pr, "pdf", now).replace(/\.pdf$/, "");
+  const vendor = compactVendor(pr.vendor1_name || "Vendor");
+  return `QUOTE-${quoteIoTag(pr)}-${vendor}-${PROGRAM}-${prMonthYearCompact(pr, now)}`;
+}
+
+/**
+ * Internal-order tag for the quote label. Same as `ioTag` once a sequence
+ * exists; before that it keeps the FY-GC shape with a `####` placeholder
+ * instead of falling back to a raw date, because the label's whole job is to
+ * show the user what the saved filename will look like.
+ */
+function quoteIoTag(pr: PurchaseRequest): string {
+  const io = formatInternalOrder(pr.pr_sequence_number, pr.date_prepared, pr.pr_fiscal_year);
+  if (io) return io;
+  // Numbering restarts per fiscal year and a year can open early (FY27 opened
+  // in Sept 2026), so a known fiscal year beats the one the date implies.
+  if (pr.pr_fiscal_year != null) {
+    return `FY${String(pr.pr_fiscal_year).slice(-2)}-GC-${IO_SEQ_PLACEHOLDER}`;
+  }
+  const d = new Date(`${pr.date_prepared}T12:00:00`);
+  const fy = fiscalYearTwoDigit(Number.isNaN(d.getTime()) ? new Date() : d);
+  return `FY${fy}-GC-${IO_SEQ_PLACEHOLDER}`;
+}
+
+/**
+ * Swap the `####` placeholder in a saved label for the sequence number the
+ * database just assigned. Leaves any other text (including the " and SOW"
+ * suffix) alone, and returns the input untouched when there's nothing to
+ * resolve.
+ */
+export function resolveIoSeqPlaceholder(
+  text: string | null | undefined,
+  seq: number | null | undefined,
+  /** The fiscal year the database numbered it in. The label's guess can be a year behind. */
+  fiscalYear?: number | null,
+): string {
+  const value = text ?? "";
+  if (seq == null || !value.includes(IO_SEQ_PLACEHOLDER)) return value;
+  const digits = String(seq).padStart(4, "0");
+  const withYear = fiscalYear != null
+    ? value.replace(/FY\d{2}-GC-####/g, `FY${String(fiscalYear).slice(-2)}-GC-${digits}`)
+    : value;
+  return withYear.split(IO_SEQ_PLACEHOLDER).join(digits);
 }
 
 /**

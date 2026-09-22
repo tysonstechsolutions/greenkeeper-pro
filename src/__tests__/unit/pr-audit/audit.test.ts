@@ -219,10 +219,29 @@ describe("auditPr — other checks", () => {
     expect(codes(pr)).not.toContain("other_not_vendor_quote");
   });
 
-  it('accepts "Other" holding the quote filename', () => {
+  it('accepts the quote filename the PR builder writes', () => {
     const pr = validPr();
-    pr.attached_other = "QUOTE-FY27-GC-0002-AceHardware-Golf Course-September2026";
+    pr.attached_other = "QUOTE-FY26-GC-0001-AceHardware-Golf Course-August2026";
     expect(codes(pr)).not.toContain("other_not_vendor_quote");
+  });
+
+  it("accepts that filename with a SOW riding along", () => {
+    const pr = validPr();
+    pr.attached_other =
+      "QUOTE-FY26-GC-0001-AceHardware-Golf Course-August2026 and SOW";
+    expect(codes(pr)).not.toContain("other_not_vendor_quote");
+  });
+
+  it("accepts a label printed before the sequence number was assigned", () => {
+    const pr = validPr();
+    pr.attached_other = "QUOTE-FY26-GC-####-AceHardware-Golf Course-August2026";
+    expect(codes(pr)).not.toContain("other_not_vendor_quote");
+  });
+
+  it("still flags something that names no quote at all", () => {
+    const pr = validPr();
+    pr.attached_other = "Price comparison spreadsheet";
+    expect(codes(pr)).toContain("other_not_vendor_quote");
   });
 
   it("flags a grand-total mismatch with the computed total", () => {
