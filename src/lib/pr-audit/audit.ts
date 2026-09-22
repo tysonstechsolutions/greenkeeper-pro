@@ -462,17 +462,18 @@ export function auditPr(
     });
   }
 
-  // 5. "Other" attachment must read "Vendor Quote".
+  // 5. "Other" attachment must name the quote: its filename
+  //    ("QUOTE-FY27-GC-0002-...") or, on older PRs, "Vendor Quote".
   const other = (pr.attached_other ?? "").trim();
-  if (!/vendor\s*quote/i.test(other)) {
+  if (!/vendor\s*quote/i.test(other) && !/^QUOTE-/i.test(other)) {
     findings.push({
       code: "other_not_vendor_quote",
       severity: "warning",
-      title: `"Other" attachment isn't marked "Vendor Quote"`,
+      title: `"Other" attachment doesn't name the quote`,
       detail: other
         ? `The "Other" box reads "${other}".`
         : `The "Other" attachment box is blank.`,
-      suggestion: `Check the "Other" box and label it "Vendor Quote".`,
+      suggestion: `Check the "Other" box and put the quote's filename in it (QUOTE-FY..-GC-NNNN-...).`,
       itemIndex: null,
       field: null,
     });

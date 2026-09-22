@@ -219,6 +219,12 @@ describe("auditPr — other checks", () => {
     expect(codes(pr)).not.toContain("other_not_vendor_quote");
   });
 
+  it('accepts "Other" holding the quote filename', () => {
+    const pr = validPr();
+    pr.attached_other = "QUOTE-FY27-GC-0002-AceHardware-Golf Course-September2026";
+    expect(codes(pr)).not.toContain("other_not_vendor_quote");
+  });
+
   it("flags a grand-total mismatch with the computed total", () => {
     const pr = validPr();
     pr.printed_total = 999;

@@ -98,6 +98,18 @@ export function quoteFilename(
 }
 
 /**
+ * The quote's name as written in the PR's "Other (specify)" box — the bundle's
+ * merged quote PDF name without the extension:
+ * "QUOTE-FY27-GC-0002-AceHardware-Golf Course-September2026".
+ */
+export function quoteAttachmentName(
+  pr: PurchaseRequest,
+  now: Date = new Date(),
+): string {
+  return quoteFilename(pr, "pdf", now).replace(/\.pdf$/, "");
+}
+
+/**
  * 889 filename: "889-{VENDOR} - EXPIRES {DD MMM YYYY}.{ext}"
  * Example: "889-HOME DEPOT - EXPIRES 01 JAN 2026.pdf"
  *

@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
-import { quoteFilename, purchaseRequestPdfFilename } from "@/lib/reports/pr-naming";
+import { quoteFilename, purchaseRequestPdfFilename, quoteAttachmentName } from "@/lib/reports/pr-naming";
 import type { PurchaseRequest } from "@/types/database";
 
 describe("formatInternalOrder", () => {
@@ -40,6 +40,20 @@ describe("PR filenames carry the fiscal-year number", () => {
   it("PR pdf", () => {
     expect(purchaseRequestPdfFilename(pr, now)).toBe(
       "PR-FY27-GC-0002 - Ace Hardware - Golf Course - September 2026.pdf",
+    );
+  });
+});
+
+describe("quoteAttachmentName", () => {
+  it("is the bundle's quote PDF name without the extension", () => {
+    const pr = {
+      pr_sequence_number: 2,
+      pr_fiscal_year: 2027,
+      date_prepared: "2026-09-22",
+      vendor1_name: "Russo Power Equipment",
+    } as PurchaseRequest;
+    expect(quoteAttachmentName(pr, new Date(2026, 8, 22))).toBe(
+      "QUOTE-FY27-GC-0002-RussoPowerEquipment-Golf Course-September2026",
     );
   });
 });

@@ -65,7 +65,8 @@ import { History as HistoryIcon } from "lucide-react";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { generateSowContent } from "@/lib/reports/sow-content";
 import { uploadSowFormData } from "@/lib/reports/sow-persistence";
-import { withSowSuffix } from "@/lib/pr-attachments";
+import { isAutoOtherText, otherWithQuoteName, withSowSuffix } from "@/lib/pr-attachments";
+import { quoteAttachmentName } from "@/lib/reports/pr-naming";
 import { AutoResizeTextarea } from "@/components/ui/auto-resize-textarea";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type {
@@ -138,6 +139,23 @@ const QUOTE_SOURCE_LABELS: Record<Exclude<QuoteSource, "">, string> = {
   vendor_cart: "Vendor Cart",
   in_store: "In Store Pricing",
 };
+const QUOTE_SOURCE_LABEL_LIST = Object.values(QUOTE_SOURCE_LABELS);
+
+/** The quote's name for the "Other" box, once the PR has its number. */
+function quoteNameFor(
+  seq: number | null,
+  fiscalYear: number | null,
+  datePrepared: string,
+  vendorName: string,
+): string | null {
+  if (seq == null) return null;
+  return quoteAttachmentName({
+    pr_sequence_number: seq,
+    pr_fiscal_year: fiscalYear,
+    date_prepared: datePrepared,
+    vendor1_name: vendorName.trim() || null,
+  } as PurchaseRequest);
+}
 
 // ── SOW constants (same as /sow page) ────────────────────────────────────────
 
@@ -1239,9 +1257,18 @@ function NewPurchaseRequestPageInner() {
     if (!quoteSource) return;
     const label = QUOTE_SOURCE_LABELS[quoteSource];
     setIgeBasedOn(label);
-    // Keep the SOW mention if one is attached (the form has no SOW checkbox,
-    // so it rides along in the "Other" box: "Vendor Quote and SOW").
-    setAttachedOther(withSowSuffix(label, attached.sow));
+    // The "Other" box names the quote file. A saved PR with a quote shows
+    // its real name; a new one shows the method until save assigns the
+    // number. Wording the user typed is left alone. The SOW mention rides
+    // along ("... and SOW") since the form has no SOW checkbox.
+    const quoteName = existingQuoteName
+      ? quoteNameFor(prSequenceNumber, prFiscalYear, datePrepared, v1.name)
+      : null;
+    setAttachedOther((prev) =>
+      isAutoOtherText(prev, QUOTE_SOURCE_LABEL_LIST)
+        ? withSowSuffix(quoteName ?? label, attached.sow)
+        : withSowSuffix(prev, attached.sow),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-fill only on quote-source change; the SOW checkbox keeps its own suffix in sync
   }, [quoteSource]);
 
@@ -2005,6 +2032,16 @@ function NewPurchaseRequestPageInner() {
       }
     }
 
+    // Edit: the number is known, so a PR with a quote gets the quote's name in
+    // "Other" now. New PRs get it after insert, once the number exists.
+    const editQuoteName =
+      editId && quoteFilenameSaved
+        ? quoteNameFor(prSequenceNumber, prFiscalYear, datePrepared, v1.name)
+        : null;
+    const otherToSave = editQuoteName
+      ? otherWithQuoteName(attachedOther.trim(), editQuoteName, attached.sow, QUOTE_SOURCE_LABEL_LIST)
+      : withSowSuffix(attachedOther.trim(), attached.sow);
+
     const payload = {
       date_prepared: datePrepared,
       required_delivery_date: requiredDeliveryDate || null,
@@ -2069,7 +2106,7 @@ function NewPurchaseRequestPageInner() {
       attached_bnj: attached.bnj,
       attached_pws: attached.pws,
       attached_itpr: attached.itpr,
-      attached_other: withSowSuffix(attachedOther.trim(), attached.sow) || null,
+      attached_other: otherToSave || null,
       attached_section_889: attached.section_889,
       attached_sow: attached.sow,
       ...(sowStoragePath ? { sow_storage_path: sowStoragePath } : {}),
@@ -2108,7 +2145,11 @@ function NewPurchaseRequestPageInner() {
       } else {
         const { data, error: insertErr } = await timedStep(
           "insert PR",
-          restFetch<{ id: string }>(
+          restFetch<{
+            id: string;
+            pr_sequence_number: number | null;
+            pr_fiscal_year: number | null;
+          }>(
             "POST",
             "purchase_requests",
             { ...payload, created_by: user.id },
@@ -2125,6 +2166,25 @@ function NewPurchaseRequestPageInner() {
           return;
         }
         const newId = data.id;
+        // Now that the PR has its number, "Other" can name the quote file.
+        const insertedQuoteOther = () => {
+          const name = quoteNameFor(
+            data.pr_sequence_number,
+            data.pr_fiscal_year,
+            datePrepared,
+            v1.name,
+          );
+          return name
+            ? {
+                attached_other: otherWithQuoteName(
+                  payload.attached_other ?? "",
+                  name,
+                  attached.sow,
+                  QUOTE_SOURCE_LABEL_LIST,
+                ),
+              }
+            : {};
+        };
         recordBreadcrumb("click", `[pr-save] inserted id=${newId.slice(-8)}`);
 
         // If this PR was submitted (not a draft), flip matching order-list
@@ -2150,6 +2210,7 @@ function NewPurchaseRequestPageInner() {
                     quote_filename: uploads[0].filename,
                     quote_uploaded_at: new Date().toISOString(),
                     quote_paths: uploads,
+                    ...insertedQuoteOther(),
                   },
                   false,
                 ),
@@ -3409,7 +3470,10 @@ function NewPurchaseRequestPageInner() {
           )}
         </div>
         <div className="mt-2">
-          <Field label="Other (specify)">
+          <Field
+            label="Other (specify)"
+            hint="Names the quote file (QUOTE-FY..-GC-NNNN-...). Filled in automatically once the PR is saved with a quote."
+          >
             <input
               type="text"
               value={attachedOther}

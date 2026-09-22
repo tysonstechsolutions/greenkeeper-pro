@@ -30,6 +30,8 @@ import {
   type PDFForm,
 } from "pdf-lib";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
+import { quoteAttachmentName } from "@/lib/reports/pr-naming";
+import { withSowSuffix } from "@/lib/pr-attachments";
 import { PR_ACCOUNTING_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
 import { findVendorDefaults } from "@/lib/vendor-defaults";
 import { getCachedUserId, directSelectRow } from "@/lib/supabase/rest";
@@ -109,6 +111,60 @@ function setText(
   }
 }
 
+/**
+ * Break text into lines no wider than `maxWidth`, splitting after spaces or
+ * dashes (a quote filename is one long dashed "word").
+ */
+export function wrapToWidth(
+  text: string,
+  maxWidth: number,
+  measure: (s: string) => number,
+): string[] {
+  const tokens = text.match(/[^\s-]*[\s-]*/g)?.filter(Boolean) ?? [text];
+  const lines: string[] = [];
+  let line = "";
+  for (const tok of tokens) {
+    if (line && measure((line + tok).trimEnd()) > maxWidth) {
+      lines.push(line.trimEnd());
+      line = tok.trimStart();
+    } else {
+      line += tok;
+    }
+  }
+  if (line.trim()) lines.push(line.trimEnd());
+  return lines;
+}
+
+/** Multiline text field filled with wrapped lines at the largest size (8pt down to 5pt) that fits the box. */
+function setFittedText(
+  form: PDFForm,
+  name: string,
+  value: string,
+  font: { widthOfTextAtSize(t: string, s: number): number },
+  written: Set<string>,
+): void {
+  try {
+    const f = form.getField(name);
+    if (!(f instanceof PDFTextField)) return;
+    const rect = f.acroField.getWidgets()[0]?.getRectangle();
+    if (!rect) return setText(form, name, value, written);
+    const width = rect.width - 4;
+    const height = rect.height - 2;
+    let size = 8;
+    let lines = wrapToWidth(value, width, (t) => font.widthOfTextAtSize(t, size));
+    while (size > 5 && lines.length * size * 1.2 > height) {
+      size -= 0.5;
+      lines = wrapToWidth(value, width, (t) => font.widthOfTextAtSize(t, size));
+    }
+    f.enableMultiline();
+    f.setFontSize(size);
+    f.setText(lines.join("\n"));
+    written.add(name);
+  } catch {
+    setText(form, name, value, written);
+  }
+}
+
 function setCheckbox(
   form: PDFForm,
   name: string,
@@ -175,6 +231,18 @@ async function loadTemplate(): Promise<Uint8Array> {
   const buf = new Uint8Array(await resp.arrayBuffer());
   cachedTemplate = buf;
   return buf.slice();
+}
+
+/**
+ * The "Other" box as printed. When it names this PR's own quote file, re-derive
+ * the name for today so it matches the quote in the bundle being downloaded
+ * (the filename carries the download month). Anything else prints as saved.
+ */
+export function otherForDownload(pr: PurchaseRequest): string {
+  const saved = (pr.attached_other ?? "").trim();
+  const io = formatInternalOrder(pr.pr_sequence_number, pr.date_prepared, pr.pr_fiscal_year);
+  if (!io || !saved.toUpperCase().startsWith(`QUOTE-${io}-`)) return saved;
+  return withSowSuffix(quoteAttachmentName(pr), /\bSOW\s*$/i.test(saved));
 }
 
 export async function generatePurchaseRequestReport(
@@ -410,7 +478,13 @@ export async function generatePurchaseRequestReport(
     setText(form, "Justifications", pr.justification || "", written);
     setText(form, "APPROVING_OFFICIAL", pr.approving_authority || "", written);
     setText(form, "SECOND_APPROVAL", pr.second_approval || "", written);
-    if (pr.attached_other) setText(form, "Attachment", pr.attached_other, written);
+    const attachedOther = otherForDownload(pr);
+    if (attachedOther) {
+      // The box is ~2.6" wide and a quote filename has no spaces, so pdf-lib
+      // would cut it off mid-word. Wrap it at the dashes and shrink to fit.
+      const helv = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      setFittedText(form, "Attachment", attachedOther, helv, written);
+    }
 
     // ── Attached-item checkboxes ───────────────────────────────────────
     step = "fill-checkboxes";
@@ -418,7 +492,7 @@ export async function generatePurchaseRequestReport(
     setCheckbox(form, "BNJ", pr.attached_bnj, written);
     setCheckbox(form, "PWS", pr.attached_pws, written);
     setCheckbox(form, "ITPR", pr.attached_itpr, written);
-    setCheckbox(form, "Other", !!pr.attached_other, written);
+    setCheckbox(form, "Other", !!attachedOther, written);
     setCheckbox(form, "889", pr.attached_section_889, written);
 
     // ── Refresh appearances ONLY for fields we wrote ───────────────────
