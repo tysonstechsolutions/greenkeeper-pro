@@ -585,6 +585,8 @@ export interface OpenSlot {
   end: string;
   /** "gap" leaves the window uncovered; "extra" is missing added cover. */
   kind: "gap" | "extra" | "short";
+  /** Set when the open shift is a standard-week slot nobody is on today. */
+  slot_id?: string;
 }
 
 /**

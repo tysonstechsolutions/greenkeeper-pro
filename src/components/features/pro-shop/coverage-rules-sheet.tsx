@@ -32,12 +32,21 @@ export function CoverageRulesSheet({
   settings,
   onSaveRule,
   onSaveSettings,
+  hoursInStandardWeek = false,
+  onOpenStandardWeek,
 }: {
   area: ScheduleArea;
   rules: CoverageRule[];
   settings: ScheduleSettings;
   onSaveRule: (rule: Pick<CoverageRule, "weekday" | "group"> & Partial<CoverageRule>) => Promise<void>;
   onSaveSettings: (next: Partial<Omit<ScheduleSettings, "area">>) => Promise<void>;
+  /**
+   * Once there is a standard week, the opening hours are set there (dated, so
+   * a season change can be scheduled). Two places to set them would be one
+   * too many, so the times drop out of this sheet.
+   */
+  hoursInStandardWeek?: boolean;
+  onOpenStandardWeek?: () => void;
 }) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +112,18 @@ export function CoverageRulesSheet({
         can all work alongside each other.
       </p>
 
+      {hoursInStandardWeek && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50/70 dark:bg-sky-950/30 dark:border-sky-900 p-2.5 text-xs text-sky-900 dark:text-sky-200">
+          Opening and closing times are set in the <strong>Standard week</strong>, so a change can start on a
+          date you pick. This sheet sets how many people each day needs.
+          {onOpenStandardWeek && (
+            <button type="button" onClick={onOpenStandardWeek} className="ml-1 underline font-medium">
+              Change the hours
+            </button>
+          )}
+        </div>
+      )}
+
       {error && <p className="text-xs text-red-600">{error}</p>}
 
       {AREA_GROUPS[area].map((group) => (
@@ -120,6 +141,7 @@ export function CoverageRulesSheet({
                   weekday={weekday}
                   group={group}
                   busy={busyKey === key}
+                  hideHours={hoursInStandardWeek}
                   onSave={(next) => save(key, next)}
                 />
               );
@@ -168,8 +190,9 @@ export function CoverageRulesSheet({
       </div>
 
       <p className="text-xs text-muted-foreground border-t border-border pt-3">
-        Changes take effect the next time you hit <strong>Regenerate</strong>. Pinned shifts stay
-        where you put them.
+        {hoursInStandardWeek
+          ? <>These numbers decide which days show an open shift or a warning. Who works when is set in the <strong>Standard week</strong>.</>
+          : <>Changes take effect the next time you hit <strong>Regenerate</strong>. Pinned shifts stay where you put them.</>}
       </p>
     </div>
   );
@@ -181,6 +204,7 @@ function RuleRow({
   weekday,
   group,
   busy,
+  hideHours = false,
   onSave,
 }: {
   label: string;
@@ -188,6 +212,8 @@ function RuleRow({
   weekday: number;
   group: ShiftGroup;
   busy: boolean;
+  /** The hours are set in the standard week; keep the rule's own untouched. */
+  hideHours?: boolean;
   onSave: (rule: Pick<CoverageRule, "weekday" | "group"> & Partial<CoverageRule>) => Promise<void>;
 }) {
   const [open, setOpen] = useState(hhmm(rule?.open_time) || "08:00");
@@ -206,14 +232,18 @@ function RuleRow({
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border p-2">
       <span className="w-20 shrink-0 text-xs font-medium">{label}</span>
-      <div className="space-y-0.5">
-        <Label className="text-[10px] text-muted-foreground">Open</Label>
-        <Input type="time" className="h-8 w-28 text-xs" value={open} onChange={(e) => setOpen(e.target.value)} />
-      </div>
-      <div className="space-y-0.5">
-        <Label className="text-[10px] text-muted-foreground">Close</Label>
-        <Input type="time" className="h-8 w-28 text-xs" value={close} onChange={(e) => setClose(e.target.value)} />
-      </div>
+      {!hideHours && (
+        <>
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-muted-foreground">Open</Label>
+            <Input type="time" className="h-8 w-28 text-xs" value={open} onChange={(e) => setOpen(e.target.value)} />
+          </div>
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-muted-foreground">Close</Label>
+            <Input type="time" className="h-8 w-28 text-xs" value={close} onChange={(e) => setClose(e.target.value)} />
+          </div>
+        </>
+      )}
       <div className="space-y-0.5">
         <Label className="text-[10px] text-muted-foreground">On shift</Label>
         <Input type="number" min="0" max="12" className="h-8 w-16 text-xs" value={base} onChange={(e) => setBase(e.target.value)} />

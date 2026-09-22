@@ -16,6 +16,7 @@ import Link from "next/link";
 import {
   CalendarClock,
   CalendarOff,
+  CalendarRange,
   ChevronLeft,
   ChevronRight,
   ChevronRight as ChevronRightIcon,
@@ -55,7 +56,10 @@ import {
 import { effectiveRulesForDay, isDayLocked } from "@/lib/pro-shop/day-overrides";
 import { matchStaffName, sanitizeWeekly, validDate } from "@/lib/pro-shop/schedule-update";
 import { computeStaffHours, elapsedMinutes, formatHours, paidMinutes, staffDayKey } from "@/lib/pro-shop/hours";
-import { openSlotsForDay, type OpenSlot } from "@/lib/pro-shop/coverage";
+import type { OpenSlot } from "@/lib/pro-shop/coverage";
+import { openShiftsForDay } from "@/lib/pro-shop/open-shifts";
+import { replacementCandidates, slotsForWeekday, versionFor } from "@/lib/pro-shop/week-template";
+import { StandardWeekSheet } from "@/components/features/pro-shop/standard-week-sheet";
 import { buildSchedulePrintHtml } from "@/lib/pro-shop/print-schedule";
 import { CoverageRulesSheet } from "@/components/features/pro-shop/coverage-rules-sheet";
 import {
@@ -142,8 +146,8 @@ function firstName(name: string): string {
  */
 function menuAt(e: React.MouseEvent): { x: number; y: number } {
   return {
-    x: Math.min(e.clientX, window.innerWidth - 200),
-    y: Math.min(e.clientY, window.innerHeight - 170),
+    x: Math.max(8, Math.min(e.clientX, window.innerWidth - 248)),
+    y: Math.max(8, Math.min(e.clientY, window.innerHeight - 380)),
   };
 }
 
@@ -182,6 +186,9 @@ function ProShopScheduleContent() {
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [weekOpen, setWeekOpen] = useState(false);
+  /** In the right-click menu: give the shift away this once, or every week. */
+  const [menuEveryWeek, setMenuEveryWeek] = useState(false);
   /** What the last rebuild did, so a scoped one says what it left alone. */
   const [rebuildResult, setRebuildResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -312,27 +319,41 @@ function ProShopScheduleContent() {
    * never disagree.
    */
   function rulesOn(dateStr: string) {
-    return effectiveRulesForDay(dateStr, ps.rules, ps.dayOverrides);
+    return effectiveRulesForDay(dateStr, ps.rules, ps.dayOverrides, ps.templates);
   }
 
   /** Shifts that day still needs somebody in. Derived, so they survive a
    *  reload and show up on the printout as a blank line to sign. */
   function openOn(dateStr: string): OpenSlot[] {
-    const rules = rulesOn(dateStr);
-    if (rules.length === 0) return [];
-    return openSlotsForDay(
-      shiftsOn(dateStr).map((s) => ({
-        group: s.group, start_time: s.start_time, end_time: s.end_time,
-      })),
-      rules,
-    );
+    return openShiftsForDay(dateStr, shiftsOn(dateStr), ps.rules, ps.dayOverrides, ps.templates);
+  }
+
+  /** Who could take a shift on a date, best first (see replacementCandidates). */
+  function candidatesOn(date: string, group: ShiftGroup, start: string, end: string, excludeStaffId?: string) {
+    return replacementCandidates({
+      date, group, start: hhmm(start), end: hhmm(end),
+      staff: ps.staff, shiftsOnDay: shiftsOn(date), timeOff: ps.timeOff, excludeStaffId,
+    });
+  }
+
+  /** Run a schedule write from a menu, reporting a failure instead of swallowing it. */
+  async function act(work: () => Promise<unknown>, done?: string) {
+    setBusy(true);
+    try {
+      await work();
+      if (done) setRebuildResult(done);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "That didn't save. Try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function handlePrint() {
     const html = buildSchedulePrintHtml({
       area, year: ps.year, month0: ps.month0,
       shifts: ps.shifts, staff: ps.staff, rules: ps.rules, overrides: ps.dayOverrides,
-      settings: ps.settings, status: ps.schedule?.status, generatedOn: new Date(),
+      templates: ps.templates, settings: ps.settings, status: ps.schedule?.status, generatedOn: new Date(),
     });
     const win = window.open("", "_blank");
     if (!win) {
@@ -401,6 +422,16 @@ function ProShopScheduleContent() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** "Mon 0700-1230 · Wed 1230-1900" — this person's standard week, as in force today. */
+  function standardWeekLine(staffId: string): string {
+    const version = versionFor(TODAY, ps.templates) ?? ps.templates[0];
+    if (!version) return "";
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return days.flatMap((label, wd) => slotsForWeekday(version.slots, wd)
+      .filter((slot) => slot.staff_id === staffId)
+      .map((slot) => `${label} ${compactTime(slot.start)}-${compactTime(slot.end)}`)).join(" · ");
   }
 
   function changeMonth(delta: number) {
@@ -589,7 +620,7 @@ function ProShopScheduleContent() {
     // "needs attention" list still naming a stretch that had just been
     // excused, while the grid beside it had already stopped showing it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ps.shifts, ps.rules, ps.dayOverrides, area, monthDate, dismissedMap]);
+  }, [ps.shifts, ps.rules, ps.dayOverrides, ps.templates, area, monthDate, dismissedMap]);
   const warningDays = flaggedDays.length;
 
   // Active + dismissed issues for the currently-open day (for the day editor).
@@ -603,7 +634,7 @@ function ProShopScheduleContent() {
     };
     // Same reason as flaggedDays above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayOpen, ps.shifts, ps.rules, ps.dayOverrides, area, dismissedMap]);
+  }, [dayOpen, ps.shifts, ps.rules, ps.dayOverrides, ps.templates, area, dismissedMap]);
 
   return (
     <div className="p-3 md:p-6 pb-28 max-w-6xl mx-auto">
@@ -691,9 +722,15 @@ function ProShopScheduleContent() {
           </button>
         )}
         <div className="flex-1" />
+        <Button size="sm" variant={ps.templates.length ? "outline" : "default"} className="gap-1.5"
+          onClick={() => setWeekOpen(true)} disabled={busy || ps.loading}>
+          <CalendarRange className="w-4 h-4" /> Standard week
+        </Button>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setRebuildOpen(true)} disabled={busy || ps.staff.length === 0}>
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-          {ps.schedule ? "Regenerate" : "Generate schedule"}
+          {ps.templates.length
+            ? (ps.schedule ? "Refill from standard week" : "Fill from standard week")
+            : (ps.schedule ? "Regenerate" : "Generate schedule")}
         </Button>
         {ps.schedule && ps.schedule.status !== "published" && (
           <Button size="sm" className="gap-1.5 bg-[#1B4332] hover:bg-[#2D6A4F]" onClick={handlePublish} disabled={busy}>
@@ -787,7 +824,9 @@ function ProShopScheduleContent() {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground mt-1">
-          Type a change in plain English — it updates the person&apos;s availability or time off and rebuilds the month.
+          {ps.templates.length
+            ? "Type a change in plain English — time off comes off the schedule. To change someone's regular days, use Standard week."
+            : "Type a change in plain English — it updates the person's availability or time off and rebuilds the month."}
         </p>
         {quickError && <p className="text-xs text-red-600 mt-2">{quickError}</p>}
         {quickResult && (
@@ -903,6 +942,7 @@ function ProShopScheduleContent() {
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setMenuEveryWeek(false);
                 setShiftMenu({ kind: "shift", shift: s, ...menuAt(e) });
               }}
             />
@@ -1051,7 +1091,13 @@ function ProShopScheduleContent() {
                               {POSITION_LABELS[s.position]}
                               <span className="text-muted-foreground/70"> · this month</span>
                             </p>
-                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {standardWeekLine(s.id) && (
+                              <p className="text-[11px] truncate mt-0.5" title="Their standard week">
+                                <CalendarRange className="inline w-3 h-3 mr-1 -mt-0.5" />
+                                {standardWeekLine(s.id)}
+                              </p>
+                            )}
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5" title="Availability">
                               {summarizeWeekly(s)}
                             </p>
                             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
@@ -1106,7 +1152,7 @@ function ProShopScheduleContent() {
             role="menu"
             aria-label="Shift actions"
             style={{ top: shiftMenu.y, left: shiftMenu.x }}
-            className="fixed z-50 w-48 rounded-lg border border-border bg-card py-1 shadow-lg"
+            className="fixed z-50 w-60 max-h-[75vh] overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-lg"
           >
             {shiftMenu.kind === "shift" ? (
               <>
@@ -1115,6 +1161,28 @@ function ProShopScheduleContent() {
                   {" · "}
                   {compactTime(shiftMenu.shift.start_time)}-{compactTime(shiftMenu.shift.end_time)}
                 </p>
+                <ReplaceList
+                  candidates={candidatesOn(
+                    shiftMenu.shift.shift_date, shiftMenu.shift.group,
+                    shiftMenu.shift.start_time, shiftMenu.shift.end_time, shiftMenu.shift.staff_id,
+                  )}
+                  title="Give this shift to"
+                  everyWeek={menuEveryWeek}
+                  onEveryWeek={ps.templates.length > 0 && shiftMenu.shift.slot_id ? setMenuEveryWeek : undefined}
+                  onPick={(staffId) => {
+                    const shift = shiftMenu.shift;
+                    const everyWeek = menuEveryWeek && !!shift.slot_id;
+                    setShiftMenu(null);
+                    const who = ps.staffById[staffId]?.full_name ?? "them";
+                    void act(
+                      () => ps.changeShift(shift, { staff_id: staffId }, everyWeek),
+                      everyWeek
+                        ? `${who} now has this shift every week from ${shortDate(shift.shift_date)}.`
+                        : `${who} covers ${shortDate(shift.shift_date)}.`,
+                    );
+                  }}
+                />
+                <div className="border-t border-border my-1" />
                 <button
                   type="button"
                   role="menuitem"
@@ -1125,7 +1193,7 @@ function ProShopScheduleContent() {
                     setEditShift({ mode: "edit", shift });
                   }}
                 >
-                  <Pencil className="w-3.5 h-3.5" /> Edit shift…
+                  <Pencil className="w-3.5 h-3.5" /> Edit times…
                 </button>
                 <button
                   type="button"
@@ -1151,7 +1219,7 @@ function ProShopScheduleContent() {
                     void removeShift(shift);
                   }}
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Remove shift
+                  <Trash2 className="w-3.5 h-3.5" /> Remove {ps.templates.length ? "this day" : "shift"}
                 </button>
               </>
             ) : (
@@ -1163,6 +1231,19 @@ function ProShopScheduleContent() {
                   {" · "}
                   {compactTime(shiftMenu.slot.start)}-{compactTime(shiftMenu.slot.end)}
                 </p>
+                <ReplaceList
+                  candidates={candidatesOn(shiftMenu.date, shiftMenu.slot.group, shiftMenu.slot.start, shiftMenu.slot.end)}
+                  title="Put on this shift"
+                  onPick={(staffId) => {
+                    const { date, slot } = shiftMenu;
+                    setShiftMenu(null);
+                    void act(() => ps.addShift({
+                      staff_id: staffId, shift_date: date, group: slot.group,
+                      start_time: slot.start, end_time: slot.end, locked: true, slot_id: slot.slot_id ?? null,
+                    }));
+                  }}
+                />
+                <div className="border-t border-border my-1" />
                 <button
                   type="button"
                   role="menuitem"
@@ -1170,7 +1251,8 @@ function ProShopScheduleContent() {
                   onClick={() => {
                     const { date, slot } = shiftMenu;
                     setShiftMenu(null);
-                    void excuseWindow(date, slot.group, { start: slot.start, end: slot.end });
+                    if (slot.slot_id) void act(() => ps.removeSlotOnDay(date, slot.slot_id!));
+                    else void excuseWindow(date, slot.group, { start: slot.start, end: slot.end });
                   }}
                 >
                   <CalendarOff className="w-3.5 h-3.5" /> Nobody needed
@@ -1185,7 +1267,7 @@ function ProShopScheduleContent() {
                     setDayOpen(date);
                   }}
                 >
-                  <Users className="w-3.5 h-3.5" /> Put someone on…
+                  <Users className="w-3.5 h-3.5" /> Open the day…
                 </button>
               </>
             )}
@@ -1223,8 +1305,36 @@ function ProShopScheduleContent() {
                 ? ps.setDayUnstaffed(dayOpen, group, range, true)
                 : excuseWindow(dayOpen, group, range)}
             resetDay={ps.resetDay}
+            templates={ps.templates}
+            onChangeEveryWeek={async (shift, patch) => {
+              const result = await ps.changeShift(shift, patch, true);
+              if (result) setRebuildResult(`Standard week updated from ${shortDate(shift.shift_date)}; ${result.days} days rebuilt.`);
+            }}
+            onRemoveSlot={(slotId) => ps.removeSlotOnDay(dayOpen, slotId)}
           />
         </Overlay>
+      )}
+
+      {/* ── Standard week ─────────────────────────────────────────────────── */}
+      {weekOpen && (
+        <StandardWeekSheet
+          area={area}
+          groups={AREA_GROUPS[area]}
+          staff={ps.staff}
+          rules={ps.rules}
+          settings={ps.settings}
+          templates={ps.templates}
+          today={TODAY}
+          monthShifts={ps.shifts}
+          monthDates={ps.datesInMonth()}
+          monthLabel={format(monthDate, "MMMM")}
+          onSave={ps.saveWeekTemplate}
+          onDelete={ps.deleteWeekTemplate}
+          onClose={(message) => {
+            setWeekOpen(false);
+            if (message) setRebuildResult(message);
+          }}
+        />
       )}
 
       {/* ── Rebuild scope ─────────────────────────────────────────────────── */}
@@ -1311,6 +1421,8 @@ function ProShopScheduleContent() {
               settings={ps.settings}
               onSaveRule={ps.saveCoverageRule}
               onSaveSettings={ps.saveScheduleSettings}
+              hoursInStandardWeek={ps.templates.length > 0}
+              onOpenStandardWeek={() => { setRulesOpen(false); setWeekOpen(true); }}
             />
           </div>
         </Overlay>
@@ -1344,8 +1456,8 @@ function ProShopScheduleContent() {
                       <ChevronRightIcon className="w-4 h-4 text-red-400" />
                     </div>
                     <ul className="mt-1 space-y-0.5">
-                      {active.map((w) => (
-                        <li key={w.code} className="text-xs text-red-700 flex items-start gap-1.5">
+                      {active.map((w, i) => (
+                        <li key={`${w.code}-${i}`} className="text-xs text-red-700 flex items-start gap-1.5">
                           <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" /> {w.message}
                         </li>
                       ))}
@@ -1362,6 +1474,64 @@ function ProShopScheduleContent() {
 }
 
 // ── Pieces ──────────────────────────────────────────────────────────────────
+
+/**
+ * Everyone who could take a shift, in the right-click menu — pick a name and
+ * it's done. Best fits first; people only free for part of it, or not usually
+ * in that day, follow with a note saying so.
+ */
+function ReplaceList({
+  candidates,
+  title,
+  onPick,
+  everyWeek,
+  onEveryWeek,
+}: {
+  candidates: ReturnType<typeof replacementCandidates>;
+  title: string;
+  onPick: (staffId: string) => void;
+  everyWeek?: boolean;
+  /** Offered only for a standard-week shift. */
+  onEveryWeek?: (next: boolean) => void;
+}) {
+  return (
+    <div className="py-1">
+      <p className="px-3 pt-1 pb-0.5 text-[11px] font-medium text-muted-foreground">{title}</p>
+      {onEveryWeek && (
+        <div className="mx-3 my-1 flex rounded-md border border-border p-0.5 text-[11px]">
+          <button type="button" onClick={() => onEveryWeek(false)}
+            className={`flex-1 rounded px-1.5 py-0.5 ${!everyWeek ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+            This day
+          </button>
+          <button type="button" onClick={() => onEveryWeek(true)}
+            className={`flex-1 rounded px-1.5 py-0.5 ${everyWeek ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+            Every week
+          </button>
+        </div>
+      )}
+      {candidates.length === 0 ? (
+        <p className="px-3 py-1.5 text-xs text-muted-foreground italic">
+          Nobody else is free that day.
+        </p>
+      ) : (
+        candidates.slice(0, 8).map((c) => (
+          <button
+            key={c.person.id}
+            type="button"
+            role="menuitem"
+            onClick={() => onPick(c.person.id)}
+            className="flex w-full flex-col px-3 py-1.5 text-left hover:bg-muted"
+          >
+            <span className="text-sm">{c.person.full_name}</span>
+            <span className={`text-[10px] ${c.fit === "available" ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>
+              {c.note}{c.ownGroup ? "" : " · covering"}
+            </span>
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
 
 function ShiftLine({
   shift,

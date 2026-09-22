@@ -140,6 +140,12 @@ export interface DayOverride {
    * sends anyone in to fill it.
    */
   unstaffed?: Partial<Record<ShiftGroup, TimeRange[]>>;
+  /**
+   * Standard-week slots taken off THIS date only (a shift deleted or moved
+   * away by hand). Without it the next refill would put the shift straight
+   * back.
+   */
+  removed_slots?: string[];
 }
 
 /** Per-day coverage exceptions, keyed by YYYY-MM-DD. Lives on the schedule row. */
@@ -161,6 +167,37 @@ export interface ProShopShift {
    * instead of retiring it. Absent on rows read before the column existed.
    */
   locked?: boolean;
+  /**
+   * The standard-week slot this shift was stamped from, kept through hand
+   * edits — "Mike's Monday, covered by Marty this once" is still Mike's Monday.
+   */
+  slot_id?: string | null;
+}
+
+/** One shift in the standard week: who works which job, when, every week. */
+export interface WeekSlot {
+  /** Stable across versions, so a stamped shift can find its slot again. */
+  id: string;
+  /** 0 = Sunday … 6 = Saturday. */
+  weekday: number;
+  group: ShiftGroup;
+  /** Null = the shift exists but nobody holds it yet. */
+  staff_id: string | null;
+  start: string;
+  end: string;
+}
+
+/** Operating hours: weekday ("0".."6") → group → open/close. */
+export type WeekHours = Partial<Record<string, Partial<Record<ShiftGroup, { open: string; close: string }>>>>;
+
+/** A dated version of an area's standard week. Applies until the next one. */
+export interface WeekTemplate {
+  id: string;
+  area: ScheduleArea;
+  /** YYYY-MM-DD. */
+  effective_from: string;
+  slots: WeekSlot[];
+  hours: WeekHours;
 }
 
 /**

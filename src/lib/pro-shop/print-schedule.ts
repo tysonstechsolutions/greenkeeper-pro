@@ -8,8 +8,9 @@
  * ruled blank line, so whoever picks the shift up can write their name on the
  * posted copy — a hole you can see and fill beats a hole you cannot see.
  */
-import { openSlotsForDay, type OpenSlot } from "./coverage";
-import { effectiveRulesForDay, type DayOverrides } from "./day-overrides";
+import type { OpenSlot } from "./coverage";
+import type { DayOverrides } from "./day-overrides";
+import { openShiftsForDay } from "./open-shifts";
 import { computeStaffHours, formatHours } from "./hours";
 import { compactTime } from "./schedule-engine";
 import {
@@ -23,6 +24,7 @@ import {
   type ScheduleArea,
   type ScheduleSettings,
   type ShiftGroup,
+  type WeekTemplate,
 } from "./types";
 
 const WEEKDAY_HEADS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -73,6 +75,8 @@ export interface PrintScheduleInput {
    * rec aids must not print a third blank line for someone to sign.
    */
   overrides?: DayOverrides;
+  /** The area's standard week — its hours, and (with no rules) its open slots. */
+  templates?: WeekTemplate[];
   settings: Pick<ScheduleSettings, "lunch_threshold_minutes" | "lunch_minutes">;
   status?: "draft" | "published";
   generatedOn: Date;
@@ -112,7 +116,7 @@ function openRow(slot: OpenSlot): string {
 }
 
 export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
-  const { area, year, month0, shifts, staff, rules, overrides = {}, settings, status, generatedOn } = input;
+  const { area, year, month0, shifts, staff, rules, overrides = {}, templates = [], settings, status, generatedOn } = input;
   const nameById = new Map(staff.map((person) => [person.id, person.full_name]));
   const hours = computeStaffHours(shifts, settings);
 
@@ -136,11 +140,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
       if (rank !== 0) return rank;
       return a.start_time.localeCompare(b.start_time);
     });
-    const dayRules = effectiveRulesForDay(date, rules, overrides);
-    const open = openSlotsForDay(
-      dayShifts.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
-      dayRules,
-    );
+    const open = openShiftsForDay(date, dayShifts, rules, overrides, templates);
 
     const rows = dayShifts.map((shift) => shiftRow(
       `${compactTime(shift.start_time)}-${compactTime(shift.end_time)}`,
@@ -175,10 +175,7 @@ export function buildSchedulePrintHtml(input: PrintScheduleInput): string {
   const openCount = printGrid(year, month0).reduce((sum, date) => {
     if (!date) return sum;
     const dayShifts = byDate.get(date) ?? [];
-    return sum + openSlotsForDay(
-      dayShifts.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
-      effectiveRulesForDay(date, rules, overrides),
-    ).length;
+    return sum + openShiftsForDay(date, dayShifts, rules, overrides, templates).length;
   }, 0);
 
   // One colour block per group. Generated for every group rather than only

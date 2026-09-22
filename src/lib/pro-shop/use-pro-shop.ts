@@ -20,9 +20,12 @@ import type {
   TimeRange,
   WarningCode,
   WeeklyAvailability,
+  WeekHours,
+  WeekSlot,
+  WeekTemplate,
 } from "./types";
 import { DEFAULT_SCHEDULE_SETTINGS, SCHEDULE_AREA_LABELS } from "./types";
-import { datesInMonth, expandMonth, ymd } from "./schedule-engine";
+import { datesInMonth, expandMonth, parseYmd, ymd } from "./schedule-engine";
 import { generateCoverageMonth, type UnfilledSlot } from "./coverage";
 import {
   clearDayOverride,
@@ -31,7 +34,9 @@ import {
   withDayCounts,
   withDayLocked,
   withDayUnstaffed,
+  withSlotRemoved,
 } from "./day-overrides";
+import { sanitizeTemplate, stampFromWeek, versionFor } from "./week-template";
 
 /** Manual shift edit payload. */
 export interface ShiftInput {
@@ -42,8 +47,23 @@ export interface ShiftInput {
   end_time: string;
   note?: string | null;
   source?: "template" | "ai" | "manual";
-  /** Pin it so Regenerate rebuilds the month around it. */
+  /**
+   * Pin it so a refill rebuilds the month around it. Defaults to pinned: a
+   * shift added by hand is a decision, and a refill must not quietly undo it.
+   */
   locked?: boolean;
+  /** The standard-week slot this shift fills, when it fills one. */
+  slot_id?: string | null;
+}
+
+/** What a standard-week change did to the months already on the calendar. */
+export interface RestampResult {
+  /** Dates rebuilt from the standard week. */
+  days: number;
+  /** Months touched, as first-of-month dates. */
+  months: string[];
+  /** Days skipped because they are held. */
+  held: number;
 }
 
 function firstOfMonth(year: number, month0: number): string {
@@ -71,6 +91,8 @@ export function useProShop(
   const [shifts, setShifts] = useState<ProShopShift[]>([]);
   const [timeOff, setTimeOff] = useState<ProShopTimeOff[]>([]);
   const [rules, setRules] = useState<CoverageRule[]>([]);
+  /** The area's standard week, every dated version, oldest first. */
+  const [templates, setTemplates] = useState<WeekTemplate[]>([]);
   const [settings, setSettings] = useState<ScheduleSettings>({
     area,
     ...DEFAULT_SCHEDULE_SETTINGS,
@@ -97,6 +119,18 @@ export function useProShop(
     setRules(rows);
     setSettings(cfg[0] ?? { area, ...DEFAULT_SCHEDULE_SETTINGS });
     return { rules: rows, settings: cfg[0] ?? { area, ...DEFAULT_SCHEDULE_SETTINGS } };
+  }, [area]);
+
+  const loadTemplates = useCallback(async () => {
+    const rows = await directSelectList<unknown>("pro_shop_week_templates", {
+      columns: "*",
+      filters: [`area=eq.${area}`],
+      orderBy: [{ column: "effective_from", ascending: true }],
+      label: "proshop.week-templates",
+    });
+    const clean = rows.map(sanitizeTemplate).filter((t): t is WeekTemplate => !!t);
+    setTemplates(clean);
+    return clean;
   }, [area]);
 
   const loadStatic = useCallback(async () => {
@@ -144,13 +178,13 @@ export function useProShop(
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadStatic(), loadShifts(), loadRules()]);
+      await Promise.all([loadStatic(), loadShifts(), loadRules(), loadTemplates()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load the schedule.");
     } finally {
       setLoading(false);
     }
-  }, [loadStatic, loadShifts, loadRules]);
+  }, [loadStatic, loadShifts, loadRules, loadTemplates]);
 
   useEffect(() => {
     reload();
@@ -445,9 +479,29 @@ export function useProShop(
 
       let rows: Array<{
         staff_id: string; shift_date: string; group: ShiftGroup;
-        start_time: string; end_time: string; source: string;
+        start_time: string; end_time: string; source: string; slot_id?: string;
       }>;
-      if (fresh.rules.length > 0) {
+      const versions = await loadTemplates();
+      if (versions.length > 0) {
+        // The standard week is the schedule. A date before the first version
+        // has nothing to stamp, so it is left exactly as it is.
+        const stampable = rebuiltDates.filter((date) => !!versionFor(date, versions));
+        rebuiltDates.splice(0, rebuiltDates.length, ...stampable);
+        const locked = await directSelectList<ProShopShift>("pro_shop_shifts", {
+          columns: "staff_id,shift_date,slot_id",
+          filters: [
+            `shift_date=gte.${firstOfMonth(year, month0)}`,
+            `shift_date=lte.${lastOfMonth(year, month0)}`,
+            "is_active=eq.true", "locked=eq.true", `area=eq.${area}`,
+          ],
+          label: "proshop.shifts.locked",
+        });
+        setUnfilled([]);
+        rows = stampFromWeek({
+          dates: stampable, versions, staff: freshStaff, timeOff: freshTimeOff,
+          lockedShifts: locked, overrides: dayOverrides,
+        });
+      } else if (fresh.rules.length > 0) {
         // A locked shift is a decision already made: it holds its slot and its
         // person's day, and the rest of the month is built around it.
         const locked = await directSelectList<ProShopShift>("pro_shop_shifts", {
@@ -493,7 +547,114 @@ export function useProShop(
       await Promise.all([loadStatic(), loadShifts()]);
       return { inserted: rows.length, rebuiltDates, skippedLocked };
     },
-    [ensureSchedule, year, month0, loadStatic, loadShifts, loadRules, area, dayOverrides],
+    [ensureSchedule, year, month0, loadStatic, loadShifts, loadRules, loadTemplates, area, dayOverrides],
+  );
+
+  /**
+   * Rebuild dates in ANY month of this area from the standard week — what a
+   * standard-week change does to the months already on the calendar. Only
+   * months that already exist are touched; a month nobody has opened yet is
+   * filled when it is generated.
+   */
+  const restampFrom = useCallback(
+    async (fromDate: string, versions: WeekTemplate[]): Promise<RestampResult> => {
+      const monthRows = await directSelectList<ProShopSchedule>("pro_shop_schedules", {
+        columns: "*",
+        filters: [`area=eq.${area}`, `month=gte.${fromDate.slice(0, 7)}-01`],
+        orderBy: [{ column: "month", ascending: true }],
+        label: "proshop.schedules.restamp",
+      });
+      if (monthRows.length === 0) return { days: 0, months: [], held: 0 };
+      const [freshStaff, freshTimeOff] = await Promise.all([
+        directSelectList<ProShopStaff>("pro_shop_staff", {
+          columns: "*",
+          filters: ["is_active=eq.true", `area=eq.${area}`],
+          label: "proshop.staff.fresh",
+        }),
+        directSelectList<ProShopTimeOff>("pro_shop_time_off", {
+          columns: "*",
+          filters: ["is_active=eq.true"],
+          label: "proshop.timeoff.fresh",
+        }),
+      ]);
+      let days = 0;
+      let held = 0;
+      const months: string[] = [];
+      for (const sched of monthRows) {
+        const first = parseYmd(sched.month);
+        const overrides = sanitizeDayOverrides(sched.day_overrides);
+        const inMonth = datesInMonth(first.getFullYear(), first.getMonth())
+          .filter((date) => date >= fromDate && !!versionFor(date, versions));
+        const dates = inMonth.filter((date) => !isDayLocked(date, overrides));
+        held += inMonth.length - dates.length;
+        if (dates.length === 0) continue;
+        const locked = await directSelectList<ProShopShift>("pro_shop_shifts", {
+          columns: "staff_id,shift_date,slot_id",
+          filters: [
+            `shift_date=gte.${dates[0]}`, `shift_date=lte.${dates[dates.length - 1]}`,
+            "is_active=eq.true", "locked=eq.true", `area=eq.${area}`,
+          ],
+          label: "proshop.shifts.locked",
+        });
+        const rows = stampFromWeek({
+          dates, versions, staff: freshStaff, timeOff: freshTimeOff, lockedShifts: locked, overrides,
+        });
+        await directRpc("replace_pro_shop_schedule_shifts", {
+          p_schedule_id: sched.id,
+          p_rows: rows,
+          p_replace: true,
+          p_reason: `Standard week applied from ${fromDate}`,
+          p_dates: dates,
+        }, "proshop.shifts.restamp");
+        days += dates.length;
+        months.push(sched.month);
+      }
+      await Promise.all([loadStatic(), loadShifts()]);
+      return { days, months, held };
+    },
+    [area, loadStatic, loadShifts],
+  );
+
+  /**
+   * Save the standard week as it should be from `effectiveFrom` on, then
+   * rebuild every existing day from that date forward to match. Weeks before
+   * the date are never touched.
+   */
+  const saveWeekTemplate = useCallback(
+    async (
+      week: { slots: WeekSlot[]; hours: WeekHours },
+      effectiveFrom: string,
+    ): Promise<RestampResult> => {
+      await directRpc("save_pro_shop_week_template", {
+        p_area: area,
+        p_effective_from: effectiveFrom,
+        p_slots: week.slots,
+        p_hours: week.hours,
+      }, "proshop.week-template.save");
+      const versions = await loadTemplates();
+      return restampFrom(effectiveFrom, versions);
+    },
+    [area, loadTemplates, restampFrom],
+  );
+
+  /**
+   * Cancel a dated change. The days it covered go back to the version before
+   * it. The first version can't be cancelled — with nothing before it the
+   * rebuild would empty those days.
+   */
+  const deleteWeekTemplate = useCallback(
+    async (template: WeekTemplate): Promise<RestampResult> => {
+      const earliest = templates.reduce<string | null>(
+        (min, t) => (!min || t.effective_from < min ? t.effective_from : min), null,
+      );
+      if (template.effective_from === earliest) {
+        throw new Error("The first standard week can't be removed — edit it instead.");
+      }
+      await directRpc("delete_pro_shop_week_template", { p_id: template.id }, "proshop.week-template.delete");
+      const versions = await loadTemplates();
+      return restampFrom(template.effective_from, versions);
+    },
+    [templates, loadTemplates, restampFrom],
   );
 
   const setScheduleNotes = useCallback(
@@ -546,7 +707,8 @@ export function useProShop(
           end_time: input.end_time,
           note: input.note ?? null,
           source: input.source ?? "manual",
-          locked: input.locked ?? false,
+          locked: input.locked ?? true,
+          ...(input.slot_id ? { slot_id: input.slot_id } : {}),
           // area is derived from the schedule inside save_pro_shop_shift.
           },
           p_reason: "Manual pro-shop shift added",
@@ -562,7 +724,9 @@ export function useProShop(
     async (shiftId: string, patch: Partial<ProShopShift>) => {
       await directRpc("save_pro_shop_shift", {
         p_shift_id: shiftId,
-        p_values: patch,
+        // A hand edit pins itself unless the caller says otherwise, or the
+        // next refill from the standard week would put it straight back.
+        p_values: { locked: true, ...patch },
         p_reason: "Pro-shop shift updated",
       }, "proshop.shift.update");
       await loadShifts();
@@ -570,15 +734,39 @@ export function useProShop(
     [loadShifts],
   );
 
+  /**
+   * A shift taken off by hand stays off: when it came from the standard week,
+   * the date remembers that slot is removed, or the next refill would put the
+   * shift straight back.
+   */
+  const rememberSlotRemoved = useCallback(
+    async (date: string, slotId: string) => {
+      if (templates.length === 0) return;
+      const sched = schedules.find((s) => s.month === `${date.slice(0, 7)}-01`);
+      if (!sched) return;
+      const current = sanitizeDayOverrides(sched.day_overrides);
+      const next = withSlotRemoved(current, date, slotId, true);
+      setSchedules((prev) => prev.map((s) => (s.id === sched.id ? { ...s, day_overrides: next } : s)));
+      await directRpc("save_pro_shop_schedule", {
+        p_schedule_id: sched.id,
+        p_values: { day_overrides: next },
+        p_reason: `Standard-week shift removed from ${date}`,
+      }, "proshop.schedule.slot-removed");
+    },
+    [templates, schedules],
+  );
+
   const deleteShift = useCallback(
     async (shiftId: string) => {
+      const shift = shifts.find((s) => s.id === shiftId);
       await directRpc("retire_pro_shop_shift", {
         p_shift_id: shiftId,
         p_reason: "Shift removed from the active schedule",
       }, "proshop.shift.retire");
+      if (shift?.slot_id) await rememberSlotRemoved(shift.shift_date, shift.slot_id);
       await loadShifts();
     },
-    [loadShifts],
+    [shifts, rememberSlotRemoved, loadShifts],
   );
 
   /**
@@ -588,14 +776,91 @@ export function useProShop(
    */
   const moveShift = useCallback(
     async (shiftId: string, to: { shift_date?: string; staff_id?: string; group?: ShiftGroup }) => {
+      const shift = shifts.find((s) => s.id === shiftId);
       await directRpc("save_pro_shop_shift", {
         p_shift_id: shiftId,
         p_values: { ...to, locked: true },
         p_reason: "Shift moved by hand on the schedule board",
       }, "proshop.shift.move");
+      // Moved off its own day: that day's slot is now deliberately empty.
+      if (shift?.slot_id && to.shift_date && to.shift_date !== shift.shift_date) {
+        await rememberSlotRemoved(shift.shift_date, shift.slot_id);
+      }
       await loadShifts();
     },
-    [loadShifts],
+    [shifts, rememberSlotRemoved, loadShifts],
+  );
+
+  /**
+   * Change a shift's person and/or hours. `everyWeek` changes the standard
+   * week from this date on — and any later dated change that still had the
+   * old value in that slot — then rebuilds those days. Otherwise it is this
+   * date only, and the edit is pinned so a refill keeps it.
+   */
+  const changeShift = useCallback(
+    async (
+      shift: ProShopShift,
+      patch: { staff_id?: string; start_time?: string; end_time?: string },
+      everyWeek: boolean,
+    ): Promise<RestampResult | null> => {
+      if (!everyWeek) {
+        await directRpc("save_pro_shop_shift", {
+          p_shift_id: shift.id,
+          p_values: { ...patch, locked: true },
+          p_reason: patch.staff_id ? "Shift given to someone else for this day" : "Shift hours changed for this day",
+        }, "proshop.shift.change");
+        await loadShifts();
+        return null;
+      }
+      const current = versionFor(shift.shift_date, templates);
+      const slot = current?.slots.find((s) => s.id === shift.slot_id);
+      if (!current || !slot) {
+        throw new Error("That shift isn't part of the standard week, so it can only be changed for this day.");
+      }
+      if (patch.staff_id && current.slots.some(
+        (s) => s.weekday === slot.weekday && s.staff_id === patch.staff_id && s.id !== slot.id,
+      )) {
+        const who = staff.find((p) => p.id === patch.staff_id)?.full_name ?? "That person";
+        throw new Error(`${who} already has a shift that day in the standard week.`);
+      }
+      const next: Partial<WeekSlot> = {
+        ...(patch.staff_id ? { staff_id: patch.staff_id } : {}),
+        ...(patch.start_time ? { start: patch.start_time.slice(0, 5) } : {}),
+        ...(patch.end_time ? { end: patch.end_time.slice(0, 5) } : {}),
+      };
+      // In a later version, only a slot still holding what this one held is
+      // changed — a later version that already moved it on keeps its own value.
+      const apply = (t: WeekTemplate) => t.slots.map((s) => {
+        if (s.id !== slot.id) return s;
+        const out = { ...s };
+        if (next.staff_id && s.staff_id === slot.staff_id) out.staff_id = next.staff_id;
+        if (next.start && s.start === slot.start) out.start = next.start;
+        if (next.end && s.end === slot.end) out.end = next.end;
+        return out;
+      });
+      // The standard week first: if anything after it fails, the change is
+      // still recorded and the next refill applies it.
+      await directRpc("save_pro_shop_week_template", {
+        p_area: area, p_effective_from: shift.shift_date, p_slots: apply(current), p_hours: current.hours,
+      }, "proshop.week-template.change");
+      for (const later of templates.filter((t) => t.effective_from > shift.shift_date)) {
+        if (!later.slots.some((s) => s.id === slot.id)) continue;
+        await directRpc("save_pro_shop_week_template", {
+          p_area: area, p_effective_from: later.effective_from, p_slots: apply(later), p_hours: later.hours,
+        }, "proshop.week-template.change");
+      }
+      // The shift in hand is unpinned so the rebuild replaces it with the new
+      // standard-week version of itself (a pinned one would be kept as-is).
+      if (shift.locked) {
+        await directRpc("save_pro_shop_shift", {
+          p_shift_id: shift.id, p_values: { locked: false },
+          p_reason: "Shift changed in the standard week",
+        }, "proshop.shift.change");
+      }
+      const versions = await loadTemplates();
+      return restampFrom(shift.shift_date, versions);
+    },
+    [area, templates, staff, loadShifts, loadTemplates, restampFrom],
   );
 
   /** Pin a shift so Regenerate rebuilds the month around it. */
@@ -760,6 +1025,12 @@ export function useProShop(
     rules,
     settings,
     unfilled,
+    templates,
+    saveWeekTemplate,
+    deleteWeekTemplate,
+    changeShift,
+    removeSlotOnDay: rememberSlotRemoved,
+    restampFrom,
     saveCoverageRule,
     saveScheduleSettings,
     addTimeOff,

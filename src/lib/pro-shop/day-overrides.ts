@@ -18,6 +18,7 @@
  * Pure and deterministic — no network, no AI, no clock.
  */
 import { parseYmd } from "./dates";
+import { rulesWithHours, versionFor } from "./week-template";
 import type {
   CoverageRule,
   DayGroupOverride,
@@ -25,6 +26,7 @@ import type {
   DayOverrides,
   ShiftGroup,
   TimeRange,
+  WeekTemplate,
 } from "./types";
 
 // The shapes live in types.ts, next to DismissedWarnings and the schedule row
@@ -95,7 +97,9 @@ export function sanitizeDayOverrides(raw: unknown): DayOverrides {
   for (const [date, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!DATE_RE.test(date)) continue;
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const entry = value as { locked?: unknown; groups?: unknown; unstaffed?: unknown };
+    const entry = value as {
+      locked?: unknown; groups?: unknown; unstaffed?: unknown; removed_slots?: unknown;
+    };
     const next: DayOverride = {};
     if (entry.locked === true) next.locked = true;
     if (entry.groups && typeof entry.groups === "object" && !Array.isArray(entry.groups)) {
@@ -128,11 +132,22 @@ export function sanitizeDayOverrides(raw: unknown): DayOverrides {
       }
       if (Object.keys(unstaffed).length > 0) next.unstaffed = unstaffed;
     }
+    if (Array.isArray(entry.removed_slots)) {
+      const ids = [...new Set(entry.removed_slots.filter(
+        (id): id is string => typeof id === "string" && id.length > 0 && id.length <= 64,
+      ))].slice(0, 50);
+      if (ids.length > 0) next.removed_slots = ids;
+    }
     // Drop entries that ended up saying nothing, so `{}` never counts as
     // "this day is customised" in the UI.
-    if (next.locked || next.groups || next.unstaffed) out[date] = next;
+    if (!isEmptyOverride(next)) out[date] = next;
   }
   return out;
+}
+
+/** An entry that says nothing — dropped rather than stored as `{}`. */
+function isEmptyOverride(entry: DayOverride): boolean {
+  return !entry.locked && !entry.groups && !entry.unstaffed && !entry.removed_slots?.length;
 }
 
 export function overrideFor(date: string, overrides: DayOverrides): DayOverride | undefined {
@@ -142,7 +157,7 @@ export function overrideFor(date: string, overrides: DayOverrides): DayOverride 
 /** Does this date carry any exception at all? Drives the "customised" badge. */
 export function hasDayOverride(date: string, overrides: DayOverrides): boolean {
   const entry = overrides[date];
-  return !!entry && (entry.locked === true || !!entry.groups || !!entry.unstaffed);
+  return !!entry && !isEmptyOverride(entry);
 }
 
 /** A locked day is held as-is: no rebuild touches it. */
@@ -159,10 +174,18 @@ export function effectiveRulesForDay(
   date: string,
   rules: CoverageRule[],
   overrides: DayOverrides = {},
+  /**
+   * The area's standard-week versions. When one is in force on this date its
+   * operating hours replace the rule's open/close — the rule keeps the counts.
+   */
+  versions: WeekTemplate[] = [],
 ): EffectiveRule[] {
   const weekday = parseYmd(date).getDay();
   const entry = overrides[date];
-  const forWeekday = rules.filter((rule) => rule.weekday === weekday);
+  const forWeekday = rulesWithHours(
+    rules.filter((rule) => rule.weekday === weekday),
+    versions.length ? versionFor(date, versions) : null,
+  );
   if (!entry?.groups && !entry?.unstaffed) return forWeekday;
   return forWeekday.map((rule) => {
     const counts = entry.groups?.[rule.group];
@@ -212,7 +235,7 @@ export function withDayCounts(
   }
   if (Object.keys(groups).length > 0) entry.groups = groups;
   else delete entry.groups;
-  if (entry.locked || entry.groups || entry.unstaffed) next[date] = entry;
+  if (!isEmptyOverride(entry)) next[date] = entry;
   else delete next[date];
   return next;
 }
@@ -246,7 +269,7 @@ export function withDayUnstaffed(
 
   if (Object.keys(unstaffed).length > 0) entry.unstaffed = unstaffed;
   else delete entry.unstaffed;
-  if (entry.locked || entry.groups || entry.unstaffed) next[date] = entry;
+  if (!isEmptyOverride(entry)) next[date] = entry;
   else delete next[date];
   return next;
 }
@@ -260,7 +283,29 @@ export function withDayLocked(
   const entry: DayOverride = { ...(next[date] ?? {}) };
   if (locked) entry.locked = true;
   else delete entry.locked;
-  if (entry.locked || entry.groups || entry.unstaffed) next[date] = entry;
+  if (!isEmptyOverride(entry)) next[date] = entry;
+  else delete next[date];
+  return next;
+}
+
+/**
+ * Take one standard-week slot off one date (removed = true), or put it back.
+ * Recorded so a refill from the standard week doesn't bring it straight back.
+ */
+export function withSlotRemoved(
+  overrides: DayOverrides,
+  date: string,
+  slotId: string,
+  removed: boolean,
+): DayOverrides {
+  const next: DayOverrides = { ...overrides };
+  const entry: DayOverride = { ...(next[date] ?? {}) };
+  const ids = new Set(entry.removed_slots ?? []);
+  if (removed) ids.add(slotId);
+  else ids.delete(slotId);
+  if (ids.size > 0) entry.removed_slots = [...ids];
+  else delete entry.removed_slots;
+  if (!isEmptyOverride(entry)) next[date] = entry;
   else delete next[date];
   return next;
 }

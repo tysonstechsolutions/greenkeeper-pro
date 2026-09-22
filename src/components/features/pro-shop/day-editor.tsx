@@ -36,7 +36,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { compactTime, hhmm, shortDate } from "@/lib/pro-shop/schedule-engine";
 import { formatHours, minutesOfDay, paidMinutes, timeFromMinutes } from "@/lib/pro-shop/hours";
-import { openSlotsForDay, type OpenSlot } from "@/lib/pro-shop/coverage";
+import type { OpenSlot } from "@/lib/pro-shop/coverage";
+import { openShiftsForDay } from "@/lib/pro-shop/open-shifts";
 import {
   effectiveRulesForDay,
   hasDayOverride,
@@ -58,6 +59,7 @@ import {
   type ScheduleSettings,
   type ShiftGroup,
   type WarningCode,
+  type WeekTemplate,
 } from "@/lib/pro-shop/types";
 
 /** Smallest change either end of a shift can move by. Schedules are :00/:30. */
@@ -100,7 +102,17 @@ export interface DayEditorProps {
   addShift: (input: {
     staff_id: string; shift_date: string; group: ShiftGroup;
     start_time: string; end_time: string; note?: string | null; locked?: boolean;
+    slot_id?: string | null;
   }) => Promise<void>;
+  /** The area's standard week. With it, a change can apply every week. */
+  templates?: WeekTemplate[];
+  /** Change a standard-week shift from this date on. */
+  onChangeEveryWeek?: (
+    shift: ProShopShift,
+    patch: { staff_id?: string; start_time?: string; end_time?: string },
+  ) => Promise<void>;
+  /** Take one standard-week slot off this date only. */
+  onRemoveSlot?: (slotId: string) => Promise<void>;
   setDayCounts: (date: string, group: ShiftGroup, counts: DayGroupOverride | null) => Promise<void>;
   setDayLock: (date: string, locked: boolean) => Promise<void>;
   /** Excuse a stretch (needed=false) or ask for cover on it again. */
@@ -114,17 +126,33 @@ export function DayEditor(props: DayEditorProps) {
     activeIssues, dismissedIssues, onDismiss, onRestore,
     onEditFull, onAdd, onCover,
     updateShift, deleteShift, addShift, setDayCounts, setDayLock, onUnstaffed, resetDay,
+    templates = [], onChangeEveryWeek, onRemoveSlot,
   } = props;
 
   const [busy, setBusy] = useState(false);
+  /**
+   * Whether a change made here is for this date only (the default — a
+   * call-out, a swap) or the standard week from this date on.
+   */
+  const [everyWeek, setEveryWeek] = useState(false);
+  const canEveryWeek = templates.length > 0 && !!onChangeEveryWeek;
   const locked = isDayLocked(date, overrides);
   const customised = hasDayOverride(date, overrides);
-  const todaysRules = effectiveRulesForDay(date, rules, overrides);
+  const todaysRules = effectiveRulesForDay(date, rules, overrides, templates);
   const normalCounts = ruleCountsForDay(date, rules);
-  const openSlots = openSlotsForDay(
-    shifts.map((s) => ({ group: s.group, start_time: s.start_time, end_time: s.end_time })),
-    todaysRules,
-  );
+  const openSlots = openShiftsForDay(date, shifts, rules, overrides, templates);
+
+  /** Route a change to this day, or to the standard week from this day on. */
+  function change(shift: ProShopShift, patch: { staff_id?: string; start_time?: string; end_time?: string }) {
+    if (everyWeek && canEveryWeek && onChangeEveryWeek) {
+      if (!shift.slot_id) {
+        window.alert("That shift was added by hand, so it isn't part of the standard week. It was changed for this day only.");
+        return updateShift(shift.id, { ...patch, locked: true });
+      }
+      return onChangeEveryWeek(shift, patch);
+    }
+    return updateShift(shift.id, { ...patch, locked: true });
+  }
 
   /** Run one write, keeping the sheet from firing a second while it lands. */
   async function run(work: () => Promise<void>) {
@@ -152,7 +180,8 @@ export function DayEditor(props: DayEditorProps) {
    */
   async function saveTimes(id: string, start: string, end: string) {
     try {
-      await updateShift(id, { start_time: start, end_time: end, locked: true });
+      const shift = shifts.find((s) => s.id === id);
+      if (shift) await change(shift, { start_time: start, end_time: end });
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Those times didn't save. Try again.");
     }
@@ -171,7 +200,7 @@ export function DayEditor(props: DayEditorProps) {
       );
       return;
     }
-    void run(() => updateShift(shift.id, { staff_id: staffId, locked: true }));
+    void run(() => change(shift, { staff_id: staffId }));
   }
 
   function removeShift(shift: ProShopShift) {
@@ -197,6 +226,7 @@ export function DayEditor(props: DayEditorProps) {
       addShift({
         staff_id: staffId, shift_date: date, group: slot.group,
         start_time: slot.start, end_time: slot.end, locked: true,
+        slot_id: slot.slot_id ?? null,
       }),
     );
   }
@@ -235,6 +265,28 @@ export function DayEditor(props: DayEditorProps) {
         )}
       </div>
 
+      {/* Is this a one-off, or how every week should be from now on? */}
+      {canEveryWeek && (
+        <div className="rounded-lg border border-border p-2.5 space-y-1.5">
+          <div className="flex rounded-lg border border-border p-0.5 text-xs font-medium" role="group"
+            aria-label="Apply changes to">
+            <button type="button" aria-pressed={!everyWeek} onClick={() => setEveryWeek(false)}
+              className={`flex-1 rounded-md px-2 py-1.5 ${!everyWeek ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+              This day only
+            </button>
+            <button type="button" aria-pressed={everyWeek} onClick={() => setEveryWeek(true)}
+              className={`flex-1 rounded-md px-2 py-1.5 ${everyWeek ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+              Every week from here
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {everyWeek
+              ? `Changing who works a shift, or its hours, updates the standard week from ${shortDate(date)} on.`
+              : "Changes stay on this date. The standard week is left alone."}
+          </p>
+        </div>
+      )}
+
       {/* ── Needs attention ────────────────────────────────────────────────── */}
       {(activeIssues.length > 0 || dismissedIssues.length > 0) && (
         <div className="rounded-lg border border-red-200 bg-red-50/70 dark:bg-red-950/30 dark:border-red-900 p-3 space-y-2">
@@ -244,8 +296,8 @@ export function DayEditor(props: DayEditorProps) {
                 <AlertTriangle className="w-3.5 h-3.5" /> Needs attention
               </p>
               <ul className="space-y-1.5">
-                {activeIssues.map((w) => (
-                  <li key={w.code} className="flex items-start justify-between gap-2">
+                {activeIssues.map((w, i) => (
+                  <li key={`${w.code}-${i}`} className="flex items-start justify-between gap-2">
                     <span className="text-xs text-red-700 dark:text-red-400 flex items-start gap-1.5">
                       <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" /> {w.message}
                     </span>
@@ -269,8 +321,8 @@ export function DayEditor(props: DayEditorProps) {
             <div className={activeIssues.length > 0 ? "pt-1.5 border-t border-red-200 dark:border-red-900" : ""}>
               <p className="text-[11px] font-medium text-muted-foreground mb-1">Dismissed</p>
               <ul className="space-y-1">
-                {dismissedIssues.map((w) => (
-                  <li key={w.code} className="flex items-center justify-between gap-2">
+                {dismissedIssues.map((w, i) => (
+                  <li key={`${w.code}-${i}`} className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-muted-foreground line-through">{w.message}</span>
                     <button
                       type="button"
@@ -303,7 +355,7 @@ export function DayEditor(props: DayEditorProps) {
             && (positionGroup(person.position) === group || person.flex === true),
         );
 
-        if (!rule && list.length === 0) return null;
+        if (!rule && list.length === 0 && groupOpen.length === 0) return null;
 
         return (
           <div key={group} className="rounded-lg border border-border p-3 space-y-2">
@@ -403,7 +455,9 @@ export function DayEditor(props: DayEditorProps) {
                       type="button"
                       disabled={busy}
                       onClick={() => void run(() =>
-                        onUnstaffed(group, { start: slot.start, end: slot.end }, false))}
+                        slot.slot_id && onRemoveSlot
+                          ? onRemoveSlot(slot.slot_id)
+                          : onUnstaffed(group, { start: slot.start, end: slot.end }, false))}
                       title="Nobody is needed for this stretch — stop asking for it"
                       className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted disabled:opacity-50"
                     >
