@@ -127,6 +127,15 @@ vi.mock("@/lib/evaluations/use-evaluations", async () => {
           follow_ups: { opened: 0, reconciled: 0, open_titles: [] },
           certifications: [],
         },
+        suggestions: {
+          highlights: [{ text: "Fixed the irrigation pump", date: "2026-05-01", source: "1:1 May 1" }],
+          improve: [],
+          goals: [
+            { text: "Wants the spray license", date: "2026-05-01", source: "1:1 May 1" },
+            { text: "Become an equipment operator", date: null, source: "Career goals" },
+          ],
+          training: [],
+        },
         loadedFor: `${employeeId}|${period.start}`,
         loading: false,
         error: null,
@@ -238,6 +247,27 @@ describe("evaluation interview", () => {
     await waitFor(() => expect(saveBlobToDevice).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole("button", { name: /Next: Sam Lee/ }));
     expect(push).toHaveBeenCalledWith("/staff/evaluations/edit?employee=emp2&fy=2026");
+  }, 30_000);
+
+  it("offers the GM's own 1:1 notes as one-tap answers", async () => {
+    const { user } = await renderPage();
+    await screen.findByRole("heading", { name: "Jane Smith" });
+    for (const el of elementsFor(false)) {
+      await user.click(within(screen.getByRole("radiogroup", { name: el.label })).getByRole("radio", { name: "3 Satisfactory" }));
+    }
+    await user.click(screen.getByRole("button", { name: /Next: a few questions/ }));
+
+    expect(screen.getByText("Fixed the irrigation pump")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add: Fixed the irrigation pump" }));
+    const did = screen.getByRole("textbox", { name: /What did they do well this year/ }) as HTMLTextAreaElement;
+    expect(did.value).toBe("Fixed the irrigation pump");
+    // Added items drop off the list.
+    expect(screen.queryByRole("button", { name: "Add: Fixed the irrigation pump" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Add all" }));
+    const goals = screen.getByRole("textbox", { name: /goals for next year/ }) as HTMLTextAreaElement;
+    expect(goals.value).toBe("Wants the spray license\nBecome an equipment operator");
+    await waitFor(() => expect(saves.at(-1)?.answers?.goals).toBe("Wants the spray license\nBecome an equipment operator"));
   }, 30_000);
 
   it("applies the form's Unsatisfactory rule", async () => {

@@ -42,20 +42,40 @@ to the printed form, and every name is checked by tests.
 My Day tasks like "do yearly evals")
 
 1. Roster for the rating period (federal FY; defaults to the most recently
-   completed one — FY2026 on 2026-10-02). Progress, "Start next",
-   "Print all finished" (one PDF), "Editable copies (.zip)".
+   completed one — FY2026 on 2026-10-02). Progress, **"Rate the crew side by
+   side"** (main path), "Start next", "Print all finished" (one PDF),
+   "Editable copies (.zip)".
+   - `/staff/evaluations/crew?fy=<year>`: first "Who supervises other
+     people?" (pre-checked by role or direct reports), then one element at a
+     time with everyone on screen (f–h only for supervisors). Each tap saves;
+     saves per person run in order so quick taps never create duplicates.
+     Finishing jumps to the first person's questions.
 2. `/staff/evaluations/edit?employee=<id>&fy=<year>`:
    - **Rate** — reason for rating, supervisor toggle, one tap per element
      (shows the form's description of the chosen level), optional example.
      A panel shows what the app already knows for the period.
    - **Questions** — did well (required), work on, goals, training (IDP 7),
-     classes/conferences (IDP 8), anything else, item 8 awards.
+     classes/conferences (IDP 8), anything else, item 8 awards. Under each
+     question, **"From your 1:1s"** lists the GM's own recorded 1:1 answers
+     (and engagement-profile career goals) that match it, with Add / Add all.
+     Matching is by what the 1:1 question asked (`suggestions.ts`); questions
+     about the GM ("what do you hope I do differently") are never used.
    - **Review** — overall rating (suggested), "Write it up" drafts item 9 and
      the IDP; everything editable; "Preview the form".
    - **Done** — finalize locks it, files the filled PDF on the employee's
      profile (Documents → Performance Review, private bucket; managers only),
      lists the signing steps from the form's instructions, "Next: <person>".
    - Autosaves ~1 s after each change.
+
+## Ideas not built yet (discussed with Tyson 2026-10-02)
+
+1. Track after finalize: approving official signed → discussed → copy given
+   (2-week deadline reminder in My Day).
+2. 90-day evaluation reminders from hire dates.
+3. Separation/close-out prompt when someone is marked leaving.
+4. Enter last-4 SSN at download (not stored).
+5. Crew totals for pay increases / awards.
+6. "For my eval" tag on wins during the year.
 
 ## Drafting
 

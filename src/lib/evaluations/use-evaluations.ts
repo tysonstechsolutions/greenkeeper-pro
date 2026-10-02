@@ -9,17 +9,22 @@ import {
   directStorageUpload,
   getCachedUserId,
 } from "@/lib/supabase/rest";
-import type { OneOnOneSession } from "@/lib/oneonone/types";
+import type { EngagementProfileRow, OneOnOneSession } from "@/lib/oneonone/types";
 import type { StaffConcern, StaffRecord } from "@/lib/staff/types";
 import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
 import { evaluationProgress } from "./compose";
+import { applyCrewRating, applyCrewSupervisory, defaultSupervisory, type CrewMember } from "./crew";
 import { buildFacts } from "./facts";
 import { FORM_VERSION } from "./form";
-import type {
-  EvaluationFacts,
-  EvaluationPeriod,
-  EvaluationProgress,
-  StaffEvaluation,
+import { applicableRatings } from "./questions";
+import { buildSuggestions, emptySuggestions, type EvaluationSuggestions } from "./suggestions";
+import {
+  isRatingValue,
+  type EvaluationFacts,
+  type EvaluationPeriod,
+  type EvaluationProgress,
+  type RatingValue,
+  type StaffEvaluation,
 } from "./types";
 
 const TABLE = "staff_evaluations";
@@ -134,6 +139,7 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
   const [employee, setEmployee] = useState<EvaluationEmployee | null>(null);
   const [evaluation, setEvaluation] = useState<StaffEvaluation | null>(null);
   const [facts, setFacts] = useState<EvaluationFacts | null>(null);
+  const [suggestions, setSuggestions] = useState<EvaluationSuggestions>(emptySuggestions());
   // "<employeeId>|<period start>" the loaded data belongs to, so the editor
   // never shows one employee's answers while the next one is loading.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -152,7 +158,7 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
       // isn't a manager can't read staff_records, so a failure there just
       // means fewer facts, never a broken page.
       const optional = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[]);
-      const [profile, personnel, row, records, sessions, concerns] = await Promise.all([
+      const [profile, personnel, row, records, sessions, concerns, engagement] = await Promise.all([
         directSelectRow<Omit<EvaluationEmployee, "personnel">>(
           "profiles",
           "id",
@@ -191,6 +197,13 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
             label: "evaluations.concerns",
           }),
         ),
+        directSelectRow<EngagementProfileRow>(
+          "staff_engagement_profiles",
+          "employee_id",
+          employeeId,
+          "employee_id,profile",
+          "evaluations.engagement",
+        ).catch(() => null),
       ]);
       if (!profile) throw new Error("Employee not found.");
       setEmployee({ ...profile, personnel: personnel ?? null });
@@ -207,6 +220,7 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
           concerns,
         }),
       );
+      setSuggestions(buildSuggestions({ period, sessions, engagement: engagement?.profile ?? null }));
       setLoadedFor(`${employeeId}|${period.start}`);
     } catch (e) {
       setLoadedFor(null);
@@ -262,7 +276,7 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
     [employeeId, period.start, period.end, period.label],
   );
 
-  return { employee, evaluation, facts, loadedFor, loading, error, reload: load, save };
+  return { employee, evaluation, facts, suggestions, loadedFor, loading, error, reload: load, save };
 }
 
 /**
@@ -298,4 +312,125 @@ export async function fileEvaluationPdf(args: {
   } catch {
     return false;
   }
+}
+
+export type CrewSaveState = "saving" | "saved" | "error";
+
+/**
+ * The crew-at-once rating screen. Shows every non-final person on the roster
+ * with their current ratings; each change saves on its own (creating the
+ * evaluation the first time). Saves for one person run in order, so quick
+ * taps can't race into a duplicate insert, and each save sends that person's
+ * latest full ratings so later taps always win.
+ */
+export function useCrewRatings(
+  period: EvaluationPeriod,
+  viewer: { id: string | null; isManager: boolean },
+) {
+  const roster = useEvaluationRoster(period, viewer);
+  const [members, setMembers] = useState<Record<string, CrewMember>>({});
+  const [saveState, setSaveState] = useState<Record<string, CrewSaveState>>({});
+  const [initializedFor, setInitializedFor] = useState<string | null>(null);
+  // Rows created/updated by this screen (the roster's copy goes stale).
+  const rowsRef = useRef<Record<string, StaffEvaluation>>({});
+  const queuesRef = useRef<Record<string, Promise<unknown>>>({});
+  const seqRef = useRef<Record<string, number>>({});
+
+  // Seed local state from the roster once it loads (render-time sync).
+  const editable = roster.entries.filter((e) => e.progress !== "final");
+  if (!roster.loading && !roster.error && initializedFor !== period.start) {
+    setInitializedFor(period.start);
+    const allProfiles = roster.entries.map((e) => e.profile);
+    const seeded: Record<string, CrewMember> = {};
+    for (const e of editable) {
+      const ev = e.evaluation;
+      seeded[e.profile.id] = {
+        ratings: ev?.ratings ?? {},
+        supervisory: ev ? !!ev.supervisory : defaultSupervisory(e.profile, allProfiles),
+        overall: ev && isRatingValue(ev.overall_rating) ? ev.overall_rating : null,
+      };
+    }
+    setMembers(seeded);
+    setSaveState({});
+  }
+
+  const persist = useCallback(
+    (employeeId: string, member: CrewMember) => {
+      const seq = (seqRef.current[employeeId] ?? 0) + 1;
+      seqRef.current[employeeId] = seq;
+      setSaveState((s) => ({ ...s, [employeeId]: "saving" }));
+      const rosterRow = roster.entries.find((e) => e.profile.id === employeeId)?.evaluation ?? null;
+      const run = async () => {
+        const values = {
+          supervisory: member.supervisory,
+          ratings: applicableRatings(member.ratings, member.supervisory),
+          overall_rating: member.overall,
+        };
+        const current = rowsRef.current[employeeId] ?? rosterRow;
+        const next = current
+          ? await directPatchRowReturning<StaffEvaluation>(TABLE, "id", current.id, values, "evaluations.crew.patch")
+          : await directInsertRow<StaffEvaluation>(
+              TABLE,
+              {
+                employee_id: employeeId,
+                period_start: period.start,
+                period_end: period.end,
+                period_label: period.label,
+                form_version: FORM_VERSION,
+                ...values,
+              },
+              "evaluations.crew.insert",
+            );
+        if (!next) throw new Error("The rating could not be saved.");
+        rowsRef.current[employeeId] = next;
+      };
+      const previous = queuesRef.current[employeeId] ?? Promise.resolve();
+      const result = previous.then(run, run);
+      queuesRef.current[employeeId] = result.catch(() => undefined);
+      // Only the newest save for a person decides their indicator.
+      const settle = (state: CrewSaveState) => {
+        if (seqRef.current[employeeId] === seq) setSaveState((s) => ({ ...s, [employeeId]: state }));
+      };
+      result.then(
+        () => settle("saved"),
+        () => settle("error"),
+      );
+    },
+    [roster.entries, period.start, period.end, period.label],
+  );
+
+  const update = useCallback(
+    (employeeId: string, change: (m: CrewMember) => CrewMember) => {
+      const member = members[employeeId];
+      if (!member) return;
+      const next = change(member);
+      setMembers({ ...members, [employeeId]: next });
+      persist(employeeId, next);
+    },
+    [members, persist],
+  );
+
+  const rate = useCallback(
+    (employeeId: string, elementKey: string, value: RatingValue) =>
+      update(employeeId, (m) => applyCrewRating(m, elementKey, value)),
+    [update],
+  );
+
+  const setSupervisory = useCallback(
+    (employeeId: string, supervisory: boolean) =>
+      update(employeeId, (m) => applyCrewSupervisory(m, supervisory)),
+    [update],
+  );
+
+  return {
+    loading: roster.loading || initializedFor !== period.start,
+    error: roster.error,
+    people: editable
+      .filter((e) => members[e.profile.id])
+      .map((e) => ({ profile: e.profile, member: members[e.profile.id] })),
+    finalCount: roster.entries.length - editable.length,
+    saveState,
+    rate,
+    setSupervisory,
+  };
 }

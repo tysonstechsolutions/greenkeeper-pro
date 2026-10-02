@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer } from "lucide-react";
+import { ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess } from "@/components/auth/role-guard";
 import { getInitials, roleLabels } from "@/lib/hooks/useProfiles";
@@ -166,10 +166,21 @@ function EvaluationsRoster() {
             <div className="h-2 rounded-full bg-muted overflow-hidden">
               <div className="h-full bg-emerald-600 transition-all" style={{ width: `${pct}%` }} />
             </div>
+            {next && (
+              <Link href={`/staff/evaluations/crew?fy=${fy}`} className="block mt-4">
+                <Button className="w-full gap-2 bg-[#1B4332] hover:bg-[#1B4332]/90 text-white">
+                  <Users className="w-4 h-4" />
+                  Rate the crew side by side
+                </Button>
+                <span className="block text-xs text-muted-foreground mt-1 text-center">
+                  Fastest way: one item at a time for everyone, then a few questions each.
+                </span>
+              </Link>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 mt-4">
               {next ? (
                 <Link href={editHref(next.profile.id)} className="flex-1">
-                  <Button className="w-full gap-2 bg-[#1B4332] hover:bg-[#1B4332]/90 text-white">
+                  <Button variant="outline" className="w-full gap-2">
                     <Play className="w-4 h-4" />
                     {next.progress === "not_started" ? "Start next" : "Continue"}: {next.profile.full_name || "Employee"}
                   </Button>

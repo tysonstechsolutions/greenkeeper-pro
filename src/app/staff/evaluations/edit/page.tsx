@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  MessageSquareHeart,
+  Plus,
   ArrowRight,
   Check,
   CheckCircle2,
@@ -50,6 +52,7 @@ import {
   elementsFor,
 } from "@/lib/evaluations/form";
 import { fiscalYearOf, periodDisplay, periodFromFyParam } from "@/lib/evaluations/period";
+import { appendSuggestions, type SuggestionTarget } from "@/lib/evaluations/suggestions";
 import { evaluationFilename, evaluationPdfBlob, type EvaluationPrintData } from "@/lib/evaluations/pdf";
 import {
   WRITTEN_QUESTIONS,
@@ -109,7 +112,7 @@ function EvaluationEditor() {
   const isManager = hasRole(ADMIN_ROLES);
   const { profile: me } = useAuth();
 
-  const { employee, evaluation, facts, loadedFor, loading, error, save } = useEvaluation(employeeId, period);
+  const { employee, evaluation, facts, suggestions, loadedFor, loading, error, save } = useEvaluation(employeeId, period);
   const viewer = useMemo(
     () => ({ id: me?.id ?? getCachedUserId(), isManager }),
     [me?.id, isManager],
@@ -667,20 +670,27 @@ function EvaluationEditor() {
           {WRITTEN_QUESTIONS.map((q) => {
             const missing = showProblems && q.required && !(answers[q.id] ?? "").trim();
             return (
-              <label key={q.id} className="block rounded-lg border border-border bg-card p-4">
-                <span className="font-semibold">
-                  {q.prompt}
-                  {q.required && <span className="text-destructive"> *</span>}
-                </span>
-                <span className="block text-xs text-muted-foreground mt-0.5">{q.hint}</span>
-                <Textarea
-                  className={`mt-2 ${missing ? "border-destructive" : ""}`}
-                  rows={3}
-                  value={answers[q.id] ?? ""}
-                  onChange={(e) => answer(q.id, e.target.value)}
+              <div key={q.id} className="rounded-lg border border-border bg-card p-4">
+                <label className="block">
+                  <span className="font-semibold">
+                    {q.prompt}
+                    {q.required && <span className="text-destructive"> *</span>}
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">{q.hint}</span>
+                  <Textarea
+                    className={`mt-2 ${missing ? "border-destructive" : ""}`}
+                    rows={3}
+                    value={answers[q.id] ?? ""}
+                    onChange={(e) => answer(q.id, e.target.value)}
+                  />
+                  {missing && <span className="block text-xs text-destructive mt-1">This one is needed.</span>}
+                </label>
+                <FromOneOnOnes
+                  items={suggestions[q.id as SuggestionTarget] ?? []}
+                  current={answers[q.id] ?? ""}
+                  onAdd={(picked) => answer(q.id, appendSuggestions(answers[q.id] ?? "", picked))}
                 />
-                {missing && <span className="block text-xs text-destructive mt-1">This one is needed.</span>}
-              </label>
+              </div>
             );
           })}
 
@@ -954,6 +964,60 @@ function EvaluationEditor() {
             )}
           </StickyNav>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Things the employee or GM already said in 1:1s, one tap to add. */
+function FromOneOnOnes({
+  items,
+  current,
+  onAdd,
+}: {
+  items: { text: string; source: string }[];
+  current: string;
+  onAdd: (picked: string[]) => void;
+}) {
+  const have = current.toLowerCase();
+  const fresh = items.filter((i) => !have.includes(i.text.toLowerCase()));
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-3 rounded-md bg-indigo-50 dark:bg-indigo-950/30 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold flex items-center gap-1.5 text-indigo-900 dark:text-indigo-200">
+          <MessageSquareHeart className="w-3.5 h-3.5" /> From your 1:1s
+        </p>
+        {fresh.length > 1 && (
+          <button
+            type="button"
+            className="text-xs font-medium text-indigo-800 dark:text-indigo-200 underline"
+            onClick={() => onAdd(fresh.map((f) => f.text))}
+          >
+            Add all
+          </button>
+        )}
+      </div>
+      {fresh.length === 0 ? (
+        <p className="text-xs text-muted-foreground mt-1">All added.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {fresh.map((item) => (
+            <li key={item.source + item.text} className="flex items-start gap-2 text-sm">
+              <button
+                type="button"
+                aria-label={`Add: ${item.text}`}
+                className="mt-0.5 shrink-0 rounded border border-indigo-300 dark:border-indigo-700 bg-background p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900"
+                onClick={() => onAdd([item.text])}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              <span>
+                {item.text} <span className="text-xs text-muted-foreground">({item.source})</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
