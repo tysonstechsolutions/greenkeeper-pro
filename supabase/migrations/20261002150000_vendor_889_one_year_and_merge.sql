@@ -45,12 +45,9 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_vendors_active_name
   ON public.vendors(name) WHERE merged_into_id IS NULL;
 
-COMMENT ON COLUMN public.vendors.section_889_signed_date IS
-  'Date the Section 889 representation was signed. It expires one year later.';
-COMMENT ON COLUMN public.vendors.section_889_signed_date_estimated IS
-  'True when the sign date was taken from the upload date instead of the form; the app asks for a check.';
-COMMENT ON COLUMN public.vendors.merged_into_id IS
-  'Set when this vendor was combined into another; merged vendors are hidden from lists and pickers.';
+COMMENT ON COLUMN public.vendors.section_889_signed_date IS 'Date the Section 889 representation was signed. It expires one year later.';
+COMMENT ON COLUMN public.vendors.section_889_signed_date_estimated IS 'True when the sign date was taken from the upload date instead of the form. The app asks for a check.';
+COMMENT ON COLUMN public.vendors.merged_into_id IS 'Set when this vendor was combined into another. Merged vendors are hidden from lists and pickers.';
 
 -- ── 2. Repair existing 889 expirations ──────────────────────────────────────
 -- Only 889s whose expiration is empty or still the old automatic Oct 1 date.
@@ -226,8 +223,7 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public.merge_vendors(UUID, UUID[]) IS
-  'Manager-only: fold duplicate vendors into one kept vendor; duplicates are marked merged, never deleted.';
+COMMENT ON FUNCTION public.merge_vendors(UUID, UUID[]) IS 'Manager-only: fold duplicate vendors into one kept vendor. Duplicates are marked merged, never deleted.';
 
 REVOKE ALL ON FUNCTION public.merge_vendors(UUID, UUID[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.merge_vendors(UUID, UUID[]) TO authenticated;
