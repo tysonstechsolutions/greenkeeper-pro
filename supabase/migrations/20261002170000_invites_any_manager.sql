@@ -3,9 +3,9 @@
 --
 -- Adding staff — the "Add Staff" sheet and "transfer from scheduling" —
 -- first inserts an invite row, then pin-signup turns it into an account.
--- The invite INSERT policies were written before the 'gm' role existed and
+-- The invite INSERT policies were written before the gm role existed and
 -- only allowed super/asst_super (002) or super/asst_super/director (006).
--- With the GM's profile role set to 'gm', every add failed with:
+-- With the GM profile role set to gm, every add failed with:
 --   new row violates row-level security policy for table "invites"
 --
 -- public.is_manager() already means "active super, asst_super, director, or

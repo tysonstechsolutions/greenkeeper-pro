@@ -19,7 +19,7 @@
 --    duplicates, the newest 889 wins, notes are combined, and purchase
 --    requests plus current/future duty assignments, coverages, and open tasks
 --    move to the kept vendor. Duplicates are NOT deleted — completed tasks
---    are protected history and still reference them — they're marked
+--    are protected history and still reference them — they are marked
 --    merged_into_id and hidden from every vendor list and picker.
 --
 -- Idempotent: ADD COLUMN IF NOT EXISTS, the repair only touches rows without
@@ -51,7 +51,7 @@ COMMENT ON COLUMN public.vendors.merged_into_id IS 'Set when this vendor was com
 
 -- ── 2. Repair existing 889 expirations ──────────────────────────────────────
 -- Only 889s whose expiration is empty or still the old automatic Oct 1 date.
--- Upload time is read in the course's time zone (Great Lakes, IL).
+-- Upload time is read in the course time zone (Great Lakes, IL).
 UPDATE public.vendors
 SET section_889_signed_date = (section_889_uploaded_at AT TIME ZONE 'America/Chicago')::date,
     section_889_signed_date_estimated = TRUE,
@@ -67,7 +67,7 @@ WHERE section_889_path IS NOT NULL
   );
 
 -- The operating-rhythm reminder still described the old fiscal-year rule.
--- Wording only; its schedule is unchanged.
+-- Wording only, its schedule is unchanged.
 DO $$ BEGIN
   IF to_regclass('public.obligations') IS NOT NULL THEN
     UPDATE public.obligations
@@ -167,7 +167,7 @@ BEGIN
     gsa_naf_other_no = v_keep.gsa_naf_other_no,
     contract_end_date = v_keep.contract_end_date,
     category = v_keep.category,
-    -- Each distinct note once, kept vendor's first, in order.
+    -- Each distinct note once, kept vendor first, in order.
     notes = NULLIF(array_to_string(ARRAY(
       SELECT d.n FROM (
         SELECT DISTINCT ON (lower(t.n)) t.n, t.ord
