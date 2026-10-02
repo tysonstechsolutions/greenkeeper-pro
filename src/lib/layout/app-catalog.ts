@@ -220,6 +220,9 @@ const CERTIFICATIONS: AppEntry = { href: "/certifications", label: "Certificatio
 // Direct launcher: pick a person → their 1:1 tab opens. Pinned so a 1:1 is one
 // click away instead of Staff → person → profile → 1:1s tab.
 const ONEONONE: AppEntry = { href: "/staff/one-on-ones", label: "1:1s", icon: MessageSquareHeart, color: "from-indigo-500 to-blue-600", pinned: true, group: GROUPS.people, keywords: ["one on one", "check in", "meeting", "employee", "staff", "1 on 1"] };
+// Yearly evaluations: answer a short interview per person, the app writes the
+// paperwork. Pinned so it's one tap away during evaluation season.
+const EVALUATIONS: AppEntry = { href: "/staff/evaluations", label: "Evaluations", icon: ClipboardCheck, color: "from-indigo-500 to-blue-600", pinned: true, group: GROUPS.people, keywords: ["evaluation", "evals", "appraisal", "performance review", "annual review", "yearly review", "rating"] };
 const ONEONONE_INSIGHTS: AppEntry = { href: "/staff/insights", label: "1:1 Insights", icon: BarChart3, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["one on one", "1:1", "themes", "morale", "concerns"] };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const PRO_SHOP_DUTIES: AppEntry = { href: "/pro-shop-schedule/duties", label: "Shop Duties", icon: ListChecks, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
@@ -361,7 +364,7 @@ export const HUB_PEOPLE: AppEntry = {
   icon: Users,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [STAFF, ONEONONE, ONEONONE_INSIGHTS, DUTY_OWNERSHIP, CERTIFICATIONS, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
+  children: [STAFF, ONEONONE, ONEONONE_INSIGHTS, EVALUATIONS, DUTY_OWNERSHIP, CERTIFICATIONS, ONBOARDING, HUB_PAPERWORK, DOCUMENTS, KNOWLEDGE],
 };
 
 /** Hub lookup by route, so the hub pages can render their own card grid. */

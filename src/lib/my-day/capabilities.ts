@@ -91,6 +91,14 @@ const CAPABILITIES: Capability[] = [
     available: true,
     patterns: [/\bdd[\s-]?200\b/i, /financial liability investigation/i, /property loss/i],
   },
+  {
+    key: "evaluation",
+    label: "Yearly Evaluations",
+    action: "Open Evaluations",
+    href: "/staff/evaluations",
+    available: true,
+    patterns: [/\bevals?\b/i, /\bevaluations?\b/i, /\bappraisals?\b/i, /performance reviews?/i],
+  },
 ];
 
 /** First capability whose pattern matches the task title, or null. */
