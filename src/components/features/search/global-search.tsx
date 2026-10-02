@@ -121,6 +121,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
             company: string | null;
           }>("vendors", {
             columns: "id,name,company",
+            filters: ["merged_into_id=is.null"],
             orderBy: [{ column: "name", ascending: true }],
             label: "search.vendors",
           }),

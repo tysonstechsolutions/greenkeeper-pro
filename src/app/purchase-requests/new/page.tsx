@@ -1102,7 +1102,8 @@ function NewPurchaseRequestPageInner() {
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
       try {
         const accessToken = await resolveAccessToken(supabase, supabaseUrl, anonKey);
-        const url = `${supabaseUrl}/rest/v1/vendors?select=*&order=name`;
+        // Combined (merged) vendors are hidden from the picker.
+        const url = `${supabaseUrl}/rest/v1/vendors?select=*&merged_into_id=is.null&order=name`;
         const res = await fetch(url, {
           headers: {
             apikey: anonKey,

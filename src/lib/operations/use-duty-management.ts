@@ -139,6 +139,7 @@ export function useDutyManagement() {
           }),
           directSelectAll<DutyVendorSummary>("vendors", {
             columns: "id,name,company",
+            filters: ["merged_into_id=is.null"],
             orderBy: [{ column: "name" }, { column: "id" }],
             label: "duties.manage.vendors",
           }),

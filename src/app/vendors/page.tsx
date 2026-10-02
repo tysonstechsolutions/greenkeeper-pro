@@ -36,8 +36,16 @@ import {
   directSelectList,
   directPatchRow,
   directInsertRow,
+  directRpc,
 } from "@/lib/supabase/rest";
-import { calc889ExpirationDate, format889Date } from "@/lib/section-889";
+import { DuplicateGroups } from "@/components/features/vendors/duplicate-groups";
+import { findDuplicateGroups } from "@/lib/vendor-duplicates";
+import {
+  calc889ExpirationDate,
+  format889Date,
+  section889Status,
+  toIsoDate,
+} from "@/lib/section-889";
 import { computeVendorPatch, findVendorDefaults } from "@/lib/vendor-defaults";
 import { callApi } from "@/lib/api/client";
 import { resizeImageFile } from "@/lib/utils/image-resize";
@@ -81,6 +89,12 @@ interface Vendor {
   section_889_filename: string | null;
   section_889_expiration_date: string | null;
   section_889_uploaded_at: string | null;
+  /** Date the 889 was signed; it expires one year later. */
+  section_889_signed_date: string | null;
+  /** True when the sign date was assumed (upload day) rather than read off the form. */
+  section_889_signed_date_estimated: boolean | null;
+  /** Set when this vendor was combined into another one (hidden from the list). */
+  merged_into_id: string | null;
 }
 
 const CATEGORIES = [
@@ -111,20 +125,11 @@ function categoryLabel(cat: string) {
   return CATEGORIES.find((c) => c.value === cat)?.label ?? cat;
 }
 
-/** Returns the 889 status for the vendor card badge. */
-function get889Status(vendor: {
+/** The 889 status for the vendor card badge. */
+const get889Status = (vendor: {
   section_889_path: string | null;
   section_889_expiration_date: string | null;
-}): "compliant" | "expiring_soon" | "expired" | "missing" {
-  if (!vendor.section_889_path) return "missing";
-  if (!vendor.section_889_expiration_date) return "compliant";
-  const today = new Date();
-  const exp = new Date(vendor.section_889_expiration_date);
-  const days = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return "expired";
-  if (days <= 30) return "expiring_soon";
-  return "compliant";
-}
+}) => section889Status(vendor);
 
 const STATUS_LABELS: Record<ReturnType<typeof get889Status>, string> = {
   compliant: "889 ✓",
@@ -148,6 +153,12 @@ export default function VendorsPage() {
     profile?.role === "director" ||
     profile?.role === "gm" ||
     profile?.role === "foreman";
+  // Combining vendors is manager-only in the database (merge_vendors).
+  const canCombine =
+    profile?.role === "super" ||
+    profile?.role === "asst_super" ||
+    profile?.role === "director" ||
+    profile?.role === "gm";
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,6 +228,9 @@ export default function VendorsPage() {
     try {
       const data = await directSelectList<Vendor>("vendors", {
         columns: "*",
+        // Vendors combined into another one stay in the database (history
+        // still points at them) but never show up in the list.
+        filters: ["merged_into_id=is.null"],
         orderBy: [{ column: "name", ascending: true }],
         label: "vendors.fetchList",
       });
@@ -329,12 +343,11 @@ export default function VendorsPage() {
         });
       if (upErr) throw new Error(upErr.message);
 
-      // 889s expire on Oct 1 of the federal fiscal year they were signed
-      // in. The "signed date" defaults to today (the upload time) — we
-      // can't reliably extract a sign date from the PDF, and the user
-      // can adjust the expiration with the date input on the card if
-      // the form was actually signed in a different fiscal year.
-      const expirationDate = calc889ExpirationDate(new Date());
+      // An 889 is good for one year from the day it was signed. A plain
+      // upload doesn't tell us the sign date, so assume today and flag it
+      // as estimated — the card asks the user to confirm the real date.
+      const signedDate = toIsoDate(new Date());
+      const expirationDate = calc889ExpirationDate(signedDate);
 
       // Direct REST so the patch can't wedge on a stalled supabase-js
       // auth wrapper.
@@ -346,6 +359,8 @@ export default function VendorsPage() {
           section_889_path: stored,
           section_889_filename: file.name,
           section_889_uploaded_at: new Date().toISOString(),
+          section_889_signed_date: signedDate,
+          section_889_signed_date_estimated: true,
           section_889_expiration_date: expirationDate,
         },
         "vendors.upload889",
@@ -398,17 +413,22 @@ export default function VendorsPage() {
         return;
       }
 
-      // 889s expire Oct 1 of the federal fiscal year they were signed in
-      // (FY = Oct 1 → Sept 30). If the form has a sign date, use it;
-      // otherwise default to today (when the file was uploaded). The
-      // user can adjust the date input on the card afterward.
-      const signedSource: Date | string = extracted.date_signed ?? new Date();
-      let expirationDate: string | null = null;
-      try {
-        expirationDate = calc889ExpirationDate(signedSource);
-      } catch {
-        // Bad date — leave null and let the user set it manually.
+      // An 889 is good for one year from the day it was signed. Paper
+      // forms have a handwritten sign date; a SAM.gov summary's
+      // representations date from its activation date. Without either,
+      // assume today and flag it so the card asks for the real date.
+      const readDate = extracted.date_signed ?? extracted.activation_date ?? null;
+      let signedDate = toIsoDate(new Date());
+      let signedEstimated = true;
+      if (readDate) {
+        try {
+          signedDate = toIsoDate(readDate);
+          signedEstimated = false;
+        } catch {
+          // Unreadable date — keep today, flagged as estimated.
+        }
       }
+      const expirationDate = calc889ExpirationDate(signedDate);
 
       // 3. Create the vendor row.
       const supabase = createClient();
@@ -453,19 +473,22 @@ export default function VendorsPage() {
           section_889_path: stored,
           section_889_filename: file.name,
           section_889_expiration_date: expirationDate,
+          section_889_signed_date: signedDate,
+          section_889_signed_date_estimated: signedEstimated,
           section_889_uploaded_at: new Date().toISOString(),
         })
         .eq("id", vendorId);
       if (linkErr) throw new Error(linkErr.message);
 
-      const formNote =
-        extracted.form_type === "paper_merchant"
-          ? " (signed paper form, expiration set to 1 year from signing)"
+      const formNote = signedEstimated
+        ? " (no sign date on the form, so today was used — check it on the vendor card)"
+        : extracted.form_type === "paper_merchant"
+          ? " (signed paper form, good for 1 year from signing)"
           : extracted.form_type === "sam_gov"
-            ? " (SAM.gov summary)"
+            ? " (SAM.gov summary, 1 year from activation)"
             : "";
       setExtractInfo(
-        `Added ${extracted.name}${expirationDate ? ` — 889 expires ${expirationDate}` : ""}${formNote}.`,
+        `Added ${extracted.name} — 889 expires ${format889Date(expirationDate)}${formNote}.`,
       );
       if (extracted.warnings && extracted.warnings.length > 0) {
         setExtractWarnings(extracted.warnings);
@@ -479,19 +502,45 @@ export default function VendorsPage() {
     }
   }
 
-  async function handleSet889Expiration(vendorId: string, value: string) {
+  /** Set the date the 889 was signed; it's good for one year from then. */
+  async function handleSet889SignedDate(vendorId: string, value: string) {
+    if (!value) return;
     try {
       await directPatchRow(
         "vendors",
         "id",
         vendorId,
-        { section_889_expiration_date: value || null },
-        "vendors.set889Expiration",
+        {
+          section_889_signed_date: value,
+          section_889_signed_date_estimated: false,
+          section_889_expiration_date: calc889ExpirationDate(value),
+        },
+        "vendors.set889SignedDate",
       );
       fetchVendors();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  // ── Duplicates ─────────────────────────────────────────────────────────
+  const duplicateGroups = useMemo(() => findDuplicateGroups(vendors), [vendors]);
+  const [combineReport, setCombineReport] = useState<string | null>(null);
+
+  async function handleCombine(keepId: string, duplicateIds: string[]) {
+    const keep = vendors.find((v) => v.id === keepId);
+    const result = await directRpc<{ combined: number; purchase_requests: number }>(
+      "merge_vendors",
+      { p_keep_id: keepId, p_merge_ids: duplicateIds },
+      "vendors.merge",
+    );
+    setCombineReport(
+      `Combined ${result?.combined ?? duplicateIds.length} into ${keep?.name ?? "the kept vendor"}` +
+        (result?.purchase_requests
+          ? ` — ${result.purchase_requests} purchase request${result.purchase_requests === 1 ? "" : "s"} moved over.`
+          : "."),
+    );
+    await fetchVendors();
   }
 
   // ── Sync vendor contacts from defaults ─────────────────────────────────
@@ -648,6 +697,26 @@ export default function VendorsPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {combineReport && (
+        <div className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3 flex items-start gap-2">
+          <FileCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-emerald-800 dark:text-emerald-300 break-words">{combineReport}</p>
+            <button
+              type="button"
+              onClick={() => setCombineReport(null)}
+              className="text-[11px] text-muted-foreground hover:text-foreground mt-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canCombine && !loading && (
+        <DuplicateGroups groups={duplicateGroups} onCombine={handleCombine} />
       )}
 
       {/* AI auto-add via 889 PDF */}
@@ -1022,14 +1091,21 @@ export default function VendorsPage() {
                               </span>
                             </p>
                             <p className="text-[10px] text-muted-foreground mt-0.5">
-                              Federal FY runs Oct 1 – Sept 30. 889s expire Oct 1 of the FY they were signed in.
+                              {v.section_889_signed_date
+                                ? `Signed ${format889Date(v.section_889_signed_date)} · good for 1 year from signing.`
+                                : "Good for 1 year from the date signed."}
                             </p>
+                            {v.section_889_signed_date_estimated && (
+                              <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                                Sign date is a guess (the day it was uploaded). Set the real date below if it&apos;s different.
+                              </p>
+                            )}
                           </div>
                         );
                       })()
                     ) : v.section_889_path ? (
                       <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
-                        Expiration date not set — defaults to next Oct 1.
+                        No sign date yet — set it below so the expiration is right.
                       </p>
                     ) : null}
 
@@ -1065,14 +1141,20 @@ export default function VendorsPage() {
                           />
                         </label>
                         {v.section_889_path && (
-                          <Input
-                            type="date"
-                            value={v.section_889_expiration_date || ""}
-                            onChange={(e) =>
-                              handleSet889Expiration(v.id, e.target.value)
-                            }
-                            className="text-sm"
-                          />
+                          <label className="block">
+                            <span className="text-[11px] font-medium text-muted-foreground">
+                              Date the 889 was signed
+                            </span>
+                            <Input
+                              type="date"
+                              aria-label={`Date ${v.name}'s 889 was signed`}
+                              value={v.section_889_signed_date || ""}
+                              onChange={(e) =>
+                                handleSet889SignedDate(v.id, e.target.value)
+                              }
+                              className="text-sm mt-0.5"
+                            />
+                          </label>
                         )}
                       </div>
                     )}
@@ -1105,6 +1187,5 @@ export default function VendorsPage() {
   );
 }
 
-// 889 expiration is now computed via calc889ExpirationDate() (next Oct 1
-// after the date signed). The old filename-regex extractor was removed
-// when the rule changed — see src/lib/section-889.ts.
+// 889 expiration is computed via calc889ExpirationDate(): one year from the
+// date signed — see src/lib/section-889.ts.

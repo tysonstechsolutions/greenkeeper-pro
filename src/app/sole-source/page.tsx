@@ -281,6 +281,7 @@ export default function SoleSourcePage() {
       const rows = await directSelectList<Vendor>("vendors", {
         columns:
           "id,name,poc,phone,email,address,address_line2,city_state_zip,section_889_expiration_date",
+        filters: ["merged_into_id=is.null"],
         orderBy: [{ column: "name", ascending: true }],
         label: "sole-source vendors",
       });
