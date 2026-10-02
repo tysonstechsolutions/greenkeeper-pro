@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import type { ProShopStaff, ShiftGroup } from "@/lib/pro-shop/types";
 import { directSelectList } from "@/lib/supabase/rest";
 import { positionGroup } from "@/lib/pro-shop/types";
+import { todayLocal } from "@/lib/utils/date";
 import {
   findUnimportedScheduleStaff,
   importScheduleStaff,
@@ -47,7 +48,8 @@ export function ProShopRosterCard({ profileNames, onImported }: ProShopRosterCar
   useEffect(() => {
     let alive = true;
     directSelectList<ProShopStaff>("pro_shop_staff", {
-      columns: "id,full_name,position,default_group,availability_text,availability,flex,phone,is_active,sort_order,notes",
+      columns:
+        "id,full_name,position,default_group,availability_text,availability,flex,phone,is_active,sort_order,notes,employed_through",
       filters: ["is_active=eq.true"],
       orderBy: [{ column: "sort_order", ascending: true }],
       label: "staff.proshop.roster",
@@ -67,7 +69,7 @@ export function ProShopRosterCard({ profileNames, onImported }: ProShopRosterCar
   }, []);
 
   const missing = useMemo(
-    () => (profileNames ? findUnimportedScheduleStaff(staff, profileNames) : []),
+    () => (profileNames ? findUnimportedScheduleStaff(staff, profileNames, todayLocal()) : []),
     [staff, profileNames],
   );
 

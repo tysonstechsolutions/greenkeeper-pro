@@ -36,3 +36,12 @@ describe("evaluations wiring", () => {
     expect(migration).toContain("DEFAULT 'cnic-5300-rev-2025-09'");
   });
 });
+
+describe("adding staff for evaluations", () => {
+  it("lets any active manager (including the GM) create staff invites", () => {
+    const fix = read("supabase/migrations/20261002170000_invites_any_manager.sql");
+    expect(fix).toContain('DROP POLICY IF EXISTS "invites_insert_manager" ON public.invites;');
+    expect(fix).toContain('DROP POLICY IF EXISTS "Managers can create invites" ON public.invites;');
+    expect(fix).toContain("WITH CHECK (created_by = auth.uid() AND public.is_manager());");
+  });
+});

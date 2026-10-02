@@ -19,15 +19,21 @@ export function normalizeStaffName(name: string | null | undefined): string {
   return (name || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Schedule staff who don't have a matching profile yet (by normalized name). */
-export function findUnimportedScheduleStaff<T extends { full_name: string }>(
-  scheduleStaff: T[],
-  existing: { full_name: string | null }[],
-): T[] {
+/**
+ * Schedule staff who don't have a matching profile yet (by normalized name).
+ * Matching counts inactive profiles too, so someone marked inactive on the
+ * staff roster is never re-added. People whose last day on the schedule
+ * (employed_through) is already past have left and are skipped as well.
+ */
+export function findUnimportedScheduleStaff<
+  T extends { full_name: string; employed_through?: string | null },
+>(scheduleStaff: T[], existing: { full_name: string | null }[], todayIso?: string): T[] {
   const have = new Set(existing.map((p) => normalizeStaffName(p.full_name)).filter(Boolean));
   return scheduleStaff.filter((s) => {
     const n = normalizeStaffName(s.full_name);
-    return n.length > 0 && !have.has(n);
+    if (n.length === 0 || have.has(n)) return false;
+    if (todayIso && s.employed_through && s.employed_through < todayIso) return false;
+    return true;
   });
 }
 

@@ -26,6 +26,22 @@ describe("findUnimportedScheduleStaff", () => {
     expect(missing.map((m) => m.full_name)).toEqual(["Bart Diaz"]);
   });
 
+  it("skips people whose last day on the schedule has passed", () => {
+    const staff = [
+      { full_name: "Left Already", employed_through: "2026-09-15" },
+      { full_name: "Last Day Today", employed_through: "2026-10-02" },
+      { full_name: "Leaving Soon", employed_through: "2026-11-01" },
+      { full_name: "Open Ended", employed_through: null },
+    ];
+    expect(findUnimportedScheduleStaff(staff, [], "2026-10-02").map((m) => m.full_name)).toEqual([
+      "Last Day Today",
+      "Leaving Soon",
+      "Open Ended",
+    ]);
+    // An inactive profile still counts as "already added".
+    expect(findUnimportedScheduleStaff(staff, [{ full_name: "open ended" }], "2026-10-02")).toHaveLength(2);
+  });
+
   it("returns everyone (with a name) when no profiles match", () => {
     const missing = findUnimportedScheduleStaff(schedule, []);
     expect(missing).toHaveLength(3); // empty-name row skipped
