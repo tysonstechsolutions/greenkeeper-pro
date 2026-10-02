@@ -1,16 +1,22 @@
 -- ============================================================================
--- Yearly performance evaluations.
+-- Yearly performance evaluations (CNIC 5300 NAF Performance Rating Form +
+-- Individual Development Plan).
 --
 -- One row per employee per rating period. The GM answers a short interview
--- (a tap rating per performance element plus a few short notes); the app
--- pulls in what it already knows about the period (call-outs, sick time,
--- 1:1s, follow-ups, certifications) and drafts the written sections. The row
--- keeps everything needed to re-print the paperwork on any form layout:
+-- (a tap rating per rating element plus a few short notes); the app pulls in
+-- what it already knows about the period (call-outs, sick time, 1:1s,
+-- follow-ups, certifications) and drafts the written parts. The row keeps
+-- everything needed to re-fill the form at any time:
 --
---   ratings    { element_key: 1..5 }
---   answers    { question_id: text }     — the GM's raw words
---   narrative  { section_key: text, elements: { element_key: text } }
---   facts      snapshot of the period facts the draft was written from
+--   rating_reason  item 5 — 90 day / interim / annual / separation
+--   supervisory    rate elements f-h too (supervisors only)
+--   ratings        item 6 — { element_key: 1..5 }
+--   overall_rating item 7
+--   awards         item 8 — { pay_increase|performance_award|time_off_award:
+--                             { granted: bool, amount: text } }
+--   answers        { question_id: text }     — the GM's raw words
+--   narrative      item 9 remarks sections + the IDP page
+--   facts          snapshot of the period facts the draft was written from
 --
 -- Same trust boundary as 1:1 sessions: only active managers or the
 -- employee's recorded direct supervisor can see or write a row. Rows are
@@ -26,14 +32,18 @@ CREATE TABLE IF NOT EXISTS public.staff_evaluations (
   period_label    TEXT NOT NULL,
   status          TEXT NOT NULL DEFAULT 'draft'
                     CHECK (status IN ('draft', 'final')),
+  rating_reason   TEXT NOT NULL DEFAULT 'annual'
+                    CHECK (rating_reason IN ('ninety_day', 'interim', 'annual', 'separation')),
+  supervisory     BOOLEAN NOT NULL DEFAULT FALSE,
   ratings         JSONB NOT NULL DEFAULT '{}'::jsonb,
   overall_rating  SMALLINT CHECK (overall_rating BETWEEN 1 AND 5),
+  awards          JSONB NOT NULL DEFAULT '{}'::jsonb,
   answers         JSONB NOT NULL DEFAULT '{}'::jsonb,
   narrative       JSONB NOT NULL DEFAULT '{}'::jsonb,
   facts           JSONB NOT NULL DEFAULT '{}'::jsonb,
   -- Which form layout the answers were collected for, so a later layout
   -- change never silently misreads an older evaluation.
-  form_version    TEXT NOT NULL DEFAULT 'generic-v1',
+  form_version    TEXT NOT NULL DEFAULT 'cnic-5300-rev-2025-09',
   finalized_at    TIMESTAMPTZ,
   created_by      UUID,
   updated_by      UUID,

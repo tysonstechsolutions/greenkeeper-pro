@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -25,21 +26,37 @@ import { getCachedUserId } from "@/lib/supabase/rest";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayLocal } from "@/lib/utils/date";
 import { draftNarrative } from "@/lib/evaluations/ai";
-import { evaluationProgress, narrativeComplete, suggestOverall } from "@/lib/evaluations/compose";
+import {
+  evaluationProgress,
+  hasUnsatisfactory,
+  narrativeComplete,
+  overallRuleProblem,
+  suggestOverall,
+} from "@/lib/evaluations/compose";
 import { describeFacts } from "@/lib/evaluations/facts";
 import {
+  AWARD_AMOUNT_HINTS,
+  AWARD_KEYS,
+  AWARD_LABELS,
+  IDP_LINES,
   NARRATIVE_SECTIONS,
-  PERFORMANCE_ELEMENTS,
   RATING_BUTTON_COLORS,
   RATING_LABELS,
+  RATING_REASON_LABELS,
   RATING_SHORT_LABELS,
+  SIGNING_STEPS,
+  SUPERVISORY_ROLES,
+  UNSATISFACTORY_NOTE,
+  elementsFor,
 } from "@/lib/evaluations/form";
 import { fiscalYearOf, periodDisplay, periodFromFyParam } from "@/lib/evaluations/period";
-import { evaluationFilename, evaluationsPdfBlob, type EvaluationPrintData } from "@/lib/evaluations/pdf";
+import { evaluationFilename, evaluationPdfBlob, type EvaluationPrintData } from "@/lib/evaluations/pdf";
 import {
   WRITTEN_QUESTIONS,
+  applicableRatings,
   elementNoteId,
   missingAnswers,
+  missingAwardAmounts,
   missingRatings,
 } from "@/lib/evaluations/questions";
 import {
@@ -50,9 +67,13 @@ import {
 } from "@/lib/evaluations/use-evaluations";
 import {
   isRatingValue,
+  type AwardKey,
   type EvaluationAnswers,
+  type EvaluationAwards,
+  type EvaluationIdp,
   type EvaluationNarrative,
   type EvaluationRatings,
+  type RatingReason,
   type RatingValue,
 } from "@/lib/evaluations/types";
 
@@ -69,6 +90,8 @@ const STEPS: { key: Step; label: string }[] = [
 const SCALE: RatingValue[] = [1, 2, 3, 4, 5];
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+
+const EMPTY_IDP: EvaluationIdp = { learning: [], conferences: [], remarks: "" };
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -93,8 +116,11 @@ function EvaluationEditor() {
   );
   const roster = useEvaluationRoster(period, viewer);
 
+  const [reason, setReason] = useState<RatingReason>("annual");
+  const [supervisory, setSupervisory] = useState(false);
   const [ratings, setRatings] = useState<EvaluationRatings>({});
   const [answers, setAnswers] = useState<EvaluationAnswers>({});
+  const [awards, setAwards] = useState<EvaluationAwards>({});
   const [overall, setOverall] = useState<RatingValue | null>(null);
   const [narrative, setNarrative] = useState<EvaluationNarrative>({});
   const [step, setStep] = useState<Step>("rate");
@@ -109,15 +135,22 @@ function EvaluationEditor() {
   const [showProblems, setShowProblems] = useState(false);
   const [filedNote, setFiledNote] = useState<string | null>(null);
 
+  // Does anyone report to this employee? Then they're rated as a supervisor
+  // by default (f–h), same as the supervisory roles.
+  const hasReports = roster.entries.some((e) => e.profile.supervisor_id === employeeId);
+
   // Copy the saved evaluation into the form once per employee/period
   // (render-time sync, so switching to the next employee resets cleanly).
   const currentKey = `${employeeId}|${period.start}`;
   const hydrateKey = !loading && loadedFor === currentKey ? currentKey : null;
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
-  if (hydrateKey && hydrateKey !== hydratedFor) {
+  if (hydrateKey && hydrateKey !== hydratedFor && employee) {
     setHydratedFor(hydrateKey);
+    setReason(evaluation?.rating_reason ?? "annual");
+    setSupervisory(evaluation ? !!evaluation.supervisory : SUPERVISORY_ROLES.includes(employee.role));
     setRatings(evaluation?.ratings ?? {});
     setAnswers(evaluation?.answers ?? {});
+    setAwards(evaluation?.awards ?? {});
     setOverall(isRatingValue(evaluation?.overall_rating) ? evaluation!.overall_rating : null);
     setNarrative(evaluation?.narrative ?? {});
     setDirty(false);
@@ -128,20 +161,32 @@ function EvaluationEditor() {
     setShowProblems(false);
     setFiledNote(null);
     const progress = evaluationProgress(evaluation);
+    const sup = evaluation ? !!evaluation.supervisory : SUPERVISORY_ROLES.includes(employee.role);
     setStep(
       progress === "final"
         ? "done"
         : narrativeComplete(evaluation?.narrative)
           ? "review"
-          : missingRatings(evaluation?.ratings ?? {}).length === 0
+          : missingRatings(evaluation?.ratings ?? {}, sup).length === 0
             ? "questions"
             : "rate",
     );
   }
 
+  // A brand-new evaluation for someone with direct reports starts as supervisory.
+  const [reportsAppliedFor, setReportsAppliedFor] = useState<string | null>(null);
+  if (hydratedFor === currentKey && !evaluation && hasReports && !supervisory && reportsAppliedFor !== currentKey) {
+    setReportsAppliedFor(currentKey);
+    setSupervisory(true);
+  }
+
   const locked = evaluation?.status === "final";
   const employeeName = employee?.full_name || "Employee";
-  const suggested = suggestOverall(ratings);
+  const elements = elementsFor(supervisory);
+  const suggested = suggestOverall(ratings, supervisory);
+  const ruleProblem = overallRuleProblem(ratings, overall, supervisory);
+  const unsat = hasUnsatisfactory(ratings, overall, supervisory);
+  const idp = narrative.idp ?? EMPTY_IDP;
 
   const persist = useCallback(
     async (values: EvaluationPatch) => {
@@ -161,8 +206,17 @@ function EvaluationEditor() {
   );
 
   const currentValues = useCallback(
-    (): EvaluationPatch => ({ ratings, answers, overall_rating: overall, narrative }),
-    [ratings, answers, overall, narrative],
+    (): EvaluationPatch => ({
+      rating_reason: reason,
+      supervisory,
+      // f–h are dropped when someone isn't rated as a supervisor.
+      ratings: applicableRatings(ratings, supervisory),
+      overall_rating: overall,
+      awards,
+      answers,
+      narrative,
+    }),
+    [reason, supervisory, ratings, overall, awards, answers, narrative],
   );
 
   // Autosave shortly after the GM stops tapping/typing.
@@ -184,31 +238,61 @@ function EvaluationEditor() {
     setActionError(null);
     setShowProblems(false);
     setStep(next);
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function touch() {
+    setDirty(true);
   }
 
   function rate(key: string, value: RatingValue) {
     setRatings((r) => ({ ...r, [key]: value }));
-    setDirty(true);
+    // Per the form, any Unsatisfactory element makes the overall Unsatisfactory.
+    if (value === 1) setOverall(1);
+    touch();
   }
 
   function answer(id: string, value: string) {
     setAnswers((a) => ({ ...a, [id]: value }));
-    setDirty(true);
+    touch();
+  }
+
+  function setAward(key: AwardKey, patch: Partial<{ granted: boolean; amount: string }>) {
+    setAwards((a) => ({
+      ...a,
+      [key]: { granted: a[key]?.granted ?? false, amount: a[key]?.amount ?? "", ...patch },
+    }));
+    touch();
   }
 
   function editSection(key: string, value: string) {
     setNarrative((n) => ({ ...n, [key]: value }));
-    setDirty(true);
+    touch();
   }
 
-  function editElementComment(key: string, value: string) {
-    setNarrative((n) => ({ ...n, elements: { ...(n.elements ?? {}), [key]: value } }));
-    setDirty(true);
+  function editIdpLine(list: "learning" | "conferences", index: number, value: string) {
+    setNarrative((n) => {
+      const current = n.idp ?? EMPTY_IDP;
+      const lines = [...current[list]];
+      while (lines.length <= index) lines.push("");
+      lines[index] = value;
+      return { ...n, idp: { ...current, [list]: lines } };
+    });
+    touch();
+  }
+
+  function editIdpRemarks(value: string) {
+    setNarrative((n) => ({ ...n, idp: { ...(n.idp ?? EMPTY_IDP), remarks: value } }));
+    touch();
   }
 
   async function writeItUp() {
-    if (narrativeComplete(narrative) && !window.confirm("Replace the current wording with a fresh draft from your answers?")) {
+    if (
+      narrativeComplete(narrative) &&
+      !window.confirm("Replace the current wording with a fresh draft from your answers?")
+    ) {
       return;
     }
     const chosen = overall ?? suggested;
@@ -219,14 +303,15 @@ function EvaluationEditor() {
         employeeName,
         position: facts?.position_title ?? (employee ? roleLabels[employee.role] : null),
         periodLabel: period.label,
-        ratings,
+        ratings: applicableRatings(ratings, supervisory),
+        supervisory,
         overall: chosen,
         answers,
         facts,
       });
       setNarrative(drafted);
       if (!overall && chosen) setOverall(chosen);
-      setDirty(true);
+      touch();
       setDraftNote(
         aiError
           ? "The AI wasn't available, so the built-in writer drafted this from your answers. Read it over and edit anything."
@@ -238,34 +323,39 @@ function EvaluationEditor() {
   }
 
   async function goToReview() {
-    if (missingAnswers(answers).length > 0) {
+    if (missingAnswers(answers).length > 0 || missingAwardAmounts(awards).length > 0) {
       setShowProblems(true);
       return;
     }
     if (!overall && suggested) {
       setOverall(suggested);
-      setDirty(true);
+      touch();
     }
     await goTo("review");
     if (!narrativeComplete(narrative)) await writeItUp();
   }
 
-  function printData(): EvaluationPrintData {
+  function printData(status: "draft" | "final"): EvaluationPrintData {
+    const pd = employee?.personnel?.personnel_details ?? null;
     return {
       evaluation: {
         period_start: period.start,
         period_end: period.end,
         period_label: period.label,
-        status: evaluation?.status ?? "draft",
-        ratings,
+        status,
+        rating_reason: reason,
+        supervisory,
+        ratings: applicableRatings(ratings, supervisory),
         overall_rating: overall,
+        awards,
         narrative,
       },
       employeeName,
+      nameParts: pd ? { last: pd.name_last, first: pd.name_first, middle: pd.name_middle } : null,
       positionTitle: facts?.position_title ?? (employee ? roleLabels[employee.role] : null),
       payPlanGrade: facts?.pay_plan_grade ?? null,
       hireDate: facts?.hire_date ?? null,
-      supervisorName: me?.full_name ?? "",
+      workSchedule: pd?.work_schedule ?? null,
     };
   }
 
@@ -274,7 +364,7 @@ function EvaluationEditor() {
     setActionError(null);
     try {
       await saveBlobToDevice({
-        blob: evaluationsPdfBlob([printData()]),
+        blob: await evaluationPdfBlob(printData(evaluation?.status ?? "draft")),
         filename: evaluationFilename(period.label, employeeName),
         shareTitle: `${employeeName} — ${period.label} evaluation`,
       });
@@ -286,14 +376,16 @@ function EvaluationEditor() {
   }
 
   const problems = [
-    ...missingRatings(ratings).map(
-      (k) => `Rate "${PERFORMANCE_ELEMENTS.find((e) => e.key === k)?.label ?? k}"`,
+    ...missingRatings(ratings, supervisory).map(
+      (k) => `Rate "${elements.find((e) => e.key === k)?.label ?? k}"`,
     ),
     ...missingAnswers(answers).map(
       (id) => `Answer "${WRITTEN_QUESTIONS.find((q) => q.id === id)?.prompt ?? id}"`,
     ),
+    ...missingAwardAmounts(awards).map((k) => `Enter the amount for ${AWARD_LABELS[k as AwardKey].toLowerCase()}`),
     ...(overall ? [] : ["Pick an overall rating"]),
-    ...NARRATIVE_SECTIONS.filter((s) => !(narrative[s.key] ?? "").trim()).map(
+    ...(ruleProblem ? [ruleProblem] : []),
+    ...NARRATIVE_SECTIONS.filter((s) => s.required && !(narrative[s.key] ?? "").trim()).map(
       (s) => `Fill in "${s.title}"`,
     ),
   ];
@@ -309,14 +401,16 @@ function EvaluationEditor() {
       await persist({ ...currentValues(), facts: facts ?? {}, status: "final" });
       setStep("done");
       if (isManager) {
-        const data = printData();
-        data.evaluation.status = "final";
-        const filed = await fileEvaluationPdf({
-          employeeId,
-          blob: evaluationsPdfBlob([data]),
-          filename: evaluationFilename(period.label, employeeName),
-          title: `${period.label} Performance Evaluation`,
-        });
+        const filed = await evaluationPdfBlob(printData("final"))
+          .then((blob) =>
+            fileEvaluationPdf({
+              employeeId,
+              blob,
+              filename: evaluationFilename(period.label, employeeName),
+              title: `${period.label} Performance Rating (CNIC 5300)`,
+            }),
+          )
+          .catch(() => false);
         setFiledNote(
           filed
             ? "A copy was filed on their profile under Documents → Performance Review."
@@ -361,15 +455,7 @@ function EvaluationEditor() {
     );
   }
 
-  if (loading || (!error && hydratedFor !== currentKey)) {
-    return (
-      <div className="p-6 flex items-center justify-center text-muted-foreground gap-2">
-        <Loader2 className="w-5 h-5 animate-spin" /> Loading…
-      </div>
-    );
-  }
-
-  if (error || !employee) {
+  if (error || (!loading && loadedFor === currentKey && !employee)) {
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto">
         <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
@@ -378,6 +464,14 @@ function EvaluationEditor() {
         <Link href={`/staff/evaluations?fy=${fy}`} className="inline-block mt-4 text-sm underline">
           Back to evaluations
         </Link>
+      </div>
+    );
+  }
+
+  if (loading || hydratedFor !== currentKey || !employee) {
+    return (
+      <div className="p-6 flex items-center justify-center text-muted-foreground gap-2">
+        <Loader2 className="w-5 h-5 animate-spin" /> Loading…
       </div>
     );
   }
@@ -414,11 +508,7 @@ function EvaluationEditor() {
           const state = i < activeIndex ? "done" : i === activeIndex ? "active" : "todo";
           return (
             <li key={s.key} className="flex-1">
-              <div
-                className={`h-1.5 rounded-full ${
-                  state === "todo" ? "bg-muted" : "bg-emerald-600"
-                }`}
-              />
+              <div className={`h-1.5 rounded-full ${state === "todo" ? "bg-muted" : "bg-emerald-600"}`} />
               <p className={`text-xs mt-1 ${state === "active" ? "font-semibold" : "text-muted-foreground"}`}>
                 {i + 1}. {s.label}
               </p>
@@ -426,6 +516,13 @@ function EvaluationEditor() {
           );
         })}
       </ol>
+
+      {unsat && step !== "done" && (
+        <div className="mb-4 flex gap-2 rounded-lg border border-red-600/30 bg-red-50 dark:bg-red-950/30 p-3 text-sm text-red-900 dark:text-red-100">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <p>{UNSATISFACTORY_NOTE}</p>
+        </div>
+      )}
 
       {/* ── Step 1: Rate ─────────────────────────────────────────────── */}
       {step === "rate" && (
@@ -455,17 +552,56 @@ function EvaluationEditor() {
             </details>
           )}
 
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <label className="block">
+              <span className="text-sm font-semibold">Reason for rating</span>
+              <select
+                className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value as RatingReason);
+                  touch();
+                }}
+              >
+                {(Object.keys(RATING_REASON_LABELS) as RatingReason[]).map((r) => (
+                  <option key={r} value={r}>
+                    {RATING_REASON_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-5 w-5 accent-emerald-700"
+                checked={supervisory}
+                onChange={(e) => {
+                  setSupervisory(e.target.checked);
+                  touch();
+                }}
+              />
+              <span>
+                <span className="text-sm font-semibold">Supervises other people</span>
+                <span className="block text-xs text-muted-foreground">
+                  Adds f–h (Leadership, Management/Coaching/EEO, Internal Controls).
+                </span>
+              </span>
+            </label>
+          </div>
+
           <p className="text-sm text-muted-foreground">
             Tap a rating for each one. Add an example only if one comes to mind.
           </p>
 
-          {PERFORMANCE_ELEMENTS.map((el) => {
+          {elements.map((el) => {
             const current = ratings[el.key];
             return (
               <div key={el.key} className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold">{el.label}</p>
+                    <p className="font-semibold">
+                      {el.letter}. {el.label}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">{el.description}</p>
                   </div>
                   {isRatingValue(current) && <Check className="w-5 h-5 text-emerald-600 shrink-0" />}
@@ -479,6 +615,7 @@ function EvaluationEditor() {
                         type="button"
                         role="radio"
                         aria-checked={selected}
+                        aria-label={`${v} ${RATING_LABELS[v]}`}
                         onClick={() => rate(el.key, v)}
                         className={`rounded-md border px-1 py-2 text-center transition-colors ${
                           selected ? RATING_BUTTON_COLORS[v] : "border-input bg-background hover:bg-muted"
@@ -490,6 +627,12 @@ function EvaluationEditor() {
                     );
                   })}
                 </div>
+                {isRatingValue(current) && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    <span className="font-medium text-foreground">{RATING_LABELS[current]}:</span>{" "}
+                    {el.levels?.[current] ?? ""}
+                  </p>
+                )}
                 <Input
                   className="mt-3"
                   placeholder="Example (optional)"
@@ -500,14 +643,14 @@ function EvaluationEditor() {
             );
           })}
 
-          {showProblems && missingRatings(ratings).length > 0 && (
+          {showProblems && missingRatings(ratings, supervisory).length > 0 && (
             <p className="text-sm text-destructive">Rate every item to keep going.</p>
           )}
           <StickyNav>
             <Button
               className="w-full gap-2 bg-[#1B4332] hover:bg-[#1B4332]/90 text-white"
               onClick={() => {
-                if (missingRatings(ratings).length > 0) setShowProblems(true);
+                if (missingRatings(ratings, supervisory).length > 0) setShowProblems(true);
                 else void goTo("questions");
               }}
             >
@@ -540,6 +683,53 @@ function EvaluationEditor() {
               </label>
             );
           })}
+
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <div>
+              <p className="font-semibold">Pay increase & awards (item 8)</p>
+              <p className="text-xs text-muted-foreground">
+                Not automatic — check with your Approving Official. Defaults to No.
+              </p>
+            </div>
+            {AWARD_KEYS.map((key) => {
+              const granted = !!awards[key]?.granted;
+              const needsAmount = showProblems && granted && !(awards[key]?.amount ?? "").trim();
+              return (
+                <div key={key} className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm">{AWARD_LABELS[key]}</span>
+                    <div className="flex rounded-md border border-input overflow-hidden" role="radiogroup" aria-label={AWARD_LABELS[key]}>
+                      {[true, false].map((yes) => (
+                        <button
+                          key={String(yes)}
+                          type="button"
+                          role="radio"
+                          aria-checked={granted === yes}
+                          onClick={() => setAward(key, { granted: yes })}
+                          className={`px-4 py-1.5 text-sm ${
+                            granted === yes ? "bg-[#1B4332] text-white" : "bg-background hover:bg-muted"
+                          }`}
+                        >
+                          {yes ? "Yes" : "No"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {granted && (
+                    <Input
+                      aria-label={`${AWARD_LABELS[key]} amount`}
+                      placeholder={`Amount — ${AWARD_AMOUNT_HINTS[key]}`}
+                      className={needsAmount ? "border-destructive" : ""}
+                      value={awards[key]?.amount ?? ""}
+                      onChange={(e) => setAward(key, { amount: e.target.value })}
+                    />
+                  )}
+                  {needsAmount && <p className="text-xs text-destructive">Enter the amount.</p>}
+                </div>
+              );
+            })}
+          </div>
+
           <StickyNav>
             <Button variant="outline" className="gap-2" onClick={() => void goTo("rate")}>
               <ArrowLeft className="w-4 h-4" /> Back
@@ -559,10 +749,10 @@ function EvaluationEditor() {
       {step === "review" && (
         <div className="space-y-4">
           <div className="rounded-lg border border-border bg-card p-4">
-            <p className="font-semibold">Overall rating</p>
+            <p className="font-semibold">Overall rating (item 7)</p>
             {suggested && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Suggested from your ratings: {suggested} – {RATING_LABELS[suggested]}. Change it if you see it differently.
+                Suggested from your ratings: {RATING_LABELS[suggested]}. Change it if you see it differently.
               </p>
             )}
             <div className="grid grid-cols-5 gap-1.5 mt-3" role="radiogroup" aria-label="Overall rating">
@@ -574,9 +764,10 @@ function EvaluationEditor() {
                     type="button"
                     role="radio"
                     aria-checked={selected}
+                    aria-label={`${v} ${RATING_LABELS[v]}`}
                     onClick={() => {
                       setOverall(v);
-                      setDirty(true);
+                      touch();
                     }}
                     className={`relative rounded-md border px-1 py-2 text-center transition-colors ${
                       selected ? RATING_BUTTON_COLORS[v] : "border-input bg-background hover:bg-muted"
@@ -593,6 +784,7 @@ function EvaluationEditor() {
                 );
               })}
             </div>
+            {ruleProblem && <p className="text-sm text-destructive mt-2">{ruleProblem}</p>}
           </div>
 
           {drafting ? (
@@ -604,46 +796,66 @@ function EvaluationEditor() {
               {draftNote && (
                 <p className="text-sm rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-100 p-3">{draftNote}</p>
               )}
-              {NARRATIVE_SECTIONS.map((s) => (
-                <label key={s.key} className="block">
-                  <span className="text-sm font-semibold">{s.title}</span>
-                  <Textarea
-                    className="mt-1"
-                    rows={5}
-                    value={narrative[s.key] ?? ""}
-                    onChange={(e) => editSection(s.key, e.target.value)}
-                  />
-                </label>
-              ))}
-              <details className="rounded-lg border border-border p-3">
-                <summary className="cursor-pointer text-sm font-semibold">Comment for each rating</summary>
-                <div className="space-y-3 mt-3">
-                  {PERFORMANCE_ELEMENTS.map((el) => {
-                    const r = ratings[el.key];
-                    return (
-                      <label key={el.key} className="block">
-                        <span className="text-xs font-semibold">
-                          {el.label}
-                          {isRatingValue(r) && <span className="font-normal text-muted-foreground"> · {RATING_LABELS[r]}</span>}
-                        </span>
-                        <Textarea
-                          className="mt-1"
-                          rows={2}
-                          value={narrative.elements?.[el.key] ?? ""}
-                          onChange={(e) => editElementComment(el.key, e.target.value)}
-                        />
-                      </label>
-                    );
-                  })}
+              <div className="space-y-3">
+                <p className="font-semibold">Supervisor&apos;s remarks (item 9)</p>
+                {NARRATIVE_SECTIONS.map((s) => (
+                  <label key={s.key} className="block">
+                    <span className="text-sm font-medium">
+                      {s.title}
+                      {!s.required && <span className="font-normal text-muted-foreground"> (optional)</span>}
+                    </span>
+                    <Textarea
+                      className="mt-1"
+                      rows={4}
+                      value={narrative[s.key] ?? ""}
+                      onChange={(e) => editSection(s.key, e.target.value)}
+                    />
+                  </label>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  If the remarks don&apos;t fit the box, a continuation sheet is added automatically.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-border p-4 space-y-3">
+                <p className="font-semibold">Individual Development Plan</p>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Learning opportunities (IDP 7)</p>
+                  {Array.from({ length: IDP_LINES }, (_, i) => (
+                    <Input
+                      key={`learning-${i}`}
+                      aria-label={`Learning opportunity ${String.fromCharCode(97 + i)}`}
+                      placeholder={`${String.fromCharCode(97 + i)}.`}
+                      value={idp.learning[i] ?? ""}
+                      onChange={(e) => editIdpLine("learning", i, e.target.value)}
+                    />
+                  ))}
                 </div>
-              </details>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Conferences, courses, classes (IDP 8)</p>
+                  {Array.from({ length: IDP_LINES }, (_, i) => (
+                    <Input
+                      key={`conference-${i}`}
+                      aria-label={`Conference or course ${String.fromCharCode(97 + i)}`}
+                      placeholder={`${String.fromCharCode(97 + i)}. include date and cost`}
+                      value={idp.conferences[i] ?? ""}
+                      onChange={(e) => editIdpLine("conferences", i, e.target.value)}
+                    />
+                  ))}
+                </div>
+                <label className="block">
+                  <span className="text-sm font-medium">IDP remarks</span>
+                  <Textarea className="mt-1" rows={3} value={idp.remarks} onChange={(e) => editIdpRemarks(e.target.value)} />
+                </label>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" className="gap-2" onClick={() => void writeItUp()}>
                   <RotateCcw className="w-4 h-4" /> Rewrite from my answers
                 </Button>
                 <Button variant="outline" className="gap-2" disabled={busy === "pdf"} onClick={() => void downloadPdf()}>
                   {busy === "pdf" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  Preview PDF
+                  Preview the form
                 </Button>
               </div>
             </>
@@ -690,12 +902,21 @@ function EvaluationEditor() {
             {filedNote && <p className="text-sm mt-2">{filedNote}</p>}
           </div>
 
+          <div className="rounded-lg border border-border bg-card p-4 text-sm">
+            <p className="font-semibold mb-2">Next steps (from the form)</p>
+            <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+              <li>Open the PDF and type in the last 4 of their SSN (items 2 and IDP 1b).</li>
+              {SIGNING_STEPS.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ol>
+          </div>
+
           <div className="rounded-lg border border-border bg-card p-4 space-y-3 text-sm">
             <p>
-              <span className="font-semibold">Overall:</span>{" "}
-              {overall ? `${overall} – ${RATING_LABELS[overall]}` : "—"}
+              <span className="font-semibold">Overall:</span> {overall ? RATING_LABELS[overall] : "—"}
             </p>
-            {NARRATIVE_SECTIONS.map((s) => (
+            {NARRATIVE_SECTIONS.filter((s) => (narrative[s.key] ?? "").trim()).map((s) => (
               <div key={s.key}>
                 <p className="font-semibold">{s.title}</p>
                 <p className="whitespace-pre-wrap text-muted-foreground">{narrative[s.key]}</p>
@@ -708,7 +929,7 @@ function EvaluationEditor() {
           <div className="flex flex-col sm:flex-row gap-2">
             <Button className="gap-2" variant="outline" disabled={busy === "pdf"} onClick={() => void downloadPdf()}>
               {busy === "pdf" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              Download PDF
+              Download the form (PDF)
             </Button>
             {isManager && (
               <Button className="gap-2" variant="outline" disabled={busy === "reopen"} onClick={() => void reopen()}>
@@ -727,11 +948,7 @@ function EvaluationEditor() {
                 Next: {nextEmployee.profile.full_name || "Employee"} <ArrowRight className="w-4 h-4" />
               </Button>
             ) : (
-              <Button
-                className="w-full gap-2"
-                variant="outline"
-                onClick={() => router.push(`/staff/evaluations?fy=${fy}`)}
-              >
+              <Button className="w-full gap-2" variant="outline" onClick={() => router.push(`/staff/evaluations?fy=${fy}`)}>
                 {roster.loading ? "Back to all evaluations" : "All done — back to the list"}
               </Button>
             )}

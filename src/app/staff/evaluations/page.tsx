@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, ClipboardCheck, Loader2, Play, Printer } from "lucide-react";
+import { ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess } from "@/components/auth/role-guard";
 import { getInitials, roleLabels } from "@/lib/hooks/useProfiles";
@@ -13,7 +13,13 @@ import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayLocal } from "@/lib/utils/date";
 import { payPlanGrade } from "@/lib/evaluations/facts";
 import { fiscalYearOf, periodChoices, periodDisplay, periodFromFyParam } from "@/lib/evaluations/period";
-import { evaluationFilename, evaluationsPdfBlob, type EvaluationPrintData } from "@/lib/evaluations/pdf";
+import JSZip from "jszip";
+import {
+  combinedEvaluationsPdfBlob,
+  evaluationFilename,
+  evaluationPdfBlob,
+  type EvaluationPrintData,
+} from "@/lib/evaluations/pdf";
 import { useEvaluationRoster } from "@/lib/evaluations/use-evaluations";
 import { PROGRESS_COLORS, PROGRESS_LABELS } from "@/lib/evaluations/types";
 import type { StaffPersonnelPrivate } from "@/types/database";
@@ -31,47 +37,75 @@ function EvaluationsRoster() {
     [me?.id, me?.role],
   );
   const { entries, loading, error } = useEvaluationRoster(period, viewer);
-  const [printing, setPrinting] = useState(false);
+  const [printing, setPrinting] = useState<null | "print" | "zip">(null);
   const [printError, setPrintError] = useState<string | null>(null);
 
   const finals = entries.filter((e) => e.progress === "final");
   const next = entries.find((e) => e.progress !== "final");
   const editHref = (employeeId: string) => `/staff/evaluations/edit?employee=${employeeId}&fy=${fy}`;
 
+  /** Everything needed to fill each finished evaluation's form. */
+  async function finishedPrintData(): Promise<EvaluationPrintData[]> {
+    const ids = finals.map((f) => f.profile.id);
+    const personnel = await directSelectList<
+      Pick<StaffPersonnelPrivate, "employee_id" | "hire_date" | "certifications" | "personnel_details">
+    >("staff_personnel_private", {
+      columns: "employee_id,hire_date,certifications,personnel_details",
+      filters: [`employee_id=in.(${ids.join(",")})`],
+      label: "evaluations.print_all.personnel",
+    }).catch(() => []);
+    const byId = new Map(personnel.map((p) => [p.employee_id, p]));
+    return finals.map((f) => {
+      const pd = byId.get(f.profile.id)?.personnel_details ?? null;
+      return {
+        evaluation: f.evaluation!,
+        employeeName: f.profile.full_name || "Employee",
+        nameParts: pd ? { last: pd.name_last, first: pd.name_first, middle: pd.name_middle } : null,
+        positionTitle: pd?.position_title?.trim() || roleLabels[f.profile.role],
+        payPlanGrade: payPlanGrade(pd),
+        hireDate: byId.get(f.profile.id)?.hire_date ?? null,
+        workSchedule: pd?.work_schedule ?? null,
+      };
+    });
+  }
+
+  /** One PDF with everyone, ready to print. */
   async function printAllFinal() {
     if (finals.length === 0) return;
-    setPrinting(true);
+    setPrinting("print");
     setPrintError(null);
     try {
-      const ids = finals.map((f) => f.profile.id);
-      const personnel = await directSelectList<
-        Pick<StaffPersonnelPrivate, "employee_id" | "hire_date" | "certifications" | "personnel_details">
-      >("staff_personnel_private", {
-        columns: "employee_id,hire_date,certifications,personnel_details",
-        filters: [`employee_id=in.(${ids.join(",")})`],
-        label: "evaluations.print_all.personnel",
-      }).catch(() => []);
-      const byId = new Map(personnel.map((p) => [p.employee_id, p]));
-      const items: EvaluationPrintData[] = finals.map((f) => {
-        const p = byId.get(f.profile.id);
-        return {
-          evaluation: f.evaluation!,
-          employeeName: f.profile.full_name || "Employee",
-          positionTitle: p?.personnel_details?.position_title?.trim() || roleLabels[f.profile.role],
-          payPlanGrade: payPlanGrade(p?.personnel_details ?? null),
-          hireDate: p?.hire_date ?? null,
-          supervisorName: me?.full_name ?? "",
-        };
-      });
       await saveBlobToDevice({
-        blob: evaluationsPdfBlob(items),
+        blob: await combinedEvaluationsPdfBlob(await finishedPrintData()),
         filename: evaluationFilename(period.label),
         shareTitle: `${period.label} evaluations`,
       });
     } catch (e) {
       setPrintError(e instanceof Error ? e.message : "Couldn't build the PDF.");
     } finally {
-      setPrinting(false);
+      setPrinting(null);
+    }
+  }
+
+  /** A .zip of each person's editable form (for SSN and CAC signatures). */
+  async function downloadAllZip() {
+    if (finals.length === 0) return;
+    setPrinting("zip");
+    setPrintError(null);
+    try {
+      const zip = new JSZip();
+      for (const item of await finishedPrintData()) {
+        zip.file(evaluationFilename(period.label, item.employeeName), await evaluationPdfBlob(item));
+      }
+      await saveBlobToDevice({
+        blob: await zip.generateAsync({ type: "blob" }),
+        filename: evaluationFilename(period.label).replace(/\.pdf$/, ".zip"),
+        shareTitle: `${period.label} evaluations`,
+      });
+    } catch (e) {
+      setPrintError(e instanceof Error ? e.message : "Couldn't build the zip.");
+    } finally {
+      setPrinting(null);
     }
   }
 
@@ -148,11 +182,20 @@ function EvaluationsRoster() {
               <Button
                 variant="outline"
                 className="gap-2"
-                disabled={finals.length === 0 || printing}
+                disabled={finals.length === 0 || printing !== null}
                 onClick={printAllFinal}
               >
-                {printing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                {printing === "print" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                 Print all finished ({finals.length})
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={finals.length === 0 || printing !== null}
+                onClick={downloadAllZip}
+              >
+                {printing === "zip" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
+                Editable copies (.zip)
               </Button>
             </div>
             {printError && <p className="text-sm text-destructive mt-2">{printError}</p>}

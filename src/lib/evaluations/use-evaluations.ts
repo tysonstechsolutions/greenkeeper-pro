@@ -111,7 +111,18 @@ export interface EvaluationEmployee {
 }
 
 export type EvaluationPatch = Partial<
-  Pick<StaffEvaluation, "ratings" | "overall_rating" | "answers" | "narrative" | "facts" | "status">
+  Pick<
+    StaffEvaluation,
+    | "rating_reason"
+    | "supervisory"
+    | "ratings"
+    | "overall_rating"
+    | "awards"
+    | "answers"
+    | "narrative"
+    | "facts"
+    | "status"
+  >
 >;
 
 /**

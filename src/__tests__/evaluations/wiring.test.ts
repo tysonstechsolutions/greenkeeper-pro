@@ -28,4 +28,11 @@ describe("evaluations wiring", () => {
     expect(migration).toContain("EXECUTE FUNCTION public.attribute_private_staff_mutation()");
     expect(migration).toContain("Only a manager can reopen a finalized evaluation");
   });
+
+  it("stores what CNIC 5300 needs", () => {
+    expect(migration).toContain("CHECK (rating_reason IN ('ninety_day', 'interim', 'annual', 'separation'))");
+    expect(migration).toContain("supervisory     BOOLEAN NOT NULL DEFAULT FALSE");
+    expect(migration).toContain("awards          JSONB NOT NULL DEFAULT '{}'::jsonb");
+    expect(migration).toContain("DEFAULT 'cnic-5300-rev-2025-09'");
+  });
 });

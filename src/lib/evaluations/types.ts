@@ -1,14 +1,14 @@
 /**
  * Yearly performance evaluations.
  *
- * The GM answers a short interview per employee — one tap rating per
- * performance element plus a few short notes — and the app fills out the
- * paperwork. Everything about the paper form itself (its elements, rating
- * labels, and written sections) lives in `form.ts`, so swapping in the
- * official sheet only means changing that one file.
+ * The GM answers a short interview per employee — one tap rating per rating
+ * element plus a few short notes — and the app fills out the CNIC 5300 NAF
+ * Performance Rating Form and its Individual Development Plan. Everything
+ * about the paper form itself lives in `form.ts`; the fillable-PDF field
+ * mapping lives in `pdf.ts`.
  */
 
-/** A rating on the 1–5 scale (5 = best). */
+/** A rating on the 1–5 scale (5 = Outstanding, 1 = Unsatisfactory). */
 export type RatingValue = 1 | 2 | 3 | 4 | 5;
 
 export const RATING_VALUES: RatingValue[] = [5, 4, 3, 2, 1];
@@ -17,24 +17,47 @@ export function isRatingValue(value: unknown): value is RatingValue {
   return value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
 }
 
+/** Item 5 — reason for rating. */
+export type RatingReason = "ninety_day" | "interim" | "annual" | "separation";
+
+/** Item 8 — the three pay/award lines. */
+export type AwardKey = "pay_increase" | "performance_award" | "time_off_award";
+
+export interface AwardDecision {
+  granted: boolean;
+  /** Free text so "$500" or "8 hrs" both work. Ignored when not granted. */
+  amount: string;
+}
+
+export type EvaluationAwards = Partial<Record<AwardKey, AwardDecision>>;
+
 /** The interview answers, keyed by question id (see questions.ts). */
 export type EvaluationAnswers = Record<string, string>;
 
 /** Element ratings, keyed by element key (see form.ts). */
 export type EvaluationRatings = Record<string, RatingValue>;
 
-/** The written sections of the evaluation, ready to print. */
+/** Page 5 — the Individual Development Plan. */
+export interface EvaluationIdp {
+  /** Item 7 a–c — learning opportunities (not Navy-required training). */
+  learning: string[];
+  /** Item 8 a–c — conferences, seminars, courses (with date and cost). */
+  conferences: string[];
+  /** IDP remarks. */
+  remarks: string;
+}
+
+/** The written parts of the evaluation, ready to print. */
 export interface EvaluationNarrative {
-  /** Overall performance summary. */
+  /** Item 9 — supports the ratings. */
   summary?: string;
-  /** Strengths and accomplishments this period. */
+  /** Item 9 — special accomplishments. */
   strengths?: string;
-  /** Areas for improvement. */
+  /** Item 9 — areas to develop (may be short). */
   improvement?: string;
-  /** Goals and development plan for the next period. */
+  /** Item 9 — goals for the next rating period. */
   goals?: string;
-  /** One short comment per rated element, keyed by element key. */
-  elements?: Record<string, string>;
+  idp?: EvaluationIdp;
   /** Where the draft came from — the AI, or the built-in writer. */
   source?: "ai" | "template";
 }
@@ -63,8 +86,11 @@ export interface StaffEvaluation {
   period_end: string;
   period_label: string;
   status: EvaluationStatus;
+  rating_reason: RatingReason;
+  supervisory: boolean;
   ratings: EvaluationRatings;
   overall_rating: RatingValue | null;
+  awards: EvaluationAwards;
   answers: EvaluationAnswers;
   narrative: EvaluationNarrative;
   facts: EvaluationFacts | Record<string, never>;

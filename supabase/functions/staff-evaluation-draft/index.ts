@@ -1,25 +1,28 @@
 /**
- * staff-evaluation-draft — writes the narrative sections of a yearly
- * performance evaluation from the GM's interview answers.
+ * staff-evaluation-draft — writes the narrative parts of a CNIC 5300 NAF
+ * Performance Rating Form from the GM's interview answers: item 9
+ * (Supervisor's Remarks: a summary that supports the ratings, special
+ * accomplishments, areas to develop, goals for the next period) and the
+ * Individual Development Plan (learning opportunities, conferences/courses,
+ * remarks).
  *
- * The GM rates each performance element and jots a few words; this turns
- * that into the written sections of the form (overall summary, strengths,
- * areas for improvement, goals, and a short comment per element). It only
- * writes — nothing is saved by this function. The GM reviews and edits every
- * word before the evaluation is finalized.
+ * It only writes — nothing is saved by this function. The GM reviews and
+ * edits every word before the evaluation is finalized.
  *
  * Auth: signed-in user. Secrets: ANTHROPIC_API_KEY, ANTHROPIC_MODEL.
  * Deploy:  supabase functions deploy staff-evaluation-draft
  *
  * Request JSON:
- *   { employee: { name, position }, period_label,
+ *   { employee: { name, position }, period_label, supervisory,
  *     overall: { value, label },
- *     elements: [ { key, label, description, rating, rating_label, note } ],
- *     answers: [ { prompt, answer } ],
+ *     elements: [ { key, label, description, rating, rating_label,
+ *                   level_description, note } ],
+ *     answers: [ { id, prompt, answer } ],
  *     facts: { ...period facts... } }
  *
  * Response JSON:
- *   { summary, strengths, improvement, goals, elements: { [key]: string } }
+ *   { summary, strengths, improvement, goals,
+ *     idp: { learning: string[], conferences: string[], remarks } }
  */
 import { handleCors, jsonError, jsonResponse } from "../_shared/cors.ts";
 import { getUser } from "../_shared/supabase.ts";
@@ -27,26 +30,35 @@ import { getUser } from "../_shared/supabase.ts";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
-const MAX_TOKENS = 3000;
+const MAX_TOKENS = 2500;
 const TIMEOUT_MS = 60_000;
 
-const SYSTEM_PROMPT = `You write the narrative sections of a yearly employee performance evaluation for a General Manager at a Navy MWR golf course (federal NAF employees). The GM has already rated each performance element and jotted short notes. You turn those into clear, professional evaluation language the GM can sign.
+const SYSTEM_PROMPT = `You write the narrative parts of a CNIC 5300 NAF Employee Performance Rating Form for a General Manager at a Navy MWR golf course (Naval Station Great Lakes). The GM has already rated each element on the form's scale (Outstanding, Highly Satisfactory, Satisfactory, Minimally Satisfactory, Unsatisfactory) and jotted short notes. You turn those into clear, professional language the GM can sign.
 
-Your ONLY sources are the GM's ratings, the GM's notes, and the "facts" block. Never invent accomplishments, numbers, incidents, projects, or quotes. If the GM's notes for a section are blank, write a brief, neutral sentence that matches the ratings — do not make up specifics.
+Your ONLY sources are the GM's ratings, the GM's notes and answers, the level descriptions provided for each rating, and the "facts" block. Never invent accomplishments, numbers, incidents, projects, courses, dates, costs, or quotes. If the GM gave nothing for a part, write a brief, neutral sentence that matches the ratings — no made-up specifics.
 
 Voice and style:
 - Third person. Refer to the employee by first name. If you need a pronoun, use "they/them" — never guess he/she.
-- Plain, professional, and specific. Short sentences. No buzzwords, no flowery praise, no exclamation points.
-- Every sentence must agree with the ratings: do not call an element excellent if it is rated "Needs Improvement", and do not criticize an element rated "Outstanding".
-- Improvement language is constructive and behavior-focused (what to do), never personal.
+- Plain, professional, specific. Short sentences. No buzzwords, no flowery praise, no exclamation points.
+- Every sentence must agree with the ratings: do not call an element excellent if it is rated Minimally Satisfactory, and do not criticize an element rated Outstanding. You may borrow wording from an element's level_description.
+- Development language is constructive and behavior-focused (what to do), never personal.
+
+Item 9 has to fit one box on the form, so keep ALL FOUR remarks parts together to about 180 words:
+- "summary": 2-3 sentences supporting the overall rating and the element ratings.
+- "strengths": special accomplishments, 1-3 sentences, from the GM's notes.
+- "improvement": 1-2 sentences, or "" if the GM named nothing to work on and no element is below Satisfactory.
+- "goals": goals for the next rating period, 1-2 sentences.
+
+The Individual Development Plan:
+- "idp.learning": up to 3 short items (each under 90 characters) for skills to refresh or acquire, taken ONLY from the GM's training answer and goals. Do not include Navy-required training. [] if the GM gave none.
+- "idp.conferences": up to 3 short items (each under 90 characters) ONLY from the GM's classes/conferences answer, keeping any date and cost the GM gave. [] if none.
+- "idp.remarks": 1-2 sentences tying the employee's goals to their development, or "".
 
 Using the facts block:
-- Attendance numbers (call-outs, sick time) may be mentioned only in the context of the Dependability & Attendance element, and only if they support the GM's rating or notes. Never mention medical details.
+- Attendance numbers (call-outs, sick time) may be mentioned only in support of the Dependability rating, and only if they agree with the GM's rating or notes. Never mention medical details.
 - Do NOT mention disciplinary records, follow-ups, or anything personal unless the GM's own notes bring it up.
-- 1:1 summaries may be used to support a strength or goal the GM already named; do not introduce new topics from them.
-- Certifications may be mentioned as accomplishments or in the development plan.
-
-Lengths: "summary" 3-5 sentences; "strengths", "improvement", "goals" 2-5 sentences each; each element comment 1-2 sentences.
+- 1:1 summaries may support a strength or goal the GM already named; do not introduce new topics from them.
+- Certifications may be mentioned as accomplishments.
 
 Produce ONLY JSON, no prose, no markdown fences:
 {
@@ -54,7 +66,7 @@ Produce ONLY JSON, no prose, no markdown fences:
   "strengths": string,
   "improvement": string,
   "goals": string,
-  "elements": { "<element key>": string }   // one entry for EVERY element key provided
+  "idp": { "learning": string[], "conferences": string[], "remarks": string }
 }`;
 
 interface AnthropicTextBlock {
@@ -85,6 +97,7 @@ Deno.serve(async (req) => {
     const payload = {
       employee: body.employee ?? {},
       period_label: body.period_label ?? "",
+      supervisory: body.supervisory === true,
       overall: body.overall ?? null,
       elements,
       answers: Array.isArray(body.answers) ? body.answers : [],
@@ -134,20 +147,20 @@ Deno.serve(async (req) => {
     if (!parsed) return jsonError("The AI reply could not be read", 502);
 
     const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-    const elementOut: Record<string, string> = {};
-    if (parsed.elements && typeof parsed.elements === "object") {
-      for (const [key, value] of Object.entries(parsed.elements as Record<string, unknown>)) {
-        const t = text(value);
-        if (t) elementOut[key] = t;
-      }
-    }
+    const list = (v: unknown) =>
+      Array.isArray(v) ? v.map(text).filter(Boolean).slice(0, 3) : [];
+    const idp = (parsed.idp && typeof parsed.idp === "object" ? parsed.idp : {}) as Record<string, unknown>;
 
     return jsonResponse({
       summary: text(parsed.summary),
       strengths: text(parsed.strengths),
       improvement: text(parsed.improvement),
       goals: text(parsed.goals),
-      elements: elementOut,
+      idp: {
+        learning: list(idp.learning),
+        conferences: list(idp.conferences),
+        remarks: text(idp.remarks),
+      },
     });
   } catch (err) {
     console.error("[staff-evaluation-draft] Unexpected error:", err);
