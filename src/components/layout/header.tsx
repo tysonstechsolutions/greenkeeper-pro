@@ -19,6 +19,7 @@ import {
   Clock,
   Wind,
   Search,
+  LogOut,
 } from "lucide-react";
 import { getPageTitle, stripTrailingSlash } from "@/lib/utils/page-title";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import { notificationToUrl } from "@/lib/utils/notification-url";
 import { useScrollDirection } from "@/lib/hooks/useScrollDirection";
 import { APP_CONFIG } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
+import { SIGNED_OUT_PATH, unsyncedChangeCount } from "@/lib/auth/sign-out";
 import type { NotificationType } from "@/types/database";
 
 const notificationIcons: Record<NotificationType, React.ReactNode> = {
@@ -61,7 +63,27 @@ interface HeaderProps {
 export function Header({ onOpenSearch }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { profile, loading, refreshProfile } = useAuth();
+  const { profile, loading, refreshProfile, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  /** Log out so the next person on this device signs in as themselves. */
+  const handleSignOut = async () => {
+    const pending = await unsyncedChangeCount();
+    const who = profile?.full_name ? ` as ${profile.full_name}` : "";
+    const message =
+      pending > 0
+        ? `Log out${who}? ${pending} change${pending === 1 ? "" : "s"} made offline haven't synced yet and will be lost.`
+        : `Log out${who}?`;
+    if (!window.confirm(message)) return;
+    setSigningOut(true);
+    setMenuOpen(false);
+    try {
+      await signOut();
+    } finally {
+      // Full reload: nothing from the old account stays in memory.
+      window.location.replace(SIGNED_OUT_PATH);
+    }
+  };
   const { currentWeather, getAlerts, error: weatherError } = useWeather();
   const weatherAlerts = getAlerts();
   const {
@@ -451,6 +473,15 @@ export function Header({ onOpenSearch }: HeaderProps) {
                   Language
                 </span>
                 <span className="text-xs font-medium text-muted-foreground uppercase">{currentLang}</span>
+              </button>
+
+              <button
+                onClick={() => void handleSignOut()}
+                disabled={signingOut}
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-red-600 dark:text-red-400 border-t border-border hover:bg-muted/50 active:bg-muted/70 transition-colors"
+              >
+                {signingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+                {signingOut ? "Logging out…" : "Log out"}
               </button>
 
             </div>

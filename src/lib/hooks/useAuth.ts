@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { clearSignedInAccount } from "@/lib/auth/sign-out";
 import { createClient } from "@/lib/supabase/client";
 import { directSelectRow } from "@/lib/supabase/rest";
 import { supabaseAuthStorageKey } from "@/lib/supabase/persist-session";
@@ -334,7 +335,10 @@ export function useAuthInternal(): UseAuthReturn {
 
   const signOut = async () => {
     setError(null);
-    await supabase.auth.signOut();
+    // "local" signs out this device only; the account stays signed in on the
+    // person's other devices. The helper also clears the saved session and
+    // cached data even if Supabase's own sign-out stalls.
+    await clearSignedInAccount(() => supabase.auth.signOut({ scope: "local" }));
     setUser(null);
     setSession(null);
     setProfile(null);
