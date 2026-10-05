@@ -51,7 +51,15 @@ import {
   UNSATISFACTORY_NOTE,
   elementsFor,
 } from "@/lib/evaluations/form";
-import { fiscalYearOf, periodDisplay, periodFromFyParam } from "@/lib/evaluations/period";
+import {
+  defaultPeriod,
+  fiscalYearOf,
+  isIsoDate,
+  ninetyDayPeriod,
+  periodDisplay,
+  periodFromFyParam,
+} from "@/lib/evaluations/period";
+import { evaluationEditHref, evaluationListHref, type EvaluationTarget } from "@/lib/evaluations/links";
 import { appendSuggestions, type SuggestionTarget } from "@/lib/evaluations/suggestions";
 import { evaluationFilename, evaluationPdfBlob, type EvaluationPrintData } from "@/lib/evaluations/pdf";
 import {
@@ -106,18 +114,30 @@ function EvaluationEditor() {
   const router = useRouter();
   const params = useSearchParams();
   const employeeId = params.get("employee") ?? "";
-  const period = periodFromFyParam(params.get("fy"), todayLocal());
+  // `?kind=90day&start=<hire date>` opens a new hire's 90-day evaluation;
+  // otherwise it's the yearly one for `?fy=`.
+  const ninetyStart = params.get("kind") === "90day" ? params.get("start") : null;
+  const kind = ninetyStart !== null ? "ninety_day" : "annual";
+  const ninetyStartValid = isIsoDate(ninetyStart);
+  const period =
+    kind === "ninety_day"
+      ? ninetyDayPeriod(ninetyStartValid ? ninetyStart : todayLocal())
+      : periodFromFyParam(params.get("fy"), todayLocal());
   const fy = fiscalYearOf(period.end);
+  const target: EvaluationTarget = kind === "ninety_day" ? { ninetyDayStart: period.start } : { fy };
+  const listHref = evaluationListHref(target);
   const { hasRole } = useRoleAccess();
   const isManager = hasRole(ADMIN_ROLES);
   const { profile: me } = useAuth();
 
-  const { employee, evaluation, facts, suggestions, loadedFor, loading, error, save } = useEvaluation(employeeId, period);
+  const { employee, evaluation, facts, suggestions, loadedFor, loading, error, save } = useEvaluation(employeeId, period, kind);
   const viewer = useMemo(
     () => ({ id: me?.id ?? getCachedUserId(), isManager }),
     [me?.id, isManager],
   );
-  const roster = useEvaluationRoster(period, viewer);
+  // The yearly roster (for a 90-day evaluation, the current one) gives
+  // "who reports to whom" and the next person to do.
+  const roster = useEvaluationRoster(kind === "ninety_day" ? defaultPeriod(todayLocal()) : period, viewer);
 
   const [reason, setReason] = useState<RatingReason>("annual");
   const [supervisory, setSupervisory] = useState(false);
@@ -149,7 +169,7 @@ function EvaluationEditor() {
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   if (hydrateKey && hydrateKey !== hydratedFor && employee) {
     setHydratedFor(hydrateKey);
-    setReason(evaluation?.rating_reason ?? "annual");
+    setReason(kind === "ninety_day" ? "ninety_day" : evaluation?.rating_reason ?? "annual");
     setSupervisory(evaluation ? !!evaluation.supervisory : SUPERVISORY_ROLES.includes(employee.role));
     setRatings(evaluation?.ratings ?? {});
     setAnswers(evaluation?.answers ?? {});
@@ -317,7 +337,7 @@ function EvaluationEditor() {
       touch();
       setDraftNote(
         aiError
-          ? "The AI wasn't available, so the built-in writer drafted this from your answers. Read it over and edit anything."
+          ? `The AI wasn't available, so the built-in writer drafted this from your answers. Read it over and edit anything. (Why: ${aiError})`
           : "Drafted from your answers. Read it over and edit anything before you finalize.",
       );
     } finally {
@@ -444,9 +464,16 @@ function EvaluationEditor() {
     }
   }
 
-  const nextEmployee = roster.entries.find(
-    (e) => e.profile.id !== employeeId && e.progress !== "final",
-  );
+  const nextHref = (() => {
+    if (kind === "ninety_day") {
+      const next = roster.ninetyDay.find((e) => e.profile.id !== employeeId && e.progress !== "final");
+      return next
+        ? { name: next.profile.full_name, href: evaluationEditHref(next.profile.id, { ninetyDayStart: next.hireDate }) }
+        : null;
+    }
+    const next = roster.entries.find((e) => e.profile.id !== employeeId && e.progress !== "final");
+    return next ? { name: next.profile.full_name, href: evaluationEditHref(next.profile.id, { fy }) } : null;
+  })();
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -458,13 +485,22 @@ function EvaluationEditor() {
     );
   }
 
+  if (kind === "ninety_day" && !ninetyStartValid) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto text-sm text-muted-foreground">
+        This 90-day evaluation link is missing the hire date.{" "}
+        <Link className="underline" href="/staff/evaluations">Back to evaluations</Link>
+      </div>
+    );
+  }
+
   if (error || (!loading && loadedFor === currentKey && !employee)) {
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto">
         <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
           {error ?? "Employee not found."}
         </div>
-        <Link href={`/staff/evaluations?fy=${fy}`} className="inline-block mt-4 text-sm underline">
+        <Link href={listHref} className="inline-block mt-4 text-sm underline">
           Back to evaluations
         </Link>
       </div>
@@ -485,7 +521,7 @@ function EvaluationEditor() {
     <div className="p-4 md:p-6 pb-28 max-w-2xl mx-auto">
       {/* Header */}
       <Link
-        href={`/staff/evaluations?fy=${fy}`}
+        href={listHref}
         onClick={() => {
           void flush();
         }}
@@ -556,23 +592,35 @@ function EvaluationEditor() {
           )}
 
           <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-            <label className="block">
-              <span className="text-sm font-semibold">Reason for rating</span>
-              <select
-                className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
-                value={reason}
-                onChange={(e) => {
-                  setReason(e.target.value as RatingReason);
-                  touch();
-                }}
-              >
-                {(Object.keys(RATING_REASON_LABELS) as RatingReason[]).map((r) => (
-                  <option key={r} value={r}>
-                    {RATING_REASON_LABELS[r]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {kind === "ninety_day" ? (
+              <div>
+                <span className="text-sm font-semibold">Reason for rating</span>
+                <p className="mt-1 text-sm">
+                  {RATING_REASON_LABELS.ninety_day} — rates the first 90 days, through the 90-day mark.
+                </p>
+              </div>
+            ) : (
+              <label className="block">
+                <span className="text-sm font-semibold">Reason for rating</span>
+                <select
+                  className="mt-1 w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
+                  value={reason}
+                  onChange={(e) => {
+                    setReason(e.target.value as RatingReason);
+                    touch();
+                  }}
+                >
+                  {/* 90-day evaluations have their own list, dated from the hire date. */}
+                  {(Object.keys(RATING_REASON_LABELS) as RatingReason[])
+                    .filter((r) => r !== "ninety_day" || reason === "ninety_day")
+                    .map((r) => (
+                      <option key={r} value={r}>
+                        {RATING_REASON_LABELS[r]}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
@@ -950,15 +998,15 @@ function EvaluationEditor() {
           </div>
 
           <StickyNav>
-            {nextEmployee ? (
+            {nextHref ? (
               <Button
                 className="w-full gap-2 bg-[#1B4332] hover:bg-[#1B4332]/90 text-white"
-                onClick={() => router.push(`/staff/evaluations/edit?employee=${nextEmployee.profile.id}&fy=${fy}`)}
+                onClick={() => router.push(nextHref.href)}
               >
-                Next: {nextEmployee.profile.full_name || "Employee"} <ArrowRight className="w-4 h-4" />
+                Next: {nextHref.name || "Employee"} <ArrowRight className="w-4 h-4" />
               </Button>
             ) : (
-              <Button className="w-full gap-2" variant="outline" onClick={() => router.push(`/staff/evaluations?fy=${fy}`)}>
+              <Button className="w-full gap-2" variant="outline" onClick={() => router.push(listHref)}>
                 {roster.loading ? "Back to all evaluations" : "All done — back to the list"}
               </Button>
             )}

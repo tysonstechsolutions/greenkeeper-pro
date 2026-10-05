@@ -71,7 +71,7 @@ My Day tasks like "do yearly evals")
 
 1. Track after finalize: approving official signed → discussed → copy given
    (2-week deadline reminder in My Day).
-2. 90-day evaluation reminders from hire dates.
+2. ~~90-day evaluation reminders from hire dates.~~ Built 2026-10-05, see below.
 3. Separation/close-out prompt when someone is marked leaving.
 4. Enter last-4 SSN at download (not stored).
 5. Crew totals for pay increases / awards.
@@ -101,3 +101,20 @@ Verified against a local Postgres 16 with the real helper functions.
 2. `supabase functions deploy staff-evaluation-draft` (uses the existing
    `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` secrets). Optional — without it the
    built-in writer drafts.
+
+## New hires and 90-day evaluations (2026-10-05)
+
+- Anyone hired fewer than 90 days before Sep 30 gets no yearly evaluation for
+  that fiscal year. They drop off the yearly list (and the crew screen) and
+  show in a "Not due" note with their 90-day mark. A yearly evaluation that
+  was already started stays on the list. No hire date means they stay on.
+- Every new hire gets a 90-day evaluation at hire date + 90 days. The list
+  page shows a "90-day evaluations" section from 30 days before the mark
+  until 90 days after it (Coming up / Due now / Overdue), plus any unfinished
+  one. Opened at `/staff/evaluations/edit?employee=<id>&kind=90day&start=<hire date>`.
+- A 90-day evaluation is its own row (`rating_reason = ninety_day`, period =
+  hire date through the mark). Migration `20261005120000_ninety_day_evaluations.sql`
+  lets it share a start date with a yearly row (someone hired Oct 1).
+- Rules live in `src/lib/evaluations/period.ts` (`needsAnnualEvaluation`,
+  `ninetyDayPeriod`, `ninetyDayTiming`) and `splitRoster` in `use-evaluations.ts`.
+

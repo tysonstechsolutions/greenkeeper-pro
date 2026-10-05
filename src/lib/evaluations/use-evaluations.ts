@@ -12,10 +12,18 @@ import {
 import type { EngagementProfileRow, OneOnOneSession } from "@/lib/oneonone/types";
 import type { StaffConcern, StaffRecord } from "@/lib/staff/types";
 import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
+import { todayLocal } from "@/lib/utils/date";
 import { evaluationProgress } from "./compose";
 import { applyCrewRating, applyCrewSupervisory, defaultSupervisory, type CrewMember } from "./crew";
 import { buildFacts } from "./facts";
 import { FORM_VERSION } from "./form";
+import {
+  addDays,
+  NEW_HIRE_DAYS,
+  needsAnnualEvaluation,
+  ninetyDayTiming,
+  type NinetyDayTiming,
+} from "./period";
 import { applicableRatings } from "./questions";
 import { buildSuggestions, emptySuggestions, type EvaluationSuggestions } from "./suggestions";
 import {
@@ -43,6 +51,31 @@ export interface RosterEntry {
   progress: EvaluationProgress;
 }
 
+/** Someone whose 90-day evaluation is coming up, due, or overdue. */
+export interface NinetyDayEntry {
+  profile: RosterProfile;
+  hireDate: string;
+  /** The 90-day mark (hire date + 90 days). */
+  dueDate: string;
+  timing: NinetyDayTiming;
+  evaluation: StaffEvaluation | null;
+  progress: EvaluationProgress;
+}
+
+/** Left off the yearly list: hired fewer than 90 days before the period ended. */
+export interface NotDueEntry {
+  profile: RosterProfile;
+  hireDate: string;
+}
+
+/** Which evaluation an editor or query is about. */
+export type EvaluationKind = "annual" | "ninety_day";
+
+/** PostgREST filter that keeps one kind of evaluation row. */
+export function kindFilter(kind: EvaluationKind): string {
+  return kind === "ninety_day" ? "rating_reason=eq.ninety_day" : "rating_reason=neq.ninety_day";
+}
+
 /** Order the roster by what still needs doing, then by name. */
 const PROGRESS_ORDER: Record<EvaluationProgress, number> = {
   in_progress: 0,
@@ -51,16 +84,101 @@ const PROGRESS_ORDER: Record<EvaluationProgress, number> = {
   final: 3,
 };
 
+const TIMING_ORDER: Record<NinetyDayTiming, number> = { overdue: 0, due: 1, upcoming: 2 };
+
+interface RosterSplitInput {
+  profiles: RosterProfile[];
+  annual: StaffEvaluation[];
+  ninetyDay: StaffEvaluation[];
+  hireDates: Map<string, string | null>;
+  period: EvaluationPeriod;
+  viewer: { id: string | null; isManager: boolean };
+  todayIso: string;
+}
+
+/**
+ * Sort everyone the viewer evaluates into the yearly list, the 90-day list,
+ * and the "not due this year" note. Pure, for testing.
+ * - Yearly: active staff, except people hired fewer than 90 days before the
+ *   period ended. An evaluation already started always stays on the list.
+ * - 90-day: anyone whose 90-day mark is within the roster window, plus any
+ *   unfinished 90-day evaluation.
+ */
+export function splitRoster(input: RosterSplitInput): {
+  entries: RosterEntry[];
+  ninetyDay: NinetyDayEntry[];
+  notDue: NotDueEntry[];
+} {
+  const { period, viewer, todayIso } = input;
+  const annualBy = new Map(input.annual.map((e) => [e.employee_id, e]));
+  // Newest 90-day row per person.
+  const ninetyBy = new Map<string, StaffEvaluation>();
+  for (const e of input.ninetyDay) {
+    const prev = ninetyBy.get(e.employee_id);
+    if (!prev || e.created_at > prev.created_at) ninetyBy.set(e.employee_id, e);
+  }
+
+  const visible = input.profiles
+    .filter((p) => p.is_active !== false && p.id !== viewer.id)
+    .filter((p) => viewer.isManager || (viewer.id !== null && p.supervisor_id === viewer.id));
+
+  const entries: RosterEntry[] = [];
+  const notDue: NotDueEntry[] = [];
+  const ninetyDay: NinetyDayEntry[] = [];
+  for (const profile of visible) {
+    const hireDate = input.hireDates.get(profile.id) ?? null;
+    const evaluation = annualBy.get(profile.id) ?? null;
+    if (evaluation || needsAnnualEvaluation(hireDate, period)) {
+      entries.push({ profile, evaluation, progress: evaluationProgress(evaluation) });
+    } else if (hireDate && hireDate <= period.end) {
+      notDue.push({ profile, hireDate });
+    }
+
+    const row = ninetyBy.get(profile.id) ?? null;
+    // A started 90-day evaluation keeps its own dates; otherwise use the hire date.
+    const start = row?.period_start ?? hireDate;
+    if (!start) continue;
+    const timing = ninetyDayTiming(start, todayIso);
+    if (timing || (row && row.status !== "final")) {
+      ninetyDay.push({
+        profile,
+        hireDate: start,
+        dueDate: row?.period_end ?? addDays(start, NEW_HIRE_DAYS),
+        timing: timing ?? "overdue",
+        evaluation: row,
+        progress: evaluationProgress(row),
+      });
+    }
+  }
+
+  entries.sort(
+    (a, b) =>
+      PROGRESS_ORDER[a.progress] - PROGRESS_ORDER[b.progress] ||
+      (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""),
+  );
+  ninetyDay.sort(
+    (a, b) =>
+      Number(a.progress === "final") - Number(b.progress === "final") ||
+      TIMING_ORDER[a.timing] - TIMING_ORDER[b.timing] ||
+      a.dueDate.localeCompare(b.dueDate),
+  );
+  notDue.sort((a, b) => (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""));
+  return { entries, ninetyDay, notDue };
+}
+
 /**
  * Everyone who needs an evaluation this period, and where each one stands.
  * Managers see every active employee; a supervisor sees their direct reports.
- * The signed-in user is never on their own list.
+ * The signed-in user is never on their own list. New hires are split off
+ * into 90-day evaluations (see splitRoster).
  */
 export function useEvaluationRoster(
   period: EvaluationPeriod,
   viewer: { id: string | null; isManager: boolean },
 ) {
   const [entries, setEntries] = useState<RosterEntry[]>([]);
+  const [ninetyDay, setNinetyDay] = useState<NinetyDayEntry[]>([]);
+  const [notDue, setNotDue] = useState<NotDueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,43 +186,53 @@ export function useEvaluationRoster(
     setLoading(true);
     setError(null);
     try {
-      const [profiles, evaluations] = await Promise.all([
+      const [profiles, annual, ninety, personnel] = await Promise.all([
         directSelectList<RosterProfile>("profiles", {
           columns: "id,full_name,role,is_active,supervisor_id",
           orderBy: [{ column: "full_name", ascending: true }],
           label: "evaluations.roster.profiles",
         }),
         directSelectList<StaffEvaluation>(TABLE, {
-          filters: [`period_start=eq.${period.start}`],
+          filters: [`period_start=eq.${period.start}`, kindFilter("annual")],
           label: "evaluations.roster.evaluations",
         }),
+        directSelectList<StaffEvaluation>(TABLE, {
+          filters: [kindFilter("ninety_day")],
+          label: "evaluations.roster.ninety_day",
+        }),
+        // Hire dates decide who's new. A supervisor who can't read them just
+        // sees everyone on the yearly list, as before.
+        directSelectList<Pick<StaffPersonnelPrivate, "employee_id" | "hire_date">>("staff_personnel_private", {
+          columns: "employee_id,hire_date",
+          label: "evaluations.roster.hire_dates",
+        }).catch(() => []),
       ]);
-      const byEmployee = new Map(evaluations.map((e) => [e.employee_id, e]));
-      const list = profiles
-        .filter((p) => p.is_active !== false && p.id !== viewer.id)
-        .filter((p) => viewer.isManager || (viewer.id !== null && p.supervisor_id === viewer.id))
-        .map((profile) => {
-          const evaluation = byEmployee.get(profile.id) ?? null;
-          return { profile, evaluation, progress: evaluationProgress(evaluation) };
-        })
-        .sort(
-          (a, b) =>
-            PROGRESS_ORDER[a.progress] - PROGRESS_ORDER[b.progress] ||
-            (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""),
-        );
-      setEntries(list);
+      const split = splitRoster({
+        profiles,
+        annual,
+        ninetyDay: ninety,
+        hireDates: new Map(personnel.map((p) => [p.employee_id, p.hire_date])),
+        period,
+        viewer,
+        todayIso: todayLocal(),
+      });
+      setEntries(split.entries);
+      setNinetyDay(split.ninetyDay);
+      setNotDue(split.notDue);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load evaluations.");
     } finally {
       setLoading(false);
     }
-  }, [period.start, viewer.id, viewer.isManager]);
+    // period is identified by its start/end; viewer by id + manager flag
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period.start, period.end, viewer.id, viewer.isManager]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  return { entries, loading, error, reload: load };
+  return { entries, ninetyDay, notDue, loading, error, reload: load };
 }
 
 export interface EvaluationEmployee {
@@ -135,7 +263,7 @@ export type EvaluationPatch = Partial<
  * them. `save` creates the row on first write and patches it after; saves
  * run one at a time so quick autosaves can't race into a duplicate insert.
  */
-export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
+export function useEvaluation(employeeId: string, period: EvaluationPeriod, kind: EvaluationKind = "annual") {
   const [employee, setEmployee] = useState<EvaluationEmployee | null>(null);
   const [evaluation, setEvaluation] = useState<StaffEvaluation | null>(null);
   const [facts, setFacts] = useState<EvaluationFacts | null>(null);
@@ -173,8 +301,14 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
           "hire_date,certifications,personnel_details",
           "evaluations.employee.personnel",
         ).catch(() => null),
+        // A yearly evaluation is found by its period; a person's 90-day
+        // evaluation by its kind (its dates come from the hire date).
         directSelectList<StaffEvaluation>(TABLE, {
-          filters: [`employee_id=eq.${employeeId}`, `period_start=eq.${period.start}`],
+          filters:
+            kind === "ninety_day"
+              ? [`employee_id=eq.${employeeId}`, kindFilter("ninety_day")]
+              : [`employee_id=eq.${employeeId}`, `period_start=eq.${period.start}`, kindFilter("annual")],
+          orderBy: [{ column: "created_at", ascending: false }],
           limit: 1,
           label: "evaluations.row",
         }).then((rows) => rows[0] ?? null),
@@ -230,7 +364,7 @@ export function useEvaluation(employeeId: string, period: EvaluationPeriod) {
     }
     // period is identified by its start date
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, period.start]);
+  }, [employeeId, period.start, kind]);
 
   useEffect(() => {
     load();

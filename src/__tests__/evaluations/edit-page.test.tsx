@@ -10,10 +10,11 @@ import type { EvaluationPatch } from "@/lib/evaluations/use-evaluations";
 import type { StaffEvaluation } from "@/lib/evaluations/types";
 
 const push = vi.fn();
+const nav = vi.hoisted(() => ({ search: "employee=emp1&fy=2026" }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
   usePathname: () => "/staff/evaluations/edit",
-  useSearchParams: () => new URLSearchParams("employee=emp1&fy=2026"),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 vi.mock("@/lib/hooks/useAuth", () => ({
@@ -45,6 +46,7 @@ vi.mock("@/lib/utils/download-blob", () => ({
 
 // Data layer: a tiny in-memory stand-in for the Supabase-backed hook.
 const saves: EvaluationPatch[] = [];
+const loadedKinds: string[] = [];
 const filed: string[] = [];
 const filedBlobs: Blob[] = [];
 
@@ -60,13 +62,15 @@ vi.mock("@/lib/evaluations/use-evaluations", async () => {
         { profile: { id: "emp1", full_name: "Jane Smith", role: "crew", is_active: true, supervisor_id: null }, evaluation: null, progress: "not_started" },
         { profile: { id: "emp2", full_name: "Sam Lee", role: "crew", is_active: true, supervisor_id: null }, evaluation: null, progress: "not_started" },
       ],
+      ninetyDay: [],
+      notDue: [],
       loading: false,
       error: null,
       reload: async () => undefined,
     }),
-    useEvaluation: (employeeId: string, period: { start: string; end: string; label: string }) => {
+    useEvaluation: (employeeId: string, period: { start: string; end: string; label: string }, kind = "annual") => {
       const [evaluation, setEvaluation] = React.useState<StaffEvaluation | null>(null);
-      void employeeId;
+      loadedKinds.push(kind);
       const save = React.useCallback(
         async (patch: EvaluationPatch) => {
           saves.push(patch);
@@ -160,6 +164,8 @@ beforeEach(() => {
     ),
   );
   saves.length = 0;
+  loadedKinds.length = 0;
+  nav.search = "employee=emp1&fy=2026";
   filed.length = 0;
   filedBlobs.length = 0;
   push.mockClear();
@@ -211,6 +217,8 @@ describe("evaluation interview", () => {
 
     // Review: suggested overall picked, built-in draft filled in.
     expect(await screen.findByText(/The AI wasn't available/)).toBeInTheDocument();
+    // …and says why, so a missing deploy or API key is obvious.
+    expect(screen.getByText(/Why: not deployed/)).toBeInTheDocument();
     const overall = screen.getByRole("radiogroup", { name: "Overall rating" });
     expect(within(overall).getByRole("radio", { name: "4 Highly Satisfactory" })).toHaveAttribute("aria-checked", "true");
     const summary = screen.getByRole("textbox", { name: "Summary that supports the ratings" }) as HTMLTextAreaElement;
@@ -290,4 +298,26 @@ describe("evaluation interview", () => {
     expect(screen.getByText("Before finalizing:")).toBeInTheDocument();
     expect(saves.some((s) => s.status === "final")).toBe(false);
   }, 30_000);
+
+  it("opens a new hire's 90-day evaluation, dated from the hire date", async () => {
+    nav.search = "employee=emp1&kind=90day&start=2026-06-01";
+    const { user } = await renderPage();
+    await screen.findByRole("heading", { name: "Jane Smith" });
+    expect(screen.getByText(/90-Day \(Jun 1, 2026 – Aug 30, 2026\)/)).toBeInTheDocument();
+    expect(loadedKinds.every((k) => k === "ninety_day")).toBe(true);
+    // The reason is fixed, not a picker.
+    expect(screen.getByText(/rates the first 90 days/)).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).toBeNull();
+
+    await user.click(within(screen.getByRole("radiogroup", { name: elementsFor(false)[0].label })).getByRole("radio", { name: "3 Satisfactory" }));
+    await waitFor(() => expect(saves.length).toBeGreaterThan(0));
+    expect(saves[0].rating_reason).toBe("ninety_day");
+    expect(screen.getByRole("link", { name: /All evaluations/ })).toHaveAttribute("href", "/staff/evaluations");
+  }, 30_000);
+
+  it("explains a broken 90-day link instead of guessing dates", async () => {
+    nav.search = "employee=emp1&kind=90day&start=nope";
+    await renderPage();
+    expect(await screen.findByText(/missing the hire date/)).toBeInTheDocument();
+  });
 });

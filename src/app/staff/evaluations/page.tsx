@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer, Users } from "lucide-react";
+import { CalendarClock, ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess } from "@/components/auth/role-guard";
 import { getInitials, roleLabels } from "@/lib/hooks/useProfiles";
@@ -12,7 +12,15 @@ import { directSelectList, getCachedUserId } from "@/lib/supabase/rest";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayLocal } from "@/lib/utils/date";
 import { payPlanGrade } from "@/lib/evaluations/facts";
-import { fiscalYearOf, periodChoices, periodDisplay, periodFromFyParam } from "@/lib/evaluations/period";
+import {
+  addDays,
+  fiscalYearOf,
+  periodChoices,
+  periodDisplay,
+  periodFromFyParam,
+  NEW_HIRE_DAYS,
+} from "@/lib/evaluations/period";
+import { evaluationEditHref } from "@/lib/evaluations/links";
 import JSZip from "jszip";
 import {
   combinedEvaluationsPdfBlob,
@@ -20,7 +28,7 @@ import {
   evaluationPdfBlob,
   type EvaluationPrintData,
 } from "@/lib/evaluations/pdf";
-import { useEvaluationRoster } from "@/lib/evaluations/use-evaluations";
+import { useEvaluationRoster, type NinetyDayEntry } from "@/lib/evaluations/use-evaluations";
 import { PROGRESS_COLORS, PROGRESS_LABELS } from "@/lib/evaluations/types";
 import type { StaffPersonnelPrivate } from "@/types/database";
 
@@ -36,13 +44,13 @@ function EvaluationsRoster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [me?.id, me?.role],
   );
-  const { entries, loading, error } = useEvaluationRoster(period, viewer);
+  const { entries, ninetyDay, notDue, loading, error } = useEvaluationRoster(period, viewer);
   const [printing, setPrinting] = useState<null | "print" | "zip">(null);
   const [printError, setPrintError] = useState<string | null>(null);
 
   const finals = entries.filter((e) => e.progress === "final");
   const next = entries.find((e) => e.progress !== "final");
-  const editHref = (employeeId: string) => `/staff/evaluations/edit?employee=${employeeId}&fy=${fy}`;
+  const editHref = (employeeId: string) => evaluationEditHref(employeeId, { fy });
 
   /** Everything needed to fill each finished evaluation's form. */
   async function finishedPrintData(): Promise<EvaluationPrintData[]> {
@@ -140,6 +148,8 @@ function EvaluationsRoster() {
         </select>
       </label>
 
+      {!loading && !error && ninetyDay.length > 0 && <NinetyDaySection items={ninetyDay} />}
+
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
@@ -235,6 +245,76 @@ function EvaluationsRoster() {
           </div>
         </>
       )}
+
+      {!loading && !error && notDue.length > 0 && (
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+          <p className="font-medium">Not due a {period.label} evaluation</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Hired fewer than {NEW_HIRE_DAYS} days before {shortDate(period.end)}. They get a 90-day evaluation instead.
+          </p>
+          <ul className="mt-2 text-sm space-y-0.5">
+            {notDue.map(({ profile, hireDate }) => (
+              <li key={profile.id}>
+                {profile.full_name || "Employee"}{" "}
+                <span className="text-xs text-muted-foreground">
+                  · hired {shortDate(hireDate)} · 90-day mark {shortDate(addDays(hireDate, NEW_HIRE_DAYS))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function shortDate(iso: string): string {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+const TIMING_BADGE: Record<NinetyDayEntry["timing"], { text: string; cls: string }> = {
+  overdue: { text: "Overdue", cls: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200" },
+  due: { text: "Due now", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
+  upcoming: { text: "Coming up", cls: "bg-muted text-muted-foreground" },
+};
+
+/** New hires: each gets a 90-day evaluation at their 90-day mark. */
+function NinetyDaySection({ items }: { items: NinetyDayEntry[] }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 mb-4">
+      <h2 className="text-sm font-semibold flex items-center gap-2">
+        <CalendarClock className="w-4 h-4 text-[#1B4332] dark:text-emerald-400" />
+        90-day evaluations
+      </h2>
+      <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+        New hires get a 90-day evaluation at their 90-day mark (hire date + {NEW_HIRE_DAYS} days).
+      </p>
+      <div className="space-y-2">
+        {items.map((item) => {
+          const badge =
+            item.progress === "final"
+              ? { text: PROGRESS_LABELS.final, cls: PROGRESS_COLORS.final }
+              : item.progress === "not_started"
+                ? TIMING_BADGE[item.timing]
+                : { text: PROGRESS_LABELS[item.progress], cls: PROGRESS_COLORS[item.progress] };
+          return (
+            <Link
+              key={item.profile.id}
+              href={evaluationEditHref(item.profile.id, { ninetyDayStart: item.hireDate })}
+              className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate">{item.profile.full_name || "Employee"}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Hired {shortDate(item.hireDate)} · 90-day mark {shortDate(item.dueDate)}
+                </p>
+              </div>
+              <span className={`text-xs font-medium px-2 py-1 rounded-full shrink-0 ${badge.cls}`}>{badge.text}</span>
+              <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
