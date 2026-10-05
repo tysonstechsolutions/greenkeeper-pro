@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2, Download, Eye, FileText, AlertTriangle, CheckCircle, PencilLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
-import { useProfiles } from "@/lib/hooks/useProfiles";
-import { directSelectRow } from "@/lib/supabase/rest";
+import { directSelectList, directSelectRow } from "@/lib/supabase/rest";
+import { todayLocal } from "@/lib/utils/date";
+import { applyResignation, deactivateDepartedStaff, type ResignationResult } from "@/lib/staff/separation";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { generateSf52Report, sf52Filename, type Sf52Data } from "@/lib/reports/sf52-report";
 import {
@@ -25,6 +26,7 @@ import {
   getSf52Action,
   buildSf52Data,
   composeSf52Name,
+  toSf52Date,
   EMPTY_SF52_INPUTS,
   type Sf52FormInputs,
 } from "@/lib/sf52/actions";
@@ -53,7 +55,20 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 function Sf52Content() {
   const router = useRouter();
   const params = useSearchParams();
-  const { profiles } = useProfiles();
+  // Everyone, including people who have left: a Recruitment SF-52 names the
+  // departing employee, and a resignation may be filed after the last day.
+  const [profiles, setProfiles] = useState<{ id: string; full_name: string; is_active: boolean }[]>([]);
+  const loadProfiles = useCallback(async () => {
+    await deactivateDepartedStaff(todayLocal());
+    const rows = await directSelectList<{ id: string; full_name: string; is_active: boolean }>("profiles", {
+      columns: "id,full_name,is_active",
+      label: "sf52.profiles",
+    }).catch(() => []);
+    setProfiles(rows);
+  }, []);
+  useEffect(() => {
+    void loadProfiles();
+  }, [loadProfiles]);
 
   const [actionKey, setActionKey] = useState("recruitment");
   const action = getSf52Action(actionKey);
@@ -69,6 +84,8 @@ function Sf52Content() {
   const [previewBusy, setPreviewBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // What saving a resignation did to the staff list (or why it couldn't).
+  const [separation, setSeparation] = useState<ResignationResult | { error: string } | null>(null);
   const [presetKey, setPresetKey] = useState("");
   const [preview, setPreview] = useState<PreviewSource | null>(null);
   // When editing a saved SF-52 (?doc=<id>), saving updates this row in place.
@@ -123,10 +140,14 @@ function Sf52Content() {
     }));
   }
 
-  const employees = useMemo(
-    () => [...profiles].sort((a, b) => a.full_name.localeCompare(b.full_name)),
-    [profiles],
-  );
+  const employees = useMemo(() => {
+    const sorted = [...profiles].sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+    return {
+      active: sorted.filter((p) => p.is_active !== false),
+      // The selected person always shows, even if they've left.
+      left: sorted.filter((p) => p.is_active === false),
+    };
+  }, [profiles]);
 
   // Reset box-1 text (and the Part E skeleton) when the action changes.
   useEffect(() => {
@@ -252,6 +273,7 @@ function Sf52Content() {
     setBusy(true);
     setError(null);
     setDone(false);
+    setSeparation(null);
     try {
       const { blob, filename } = await buildPdf();
       await saveBlobToDevice({ blob, filename, shareTitle: filename });
@@ -272,6 +294,23 @@ function Sf52Content() {
         }
       }
       setDone(true);
+      // A resignation takes them off the active staff list (now, or the day
+      // after their last day). The SF-52 is already saved either way.
+      if (action.key === "resignation" && employeeId) {
+        try {
+          setSeparation(
+            await applyResignation({
+              employeeId,
+              fullName: employeeName,
+              effectiveDate: form.proposedEffectiveDate,
+              todayIso: todayLocal(),
+            }),
+          );
+          void loadProfiles();
+        } catch (e) {
+          setSeparation({ error: e instanceof Error ? e.message : "Couldn't update the staff list." });
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate the SF-52.");
     } finally {
@@ -321,9 +360,16 @@ function Sf52Content() {
             </Label>
             <select id="employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={selectCls}>
               <option value="">{action.key === "recruitment" ? "— New / vacant —" : "— Select —"}</option>
-              {employees.map((p) => (
+              {employees.active.map((p) => (
                 <option key={p.id} value={p.id}>{p.full_name}</option>
               ))}
+              {employees.left.length > 0 && (
+                <optgroup label="No longer active">
+                  {employees.left.map((p) => (
+                    <option key={p.id} value={p.id}>{p.full_name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         </div>
@@ -535,6 +581,24 @@ function Sf52Content() {
           <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800 flex items-start gap-2">
             <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
             SF-52 downloaded and saved to Documents. Keep tweaking and saving — it updates the same copy.
+          </div>
+        )}
+        {separation && "error" in separation && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            The SF-52 is saved, but {employeeName || "they"} couldn&apos;t be taken off the active staff list (
+            {separation.error}). Mark them inactive on their profile instead.
+          </div>
+        )}
+        {separation && !("error" in separation) && (
+          <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-800 flex items-start gap-2">
+            <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              {separation.removedNow
+                ? `${employeeName || "This employee"} was taken off the active staff list (last day ${toSf52Date(separation.lastDay)}).`
+                : `${employeeName || "This employee"} will come off the active staff list after their last day, ${toSf52Date(separation.lastDay)}.`}
+              {separation.scheduleUpdated ? " The pro shop schedule stops after that day too." : ""}
+            </span>
           </div>
         )}
 

@@ -309,6 +309,9 @@ export interface PersonnelDetails {
   employee_subgroup?: string | null; // HR subgroup, e.g. "Flex Continuing"
   position_start_date?: string | null; // yyyy-mm-dd, HR "Start Date"
   supervisory?: string | null; // "Yes" | "No" — HR "Supervisor Position"
+  // yyyy-mm-dd last day of work, set by a resignation SF-52. The person drops
+  // off the active staff list the day after (see lib/staff/separation.ts).
+  separation_date?: string | null;
   // Free-text scheduling preference (desired hours / availability). Updated
   // from a 1:1 when the employee asks for more/fewer hours; shown on their
   // profile so the schedule reflects what they want.

@@ -53,6 +53,8 @@ import {
   type StaffDocument,
 } from "@/lib/staff/types";
 import type { UserRole, Certification as Cert, PersonnelDetails } from "@/types/database";
+import { hasLeft } from "@/lib/staff/separation";
+import { todayLocal } from "@/lib/utils/date";
 import type { DutyDepartment, DutyRoleGroup } from "@/lib/operations/types";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
@@ -234,7 +236,11 @@ function ProfileContent() {
         supervisor_id: supervisorId || null,
         emergency_contact: emergency,
         certifications: certs,
-        personnel_details: cleanPd(pd),
+        // Reactivating someone whose recorded last day has passed (a rehire)
+        // clears that date, or they'd be taken off the active list again.
+        personnel_details: cleanPd(
+          isActive && hasLeft(pd.separation_date, todayLocal()) ? { ...pd, separation_date: "" } : pd,
+        ),
       });
       setInfoMsg("Saved.");
       setTimeout(() => setInfoMsg(null), 2500);
@@ -688,6 +694,13 @@ function ProfileContent() {
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
                 </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Last day (resignation)</Label>
+                <Input type="date" value={pd.separation_date || ""} onChange={(e) => setPdField("separation_date", e.target.value)} />
+                <p className="text-[11px] text-muted-foreground">Set by a resignation SF-52. They come off the active list the day after.</p>
               </div>
             </div>
           </div>

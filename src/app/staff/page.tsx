@@ -43,6 +43,7 @@ import type {
 import { todayLocal } from "@/lib/utils/date";
 import { AddStaffSheet } from "@/components/features/staff/add-staff-sheet";
 import { HrRosterImportSheet } from "@/components/features/staff/hr-roster-import-sheet";
+import { deactivateDepartedStaff } from "@/lib/staff/separation";
 import { ProShopRosterCard } from "@/components/features/pro-shop/roster-card";
 
 // Extended profile with additional details for staff page
@@ -108,6 +109,8 @@ export default function StaffPage() {
 
     try {
       const today = todayLocal();
+      // People whose resignation last day has passed come off the active list.
+      if (canEditStaff) await deactivateDepartedStaff(today);
 
       // Run directory, workload, and authorized personnel queries in parallel.
       // Profiles get a longer timeout (15s) because RLS evaluation on the

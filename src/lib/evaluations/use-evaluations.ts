@@ -13,6 +13,7 @@ import type { EngagementProfileRow, OneOnOneSession } from "@/lib/oneonone/types
 import type { StaffConcern, StaffRecord } from "@/lib/staff/types";
 import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
+import { deactivateDepartedStaff } from "@/lib/staff/separation";
 import { evaluationProgress } from "./compose";
 import { applyCrewRating, applyCrewSupervisory, defaultSupervisory, type CrewMember } from "./crew";
 import { buildFacts } from "./facts";
@@ -186,6 +187,8 @@ export function useEvaluationRoster(
     setLoading(true);
     setError(null);
     try {
+      // Someone whose resignation last day has passed is no longer evaluated.
+      if (viewer.isManager) await deactivateDepartedStaff(todayLocal());
       const [profiles, annual, ninety, personnel] = await Promise.all([
         directSelectList<RosterProfile>("profiles", {
           columns: "id,full_name,role,is_active,supervisor_id",

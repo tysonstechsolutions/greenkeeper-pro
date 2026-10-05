@@ -19,6 +19,8 @@ import { Label } from "@/components/ui/label";
 import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { directRpc, directSelectRow } from "@/lib/supabase/rest";
+import { clearPastSeparation } from "@/lib/staff/separation";
+import { todayLocal } from "@/lib/utils/date";
 import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
 
 const ROLES: { value: UserRole; label: string }[] = [
@@ -133,6 +135,9 @@ function PageContent() {
         },
         "settings.staff.view.save",
       );
+      // A rehire: drop a resignation last day that has passed, or the daily
+      // check would mark them inactive again.
+      if (isActive) await clearPastSeparation(staffId, todayLocal()).catch(() => false);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
