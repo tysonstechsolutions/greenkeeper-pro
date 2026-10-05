@@ -676,6 +676,19 @@ function ProfileContent() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1"><Label className="text-xs">Home cost center</Label><Input value={pd.cost_center || ""} onChange={(e) => setPdField("cost_center", e.target.value)} placeholder="5-digit" /></div>
+              <div className="space-y-1"><Label className="text-xs">Cost center name</Label><Input value={pd.cost_center_name || ""} onChange={(e) => setPdField("cost_center_name", e.target.value)} placeholder="e.g. GLK VM GOLF PROGRAM" /></div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Employee subgroup</Label><Input value={pd.employee_subgroup || ""} onChange={(e) => setPdField("employee_subgroup", e.target.value)} placeholder="e.g. Flex Continuing" /></div>
+              <div className="space-y-1"><Label className="text-xs">HR start date</Label><Input type="date" value={pd.position_start_date || ""} onChange={(e) => setPdField("position_start_date", e.target.value)} /></div>
+              <div className="space-y-1">
+                <Label className="text-xs">Supervisor position</Label>
+                <select value={pd.supervisory || ""} onChange={(e) => setPdField("supervisory", e.target.value)} className="w-full px-2 py-2.5 rounded-lg border border-input bg-background text-sm">
+                  <option value="">—</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
             </div>
           </div>
 

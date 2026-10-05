@@ -22,6 +22,7 @@ import {
   WifiOff,
   RefreshCw,
   TrendingUp,
+  ClipboardPaste,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -41,6 +42,7 @@ import type {
 } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 import { AddStaffSheet } from "@/components/features/staff/add-staff-sheet";
+import { HrRosterImportSheet } from "@/components/features/staff/hr-roster-import-sheet";
 import { ProShopRosterCard } from "@/components/features/pro-shop/roster-card";
 
 // Extended profile with additional details for staff page
@@ -87,6 +89,8 @@ export default function StaffPage() {
   // Opening it doesn't navigate anywhere; the form lives inline so the
   // manager stays on the staff list and the new row pops in on success.
   const [addStaffOpen, setAddStaffOpen] = useState(false);
+  // "Import HR roster" sheet — paste the HR export to update/add staff.
+  const [hrImportOpen, setHrImportOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -412,6 +416,12 @@ export default function StaffPage() {
               Manage Crews
             </Button>
           </Link>
+          {canEditStaff && (
+            <Button variant="outline" className="gap-2" onClick={() => setHrImportOpen(true)}>
+              <ClipboardPaste className="w-4 h-4" />
+              Import HR roster
+            </Button>
+          )}
           <Button className="gap-2" onClick={() => setAddStaffOpen(true)}>
             <UserPlus className="w-4 h-4" />
             Add Staff
@@ -897,6 +907,15 @@ export default function StaffPage() {
           fetchStaff();
         }}
       />
+
+      {canEditStaff && (
+        <HrRosterImportSheet
+          open={hrImportOpen}
+          onOpenChange={setHrImportOpen}
+          staff={profiles}
+          onDone={fetchStaff}
+        />
+      )}
     </div>
       )}
     </RoleGuard>

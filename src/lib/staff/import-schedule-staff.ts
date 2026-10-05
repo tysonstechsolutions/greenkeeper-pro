@@ -13,7 +13,7 @@
 import { directInsertRow, directRpc, getCachedUserId } from "@/lib/supabase/rest";
 import { callApi } from "@/lib/api/client";
 import type { ProShopStaff, ProShopPosition } from "@/lib/pro-shop/types";
-import type { Invite } from "@/types/database";
+import type { Invite, InviteRole } from "@/types/database";
 
 export function normalizeStaffName(name: string | null | undefined): string {
   return (name || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -69,41 +69,50 @@ export interface ImportScheduleStaffResult {
 }
 
 /**
+ * Create one staff account the same way the "Add Staff" sheet does: an
+ * invite row, then pin-signup (auth user + profile + PIN, no email sent).
+ * Returns the new profile id. The random PIN is retried on collisions.
+ */
+export async function provisionStaffAccount(
+  fullName: string,
+  options: { role?: InviteRole; phone?: string | null } = {},
+): Promise<string> {
+  const managerId = getCachedUserId();
+  if (!managerId) throw new Error("You must be signed in to add staff.");
+
+  const invite = await directInsertRow<Invite>(
+    "invites",
+    { role: options.role ?? "seasonal", email: null, created_by: managerId },
+    "provisionStaffAccount.invite",
+  );
+
+  let lastError = "Failed to create the staff account.";
+  // Random PINs can collide with existing ones — retry a couple times.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await callApi<PinSignupResponse>("pin-signup", {
+      method: "POST",
+      body: { token: invite.token, fullName, phone: options.phone || null, pin: randomPin() },
+    });
+    if (res?.success && res.user) return res.user.id;
+    lastError = res?.error || lastError;
+    if (!/PIN is already in use/i.test(lastError)) break;
+  }
+  throw new Error(lastError);
+}
+
+/**
  * Provision profiles for the given schedule staff. Continues past individual
  * failures so one bad row doesn't block the rest.
  */
 export async function importScheduleStaff(staff: ProShopStaff[]): Promise<ImportScheduleStaffResult> {
-  const managerId = getCachedUserId();
-  if (!managerId) throw new Error("You must be signed in to add staff.");
+  if (!getCachedUserId()) throw new Error("You must be signed in to add staff.");
 
   const result: ImportScheduleStaffResult = { added: [], failed: [] };
 
   for (const s of staff) {
     const name = s.full_name.trim();
     try {
-      // Same flow as the Add Staff sheet: invite -> pin-signup.
-      const invite = await directInsertRow<Invite>(
-        "invites",
-        { role: "seasonal", email: null, created_by: managerId },
-        "importScheduleStaff.invite",
-      );
-
-      let user: { id: string } | null = null;
-      let lastError = "Failed to create the staff account.";
-      // Random PINs can collide with existing ones — retry a couple times.
-      for (let attempt = 0; attempt < 3 && !user; attempt++) {
-        const res = await callApi<PinSignupResponse>("pin-signup", {
-          method: "POST",
-          body: { token: invite.token, fullName: name, phone: s.phone || null, pin: randomPin() },
-        });
-        if (res?.success && res.user) {
-          user = res.user;
-        } else {
-          lastError = res?.error || lastError;
-          if (!/PIN is already in use/i.test(lastError)) break;
-        }
-      }
-      if (!user) throw new Error(lastError);
+      const userId = await provisionStaffAccount(name, { role: "seasonal", phone: s.phone || null });
 
       // Seed SF-52 personnel details with what the schedule knows. Best
       // effort — the profile exists either way.
@@ -111,15 +120,15 @@ export async function importScheduleStaff(staff: ProShopStaff[]): Promise<Import
       await directRpc(
         "update_staff_profile",
         {
-          p_employee_id: user.id,
+          p_employee_id: userId,
           p_directory: {},
           p_personnel: {
             personnel_details: {
-            name_first: split.first,
-            name_middle: split.middle,
-            name_last: split.last,
-            position_title: scheduleStaffPositionTitle(s.position),
-            work_schedule: "Flex",
+              name_first: split.first,
+              name_middle: split.middle,
+              name_last: split.last,
+              position_title: scheduleStaffPositionTitle(s.position),
+              work_schedule: "FLEX",
             },
           },
         },

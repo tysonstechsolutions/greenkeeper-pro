@@ -305,6 +305,10 @@ export interface PersonnelDetails {
   avg_hours?: string | null; // average hours for a flex employee
   flsa?: string | null; // "E" (exempt) | "N" (nonexempt)
   cost_center?: string | null; // 5-digit home cost center
+  cost_center_name?: string | null; // e.g. "GLK VM GOLF PROGRAM"
+  employee_subgroup?: string | null; // HR subgroup, e.g. "Flex Continuing"
+  position_start_date?: string | null; // yyyy-mm-dd, HR "Start Date"
+  supervisory?: string | null; // "Yes" | "No" — HR "Supervisor Position"
   // Free-text scheduling preference (desired hours / availability). Updated
   // from a 1:1 when the employee asks for more/fewer hours; shown on their
   // profile so the schedule reflects what they want.
