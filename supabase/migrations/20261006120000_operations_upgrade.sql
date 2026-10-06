@@ -91,21 +91,28 @@ BEGIN
 END;
 $function$;
 
-DO $guard$
-DECLARE t TEXT;
-BEGIN
-  FOREACH t IN ARRAY ARRAY[
-    'pro_shop_staff', 'pro_shop_schedules', 'pro_shop_shifts', 'pro_shop_time_off',
-    'pro_shop_coverage_rules', 'pro_shop_schedule_settings', 'pro_shop_week_templates'
-  ] LOOP
-    EXECUTE format('DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.%I', t);
-    EXECUTE format(
-      'CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area()',
-      t
-    );
-  END LOOP;
-END
-$guard$;
+-- One guard trigger per schedule table (written out, no DO block, for the SQL editor).
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_staff;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_staff
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_schedules;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_schedules
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_shifts;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_shifts
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_time_off;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_time_off
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_coverage_rules;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_coverage_rules
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_schedule_settings;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_schedule_settings
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
+DROP TRIGGER IF EXISTS trg_fb_manager_schedule_area ON public.pro_shop_week_templates;
+CREATE TRIGGER trg_fb_manager_schedule_area BEFORE INSERT OR UPDATE OR DELETE ON public.pro_shop_week_templates
+  FOR EACH ROW EXECUTE FUNCTION public.guard_fb_manager_schedule_area();
 
 -- Reading: managers see every area, the F&B Manager sees Buckleys.
 CREATE OR REPLACE FUNCTION public.can_read_schedule_area(p_area TEXT)
