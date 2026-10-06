@@ -37,6 +37,7 @@ import { createClient } from "@/lib/supabase/client";
 import { callApi, resolveAccessToken } from "@/lib/api/client";
 import { markOrderItemsOrderedFromPR } from "@/lib/order-list/mark-ordered";
 import { takePrPrefill } from "@/lib/restaurant/order-guide";
+import { learnedLineCodes } from "@/lib/accounting/learned";
 import {
   PR_INVOICE_DEFAULTS,
   PR_DELIVERY_DEFAULTS,
@@ -1395,8 +1396,24 @@ function NewPurchaseRequestPageInner() {
   // finished; codes already picked are never changed, only hinted.
   const codeContext = contextForRole(profile?.role, profile?.department);
   const vendorForCodes = vendors.find((v) => v.id === vendorId)?.name ?? "";
-  const codeSuggestionsFor = (item: PurchaseRequestItem) =>
-    recommendLineCodes(`${item.description ?? ""} ${vendorForCodes}`, codeContext);
+  // A line that reads like something bought before gets that line's codes
+  // (what was actually used and approved); otherwise the keyword rules.
+  // Site and G/L follow the cost center actually chosen.
+  const codeSuggestionsFor = (item: PurchaseRequestItem) => {
+    const text = `${item.description ?? ""} ${vendorForCodes}`;
+    const rules = recommendLineCodes(text, codeContext);
+    const learned = (item.description ?? "").trim()
+      ? learnedLineCodes(item.description, item.part_number, vendorForCodes, partHistory.entries)
+      : null;
+    const costCenter = learned?.costCenter ?? rules.costCenter;
+    const cc = item.cost_ctr || costCenter?.code;
+    const learnedFits = !!learned && (!learned.costCenter || learned.costCenter.code === cc);
+    return {
+      costCenter,
+      site: (learnedFits && learned?.site) || recommendSite(cc),
+      glAccount: (learnedFits && learned?.glAccount) || recommendGlAccount(text, cc),
+    };
+  };
   function fillBlankCodes(idx: number) {
     setItems((prev) =>
       prev.map((it, i) => {
@@ -3369,10 +3386,8 @@ function NewPurchaseRequestPageInner() {
                   // Fee lines follow the other lines' codes, so no hints there.
                   const rec = isFee ? null : codeSuggestionsFor(item);
                   // The site and G/L hints follow the cost center actually chosen.
-                  const siteRec = rec ? recommendSite(item.cost_ctr || rec.costCenter?.code) : null;
-                  const glRec = rec
-                    ? recommendGlAccount(`${item.description ?? ""} ${vendorForCodes}`, item.cost_ctr || rec.costCenter?.code)
-                    : null;
+                  const siteRec = rec?.site ?? null;
+                  const glRec = rec?.glAccount ?? null;
                   return (
                     <>
                       <Field label="Cost Ctr">

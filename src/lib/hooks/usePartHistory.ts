@@ -41,6 +41,10 @@ export interface PartHistoryEntry {
   count: number;
   /** Last date_prepared we saw this on (ISO). */
   last_used: string;
+  /** Accounting codes on the most recent PR line for this item ("" when blank). */
+  site?: string;
+  cost_ctr?: string;
+  gl_acct?: string;
 }
 
 function normalizeKey(item: { part_number?: string; description?: string }): string {
@@ -102,6 +106,9 @@ export function usePartHistory() {
                 vendor: row.vendor1_name || null,
                 count: 1,
                 last_used: row.date_prepared,
+                site: (it.site || "").trim(),
+                cost_ctr: (it.cost_ctr || "").trim(),
+                gl_acct: (it.gl_acct || "").trim(),
               });
             }
           }
