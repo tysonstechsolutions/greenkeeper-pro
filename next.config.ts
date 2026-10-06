@@ -45,6 +45,20 @@ const nextConfig: NextConfig = {
 
   // Silence Next.js 16 turbopack warning about legacy webpack config paths.
   turbopack: {},
+
+  // Sentry's server SDK pulls in OpenTelemetry, which loads its plugins with
+  // a dynamic require(). Webpack can't follow that and warns on every build;
+  // it's harmless (and unused in a static export). Hide only that warning.
+  webpack: (config) => {
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      {
+        module: /@opentelemetry[\\/]instrumentation/,
+        message: /Critical dependency: the request of a dependency is an expression/,
+      },
+    ];
+    return config;
+  },
 };
 
 export default nextConfig;

@@ -1346,6 +1346,7 @@ function NewPurchaseRequestPageInner() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per PR; the profile only fills a requestor the saved PR left blank
   }, [editId, fromId]);
 
   // ── Computed totals ──────────────────────────────────────────────────────

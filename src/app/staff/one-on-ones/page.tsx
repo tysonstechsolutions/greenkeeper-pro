@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   MessageSquareHeart,
   TrendingUp,
-  Loader2,
   Sparkles,
   Clock,
   ChevronRight,
