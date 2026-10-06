@@ -36,7 +36,8 @@ import {
   prepareWorkOrderPhoto,
   uploadWorkOrderPhotos,
 } from "@/lib/work-orders/photos";
-import { PR_COST_CENTERS } from "@/lib/pr-accounting-codes";
+import { CodePicker } from "@/components/accounting/code-picker";
+import { contextForRole, recommendWorkOrderCostCenter } from "@/lib/accounting/recommend";
 
 // ── Fixed SECTION 2 values ──────────────────────────────────────────────────────
 
@@ -506,19 +507,20 @@ export function NewWorkOrderForm({ onCreated }: Props) {
 
           <div className="space-y-1.5">
             <Label htmlFor="wo-cc">Cost Center</Label>
-            <select
+            <CodePicker
               id="wo-cc"
+              kind="cost_center"
+              ariaLabel="Cost Center"
               value={costCenter}
-              onChange={(e) => setCostCenter(e.target.value)}
+              onChange={setCostCenter}
+              emptyLabel="Select cost center…"
+              suggestion={recommendWorkOrderCostCenter(
+                `${facility} ${programAreaRoom}`,
+                description,
+                contextForRole(profile?.role, profile?.department),
+              )}
               className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base"
-            >
-              <option value="">Select cost center…</option>
-              {PR_COST_CENTERS.map((cc) => (
-                <option key={cc.value} value={cc.value}>
-                  {cc.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Photos */}

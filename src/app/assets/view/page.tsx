@@ -1,5 +1,6 @@
 "use client";
 
+import { codeLabel } from "@/lib/accounting/recommend";
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -1121,8 +1122,8 @@ function PageContent() {
         <CardContent className="p-4">
           <p className="text-sm font-semibold mb-2">Asset details</p>
           <DetailRow label="Site" value={fy26AssetSiteLabels[asset.site] ?? asset.site} />
-          <DetailRow label="Cost Center" value={asset.cost_center} />
-          <DetailRow label="Resp. Cost Center" value={asset.resp_cost_center} />
+          <DetailRow label="Cost Center" value={codeLabel("cost_center", asset.cost_center) || asset.cost_center} />
+          <DetailRow label="Resp. Cost Center" value={codeLabel("cost_center", asset.resp_cost_center) || asset.resp_cost_center} />
           <DetailRow
             label="Asset #"
             value={<span className="font-mono">{asset.asset_number}</span>}

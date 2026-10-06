@@ -110,12 +110,12 @@ export function auditInFiscalMonth(
   );
 }
 
-/** Default seed list (built-in golf-course cost centers) — all "Golf Course". */
+/** Default seed list: the golf course's cost centers, plus Buckley's under Food and Beverage. */
 const DEFAULT_COST_CENTERS: RollupCostCenter[] = PR_COST_CENTERS.map((c) => ({
   code: c.value,
   label: c.label,
   categoryId: null,
-  category: "Golf Course",
+  category: c.value === "20091" ? "Food and Beverage" : "Golf Course",
 }));
 
 function num(v: unknown): number {

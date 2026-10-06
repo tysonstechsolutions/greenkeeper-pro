@@ -28,8 +28,8 @@ export const AREA_BY_REVENUE_CATEGORY: Record<string, MoneyArea> = {
 };
 
 /**
- * NAF cost-center code → area (the five authorized PR codes, see
- * pr-accounting-codes.ts). Unknown codes fall to "unassigned" and are shown
+ * NAF cost-center code → area (the golf course's five codes plus Buckley's,
+ * see pr-accounting-codes.ts). Unknown codes fall to "unassigned" and are shown
  * as their own bucket rather than silently lumped somewhere.
  */
 export const AREA_BY_COST_CENTER: Record<string, MoneyArea> = {
@@ -38,6 +38,7 @@ export const AREA_BY_COST_CENTER: Record<string, MoneyArea> = {
   "25224": "range", // GOLF RANGE PROG
   "25229": "course", // GC CLUB/CART RENTAL
   "25581": "course", // GC MAINTENANCE
+  "20091": "restaurant", // BUCKLEY'S F & B
 };
 
 export function areaForRevenueCategory(category: string): MoneyArea {

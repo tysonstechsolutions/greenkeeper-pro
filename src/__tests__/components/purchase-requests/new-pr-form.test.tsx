@@ -226,3 +226,34 @@ describe("IGE Based On / Other attachment", () => {
     expect(fieldControl("Other (specify)")).toHaveValue(expected);
   });
 });
+
+describe("accounting codes", () => {
+  it("fills blank Site / Cost Ctr / G/L from the description and offers a better one later", async () => {
+    const { user } = await renderForm();
+    await openSection(user, /^Line Items/);
+    await user.click(screen.getByRole("button", { name: /Add Line Item/ }));
+
+    // The new line's description (the fee line's is read-only).
+    const description = screen
+      .getAllByPlaceholderText("e.g. Toro Greensmaster 3150 mower blade")
+      .find((el) => !el.hasAttribute("readonly")) as HTMLTextAreaElement;
+    await user.type(description, "Fertilizer 18-0-18 50 lb bag");
+    await user.tab(); // finishing the description fills blank codes
+
+    const cc = screen.getByLabelText("Line 1 cost center") as HTMLSelectElement;
+    const site = screen.getByLabelText("Line 1 site") as HTMLSelectElement;
+    const gl = screen.getByLabelText("Line 1 G/L account") as HTMLSelectElement;
+    expect([cc.value, site.value, gl.value]).toEqual(["25581", "7010", "684000"]);
+
+    // A picked code is never replaced; a different suggestion is only offered.
+    await user.selectOptions(gl, "701000");
+    expect(gl.value).toBe("701000");
+    expect(screen.getByRole("button", { name: "Use suggested G/L account 684000" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Use suggested G/L account 684000" }));
+    expect(gl.value).toBe("684000");
+
+    // Every official code is choosable, e.g. Buckley's.
+    expect(cc.querySelector("option[value='20091']")).not.toBeNull();
+    expect(cc.querySelector("option[value='20574']")).not.toBeNull();
+  });
+});

@@ -65,6 +65,8 @@ export interface Sf52FormInputs {
   toHourlyRate: string;
   /** Last line of the box 14/22 organization block (Maintenance, Restaurant…). */
   orgUnit: string;
+  /** Box 35 appropriation code (the cost center). Blank uses the employee's. */
+  costCenter: string;
   // Part D (recruitment)
   numRecruitments: string;
   areasOfConsideration: string;
@@ -96,6 +98,7 @@ export const EMPTY_SF52_INPUTS: Sf52FormInputs = {
   toStep: "",
   toHourlyRate: "",
   orgUnit: SF52_FACILITY.defaultOrgUnit,
+  costCenter: "",
   numRecruitments: "1",
   areasOfConsideration: "All Areas",
   proposedSalaryRange: "",
@@ -151,7 +154,7 @@ export function buildSf52Data(
     workSchedule: pd?.work_schedule || "",
     ptHours: pd?.avg_hours || "",
     flsa: pd?.flsa || "",
-    appropriationCode: pd?.cost_center || "",
+    appropriationCode: f.costCenter.trim() || pd?.cost_center || "",
     dutyStationCode: SF52_FACILITY.dutyStationCode,
     dutyStation: SF52_FACILITY.dutyStation,
   };

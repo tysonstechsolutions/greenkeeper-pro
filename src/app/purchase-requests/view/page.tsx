@@ -25,6 +25,7 @@ import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { directPatchRow, publicStorageUrl } from "@/lib/supabase/rest";
 import { canChangePurchaseRequest, canUsePurchaseRequests } from "@/lib/auth/fb-manager";
+import { codeLabel } from "@/lib/accounting/recommend";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import {
   prVariance,
@@ -1615,19 +1616,19 @@ function ViewPurchaseRequestInner() {
                     {it.site && (
                       <>
                         <span className="text-muted-foreground">Site:</span>
-                        <span>{it.site}</span>
+                        <span>{codeLabel("site", it.site)}</span>
                       </>
                     )}
                     {it.cost_ctr && (
                       <>
                         <span className="text-muted-foreground">Cost Ctr:</span>
-                        <span>{it.cost_ctr}</span>
+                        <span>{codeLabel("cost_center", it.cost_ctr)}</span>
                       </>
                     )}
                     {it.gl_acct && (
                       <>
                         <span className="text-muted-foreground">G/L Acct:</span>
-                        <span>{it.gl_acct}</span>
+                        <span>{codeLabel("gl_account", it.gl_acct)}</span>
                       </>
                     )}
                   </div>

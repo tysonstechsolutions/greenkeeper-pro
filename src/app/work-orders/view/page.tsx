@@ -1,5 +1,6 @@
 "use client";
 
+import { codeLabel } from "@/lib/accounting/recommend";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -387,7 +388,7 @@ function ViewWorkOrderInner() {
           label="Program Area / Room"
           value={wo.program_area_room || "—"}
         />
-        <Detail label="Cost Center" value={wo.cost_center || "—"} />
+        <Detail label="Cost Center" value={codeLabel("cost_center", wo.cost_center) || "—"} />
       </SectionCard>
 
       <SectionCard title="Description of Work">

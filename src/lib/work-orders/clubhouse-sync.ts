@@ -9,6 +9,7 @@
  * All sync writes are best-effort: a failure here must never block the work-order
  * or issue action the user actually took.
  */
+import { recommendWorkOrderCostCenter } from "@/lib/accounting/recommend";
 import { directInsertRow, directPatchByFilter, getCachedUserId } from "@/lib/supabase/rest";
 
 // Fixed POCs for golf work orders (mirrors the new-work-order form).
@@ -139,7 +140,8 @@ export async function createWorkOrderFromIssue(issue: {
       nature_of_request: null,
       facility_bldg: facility,
       program_area_room: issue.location || null,
-      cost_center: null,
+      // Where the issue is decides the cost center (maintenance shop, Buckley's…).
+      cost_center: recommendWorkOrderCostCenter(`${facility} ${issue.location ?? ""}`, desc).code,
       description_of_work: desc,
       work_type: "Routine",
       primary_poc_email: WO_POC.primaryEmail,

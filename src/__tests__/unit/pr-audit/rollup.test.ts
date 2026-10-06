@@ -116,12 +116,13 @@ function row(rows: ReturnType<typeof buildCostCenterRollup>, cc: string) {
 }
 
 describe("buildCostCenterRollup", () => {
-  it("always includes the five built-in cost centers (default seed)", () => {
+  it("always includes the built-in cost centers (golf course + Buckley's)", () => {
     const rows = buildCostCenterRollup([], [], 2026);
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6);
     expect(rows.map((r) => r.cost_ctr)).toEqual([
       "20086",
       "20087",
+      "20091",
       "25224",
       "25229",
       "25581",

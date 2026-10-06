@@ -55,6 +55,9 @@ import {
 } from "@/lib/staff/types";
 import type { UserRole, Certification as Cert, PersonnelDetails } from "@/types/database";
 import { hasLeft } from "@/lib/staff/separation";
+import { CodePicker } from "@/components/accounting/code-picker";
+import { recommendHomeCostCenter } from "@/lib/accounting/recommend";
+import { COST_CENTER_CODES } from "@/lib/accounting/official-codes";
 import { todayLocal } from "@/lib/utils/date";
 import type { DutyDepartment, DutyRoleGroup } from "@/lib/operations/types";
 
@@ -691,7 +694,22 @@ function ProfileContent() {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1"><Label className="text-xs">Home cost center</Label><Input value={pd.cost_center || ""} onChange={(e) => setPdField("cost_center", e.target.value)} placeholder="5-digit" /></div>
+              <div className="space-y-1">
+                <Label className="text-xs">Home cost center</Label>
+                <CodePicker
+                  kind="cost_center"
+                  ariaLabel="Home cost center"
+                  value={pd.cost_center}
+                  onChange={(v) => {
+                    setPdField("cost_center", v);
+                    const name = COST_CENTER_CODES.find((c) => c.code === v)?.label;
+                    if (name) setPdField("cost_center_name", name);
+                  }}
+                  suggestion={recommendHomeCostCenter(pd.position_title, department || null)}
+                  emptyLabel="— none —"
+                  className="w-full px-2 py-2.5 rounded-lg border border-input bg-background text-sm"
+                />
+              </div>
               <div className="space-y-1"><Label className="text-xs">Cost center name</Label><Input value={pd.cost_center_name || ""} onChange={(e) => setPdField("cost_center_name", e.target.value)} placeholder="e.g. GLK VM GOLF PROGRAM" /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

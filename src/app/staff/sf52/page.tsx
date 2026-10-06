@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ADMIN_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { staffForViewer } from "@/lib/auth/fb-manager";
+import { CodePicker } from "@/components/accounting/code-picker";
+import { codeLabel, recommendHomeCostCenter } from "@/lib/accounting/recommend";
 import { directSelectList, directSelectRow } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 import { applyResignation, deactivateDepartedStaff, type ResignationResult } from "@/lib/staff/separation";
@@ -180,6 +182,8 @@ function Sf52Content() {
       if (!employeeId) {
         setPd(null);
         setEmployeeName("");
+        // A cost center carried in from a previously picked employee goes too.
+        if (!restoreRef.current.skipEmployeeSeed) setForm((f) => ({ ...f, costCenter: "" }));
         return;
       }
       const [row, personnel] = await Promise.all([
@@ -217,6 +221,7 @@ function Sf52Content() {
         toPayBand: details?.pay_band || "",
         toStep: details?.step || "",
         toHourlyRate: details?.hourly_rate || "",
+        costCenter: details?.cost_center || "",
         proposedSalaryRange:
           f.proposedSalaryRange || (details?.hourly_rate ? `$${details.hourly_rate}` : ""),
       }));
@@ -378,6 +383,25 @@ function Sf52Content() {
               )}
             </select>
           </div>
+        </div>
+
+        {/* Box 35 — appropriation code (cost center). From the employee's
+            record when there is one; otherwise suggested from the position. */}
+        <div className="space-y-1.5">
+          <Label htmlFor="sf52-cost-center">Cost center (box 35, appropriation code)</Label>
+          <CodePicker
+            id="sf52-cost-center"
+            kind="cost_center"
+            ariaLabel="SF-52 cost center"
+            value={form.costCenter || pd?.cost_center || ""}
+            onChange={(v) => update("costCenter", v)}
+            suggestion={recommendHomeCostCenter(
+              form.toPositionTitle || pd?.position_title,
+              /restaurant|buckley|f&b|food/i.test(form.orgUnit) ? "food_and_beverage" : /maint/i.test(form.orgUnit) ? "maintenance" : null,
+            )}
+            emptyLabel="— none —"
+            className={selectCls}
+          />
         </div>
 
         {needsEmployee && employeeId && !pd && (
@@ -570,7 +594,7 @@ function Sf52Content() {
           <p className="font-medium text-foreground">Auto-filled from the employee &amp; facility:</p>
           {action.fillFrom && <p>Current position: {pd ? composeFrom(pd) : "—"}</p>}
           <p>Name: {action.key === "recruitment" ? "(blank — vacancy)" : composeSf52Name(pd) || "—"}</p>
-          <p>Work schedule: {pd?.work_schedule || "—"} · FLSA: {pd?.flsa || "—"} · Cost center: {pd?.cost_center || "—"}</p>
+          <p>Work schedule: {pd?.work_schedule || "—"} · FLSA: {pd?.flsa || "—"} · Cost center: {codeLabel("cost_center", form.costCenter || pd?.cost_center) || "—"}</p>
           <p>Duty station: {SF52_FACILITY.dutyStation} ({SF52_FACILITY.dutyStationCode})</p>
           <p>
             The download is the real fillable form — every box stays a live (blue) field you can edit or

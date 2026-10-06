@@ -25,6 +25,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { canChangePurchaseRequest, canUsePurchaseRequests } from "@/lib/auth/fb-manager";
+import { CodePicker } from "@/components/accounting/code-picker";
+import {
+  contextForRole,
+  recommendGlAccount,
+  recommendLineCodes,
+  recommendSite,
+} from "@/lib/accounting/recommend";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { callApi, resolveAccessToken } from "@/lib/api/client";
@@ -40,11 +47,6 @@ import {
   PR_REQUESTOR_DEFAULTS,
   type PrRequestVia,
 } from "@/lib/pr-defaults";
-import {
-  PR_SITES,
-  PR_COST_CENTERS,
-  PR_GL_ACCOUNTS,
-} from "@/lib/pr-accounting-codes";
 import { formatInternalOrder } from "@/lib/pr-internal-order";
 import {
   isCcFeeItem,
@@ -1363,6 +1365,30 @@ function NewPurchaseRequestPageInner() {
   function updateItem(idx: number, patch: Partial<PurchaseRequestItem>) {
     setItems((prev) =>
       prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
+    );
+  }
+
+  // ── Accounting code suggestions ─────────────────────────────────────────
+  // What each line is for (its description and the vendor) plus who is
+  // buying (the F&B Manager buys for Buckley's) decides the suggested Site,
+  // Cost Center, and G/L. Blank codes are filled when the description is
+  // finished; codes already picked are never changed, only hinted.
+  const codeContext = contextForRole(profile?.role, profile?.department);
+  const vendorForCodes = vendors.find((v) => v.id === vendorId)?.name ?? "";
+  const codeSuggestionsFor = (item: PurchaseRequestItem) =>
+    recommendLineCodes(`${item.description ?? ""} ${vendorForCodes}`, codeContext);
+  function fillBlankCodes(idx: number) {
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx || isCcFeeItem(it) || !(it.description ?? "").trim()) return it;
+        const rec = codeSuggestionsFor(it);
+        return {
+          ...it,
+          cost_ctr: it.cost_ctr || rec.costCenter?.code || "",
+          site: it.site || rec.site?.code || "",
+          gl_acct: it.gl_acct || rec.glAccount?.code || "",
+        };
+      }),
     );
   }
   function addItem() {
@@ -3121,68 +3147,43 @@ function NewPurchaseRequestPageInner() {
             return (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Field label="Site (all)">
-                  <select
+                  <CodePicker
+                    kind="site"
+                    ariaLabel="Site (all)"
                     value={sharedSite}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    onChange={(v) => {
                       if (!v) return;
                       setItems((prev) => prev.map((it) => ({ ...it, site: v })));
                     }}
+                    emptyLabel={siteMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
                     className={inputCls}
-                  >
-                    <option value="">
-                      {siteMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
-                    </option>
-                    {PR_SITES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </Field>
                 <Field label="Cost Ctr (all)">
-                  <select
+                  <CodePicker
+                    kind="cost_center"
+                    ariaLabel="Cost Ctr (all)"
                     value={sharedCostCtr}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    onChange={(v) => {
                       if (!v) return;
-                      setItems((prev) =>
-                        prev.map((it) => ({ ...it, cost_ctr: v })),
-                      );
+                      setItems((prev) => prev.map((it) => ({ ...it, cost_ctr: v })));
                     }}
+                    emptyLabel={costCtrMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
                     className={inputCls}
-                  >
-                    <option value="">
-                      {costCtrMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
-                    </option>
-                    {PR_COST_CENTERS.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </Field>
                 <Field label="G/L (all)">
-                  <select
+                  <CodePicker
+                    kind="gl_account"
+                    ariaLabel="G/L (all)"
                     value={sharedGl}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    onChange={(v) => {
                       if (!v) return;
-                      setItems((prev) =>
-                        prev.map((it) => ({ ...it, gl_acct: v })),
-                      );
+                      setItems((prev) => prev.map((it) => ({ ...it, gl_acct: v })));
                     }}
+                    emptyLabel={glMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
                     className={inputCls}
-                  >
-                    <option value="">
-                      {glMixed ? "— Mixed (pick to override) —" : "— pick to apply —"}
-                    </option>
-                    {PR_GL_ACCOUNTS.map((g) => (
-                      <option key={g.value} value={g.value}>
-                        {g.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </Field>
               </div>
             );
@@ -3310,6 +3311,7 @@ function NewPurchaseRequestPageInner() {
                   <textarea
                     value={item.description}
                     onChange={(e) => updateItem(idx, { description: e.target.value })}
+                    onBlur={() => fillBlankCodes(idx)}
                     rows={2}
                     placeholder="e.g. Toro Greensmaster 3150 mower blade"
                     className={`${isFee ? readOnlyCls : inputCls} resize-none`}
@@ -3343,50 +3345,54 @@ function NewPurchaseRequestPageInner() {
                     />
                   </Field>
                 )}
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Site">
-                    <select
-                      value={item.site}
-                      onChange={(e) => updateItem(idx, { site: e.target.value })}
-                      className={inputCls}
-                    >
-                      <option value="">— pick —</option>
-                      {PR_SITES.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Cost Ctr">
-                    <select
-                      value={item.cost_ctr}
-                      onChange={(e) => updateItem(idx, { cost_ctr: e.target.value })}
-                      className={inputCls}
-                    >
-                      <option value="">— pick —</option>
-                      {PR_COST_CENTERS.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-                <Field label="G/L Account">
-                  <select
-                    value={item.gl_acct}
-                    onChange={(e) => updateItem(idx, { gl_acct: e.target.value })}
-                    className={inputCls}
-                  >
-                    <option value="">— pick —</option>
-                    {PR_GL_ACCOUNTS.map((g) => (
-                      <option key={g.value} value={g.value}>
-                        {g.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                {(() => {
+                  // Fee lines follow the other lines' codes, so no hints there.
+                  const rec = isFee ? null : codeSuggestionsFor(item);
+                  // The site and G/L hints follow the cost center actually chosen.
+                  const siteRec = rec ? recommendSite(item.cost_ctr || rec.costCenter?.code) : null;
+                  const glRec = rec
+                    ? recommendGlAccount(`${item.description ?? ""} ${vendorForCodes}`, item.cost_ctr || rec.costCenter?.code)
+                    : null;
+                  return (
+                    <>
+                      <Field label="Cost Ctr">
+                        <CodePicker
+                          kind="cost_center"
+                          ariaLabel={`Line ${idx + 1} cost center`}
+                          value={item.cost_ctr}
+                          onChange={(v) => updateItem(idx, { cost_ctr: v })}
+                          suggestion={rec?.costCenter}
+                          emptyLabel="— pick —"
+                          className={inputCls}
+                        />
+                      </Field>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Field label="Site">
+                          <CodePicker
+                            kind="site"
+                            ariaLabel={`Line ${idx + 1} site`}
+                            value={item.site}
+                            onChange={(v) => updateItem(idx, { site: v })}
+                            suggestion={siteRec}
+                            emptyLabel="— pick —"
+                            className={inputCls}
+                          />
+                        </Field>
+                        <Field label="G/L Account">
+                          <CodePicker
+                            kind="gl_account"
+                            ariaLabel={`Line ${idx + 1} G/L account`}
+                            value={item.gl_acct}
+                            onChange={(v) => updateItem(idx, { gl_acct: v })}
+                            suggestion={glRec}
+                            emptyLabel="— pick —"
+                            className={inputCls}
+                          />
+                        </Field>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Qty">
                     <input

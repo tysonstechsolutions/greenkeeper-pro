@@ -2,10 +2,13 @@
  * Site, Cost Center, and G/L Account code lists for the NAVMIDLANT NAF
  * Purchase Request line items.
  *
- * Source: procurement office working list (May 2026). Update the arrays
- * below when codes are added/retired and rebuild — they appear as
- * dropdowns on every PR line item.
+ * The full official listings live in lib/accounting/official-codes.ts. The
+ * arrays here are the codes this operation (the golf course, maintenance,
+ * the pro shop, and Buckley's) uses day to day: they lead every picker and
+ * seed the budget rollup. Any official code can still be chosen.
  */
+import { COST_CENTER_CODES, GL_ACCOUNT_CODES, SITE_CODES } from "@/lib/accounting/official-codes";
+import { COMMON_COST_CENTERS, COMMON_GL_ACCOUNTS, COMMON_SITES } from "@/lib/accounting/recommend";
 
 export interface AccountingCode {
   /** The numeric code as it must appear on the form. */
@@ -14,33 +17,24 @@ export interface AccountingCode {
   label: string;
 }
 
-/** Sites the cardholder can buy against. */
-export const PR_SITES: AccountingCode[] = [
-  { value: "7009", label: "7009" },
-  { value: "7010", label: "7010" },
-];
+function pick(list: { code: string; label: string }[], codes: string[]): AccountingCode[] {
+  return codes.map((code) => {
+    const hit = list.find((c) => c.code === code);
+    if (!hit) throw new Error(`Accounting code ${code} is not on the official listing`);
+    return { value: code, label: `${code} — ${hit.label}` };
+  });
+}
 
-/** Cost centers under the golf course. */
-export const PR_COST_CENTERS: AccountingCode[] = [
-  { value: "20086", label: "20086 — GLK VMGC GOLF MDSE RESALE" },
-  { value: "20087", label: "20087 — GLK VMGC GOLF COURSE PROGRAM" },
-  { value: "25224", label: "25224 — GLK VMGC GOLF RANGE PROG" },
-  { value: "25229", label: "25229 — GLK VMGC GC CLUB/CART RENTAL" },
-  { value: "25581", label: "25581 — GLK VMGC GC MAINTENANCE" },
-];
+/** Sites this operation buys against (golf course, maintenance shop, Buckley's). */
+export const PR_SITES: AccountingCode[] = pick(SITE_CODES, COMMON_SITES);
 
-/** G/L accounts authorized for purchase requests. */
-export const PR_GL_ACCOUNTS: AccountingCode[] = [
-  { value: "151110", label: "151110 — RESALE INVENTORY FOOD" },
-  { value: "151120", label: "151120 — RESALE INVENTORY ALCOHOL" },
-  { value: "151130", label: "151130 — RESALE INVENTORY MERCHANDISE" },
-  { value: "152000", label: "152000 — CENTRAL STOREROOM INVENTORIES" },
-  { value: "641000", label: "641000 — UTILITIES" },
-  { value: "681000", label: "681000 — REPAIRS & MAINT VEHICLES" },
-  { value: "683000", label: "683000 — FURNITURE, FIXTURES & EQUIPMENT" },
-  { value: "684000", label: "684000 — REPAIRS & MAINT GROUNDS" },
-  { value: "685000", label: "685000 — REPAIRS & MAINT BLDG & FAC" },
-  { value: "701000", label: "701000 — SUPPLIES" },
-  { value: "701003", label: "701003 — OFFICE SUPPLIES" },
-  { value: "701005", label: "701005 — CLEANING TOOLS AND SUPPLIES" },
-];
+/** Cost centers for the golf course and Buckley's. */
+export const PR_COST_CENTERS: AccountingCode[] = pick(COST_CENTER_CODES, COMMON_COST_CENTERS);
+
+/** The G/L accounts purchase requests here usually use. */
+export const PR_GL_ACCOUNTS: AccountingCode[] = pick(GL_ACCOUNT_CODES, COMMON_GL_ACCOUNTS);
+
+/** Every official code, for validating and for "show all" in pickers. */
+export const ALL_SITES: AccountingCode[] = SITE_CODES.map((c) => ({ value: c.code, label: `${c.code} — ${c.label}` }));
+export const ALL_COST_CENTERS: AccountingCode[] = COST_CENTER_CODES.map((c) => ({ value: c.code, label: `${c.code} — ${c.label}` }));
+export const ALL_GL_ACCOUNTS: AccountingCode[] = GL_ACCOUNT_CODES.map((c) => ({ value: c.code, label: `${c.code} — ${c.label}` }));

@@ -25,9 +25,9 @@
  *   7. (Info) the PR doesn't unexpectedly span multiple cost centers.
  */
 import {
-  PR_SITES,
-  PR_COST_CENTERS,
-  PR_GL_ACCOUNTS,
+  ALL_SITES,
+  ALL_COST_CENTERS,
+  ALL_GL_ACCOUNTS,
 } from "@/lib/pr-accounting-codes";
 import {
   isCcFeeItem,
@@ -156,18 +156,18 @@ export interface ValidCodes {
 }
 
 /**
- * Built-in golf-course lists, used as the default when the caller doesn't pass
- * dynamic (DB-loaded) codes — keeps the audit working before the code tables
- * exist and keeps the unit tests stable.
+ * The official listings (every site, cost center, and G/L account), used as
+ * the default when the caller doesn't pass DB-loaded codes — keeps the audit
+ * working before the code tables exist.
  */
 export const DEFAULT_VALID_CODES: ValidCodes = {
-  sites: new Set(PR_SITES.map((c) => c.value)),
-  costCenters: new Set(PR_COST_CENTERS.map((c) => c.value)),
-  glAccounts: new Set(PR_GL_ACCOUNTS.map((c) => c.value)),
+  sites: new Set(ALL_SITES.map((c) => c.value)),
+  costCenters: new Set(ALL_COST_CENTERS.map((c) => c.value)),
+  glAccounts: new Set(ALL_GL_ACCOUNTS.map((c) => c.value)),
 };
 
 const COST_CENTER_LABELS = new Map(
-  PR_COST_CENTERS.map((c) => [c.value, c.label]),
+  ALL_COST_CENTERS.map((c) => [c.value, c.label]),
 );
 
 /** Coerce anything numeric-ish to a finite number, else 0. */
