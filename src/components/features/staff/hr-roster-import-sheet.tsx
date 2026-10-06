@@ -15,10 +15,12 @@ import {
   matchHrRows,
   mergePersonnelDetails,
   parseHrRoster,
+  placementFill,
   placementFor,
   type HrMatchReason,
   type HrRosterRow,
 } from "@/lib/staff/hr-roster";
+import { DUTY_DEPARTMENT_LABELS, DUTY_ROLE_GROUP_LABELS } from "@/lib/operations/duties";
 import type { PersonnelDetails } from "@/types/database";
 
 /** The slice of a staff profile the import needs. */
@@ -28,6 +30,8 @@ export interface HrImportStaff {
   is_active: boolean;
   hire_date?: string | null;
   personnel_details?: PersonnelDetails | null;
+  department?: string | null;
+  role_group?: string | null;
 }
 
 interface HrRosterImportSheetProps {
@@ -154,13 +158,16 @@ function ImportForm({
     const hireDate = row.activityStartDate || existing?.hire_date || null;
     const reactivate =
       !!existing && !existing.is_active && row.employmentStatus.toLowerCase() === "active";
+    const fill = existing ? placementFill(existing, row) : {};
     const changes = existing
       ? [
           ...(reactivate ? ["Status: Inactive → Active"] : []),
+          ...(fill.department ? [`Department: — → ${DUTY_DEPARTMENT_LABELS[fill.department]}`] : []),
+          ...(fill.role_group ? [`Crew: — → ${DUTY_ROLE_GROUP_LABELS[fill.role_group]}`] : []),
           ...describeChanges(existing, { hire_date: hireDate, personnel_details: personnel }),
         ]
       : [];
-    return { existing, personnel, hireDate, reactivate, changes };
+    return { existing, personnel, hireDate, reactivate, fill, changes };
   };
 
   const counts = useMemo(() => {
@@ -193,13 +200,14 @@ function ImportForm({
       const row = rows[i];
       const decision = decisions[i];
       if (decision === "skip" || results[i]?.ok) continue;
-      const { existing, personnel, hireDate, reactivate } = plan(row, decision);
+      const { existing, personnel, hireDate, reactivate, fill } = plan(row, decision);
       try {
         let employeeId: string;
         const directory: Record<string, unknown> = {};
         if (existing) {
           employeeId = existing.id;
           if (reactivate) directory.is_active = true;
+          Object.assign(directory, fill);
         } else {
           const name = scheduleMatch[i] || displayNameFor(row);
           employeeId =

@@ -359,6 +359,28 @@ export function placementFor(row: Pick<HrRosterRow, "costCenter" | "costCenterNa
   return { department: null, roleGroup: null };
 }
 
+/**
+ * For someone already in Staff: the department and role group to fill in
+ * from HR, but only where theirs is blank. A department someone picked by
+ * hand is never changed. Returns only the fields to set.
+ */
+export function placementFill(
+  existing: { department?: string | null; role_group?: string | null },
+  row: Pick<HrRosterRow, "costCenter" | "costCenterName" | "position">,
+): { department?: DutyDepartment; role_group?: DutyRoleGroup } {
+  const place = placementFor(row);
+  const out: { department?: DutyDepartment; role_group?: DutyRoleGroup } = {};
+  const hasDept = !!(existing.department ?? "").trim();
+  if (!hasDept && place.department) out.department = place.department;
+  // A role group only makes sense inside the department it belongs to.
+  const dept = hasDept ? existing.department : place.department;
+  const groupBlank = !(existing.role_group ?? "").trim() || existing.role_group === "unassigned";
+  if (groupBlank && place.roleGroup && dept === place.department) {
+    out.role_group = place.roleGroup;
+  }
+  return out;
+}
+
 /** App role for a brand-new account. Flex staff are part-time; others crew. */
 export function inviteRoleFor(row: Pick<HrRosterRow, "employeeSubgroup">): InviteRole {
   return workScheduleFor(row.employeeSubgroup) === "FLEX" ? "seasonal" : "crew";

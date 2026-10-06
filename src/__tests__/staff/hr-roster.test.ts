@@ -10,6 +10,7 @@ import {
   mergePersonnelDetails,
   parseHrRoster,
   parsePayPlan,
+  placementFill,
   placementFor,
   splitHrName,
   titleCaseName,
@@ -246,5 +247,29 @@ describe("mergePersonnelDetails", () => {
     expect(changes).toContain("Position: Recreation Aide → Recreation Aid");
     expect(changes).toContain("Pay plan: — → NF");
     expect(describeChanges({ hire_date: "2025-08-11", personnel_details: after }, { hire_date: "2025-08-11", personnel_details: after })).toEqual([]);
+  });
+});
+
+describe("placementFill", () => {
+  const fb = { costCenter: "20091", costCenterName: "GLK BUCKLEY'S F&B", position: "Food Service Worker" };
+  it("fills a blank department and crew from HR", () => {
+    expect(placementFill({ department: null, role_group: null }, fb)).toEqual({
+      department: "food_and_beverage",
+      role_group: "restaurant_staff",
+    });
+    expect(placementFill({ department: "", role_group: "unassigned" }, fb)).toEqual({
+      department: "food_and_beverage",
+      role_group: "restaurant_staff",
+    });
+  });
+  it("never changes a department someone picked", () => {
+    expect(placementFill({ department: "pro_shop", role_group: null }, fb)).toEqual({});
+    expect(placementFill({ department: "food_and_beverage", role_group: "general_manager" }, fb)).toEqual({});
+  });
+  it("fills just the crew when the department already matches", () => {
+    expect(placementFill({ department: "food_and_beverage", role_group: null }, fb)).toEqual({ role_group: "restaurant_staff" });
+  });
+  it("does nothing when HR's cost center isn't one of ours", () => {
+    expect(placementFill({}, { costCenter: "99999", costCenterName: "OTHER", position: "Clerk" })).toEqual({});
   });
 });

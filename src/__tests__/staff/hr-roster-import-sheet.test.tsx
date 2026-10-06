@@ -26,6 +26,8 @@ const STAFF = [
     id: "p-dj",
     full_name: "DJ Skinner",
     is_active: true,
+    department: "golf_operations",
+    role_group: "golf_operations_assistant",
     hire_date: null,
     personnel_details: { hourly_rate: "17.25", position_title: "Golf Operations Assistant" },
   },
@@ -51,6 +53,9 @@ describe("HrRosterImportSheet", () => {
     expect(await screen.findByText("2 to update · 1 to add · 0 skipped")).toBeTruthy();
     expect(screen.getByText("Position: Golf Operations Assistant → Golf Operations Asst")).toBeTruthy();
     expect(screen.getByText("Status: Inactive → Active")).toBeTruthy();
+    // Marty has no department yet: HR's cost center fills it in.
+    expect(screen.getByText("Department: — → Golf Operations")).toBeTruthy();
+    expect(screen.getByText("Crew: — → Golf Ops / Pro Shop")).toBeTruthy();
     expect(screen.getByText(/Creates Ruben Villalobos/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Apply 3" }));
@@ -74,7 +79,11 @@ describe("HrRosterImportSheet", () => {
 
     // Marty: reactivated because HR lists him as Active.
     const marty = calls.find((c) => c.p_employee_id === "p-marty");
-    expect(marty.p_directory).toEqual({ is_active: true });
+    expect(marty.p_directory).toEqual({
+      is_active: true,
+      department: "golf_operations",
+      role_group: "golf_operations_assistant",
+    });
 
     // Ruben: created through invite + pin-signup, then placed in F&B.
     expect(rest.directInsertRow).toHaveBeenCalledWith(
