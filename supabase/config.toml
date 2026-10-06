@@ -36,3 +36,30 @@ enable_signup = true
 [auth.email]
 enable_signup = true
 enable_confirmations = false
+
+# Edge functions that must stay reachable without a user's login token, matching
+# how they are deployed in production (checked 2026-10-06): PIN sign-in and
+# sign-up, push notifications, the scheduled daily briefing (shared secret),
+# and the drone / spray-window endpoints, which check auth themselves. Every
+# other function keeps the default (verify_jwt = true). The deploy workflow
+# (.github/workflows/deploy-functions.yml) reads these.
+[functions.pin-login]
+verify_jwt = false
+
+[functions.pin-signup]
+verify_jwt = false
+
+[functions.push-send]
+verify_jwt = false
+
+[functions.push-subscribe]
+verify_jwt = false
+
+[functions.daily-briefing]
+verify_jwt = false
+
+[functions.drone-upload]
+verify_jwt = false
+
+[functions.spray-window]
+verify_jwt = false

@@ -15,6 +15,7 @@ import {
   Smartphone,
   Lock,
   Loader2,
+  Activity,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleVisible } from "@/components/auth/role-guard";
@@ -75,6 +76,13 @@ const adminSections = [
     icon: FileText,
     href: "/settings/briefing",
     color: "from-sky-500 to-cyan-600",
+  },
+  {
+    title: "System Health",
+    description: "Deployed AI features, database updates, settings",
+    icon: Activity,
+    href: "/settings/system-health",
+    color: "from-emerald-600 to-teal-700",
   },
   {
     title: "How you use the app",

@@ -1,0 +1,95 @@
+INVOICE
+Page 1 of 3
+ACCOUNT NUMBER   INVOICE NUMBER   INVOICE DATE   CUSTOMER NUMBER   PURCHASE ORDER #   SALES LOCATION   SALES REP   DATE ORDERED
+51134245   1897076   09/22/2026   51134245   2088   1220   09/21/2026
+FREIGHT TERMS    ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+296827    NET 30 DAYS    2390
+BILL TO    SHIP TO    REMIT TO
+JSNE GLAKES BUCKLEYS   JSNE GLAKES BUCKLEYS   US Foods, Inc.
+2821 GREAT LAKES DRIVE   2821 GREAT LAKES DRIVE   PO BOX 98420
+GREAT LAKES, IL 60088   GREAT LAKES, IL 60088   IL EGG INSPECTION FEE PD
+ATTN: MANAGER   Dept.: 0   CHICAGO, IL 60693-8420
+(847) 688-2020   (847) 688-2020   (630) 595-1200
+SHIPPED FROM:   DRIVER NAME:   REGINALD ROGERS   ROUTE NUMBER:   2390
+SHIPPED DATE:   09/22/2026   DRIVER ID:   325445   STOP NUMBER:   6
+INVOICE LINE DETAILS
+QUANTITY   SALES   PRODUCT DESCRIPTION    LABEL    PACK SIZE   CODE WEIGHT    PRICING   UNIT   EXTENDED
+ORD    SHP    ADJ   UNIT   NUMBER   UNIT   PRICE   PRICE
+DRY
+1    1    0    CS    1510080    SEASONING, TACO PWDR BAG SHLF    DELPASDO    6/9 OZ    CS    $14.6100    $14.61
+1    1    0    CS    4352191    SAUCE, MNARA TMTO CAN SHLF    MONARCH    6/#10 CN    CS    $34.2300    $34.23
+1    1    0    CS    6056492    TORTILLA, FLOUR 6" PRSSD SHLF    LA BNDRITA    12/24 EA    CS    $23.6600    $23.66
+1    1    0    CS    6729776    KETCHUP, TMTO FCY 33% RED SQZ    HEINZ    16/14 OZ    CS    $23.4900    $23.49
+REFRIGERATED
+1    1    0    EA    2326429    BROCCOLI, FLORT ICLS FRESH REF    CROSS VALY    3 LB    B    EA    $6.4200    $6.42
+READY TO EAT - Please refer to return policy
+1    1    0    CS    2776903    LEMON, CHO 12 CT DMSTC & IMP    SUNKIST    12 EA    CS    $11.8000    $11.80
+1    1    0    CS    4731808    TOMATO, CHRY RED FRESH REF    CROSS VALY    5 LB    CS    $20.6200    $20.62
+1    1    0    CS    5016423    LIME, 12 CT FRESH REF    PACKER    12 EA    CS    $11.8800    $11.88
+1    1    0    CS    7333024    TOMATO, RND 5X6 #1 GRD FRESH 1    CROSS VALY    10 LB    CS    $21.6000    $21.60
+2    2    0    CS    8011801    LETTUCE, GRN LEAF FRESH REF    PACKER    6 EA    CS    $15.4300    $30.86
+1    1    0    CS    9015421    CUCUMBER, FRESH REF    PACKER    6 EA    CS    $11.3000    $11.30
+1    1    0    EA    9326430    CILANTRO, WSHD & TRIMD FRESH    CROSS VALY    1 LB    B    EA    $6.3500    $6.35
+READY TO EAT - Please refer to return policy
+Page 1 of 3
+INVOICE
+Page 2 of 3
+ACCOUNT NUMBER   INVOICE NUMBER   INVOICE DATE   CUSTOMER NUMBER   PURCHASE ORDER #   SALES LOCATION   SALES REP   DATE ORDERED
+51134245   1897076   09/22/2026   51134245   2088   1220   09/21/2026
+FREIGHT TERMS    ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+296827    NET 30 DAYS    2390
+INVOICE LINE DETAILS
+QUANTITY   SALES   PRODUCT DESCRIPTION    LABEL    PACK SIZE   CODE WEIGHT    PRICING   UNIT   EXTENDED
+ORD    SHP    ADJ   UNIT   NUMBER   UNIT   PRICE   PRICE
+FROZEN
+1    1    0    CS    1009582    ROLL, DNNR YEAST WHT 1.3 Z SQ    STSCHUBERT    120/1.3 OZ    CS    $22.8300    $22.83
+3    3    0    CS    1061444    SAUCE, ALFR BOIL IN BAG FZN    MOLLYS KIT    4/4 LB    CS    $52.8500    $158.55
+2    2    0    CS    1560796    BEEF, PTY GRND 80/20 3:1 HMSTY    CTLMN SLCT    30/5.33 OZ    CS    $51.8600    $103.72
+1    1    0    CS    2953834    CHICKEN, TENDR BRST MEAT BTRD    TYSON    2/5 LB    CS    $28.8000    $28.80
+1    1    0    CS    6105884    APPETIZER, CHS CURD BRDD .24 Z    CHEFS LINE    2/5 LB    CS    $54.2700    $54.27
+4    0    0    CS    7674255    MEATBALL, BF .5 Z ITLN W/ CHS    CTLMN SLCT    10 LB    $0.0000    $0.00
+*SUB*    4    0    CS    2110694    MEATBALL, BF 1 Z ITLN W/ CHS    CTLMN SLCT    10 LB    CS    $46.6600    $186.64
+1    1    0    CS    8335937    BACON, PORK 14-18 CT LAID 2D    PATUXENT    15 LB    CS    $61.7000    $61.70
+1    1    0    CS    8529315    BEEF, GRND 100% PURE 80/20 MED    ROCHESTER    4/5 LB    CS    $139.7400    $139.74
+1    1    0    CS    9327834    CARROT, BABY WHL FCY FZN    MONARCH    12/2 LB    CS    $41.0200    $41.02
+DELIVERY SUMMARY
+AS SHIPPED DELIVERY AMOUNT   $1,014.09
+Product Total Adjustments   $0.00
+Total Charges Adjustment   $0.00
+Total Allowance Adjustment   $0.00
+Sales Tax Adj:    Rate: VAR    $0.00
+TOTAL ADJUSTMENT   $0.00
+DELIVERED AMOUNT   $1,014.09
+INVOICE SUMMARY
+Product Total    $1,014.09
+TOTAL NET WEIGHT SHIPPED   317.31   Sales Tax   Rate:    $0.00
+TOTAL GROSS WEIGHT SHIPPED    349.07   PLEASE REMIT THIS AMOUNT BY 10/22/2026   $1,014.09
+Page 2 of 3
+INVOICE
+Page 3 of 3
+ACCOUNT NUMBER   INVOICE NUMBER   INVOICE DATE   CUSTOMER NUMBER   PURCHASE ORDER #   SALES LOCATION   SALES REP   DATE ORDERED
+51134245   1897076   09/22/2026   51134245   2088   1220   09/21/2026
+FREIGHT TERMS    ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+296827    NET 30 DAYS    2390
+CUSTOMER ACCEPTANCE
+Interest shall accrue on all unpaid balances exceeding established credit terms at a rate equal to the lesser of (a) 1-1/2% per month or (b) the maximum rate that the customer may lawfully contract to pay, and in
+all events calculated in accordance with applicable law.
+CUSTOMER SIGNATURE: . JOHN PURE
+SIGNED AT: 09/22/2026 05:19 PM (UTC)
+**We appreciate your business. Please visit our website order.usfoods.com for a fast and easy way to order or contact customer service at: (800) 253-0277.
+**You agree with respect to any dispute arising out of your purchases from US Foods: (i) you are giving up your right to serve in any representative capacity, or to participate as a member of a class,
+in any lawsuit; (ii) you also agree, at US Foods sole option, to submit to binding, individual arbitration of all claims; (iii) such arbitration shall be governed by the Federal Arbitration Act, 9 U.S.C. § 1 and
+conducted in accordance with the JAMS Comprehensive Arbitration Rules & Procedures; and (iv) each party shall pay half the costs of arbitration, and separately pay its own attorneys’ fees and costs.
+**Fuel Surcharge: For the most up-to-date information about the fuel surcharge terms and conditions, go to: http://www.usfoods.com/terms/fuelsurcharge/StandardGridEIAAreaMidwest
+Credit Card Surcharge: Please note that, where applicable, a surcharge will be applied to payments made by credit card. The surcharge is not greater than our cost of acceptance. The surcharge
+does not apply to other payment forms, such as ACH. If applicable, the surcharge will be added to your total at the time of payment.
+If you have an agreement with US Foods that expressly addresses the fuel surcharge or the credit card surcharge, please refer to that agreement.
+**The perishable agricultural commodities listed on this invoice are sold subject to the statutory trust authorized by section 5(c) of the Perishable Agricultural Commodities Act, 1930 (7 U.S.C. 499e(c)).
+The seller of these commodities retains a trust claim over these commodities, all inventories of food or other products derived from these commodities, and any receivables or proceeds from the sale of
+these commodities until full payment is received.
+USDA National Organic Program Indicators: +F = "100% Organic"; +O = "Organic"; +M = "Made with organic ingredients"
+**The perishable agricultural commodities listed on this invoice are sold subject to the statutory trust authorized by section 5(c) of the Perishable Agricultural Commodities Act, 1930 (7 U.S.C. 499e(c)).
+The seller of these commodities retains a trust claim over these commodities, all inventories of food or other products derived from these commodities, and any receivables or proceeds from the sale of
+these commodities until full payment is received.
+USDA National Organic Program Indicators: +F = "100% Organic"; +O = "Organic"; +M = "Made with organic ingredients"
+Page 3 of 3

@@ -1,0 +1,54 @@
+VENDOR SHIP INVOICE
+Page 1 of 2
+ACCOUNT NUMBER    INVOICE NUMBER    INVOICE DATE    CUSTOMER NUMBER PURCHASE ORDER #    SALES LOCATION    SALES REP    DATE ORDERED
+51134245   1530079    09/11/2026    51134245    2088    1220    09/09/2026
+FREIGHT TERMS   ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+282844   NET 30 DAYS   0
+BILL TO    SHIP TO    REMIT TO
+JSNE GLAKES BUCKLEYS   JSNE GLAKES BUCKLEYS   US Foods, Inc.
+2821 GREAT LAKES DRIVE   2821 GREAT LAKES DRIVE   PO BOX 98420
+GREAT LAKES, IL 60088   GREAT LAKES, IL 60088   IL EGG INSPECTION FEE PD
+ATTN: MANAGER   Dept.: 0   CHICAGO, IL 60693-8420
+(847) 688-2020   (847) 688-2020   (630) 595-1200
+SHIPPED FROM:   DRIVER NAME:   ROUTE NUMBER:   0
+SHIPPED DATE:   09/10/2026   DRIVER ID:   STOP NUMBER:   0
+INVOICE LINE DETAILS
+QUANTITY   SALES   PRODUCT DESCRIPTION    LABEL    PACK SIZE   CODE WEIGHT    PRICING   UNIT   EXTENDED
+ORD    SHP   UNIT   NUMBER   UNIT   PRICE   PRICE
+DRY
+1    1    CS    1031498    LIGHTER, UTLITY BUTANE LONG NE    STERNOCAND    12/1 EA    CS    $38.7200    $38.72
+Shipment Tracking: 519543429443, FEDEX
+INVOICE SUMMARY
+Product Total    $38.72
+TOTAL NET WEIGHT SHIPPED   1.80   Sales Tax   Rate:    $0.00
+TOTAL GROSS WEIGHT SHIPPED    2.50   PLEASE REMIT THIS AMOUNT BY 10/11/2026   $38.72
+Page 1 of 2
+VENDOR SHIP INVOICE
+Page 2 of 2
+ACCOUNT NUMBER    INVOICE NUMBER    INVOICE DATE    CUSTOMER NUMBER PURCHASE ORDER #    SALES LOCATION    SALES REP    DATE ORDERED
+51134245   1530079    09/11/2026    51134245    2088    1220    09/09/2026
+FREIGHT TERMS   ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+282844   NET 30 DAYS   0
+CUSTOMER ACCEPTANCE
+Interest shall accrue on all unpaid balances exceeding established credit terms at a rate equal to the lesser of (a) 1-1/2% per month or (b) the maximum rate that the customer may lawfully contract to pay, and in
+all events calculated in accordance with applicable law.
+Promotional allowances, cash discounts, prompt pay discounts, growth programs and all other incentives are retained by U.S. Foodservice ® and do not reduce Product Price. Product Price is defined as the
+supplier, packer, or any vendor delivered cost or f.o.b unit price plus standard freight less off-invoice discounts or off-invoice allowances (i.e., manufacturer generated discounts or allowances on particular items
+for set periods of time and which are specifically reflected on the invoice).
+**We appreciate your business. Please visit our website order.usfoods.com for a fast and easy way to order or contact customer service at: (800) 253-0277.
+**You agree with respect to any dispute arising out of your purchases from US Foods: (i) you are giving up your right to serve in any representative capacity, or to participate as a member of a class,
+in any lawsuit; (ii) you also agree, at US Foods sole option, to submit to binding, individual arbitration of all claims; (iii) such arbitration shall be governed by the Federal Arbitration Act, 9 U.S.C. § 1 and
+conducted in accordance with the JAMS Comprehensive Arbitration Rules & Procedures; and (iv) each party shall pay half the costs of arbitration, and separately pay its own attorneys’ fees and costs.
+**Fuel Surcharge: For the most up-to-date information about the fuel surcharge terms and conditions, go to: http://www.usfoods.com/terms/fuelsurcharge/StandardGridEIAAreaMidwest
+Credit Card Surcharge: Please note that, where applicable, a surcharge will be applied to payments made by credit card. The surcharge is not greater than our cost of acceptance. The surcharge
+does not apply to other payment forms, such as ACH. If applicable, the surcharge will be added to your total at the time of payment.
+If you have an agreement with US Foods that expressly addresses the fuel surcharge or the credit card surcharge, please refer to that agreement.
+**The perishable agricultural commodities listed on this invoice are sold subject to the statutory trust authorized by section 5(c) of the Perishable Agricultural Commodities Act, 1930 (7 U.S.C. 499e(c)).
+The seller of these commodities retains a trust claim over these commodities, all inventories of food or other products derived from these commodities, and any receivables or proceeds from the sale of
+these commodities until full payment is received.
+USDA National Organic Program Indicators: +F = "100% Organic"; +O = "Organic"; +M = "Made with organic ingredients"
+**The perishable agricultural commodities listed on this invoice are sold subject to the statutory trust authorized by section 5(c) of the Perishable Agricultural Commodities Act, 1930 (7 U.S.C. 499e(c)).
+The seller of these commodities retains a trust claim over these commodities, all inventories of food or other products derived from these commodities, and any receivables or proceeds from the sale of
+these commodities until full payment is received.
+USDA National Organic Program Indicators: +F = "100% Organic"; +O = "Organic"; +M = "Made with organic ingredients"
+Page 2 of 2
