@@ -1,0 +1,52 @@
+WILL CALL INVOICE
+Page 1 of 2
+ACCOUNT NUMBER    INVOICE NUMBER    INVOICE DATE    CUSTOMER NUMBER PURCHASE ORDER #    SALES LOCATION    SALES REP    DATE ORDERED
+51134245   2922059    09/23/2025    51134245    RECOVERY EXPRESS AM    2099    1220    09/22/2025
+FREIGHT TERMS   ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+576518   NET 30 DAYS   2992   RECOVERY EXPRESS
+BILL TO    SHIP TO    REMIT TO
+JSNE GLAKES BUCKLEYS   JSNE GLAKES BUCKLEYS   US Foods, Inc.
+2821 GREAT LAKES DRIVE   2821 GREAT LAKES DRIVE   BOX 98420
+GREAT LAKES, IL 60088   GREAT LAKES, IL 60088   IL EGG INSPECTION FEE PD
+ATTN: JOHN PURE   Dept.: 0   CHICAGO, IL 60693-8420
+(847) 688-2020   (847) 688-2020   (630) 595-1200
+SHIPPED FROM:   800 SUPREME DRIVE,BENSENVILLE, IL   DRIVER NAME:   VICTOR AFANASOV   ROUTE NUMBER:   2992
+SHIPPED DATE:   09/23/2025   DRIVER ID:   325499   STOP NUMBER:   3
+INVOICE LINE DETAILS
+QUANTITY   SALES   PRODUCT DESCRIPTION    LABEL    PACK SIZE   CODE WEIGHT    PRICING   UNIT   EXTENDED
+ORD    SHP   UNIT   NUMBER   UNIT   PRICE   PRICE
+FROZEN
+1    1    CS    1022546    ROAST BEEF, TOP INS RND C/ F2F    CTLMN SLCT    2/5-9 LBA    16.52    LB    $10.4200    $172.14
+READY TO EAT - Please refer to return policy
+CS: 1    16.52 lbs
+1    1    CS    6152637    BEEF, STK RIBEY RL 1112 BNLS    CTLMN SLCT    20/8 OZ    CS    $116.9700    $116.97
+INVOICE SUMMARY
+Product Total    $289.11
+TOTAL NET WEIGHT SHIPPED   26.52   Sales Tax   Rate:    $0.00
+TOTAL GROSS WEIGHT SHIPPED    27.02   PLEASE REMIT THIS AMOUNT BY 10/23/2025   $289.11
+Page 1 of 2
+WILL CALL INVOICE
+Page 2 of 2
+ACCOUNT NUMBER    INVOICE NUMBER    INVOICE DATE    CUSTOMER NUMBER PURCHASE ORDER #    SALES LOCATION    SALES REP    DATE ORDERED
+51134245   2922059    09/23/2025    51134245    RECOVERY EXPRESS AM    2099    1220    09/22/2025
+FREIGHT TERMS   ORDER NUMBER   PAYMENT TERMS   ROUTE NUMBER   SPECIAL INSTRUCTIONS
+576518   NET 30 DAYS   2992   RECOVERY EXPRESS
+CUSTOMER ACCEPTANCE
+Interest shall accrue on all unpaid balances exceeding established credit terms at a rate equal to the lesser of (a) 1-1/2% per month or (b) the maximum rate that the customer may lawfully contract to pay, and in
+all events calculated in accordance with applicable law.
+Promotional allowances, cash discounts, prompt pay discounts, growth programs and all other incentives are retained by U.S. Foodservice ® and do not reduce Product Price. Product Price is defined as the
+supplier, packer, or any vendor delivered cost or f.o.b unit price plus standard freight less off-invoice discounts or off-invoice allowances (i.e., manufacturer generated discounts or allowances on particular items
+for set periods of time and which are specifically reflected on the invoice).
+**We appreciate your business. Please visit our website order.usfoods.com for a fast and easy way to order or contact customer service at: (800) 253-0277.
+**You agree with respect to any dispute arising out of your purchases from US Foods: (i) you are giving up your right to serve in any representative capacity, or to participate as a member of a class,
+in any lawsuit; (ii) you also agree, at US Foods sole option, to submit to binding, individual arbitration of all claims; (iii) such arbitration shall be governed by the Federal Arbitration Act, 9 U.S.C. § 1 and
+conducted in accordance with the Commercial Rules of the American Arbitration Association; and (iv) each party shall pay half the costs of arbitration, and separately pay its own attorneys’ fees and costs.
+Fuel Surcharge: For information about the fuel surcharge, go to: http://www.usfoods.com/terms/fuelsurcharge/StandardGridEIAAreaMidwest
+Credit Card Surcharge: Please note that, where applicable, a surcharge will be applied to payments made by credit card. The surcharge is not greater than our cost of acceptance. The surcharge
+does not apply to other payment forms, such as ACH. If applicable, the surcharge will be added to your total at the time of payment.
+If you have an agreement with US Foods that expressly addresses the fuel surcharge or the credit card surcharge, please refer to that agreement.
+**The perishable agricultural commodities listed on this invoice are sold subject to the statutory trust authorized by section 5(c) of the Perishable Agricultural Commodities Act, 1930 (7 U.S.C. 499e(c)).
+The seller of these commodities retains a trust claim over these commodities, all inventories of food or other products derived from these commodities, and any receivables or proceeds from the sale of
+these commodities until full payment is received.
+USDA National Organic Program Indicators: +F = "100% Organic"; +O = "Organic"; +M = "Made with organic ingredients"
+Page 2 of 2

@@ -36,6 +36,8 @@ export interface UsFoodsDocument {
   /** What was actually owed: delivered amount, else product total. Negative for a credit. */
   total: number;
   lines: UsFoodsLine[];
+  /** A price adjustment on the document, e.g. "Customer Rebate". */
+  adjustment?: string | null;
 }
 
 const SECTIONS = /^(DRY|REFRIGERATED|FROZEN|PRODUCE|DAIRY|MEAT|SEAFOOD|BEVERAGE[S]?|CHEMICAL.*|JANITORIAL.*|DISPOSABLE.*|EQUIPMENT.*|SUPPLIES.*|PAPER.*)$/;
@@ -65,9 +67,18 @@ const SUPPLY_NOUNS = new Set([
   "FORK", "SPOON", "KNIFE", "CUTLERY", "STRAW", "LINER", "TOWEL", "TISSUE", "CLEANER", "DEGREASER", "SANITIZER",
   "SOAP", "DETERGENT", "BLEACH", "BOX", "CLAMSHELL", "PICK", "SKEWER", "STIRRER", "BOAT", "LABEL", "TAPE", "MOP",
   "SPONGE", "SCRUBBER", "LIGHTER", "CANDLE", "PAPER", "TOOTHPICK", "CHOPSTICK", "APRON", "HAIRNET", "SHEET",
-  "DISH", "PAN", "BUCKET", "BROOM", "BRUSH", "THERMOMETER", "SCOOP", "TONG", "LADLE", "WHISK", "SPATULA",
+  "DISH", "PAN", "BUCKET", "WIPE", "PAIL", "BOARD", "STICKER", "PLACEMAT", "DOILY",
+  "RINSE", "DELIMER", "DISPENSER", "TURNER", "SCRAPER", "MITT", "BASKET", "GUEST", "COVER", "RIBBON", "KIT",
+  "GRILL", "PITCHER", "RAMEKIN", "SQUEEZE", "TIMER", "SHAKER", "FILTER", "BATTERY", "BROOM", "BRUSH", "THERMOMETER", "SCOOP", "TONG", "LADLE", "WHISK", "SPATULA",
 ]);
-const ALCOHOL_WORDS = /\b(BEER|WINE|LIQUOR|SPIRITS?|VODKA|WHISKE?Y|BOURBON|RUM|TEQUILA|GIN|LAGER|ALE|IPA|SELTZER HARD|HARD SELTZER|CHAMPAGNE|PROSECCO)\b/;
+/**
+ * Alcohol only when the product itself is alcohol (its leading noun). Beer
+ * named later in a description is an ingredient ("POTATO, FF … BTRD BEER",
+ * "COD, BTRD BEER").
+ */
+const ALCOHOL_NOUN = /^(BEER|WINE|LIQUOR|SPIRITS?|VODKA|WHISKE?Y|BOURBON|RUM|TEQUILA|GIN|LAGER|ALE|IPA|HARD SELTZER|SELTZER, HARD|CHAMPAGNE|PROSECCO|CORDIAL|LIQUEUR|SCHNAPPS|BRANDY|COGNAC|SCOTCH|SAKE|CIDER, HARD)\b/;
+/** Paper cones (cotton candy) are supplies; ice cream cones are food. */
+const SUPPLY_PATTERNS = [/^CONE, PAPR/, /^CONE, PAPER/];
 
 /**
  * Food (counts toward food cost), alcohol (beverage cost), or supplies
@@ -77,7 +88,8 @@ const ALCOHOL_WORDS = /\b(BEER|WINE|LIQUOR|SPIRITS?|VODKA|WHISKE?Y|BOURBON|RUM|T
 export function classifyUsFoodsLine(description: string, section?: string | null): PurchaseCategory {
   const d = description.toUpperCase();
   if (section && /CHEMICAL|JANITORIAL|DISPOSABLE|EQUIPMENT|SUPPLIES|PAPER/.test(section)) return "supplies";
-  if (ALCOHOL_WORDS.test(d)) return "alcohol";
+  if (ALCOHOL_NOUN.test(d)) return "alcohol";
+  if (SUPPLY_PATTERNS.some((re) => re.test(d))) return "supplies";
   const noun = d.split(/[,\s]/)[0]?.replace(/S$/, "") ?? "";
   if (SUPPLY_NOUNS.has(noun) || SUPPLY_NOUNS.has(d.split(/[,\s]/)[0] ?? "")) return "supplies";
   return "food";
@@ -121,7 +133,7 @@ export function parseUsFoodsDocument(lines: string[]): UsFoodsDocument | null {
   const trimmed = lines.map((l) => l.replace(/\s+$/, ""));
   const first = trimmed.find((l) => l.trim())?.trim() ?? "";
   const isCredit = /^CREDIT MEMO\b/.test(first);
-  if (!isCredit && !/^(VENDOR SHIP )?INVOICE\b/.test(first)) return null;
+  if (!isCredit && !/^((VENDOR SHIP|WILL CALL) )?INVOICE\b/.test(first)) return null;
 
   let documentNumber = "";
   let invoiceNumber = "";
@@ -134,7 +146,7 @@ export function parseUsFoodsDocument(lines: string[]): UsFoodsDocument | null {
     if (!documentNumber && /^ACCOUNT NUMBER\b/.test(head.trim())) {
       if (isCredit) {
         documentNumber = values[1] ?? "";
-        invoiceNumber = values[2] ?? "";
+        invoiceNumber = values[2] && values[2] !== "0" ? values[2] : "";
         orderNumber = values[3] ?? null;
       } else {
         documentNumber = values[1] ?? "";
@@ -154,8 +166,20 @@ export function parseUsFoodsDocument(lines: string[]): UsFoodsDocument | null {
   let section: string | null = null;
   // Wrapped description lines only ever sit right under their item.
   let wrapLinesLeft = 0;
+  // The hazardous-materials summary repeats lines already listed: skip it
+  // until the next page's line details.
+  let inHazmatSummary = false;
   for (const raw of trimmed) {
     const line = raw.trim();
+    if (/^HAZARD(OUS)? MATERIALS? SUMMARY/i.test(line)) {
+      inHazmatSummary = true;
+      wrapLinesLeft = 0;
+      continue;
+    }
+    if (inHazmatSummary) {
+      if (/^INVOICE LINE DETAILS/i.test(line)) inHazmatSummary = false;
+      continue;
+    }
     if (SECTIONS.test(line)) {
       section = line;
       wrapLinesLeft = 0;
@@ -204,10 +228,13 @@ export function parseUsFoodsDocument(lines: string[]): UsFoodsDocument | null {
     const m = text.match(re);
     return m ? money(m[1]) : null;
   };
+  // A credit memo states what it credits on its AMOUNT line (rebates have no items).
+  const creditAmount = isCredit ? pick(/^AMOUNT\s+-?\$([\d,]+\.\d{2})/m) : null;
+  const adjustment = text.match(/^Sales Adj - (.+?)\s+-?\$[\d,]+\.\d{2}/m)?.[1]?.trim() ?? null;
   const delivered = pick(/DELIVERED AMOUNT\s+-?\$([\d,]+\.\d{2})/);
   const productTotal = pick(/Product Total\s+-?\$([\d,]+\.\d{2})/);
   const sumLines = Math.round(parsed.reduce((s, l) => s + l.extended, 0) * 100) / 100;
-  let total = delivered ?? productTotal ?? Math.abs(sumLines);
+  let total = creditAmount ?? delivered ?? productTotal ?? Math.abs(sumLines);
   if (isCredit) total = -Math.abs(total);
 
   if (!documentNumber || !date) return null;
@@ -219,6 +246,7 @@ export function parseUsFoodsDocument(lines: string[]): UsFoodsDocument | null {
     orderNumber,
     total,
     lines: parsed,
+    adjustment,
   };
 }
 

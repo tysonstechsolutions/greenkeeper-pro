@@ -28,6 +28,11 @@ describe("invoice line coding", () => {
     expect(outletFor({ productNumber: "5016423", category: "food" }, remembered)).toBe("bar");
     expect(outletFor({ productNumber: "9", category: "alcohol" }, remembered)).toBe("bar");
     expect(outletFor({ productNumber: "x", category: "food" }, remembered)).toBe("restaurant");
+    // Bar mixers start out Bar; a remembered choice wins.
+    expect(outletFor({ productNumber: "2211928", category: "food", description: "BAR MIX, BLDY MARY RICH &" }, none)).toBe("bar");
+    expect(outletFor({ productNumber: "4082806", category: "food", description: "DRINK, SODA TONIC WATER" }, none)).toBe("bar");
+    expect(outletFor({ productNumber: "4082806", category: "food", description: "DRINK, SODA TONIC WATER" }, new Map([["4082806", "restaurant" as const]]))).toBe("restaurant");
+    expect(outletFor({ productNumber: "7742265", category: "food", description: "DRINK, SODA GNGR ALE CAN" }, none)).toBe("restaurant");
   });
 
   it("totals by cost center and G/L, the unexplained remainder on food", () => {

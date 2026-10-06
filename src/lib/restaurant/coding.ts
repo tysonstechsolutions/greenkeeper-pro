@@ -30,14 +30,22 @@ export const GL_RESALE_FOOD = "151110";
 export const GL_RESALE_ALCOHOL = "151120";
 export const GL_SUPPLIES = "701000";
 
-/** Bar or restaurant for a line: alcohol is always bar, else what was remembered, else restaurant. */
+/** Mixers that only the bar uses, marked Bar until someone says otherwise. */
+const BAR_MIXERS = /^BAR MIX\b|\bTONIC\b|\bSODA CLUB\b|\bCLUB SODA\b|\bGRENADINE\b|\bBITTERS\b|\bBLDY MARY\b|\bBLOODY MARY\b|\bMRITA\b|\bMARGARITA\b|\bSWEET (& )?SOUR\b|\bSOUR MIX\b|\bCHERRY, MARASCHINO\b|\bOLIVE, COCKTAIL\b/;
+
+/**
+ * Bar or restaurant for a line: alcohol is always bar; otherwise what was
+ * remembered for the product; otherwise bar mixers go to the bar; else restaurant.
+ */
 export function outletFor(
-  line: { productNumber?: string; product_number?: string; category: PurchaseCategory | string },
+  line: { productNumber?: string; product_number?: string; category: PurchaseCategory | string; description?: string },
   remembered: ReadonlyMap<string, Outlet>,
 ): Outlet {
   if (line.category === "alcohol") return "bar";
   const pn = line.productNumber ?? line.product_number ?? "";
-  return remembered.get(pn) ?? "restaurant";
+  const known = remembered.get(pn);
+  if (known) return known;
+  return line.category === "food" && BAR_MIXERS.test((line.description ?? "").toUpperCase()) ? "bar" : "restaurant";
 }
 
 /** G/L for a line from what it is. Supplies never land on a resale account. */

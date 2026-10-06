@@ -139,10 +139,16 @@ export interface ImportPlan {
 
 const docKey = (kind: string, number: string) => `${kind}:${number}`;
 
-export function documentLabel(doc: Pick<UsFoodsDocument, "kind" | "documentNumber" | "invoiceNumber">): string {
-  return doc.kind === "credit"
+export function documentLabel(
+  doc: Pick<UsFoodsDocument, "kind" | "documentNumber" | "invoiceNumber"> & { adjustment?: string | null },
+): string {
+  if (doc.kind !== "credit") return `Invoice ${doc.documentNumber}`;
+  if (doc.adjustment && (!doc.invoiceNumber || doc.invoiceNumber === doc.documentNumber)) {
+    return `${doc.adjustment} ${doc.documentNumber}`;
+  }
+  return doc.invoiceNumber && doc.invoiceNumber !== doc.documentNumber
     ? `Credit memo ${doc.documentNumber} (on invoice ${doc.invoiceNumber})`
-    : `Invoice ${doc.documentNumber}`;
+    : `Credit memo ${doc.documentNumber}`;
 }
 
 /**
@@ -198,7 +204,7 @@ export function planUsFoodsImport(
         amount: doc.total,
         kind: doc.kind,
         document_number: doc.documentNumber,
-        against_invoice: doc.kind === "credit" ? doc.invoiceNumber : null,
+        against_invoice: doc.kind === "credit" && doc.invoiceNumber !== doc.documentNumber ? doc.invoiceNumber : null,
         order_number: doc.orderNumber,
         delivery_order: cover?.deliveryOrder ?? null,
         site: cover?.site ?? null,

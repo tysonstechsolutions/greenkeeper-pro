@@ -83,6 +83,28 @@ describe("parseUsFoodsDocument", () => {
     expect(doc.lines[0].category).toBe("supplies");
   });
 
+  it("doesn't count the hazardous-materials summary twice", () => {
+    const doc = parseUsFoodsDocument(lines("invoice-863379-hazmat.txt"))!;
+    expect(doc.total).toBe(923.82);
+    expect(sum(doc.lines.map((l) => l.extended))).toBe(923.82);
+    expect(doc.lines.filter((l) => l.productNumber === "6045686")).toHaveLength(1);
+    // Catch-weight meat (priced by the pound) comes through at its invoice amount.
+    expect(doc.lines.find((l) => l.productNumber === "923250")?.extended).toBe(97.31);
+  });
+
+  it("reads a customer rebate (a credit memo with no items) as money back", () => {
+    const doc = parseUsFoodsDocument(lines("rebate-2994402.txt"))!;
+    expect(doc).toMatchObject({ kind: "credit", documentNumber: "2994402", total: -41.41, adjustment: "Customer Rebate" });
+    expect(doc.lines).toEqual([]);
+    expect(categoryTotals(doc)).toEqual({ food: -41.41, alcohol: 0, supplies: 0 });
+  });
+
+  it("reads a will-call invoice", () => {
+    const doc = parseUsFoodsDocument(lines("will-call.txt"))!;
+    expect(doc).toMatchObject({ kind: "invoice", documentNumber: "2922059", date: "2025-09-23", total: 289.11 });
+    expect(sum(doc.lines.map((l) => l.extended))).toBe(289.11);
+  });
+
   it("returns null for something that is not a US Foods invoice", () => {
     expect(parseUsFoodsDocument(["PURCHASE REQUEST", "something else"])).toBeNull();
     expect(parseUsFoodsDocument([])).toBeNull();
@@ -116,6 +138,15 @@ describe("classifyUsFoodsLine", () => {
     expect(classifyUsFoodsLine("SHORTENING, FRYG CNOLA")).toBe("food");
     expect(classifyUsFoodsLine("BEER, LAGER 12 OZ CAN")).toBe("alcohol");
     expect(classifyUsFoodsLine("ANYTHING", "CHEMICALS")).toBe("supplies");
+    // Beer named as an ingredient isn't alcohol.
+    expect(classifyUsFoodsLine("POTATO, FF 5/16\" SC BTRD BEER")).toBe("food");
+    expect(classifyUsFoodsLine("COD, BTRD BEER ALSKN WHT2Z MSC")).toBe("food");
+    expect(classifyUsFoodsLine("WINE, CHARDONNAY")).toBe("alcohol");
+    // Kitchen tools and chemicals are supplies; ice cream cones are food, paper cones aren't.
+    for (const d of ["RINSE ADDITIVE, LIQ", "DELIMER, AP LMEWY", "TURNER, HMBGR SOLID", "GUEST CHECK, 1 PART", "MITT, OVN 17\"", "CONE, PAPR COTN CNDY"]) {
+      expect(classifyUsFoodsLine(d)).toBe("supplies");
+    }
+    expect(classifyUsFoodsLine("CONE, ICE CREAM CAKE")).toBe("food");
   });
 });
 
