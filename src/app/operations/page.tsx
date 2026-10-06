@@ -39,6 +39,7 @@ import {
 import { WorkCard } from "@/components/features/operations-command-center/work-card";
 import { EmailDraftDialog } from "@/components/features/operations-command-center/email-draft-dialog";
 import { MorningBrief } from "@/components/features/operations-command-center/morning-brief";
+import { RemindersCard } from "@/components/features/reminders/reminders-card";
 import { buildTaskEmailDraft, type EmailDraft } from "@/lib/operational-work/email-draft";
 import type { InterpretedAction } from "@/lib/operational-work/instruction-interpreter";
 import { classifyStaleWork } from "@/lib/operations/stale-work";
@@ -320,6 +321,8 @@ function OperationsCommandCenter() {
       {!personalView && !operationsLoading && operations.items.length > 0 && (
         <MorningBrief items={operations.items} today={todayDate} />
       )}
+
+      {!personalView && <RemindersCard />}
 
       <p className="mb-3 text-xs text-muted-foreground">
         Showing everything overdue plus work due through {formatHorizon(operations.horizonDate)}. Later
