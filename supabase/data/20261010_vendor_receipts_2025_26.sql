@@ -21,7 +21,7 @@
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-10-06', 'Lakeshore Beverage', 149.67, 'invoice', '311506', NULL, 0, 149.67, 0, 149.67, 'Invoice 311506 · 6 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2025-10-06', 'Lakeshore Beverage', 149.67, 'invoice', '311506', NULL, 0, 149.67, 0, 149.67, 'Invoice 311506 - 6 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -40,7 +40,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-10-06', 'Lakeshore Beverage', 549.65, 'invoice', '311507', NULL, 0, 549.65, 0, 549.65, 'Invoice 311507 · 4 items · Total printed on the invoice')
+  VALUES ('2025-10-06', 'Lakeshore Beverage', 549.65, 'invoice', '311507', NULL, 0, 549.65, 0, 549.65, 'Invoice 311507 - 4 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -57,7 +57,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-10-30', 'Lakeshore Beverage', 1116.69, 'invoice', '358300', NULL, 0, 1116.69, 0, 1116.69, 'Invoice 358300 · 8 items · Total from the items only, since the bottom of the receipt is not in the photo. Peppermint (2 cases) was out of stock. Another Oct 30 invoice of about $306.54 is not in the photos.')
+  VALUES ('2025-10-30', 'Lakeshore Beverage', 1116.69, 'invoice', '358300', NULL, 0, 1116.69, 0, 1116.69, 'Invoice 358300 - 8 items - Total from the items only, since the bottom of the receipt is not in the photo. Peppermint (2 cases) was out of stock. Another Oct 30 invoice of about 306.54 dollars is not in the photos.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -78,7 +78,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-11-12', 'Lakeshore Beverage', 317.02, 'invoice', '380981', NULL, 0, 317.02, 0, 317.02, 'Invoice 380981 · 7 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2025-11-12', 'Lakeshore Beverage', 317.02, 'invoice', '380981', NULL, 0, 317.02, 0, 317.02, 'Invoice 380981 - 7 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -98,7 +98,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-11-12', 'Lakeshore Beverage', 372.23, 'invoice', '380983', NULL, 0, 372.23, 0, 372.23, 'Invoice 380983 · 4 items · Total worked out from Lakeshore running account balance on later receipts. Espresso Martini and Peppermint were out of stock.')
+  VALUES ('2025-11-12', 'Lakeshore Beverage', 372.23, 'invoice', '380983', NULL, 0, 372.23, 0, 372.23, 'Invoice 380983 - 4 items - Total worked out from Lakeshore running account balance on later receipts. Espresso Martini and Peppermint were out of stock.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -115,7 +115,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-11-19', 'Lakeshore Beverage', 174.64, 'invoice', '393156', NULL, 0, 174.64, 0, 174.64, 'Invoice 393156 · 7 items · Total printed on the invoice. Point Amber was out of stock.')
+  VALUES ('2025-11-19', 'Lakeshore Beverage', 174.64, 'invoice', '393156', NULL, 0, 174.64, 0, 174.64, 'Invoice 393156 - 7 items - Total printed on the invoice. Point Amber was out of stock.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -135,7 +135,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-11-19', 'Lakeshore Beverage', 697.06, 'invoice', '393158', NULL, 0, 697.06, 0, 697.06, 'Invoice 393158 · 6 items · Total printed on the invoice')
+  VALUES ('2025-11-19', 'Lakeshore Beverage', 697.06, 'invoice', '393158', NULL, 0, 697.06, 0, 697.06, 'Invoice 393158 - 6 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -154,7 +154,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-03', 'Lakeshore Beverage', 336.63, 'invoice', '417452', NULL, 0, 336.63, 0, 336.63, 'Invoice 417452 · 9 items · Total printed on the invoice. Black Philly was out of stock.')
+  VALUES ('2025-12-03', 'Lakeshore Beverage', 336.63, 'invoice', '417452', NULL, 0, 336.63, 0, 336.63, 'Invoice 417452 - 9 items - Total printed on the invoice. Black Philly was out of stock.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -176,7 +176,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-03', 'Lakeshore Beverage', 592.09, 'invoice', '417455', NULL, 0, 592.09, 0, 592.09, 'Invoice 417455 · 6 items · Total printed on the invoice. Long Island (2) and White Russian (3) were out of stock.')
+  VALUES ('2025-12-03', 'Lakeshore Beverage', 592.09, 'invoice', '417455', NULL, 0, 592.09, 0, 592.09, 'Invoice 417455 - 6 items - Total printed on the invoice. Long Island (2) and White Russian (3) were out of stock.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -195,7 +195,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-10', 'Lakeshore Beverage', 94.6, 'invoice', '429119', NULL, 0, 94.6, 0, 94.6, 'Invoice 429119 · 4 items · Total printed on the invoice')
+  VALUES ('2025-12-10', 'Lakeshore Beverage', 94.6, 'invoice', '429119', NULL, 0, 94.6, 0, 94.6, 'Invoice 429119 - 4 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -212,7 +212,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-10', 'Lakeshore Beverage', 229.86, 'invoice', '429121', NULL, 0, 229.86, 0, 229.86, 'Invoice 429121 · 2 items · Total printed on the invoice. A third Dec 10 invoice for $58.00 is not in the photos.')
+  VALUES ('2025-12-10', 'Lakeshore Beverage', 229.86, 'invoice', '429121', NULL, 0, 229.86, 0, 229.86, 'Invoice 429121 - 2 items - Total printed on the invoice. A third Dec 10 invoice for 58.00 dollars is not in the photos.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -227,7 +227,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-17', 'Lakeshore Beverage', 195.02, 'invoice', '441601', NULL, 0, 195.02, 0, 195.02, 'Invoice 441601 · 6 items · Total printed on the invoice')
+  VALUES ('2025-12-17', 'Lakeshore Beverage', 195.02, 'invoice', '441601', NULL, 0, 195.02, 0, 195.02, 'Invoice 441601 - 6 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -246,7 +246,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-17', 'Lakeshore Beverage', 477.17, 'invoice', '441602', NULL, 0, 477.17, 0, 477.17, 'Invoice 441602 · 6 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2025-12-17', 'Lakeshore Beverage', 477.17, 'invoice', '441602', NULL, 0, 477.17, 0, 477.17, 'Invoice 441602 - 6 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -265,7 +265,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-01-07', 'Lakeshore Beverage', 227.08, 'invoice', '474004', NULL, 0, 227.08, 0, 227.08, 'Invoice 474004 · 5 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2026-01-07', 'Lakeshore Beverage', 227.08, 'invoice', '474004', NULL, 0, 227.08, 0, 227.08, 'Invoice 474004 - 5 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -283,7 +283,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-01-07', 'Lakeshore Beverage', 319.77, 'invoice', '474005', NULL, 0, 319.77, 0, 319.77, 'Invoice 474005 · 6 items · Total printed on the invoice')
+  VALUES ('2026-01-07', 'Lakeshore Beverage', 319.77, 'invoice', '474005', NULL, 0, 319.77, 0, 319.77, 'Invoice 474005 - 6 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -302,7 +302,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-01-21', 'Lakeshore Beverage', 116.31, 'invoice', '497432', NULL, 0, 116.31, 0, 116.31, 'Invoice 497432 · 4 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2026-01-21', 'Lakeshore Beverage', 116.31, 'invoice', '497432', NULL, 0, 116.31, 0, 116.31, 'Invoice 497432 - 4 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -319,7 +319,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-01-21', 'Lakeshore Beverage', 319.77, 'invoice', '497433', NULL, 0, 319.77, 0, 319.77, 'Invoice 497433 · 5 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2026-01-21', 'Lakeshore Beverage', 319.77, 'invoice', '497433', NULL, 0, 319.77, 0, 319.77, 'Invoice 497433 - 5 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -337,7 +337,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-02-04', 'Lakeshore Beverage', 123.28, 'invoice', '520501', NULL, 0, 123.28, 0, 123.28, 'Invoice 520501 · 3 items · Total printed on the invoice')
+  VALUES ('2026-02-04', 'Lakeshore Beverage', 123.28, 'invoice', '520501', NULL, 0, 123.28, 0, 123.28, 'Invoice 520501 - 3 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -353,7 +353,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-02-04', 'Lakeshore Beverage', 493.34, 'invoice', '520502', NULL, 0, 493.34, 0, 493.34, 'Invoice 520502 · 6 items · Total printed on the invoice')
+  VALUES ('2026-02-04', 'Lakeshore Beverage', 493.34, 'invoice', '520502', NULL, 0, 493.34, 0, 493.34, 'Invoice 520502 - 6 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -372,7 +372,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-02-18', 'Lakeshore Beverage', 201.31, 'invoice', '543832', NULL, 0, 201.31, 0, 201.31, 'Invoice 543832 · 4 items · Total printed on the invoice')
+  VALUES ('2026-02-18', 'Lakeshore Beverage', 201.31, 'invoice', '543832', NULL, 0, 201.31, 0, 201.31, 'Invoice 543832 - 4 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -389,7 +389,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-02-18', 'Lakeshore Beverage', 666.12, 'invoice', '543833', NULL, 0, 666.12, 0, 666.12, 'Invoice 543833 · 8 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2026-02-18', 'Lakeshore Beverage', 666.12, 'invoice', '543833', NULL, 0, 666.12, 0, 666.12, 'Invoice 543833 - 8 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -410,7 +410,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-02-25', 'Lakeshore Beverage', 151.5, 'invoice', '556086', NULL, 0, 151.5, 0, 151.5, 'Invoice 556086 · 2 items · Total printed on the invoice')
+  VALUES ('2026-02-25', 'Lakeshore Beverage', 151.5, 'invoice', '556086', NULL, 0, 151.5, 0, 151.5, 'Invoice 556086 - 2 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -425,7 +425,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-03-25', 'Lakeshore Beverage', 197.13, 'invoice', '108412', NULL, 0, 197.13, 0, 197.13, 'Invoice 108412 · 7 items · Total worked out from Lakeshore running account balance on later receipts. An invoice of about $507.91 from mid-March is not in the photos.')
+  VALUES ('2026-03-25', 'Lakeshore Beverage', 197.13, 'invoice', '108412', NULL, 0, 197.13, 0, 197.13, 'Invoice 108412 - 7 items - Total worked out from Lakeshore running account balance on later receipts. An invoice of about 507.91 dollars from mid-March is not in the photos.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -445,7 +445,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-03-25', 'Lakeshore Beverage', 976.68, 'invoice', '108413', NULL, 0, 976.68, 0, 976.68, 'Invoice 108413 · 11 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2026-03-25', 'Lakeshore Beverage', 976.68, 'invoice', '108413', NULL, 0, 976.68, 0, 976.68, 'Invoice 108413 - 11 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -469,7 +469,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-04-01', 'Lakeshore Beverage', 335.56, 'invoice', '121399', NULL, 0, 335.56, 0, 335.56, 'Invoice 121399 · 5 items · Total worked out from Lakeshore running account balance on later receipts')
+  VALUES ('2026-04-01', 'Lakeshore Beverage', 335.56, 'invoice', '121399', NULL, 0, 335.56, 0, 335.56, 'Invoice 121399 - 5 items - Total worked out from Lakeshore running account balance on later receipts')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -487,7 +487,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-04-08', 'Lakeshore Beverage', 274.39, 'invoice', '133606', NULL, 0, 274.39, 0, 274.39, 'Invoice 133606 · 6 items · Total from the items only, since the bottom of the receipt is not in the photo. The bottom of this receipt is not in the photo, so a $10 service charge may be missing.')
+  VALUES ('2026-04-08', 'Lakeshore Beverage', 274.39, 'invoice', '133606', NULL, 0, 274.39, 0, 274.39, 'Invoice 133606 - 6 items - Total from the items only, since the bottom of the receipt is not in the photo. The bottom of this receipt is not in the photo, so a 10 dollar service charge may be missing.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -506,7 +506,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-04-08', 'Lakeshore Beverage', 651.12, 'invoice', '133607', NULL, 0, 651.12, 0, 651.12, 'Invoice 133607 · 10 items · Total from the items only, since the bottom of the receipt is not in the photo. The photo ends at White Russian, so there may be more items below it.')
+  VALUES ('2026-04-08', 'Lakeshore Beverage', 651.12, 'invoice', '133607', NULL, 0, 651.12, 0, 651.12, 'Invoice 133607 - 10 items - Total from the items only, since the bottom of the receipt is not in the photo. The photo ends at White Russian, so there may be more items below it.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -529,7 +529,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-11-18', 'Kloss Distributing', 1251.62, 'invoice', '10251838', NULL, 0, 1251.62, 0, 1251.62, 'Invoice 10251838 · 22 items · Total printed on the invoice')
+  VALUES ('2025-11-18', 'Kloss Distributing', 1251.62, 'invoice', '10251838', NULL, 0, 1251.62, 0, 1251.62, 'Invoice 10251838 - 22 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -564,7 +564,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2025-12-16', 'Kloss Distributing', -126.38, 'credit', '10253244', NULL, 0, -126.38, 0, -126.38, 'Credit 10253244 · 2 items · Total printed on the invoice. Returned for restock.')
+  VALUES ('2025-12-16', 'Kloss Distributing', -126.38, 'credit', '10253244', NULL, 0, -126.38, 0, -126.38, 'Credit 10253244 - 2 items - Total printed on the invoice. Returned for restock.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -579,7 +579,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-01-06', 'Kloss Distributing', -167.64, 'credit', '10254279', NULL, 0, -167.64, 0, -167.64, 'Credit 10254279 · 1 item · Total printed on the invoice. Returned for restock.')
+  VALUES ('2026-01-06', 'Kloss Distributing', -167.64, 'credit', '10254279', NULL, 0, -167.64, 0, -167.64, 'Credit 10254279 - 1 item - Total printed on the invoice. Returned for restock.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -593,7 +593,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-02-24', 'Kloss Distributing', 442.16, 'invoice', '10256742', NULL, 0, 442.16, 0, 442.16, 'Invoice 10256742 · 9 items · Total printed on the invoice')
+  VALUES ('2026-02-24', 'Kloss Distributing', 442.16, 'invoice', '10256742', NULL, 0, 442.16, 0, 442.16, 'Invoice 10256742 - 9 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -615,7 +615,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-04-14', 'Kloss Distributing', 443.07, 'invoice', '10259248', NULL, 0, 443.07, 0, 443.07, 'Invoice 10259248 · 9 items · Total printed on the invoice')
+  VALUES ('2026-04-14', 'Kloss Distributing', 443.07, 'invoice', '10259248', NULL, 0, 443.07, 0, 443.07, 'Invoice 10259248 - 9 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -637,7 +637,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-04-14', 'Kloss Distributing', 236.48, 'invoice', '10259249', NULL, 0, 236.48, 0, 236.48, 'Invoice 10259249 · 7 items · Total printed on the invoice. Yuengling: 2 ordered, 1 shipped (back order).')
+  VALUES ('2026-04-14', 'Kloss Distributing', 236.48, 'invoice', '10259249', NULL, 0, 236.48, 0, 236.48, 'Invoice 10259249 - 7 items - Total printed on the invoice. Yuengling: 2 ordered, 1 shipped (back order).')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -657,7 +657,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-05-05', 'Kloss Distributing', 179.79, 'invoice', '10260832', NULL, 0, 179.79, 0, 179.79, 'Invoice 10260832 · 5 items · Total printed on the invoice')
+  VALUES ('2026-05-05', 'Kloss Distributing', 179.79, 'invoice', '10260832', NULL, 0, 179.79, 0, 179.79, 'Invoice 10260832 - 5 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -675,7 +675,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-06-18', 'MWR Central Warehouse', 272.78, 'invoice', 'SO-26-029103', NULL, 272.78, 0, 0, 0, 'Invoice SO-26-029103 · 10 items · Total printed on the invoice')
+  VALUES ('2026-06-18', 'MWR Central Warehouse', 272.78, 'invoice', 'SO-26-029103', NULL, 272.78, 0, 0, 0, 'Invoice SO-26-029103 - 10 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -698,7 +698,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-06-24', 'MWR Central Warehouse', 136.77, 'invoice', 'SO-26-029117', NULL, 70.51, 0, 66.26, 0, 'Invoice SO-26-029117 · 5 items · Total printed on the invoice')
+  VALUES ('2026-06-24', 'MWR Central Warehouse', 136.77, 'invoice', 'SO-26-029117', NULL, 70.51, 0, 66.26, 0, 'Invoice SO-26-029117 - 5 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -716,7 +716,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-07-08', 'MWR Central Warehouse', 235.79, 'invoice', 'SO-26-029135', NULL, 101.5, 0, 134.29, 0, 'Invoice SO-26-029135 · 7 items · Total printed on the invoice')
+  VALUES ('2026-07-08', 'MWR Central Warehouse', 235.79, 'invoice', 'SO-26-029135', NULL, 101.5, 0, 134.29, 0, 'Invoice SO-26-029135 - 7 items - Total printed on the invoice')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -736,7 +736,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-07-16', 'MWR Central Warehouse', 149.58, 'invoice', 'SO-26-029154', NULL, 149.58, 0, 0, 0, 'Invoice SO-26-029154 · 6 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  VALUES ('2026-07-16', 'MWR Central Warehouse', 149.58, 'invoice', 'SO-26-029154', NULL, 149.58, 0, 0, 0, 'Invoice SO-26-029154 - 6 items - Total from the warehouse order history (no printed total, so the lines added up)')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -755,7 +755,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-08-04', 'MWR Central Warehouse', 329.6, 'invoice', 'SO-26-029195', NULL, 51.94, 0, 277.66, 0, 'Invoice SO-26-029195 · 7 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  VALUES ('2026-08-04', 'MWR Central Warehouse', 329.6, 'invoice', 'SO-26-029195', NULL, 51.94, 0, 277.66, 0, 'Invoice SO-26-029195 - 7 items - Total from the warehouse order history (no printed total, so the lines added up)')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -775,7 +775,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-08-20', 'MWR Central Warehouse', 685.36, 'invoice', 'SO-26-029235', NULL, 7.06, 0, 678.3, 0, 'Invoice SO-26-029235 · 7 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  VALUES ('2026-08-20', 'MWR Central Warehouse', 685.36, 'invoice', 'SO-26-029235', NULL, 7.06, 0, 678.3, 0, 'Invoice SO-26-029235 - 7 items - Total from the warehouse order history (no printed total, so the lines added up)')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -795,7 +795,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-08-27', 'MWR Central Warehouse', 247.19, 'invoice', 'SO-26-029253', NULL, 127.54, 0, 119.65, 0, 'Invoice SO-26-029253 · 6 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  VALUES ('2026-08-27', 'MWR Central Warehouse', 247.19, 'invoice', 'SO-26-029253', NULL, 127.54, 0, 119.65, 0, 'Invoice SO-26-029253 - 6 items - Total from the warehouse order history (no printed total, so the lines added up)')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -814,7 +814,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-09-22', 'MWR Central Warehouse', 184.44, 'invoice', 'SO-26-029310', NULL, 114.88, 0, 69.56, 0, 'Invoice SO-26-029310 · 8 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  VALUES ('2026-09-22', 'MWR Central Warehouse', 184.44, 'invoice', 'SO-26-029310', NULL, 114.88, 0, 69.56, 0, 'Invoice SO-26-029310 - 8 items - Total from the warehouse order history (no printed total, so the lines added up)')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -835,7 +835,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-05-27', 'Mess requisition', 48.2, 'invoice', 'FY26-1191', NULL, 48.2, 0, 0, 0, 'Invoice FY26-1191 · 5 items · Total printed on the invoice. From Epicenter (cost center 20574).')
+  VALUES ('2026-05-27', 'Mess requisition', 48.2, 'invoice', 'FY26-1191', NULL, 48.2, 0, 0, 0, 'Invoice FY26-1191 - 5 items - Total printed on the invoice. From Epicenter (cost center 20574).')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -853,7 +853,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-06-09', 'Mess requisition', 232.38, 'invoice', 'FY26-1194', NULL, 0, 232.38, 0, 232.38, 'Invoice FY26-1194 · 5 items · Total printed on the invoice. Beer from Epicenter (cost center 20574) to Buckleys bar, account 151120. Thermal paper ($86.01) on the same sheet is not in its total.')
+  VALUES ('2026-06-09', 'Mess requisition', 232.38, 'invoice', 'FY26-1194', NULL, 0, 232.38, 0, 232.38, 'Invoice FY26-1194 - 5 items - Total printed on the invoice. Beer from Epicenter (cost center 20574) to Buckleys bar, account 151120. Thermal paper (86.01 dollars) on the same sheet is not in its total.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -871,7 +871,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-07-08', 'Mess requisition', 124.24, 'invoice', 'FY26-1338', NULL, 124.24, 0, 0, 0, 'Invoice FY26-1338 · 3 items · Total printed on the invoice. From Epicenter. Only the total and two lines are clear on the scan.')
+  VALUES ('2026-07-08', 'Mess requisition', 124.24, 'invoice', 'FY26-1338', NULL, 124.24, 0, 0, 0, 'Invoice FY26-1338 - 3 items - Total printed on the invoice. From Epicenter. Only the total and two lines are clear on the scan.')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )
@@ -887,7 +887,7 @@ FROM p CROSS JOIN (VALUES
 WITH p AS (
   INSERT INTO public.restaurant_purchases
     (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
-  VALUES ('2026-07-24', 'Mess requisition', 24.75, 'invoice', 'FY26-1344', NULL, 24.75, 0, 0, 0, 'Invoice FY26-1344 · 2 items · Total printed on the invoice. From Epicenter (cost center 20574).')
+  VALUES ('2026-07-24', 'Mess requisition', 24.75, 'invoice', 'FY26-1344', NULL, 24.75, 0, 0, 0, 'Invoice FY26-1344 - 2 items - Total printed on the invoice. From Epicenter (cost center 20574).')
   ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
   RETURNING id
 )

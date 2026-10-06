@@ -4,7 +4,8 @@
  * statement: the purchase, then its lines, skipped whole if that vendor +
  * kind + number is already saved (so it is safe to run again).
  *
- * No DO blocks and no semicolons inside text (the SQL editor splits on them).
+ * No DO blocks, and no semicolons or dollar signs inside text (the SQL editor
+ * misreads both). Text is plain ASCII.
  * Pure.
  */
 import type { PlannedVendorInvoice } from "./vendor-invoice";
@@ -15,8 +16,12 @@ function lit(v: string | number | null): string {
     if (!Number.isFinite(v)) throw new Error(`Not a number: ${v}`);
     return String(v);
   }
-  if (v.includes(";")) throw new Error(`Text can't hold a semicolon (the SQL editor splits on it): ${v}`);
-  return `'${v.replace(/'/g, "''")}'`;
+  // The Supabase SQL editor splits on semicolons and reads $ as the start of a
+  // dollar-quoted block, so neither can appear inside text.
+  if (/[;$]/.test(v)) throw new Error(`Text can't hold a semicolon or dollar sign (the SQL editor misreads them): ${v}`);
+  // Plain ASCII only: the middle dot in notes becomes a dash.
+  const ascii = v.replace(/ · /g, " - ").replace(/[^\x20-\x7E]/g, "");
+  return `'${ascii.replace(/'/g, "''")}'`;
 }
 
 export function vendorInvoiceSql(p: PlannedVendorInvoice): string {

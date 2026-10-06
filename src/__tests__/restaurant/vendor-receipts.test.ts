@@ -119,6 +119,7 @@ describe("transcribed vendor receipts", () => {
     expect(readFileSync(sqlPath, "utf8")).toBe(sql);
     // One statement per invoice, safe to run twice, nothing the editor chokes on.
     expect(sql.match(/ON CONFLICT \(lower\(vendor\), kind, document_number\)/g)).toHaveLength(receipts.length);
-    expect(sql).not.toMatch(/\bDO \$/);
+    expect(sql).not.toContain("$");
+    expect(sql).toMatch(/^[\x0A\x20-\x7E]*$/);
   });
 });

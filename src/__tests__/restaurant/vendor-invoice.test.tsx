@@ -169,10 +169,11 @@ describe("vendor invoice lines", () => {
     });
     const sql = vendorInvoiceSql(p);
     expect(sql).toContain("ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING");
-    expect(sql).toContain("'Invoice FY26-1344 · 2 items · Buckley''s order'");
+    expect(sql).toContain("'Invoice FY26-1344 - 2 items - Buckley''s order'");
     expect(sql.trim().endsWith(";")).toBe(true);
     expect(sql.split(";").length).toBe(2);
     expect(() => vendorInvoiceSql({ ...p, row: { ...p.row, notes: "a; b" } })).toThrow(/semicolon/);
+    expect(() => vendorInvoiceSql({ ...p, row: { ...p.row, notes: "about $10" } })).toThrow(/dollar sign/);
   });
 });
 
