@@ -23,6 +23,7 @@ interface PinLoginResponse {
 function PinLoginInner() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
+  const loggedOutIdle = searchParams.get("reason") === "idle";
 
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +219,9 @@ function PinLoginInner() {
         >
           GreenKeeper Pro
         </p>
+        {loggedOutIdle && (
+          <p className="mt-3 text-sm text-white/85">Logged out after a while with no use. Enter your PIN to sign back in.</p>
+        )}
       </div>
 
       {/* PIN card */}

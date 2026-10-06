@@ -12,6 +12,7 @@ import { PwaInstallCapture } from "@/lib/hooks/usePwaInstall";
 import { AssistantBar } from "@/components/features/ai/assistant-bar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { DebugOverlay } from "@/components/debug-overlay";
+import { IdleLogout } from "@/components/auth/idle-logout";
 import { useKeyboardScroll } from "@/lib/hooks/useKeyboardScroll";
 import { recordBreadcrumb } from "@/lib/debug/breadcrumbs";
 import { stripTrailingSlash } from "@/lib/utils/page-title";
@@ -124,6 +125,9 @@ export function AppShell({ children }: AppShellProps) {
           exposes a one-tap "Reset app state" escape hatch without a
           full app kill. Shows a red pulsing icon if errors are captured. */}
       {user && <DebugOverlay />}
+
+      {/* Logs a shared device out after a stretch of no use (Settings). */}
+      {user && <IdleLogout />}
     </div>
   );
 }

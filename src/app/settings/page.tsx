@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { usePwaInstall } from "@/lib/hooks/usePwaInstall";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import type { UserRole } from "@/types/database";
+import { AutoLogoutSetting } from "@/components/auth/auto-logout-setting";
 
 const settingsSections = [
   {
@@ -55,7 +56,17 @@ const settingsSections = [
   },
 ];
 
-const adminSections = [
+/** Admin rows show to super / asst super unless a row lists more roles. */
+const ADMIN_DEFAULT_ROLES: UserRole[] = ["super", "asst_super"];
+
+const adminSections: {
+  title: string;
+  description: string;
+  icon: typeof Database;
+  href: string;
+  color: string;
+  roles?: UserRole[];
+}[] = [
   {
     title: "Course Setup",
     description: "Course info, zones, and holes",
@@ -83,6 +94,7 @@ const adminSections = [
     icon: Activity,
     href: "/settings/system-health",
     color: "from-emerald-600 to-teal-700",
+    roles: ["super", "asst_super", "director", "gm"],
   },
   {
     title: "How you use the app",
@@ -182,17 +194,20 @@ export default function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
             </Link>
           ))}
+          <AutoLogoutSetting />
         </div>
       </div>
 
       {/* Admin-only sections */}
-      <RoleVisible visibleToRoles={["super", "asst_super"]}>
+      <RoleVisible visibleToRoles={["super", "asst_super", "director", "gm"]}>
         <div className="gk-animate-in gk-animate-in-3 mb-6">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
             Administration
           </h2>
           <div className="space-y-2">
-            {adminSections.map((section) => (
+            {adminSections
+              .filter((section) => (section.roles ?? ADMIN_DEFAULT_ROLES).includes(profile?.role as UserRole))
+              .map((section) => (
               <Link
                 key={section.title}
                 href={section.href}

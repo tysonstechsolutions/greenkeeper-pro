@@ -11,6 +11,7 @@
  */
 import { clearCache } from "@/lib/offline/cache";
 import { clearQueue, getQueueCount } from "@/lib/utils/offline-queue";
+import { LAST_ACTIVITY_KEY } from "./idle";
 
 const SIGN_OUT_TIMEOUT_MS = 3_000;
 
@@ -53,7 +54,9 @@ export async function clearSignedInAccount(
       const keys: string[] = [];
       for (let i = 0; i < storage.length; i++) {
         const k = storage.key(i);
-        if (k && isSupabaseSessionKey(k)) keys.push(k);
+        // The idle timer's last-activity mark goes too, so the next person
+        // starts with a fresh clock.
+        if (k && (isSupabaseSessionKey(k) || k === LAST_ACTIVITY_KEY)) keys.push(k);
       }
       for (const k of keys) storage.removeItem(k);
     } catch {
