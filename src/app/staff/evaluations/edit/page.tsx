@@ -86,7 +86,14 @@ import {
   type EvaluationRatings,
   type RatingReason,
   type RatingValue,
+  type StaffEvaluation,
 } from "@/lib/evaluations/types";
+import {
+  FOLLOW_THROUGH_STEPS,
+  followThrough,
+  followThroughText,
+  type FollowThroughKey,
+} from "@/lib/evaluations/follow-through";
 
 type Step = "rate" | "questions" | "review" | "done";
 
@@ -962,6 +969,8 @@ function EvaluationEditor() {
             {filedNote && <p className="text-sm mt-2">{filedNote}</p>}
           </div>
 
+          {evaluation && <FollowThroughCard evaluation={evaluation} save={save} />}
+
           <div className="rounded-lg border border-border bg-card p-4 text-sm">
             <p className="font-semibold mb-2">Next steps (from the form)</p>
             <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
@@ -1099,6 +1108,95 @@ function SaveIndicator({ state, locked }: { state: SaveState; locked: boolean })
 }
 
 /** Bottom action bar that stays in reach of a thumb on a phone. */
+/** The three things that happen after finalizing, each with the date it was done. */
+function FollowThroughCard({
+  evaluation,
+  save,
+}: {
+  evaluation: StaffEvaluation;
+  save: (patch: EvaluationPatch) => Promise<StaffEvaluation>;
+}) {
+  const today = todayLocal();
+  const ft = followThrough(evaluation, today);
+  const [saving, setSaving] = useState<FollowThroughKey | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  if (!ft) return null;
+
+  const setDate = async (key: FollowThroughKey, value: string | null) => {
+    setSaving(key);
+    setErr(null);
+    try {
+      await save({ [key]: value } as EvaluationPatch);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErr(
+        /column|schema cache|does not exist/i.test(msg)
+          ? "Run the database update (20261006120000_operations_upgrade.sql) to track these."
+          : `Couldn't save: ${msg}`,
+      );
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 text-sm" aria-label="Follow-through">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="font-semibold">Follow-through</p>
+        <span
+          className={`text-xs font-medium ${
+            ft.complete
+              ? "text-emerald-700 dark:text-emerald-400"
+              : ft.overdue
+                ? "text-red-700 dark:text-red-400"
+                : "text-amber-700 dark:text-amber-400"
+          }`}
+        >
+          {ft.done} of {ft.total} done
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">{followThroughText(ft)}</p>
+      <ul className="space-y-2">
+        {FOLLOW_THROUGH_STEPS.map((step) => {
+          const value = evaluation[step.key] ?? null;
+          return (
+            <li key={step.key} className="flex items-center gap-2">
+              {value ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/40 shrink-0" />
+              )}
+              <span className="flex-1 min-w-0">{step.label}</span>
+              {value ? (
+                <input
+                  type="date"
+                  value={value}
+                  max={today}
+                  disabled={saving !== null}
+                  aria-label={`${step.label} date`}
+                  onChange={(e) => void setDate(step.key, e.target.value || null)}
+                  className="rounded border border-input bg-background px-2 py-1 text-xs"
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={saving !== null}
+                  onClick={() => void setDate(step.key, today)}
+                  aria-label={`Mark ${step.short} today`}
+                >
+                  {saving === step.key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Done today"}
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {err && <p className="text-xs text-destructive mt-2">{err}</p>}
+    </section>
+  );
+}
+
 function StickyNav({ children }: { children: React.ReactNode }) {
   return (
     <div className="sticky bottom-20 md:bottom-4 z-10 flex gap-2 rounded-lg border border-border bg-background/95 backdrop-blur p-2 shadow-lg">

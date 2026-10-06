@@ -34,6 +34,7 @@ import {
 } from "@/lib/evaluations/pdf";
 import { useEvaluationRoster, type NinetyDayEntry } from "@/lib/evaluations/use-evaluations";
 import { PROGRESS_COLORS, PROGRESS_LABELS, type EvaluationProgress } from "@/lib/evaluations/types";
+import { followThrough, followThroughText, type FollowThrough } from "@/lib/evaluations/follow-through";
 import type { StaffPersonnelPrivate } from "@/types/database";
 
 function EvaluationsRoster() {
@@ -284,6 +285,7 @@ function EvaluationsRoster() {
                   due: e.due,
                   dueDate: e.dueDate,
                   progress: e.progress,
+                  followUp: followThrough(e.evaluation, today),
                 }))}
                 today={today}
               />
@@ -340,6 +342,8 @@ interface DueItem {
   due: DueStatus | null;
   dueDate: string;
   progress: EvaluationProgress;
+  /** Final evaluations: what follow-through is left. */
+  followUp?: FollowThrough | null;
 }
 
 /** People grouped Overdue → Due soon → Upcoming → Finished, each with where they stand. */
@@ -372,6 +376,19 @@ function DueSections({ items, today }: { items: DueItem[]; today: string }) {
                       {i.detail}
                       {i.due && <span className={DUE_TEXT_COLORS[i.due]}> · {dueText(i.dueDate, today)}</span>}
                     </p>
+                    {i.followUp && (
+                      <p
+                        className={`text-xs mt-0.5 ${
+                          i.followUp.complete
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : i.followUp.overdue
+                              ? "text-red-700 dark:text-red-400 font-medium"
+                              : "text-amber-700 dark:text-amber-400"
+                        }`}
+                      >
+                        {followThroughText(i.followUp)}
+                      </p>
+                    )}
                   </div>
                   <span className={`text-xs font-medium px-2 py-1 rounded-full shrink-0 ${PROGRESS_COLORS[i.progress]}`}>
                     {PROGRESS_LABELS[i.progress]}
@@ -409,6 +426,7 @@ function NinetyDayList({ items, today }: { items: NinetyDayEntry[]; today: strin
             due: item.due,
             dueDate: item.dueDate,
             progress: item.progress,
+            followUp: followThrough(item.evaluation, today),
           }))}
           today={today}
         />

@@ -301,6 +301,9 @@ export type EvaluationPatch = Partial<
     | "narrative"
     | "facts"
     | "status"
+    | "approved_on"
+    | "discussed_on"
+    | "copy_given_on"
   >
 >;
 

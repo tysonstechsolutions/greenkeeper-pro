@@ -96,6 +96,10 @@ export interface StaffEvaluation {
   facts: EvaluationFacts | Record<string, never>;
   form_version: string;
   finalized_at: string | null;
+  /** Follow-through after it's final (yyyy-mm-dd). Absent before the 2026-10-06 database update. */
+  approved_on?: string | null;
+  discussed_on?: string | null;
+  copy_given_on?: string | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;

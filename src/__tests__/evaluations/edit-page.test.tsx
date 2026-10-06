@@ -250,6 +250,12 @@ describe("evaluation interview", () => {
     expect(screen.getByText(/filed on their profile/)).toBeInTheDocument();
     expect(screen.getByText(/last 4 of their SSN/)).toBeInTheDocument();
 
+    // Follow-through: mark the approving official's signature done today.
+    expect(screen.getByText("0 of 3 done")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Mark signed today" }));
+    expect(await screen.findByText("1 of 3 done")).toBeInTheDocument();
+    expect(saves.at(-1)).toEqual({ approved_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
+
     // Download, then straight on to the next person.
     await user.click(screen.getByRole("button", { name: /Download the form/ }));
     await waitFor(() => expect(saveBlobToDevice).toHaveBeenCalledTimes(1));
