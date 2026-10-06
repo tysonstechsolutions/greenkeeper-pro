@@ -5,7 +5,7 @@
 export type EvaluationTarget = { fy: number } | { ninetyDayStart: string };
 
 export function evaluationListHref(target: EvaluationTarget): string {
-  return "fy" in target ? `/staff/evaluations?fy=${target.fy}` : "/staff/evaluations";
+  return "fy" in target ? `/staff/evaluations?fy=${target.fy}` : "/staff/evaluations?tab=90day";
 }
 
 export function evaluationEditHref(employeeId: string, target: EvaluationTarget): string {

@@ -312,7 +312,7 @@ describe("evaluation interview", () => {
     await user.click(within(screen.getByRole("radiogroup", { name: elementsFor(false)[0].label })).getByRole("radio", { name: "3 Satisfactory" }));
     await waitFor(() => expect(saves.length).toBeGreaterThan(0));
     expect(saves[0].rating_reason).toBe("ninety_day");
-    expect(screen.getByRole("link", { name: /All evaluations/ })).toHaveAttribute("href", "/staff/evaluations");
+    expect(screen.getByRole("link", { name: /All evaluations/ })).toHaveAttribute("href", "/staff/evaluations?tab=90day");
   }, 30_000);
 
   it("explains a broken 90-day link instead of guessing dates", async () => {

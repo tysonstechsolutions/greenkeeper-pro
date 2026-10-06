@@ -118,3 +118,16 @@ Verified against a local Postgres 16 with the real helper functions.
 - Rules live in `src/lib/evaluations/period.ts` (`needsAnnualEvaluation`,
   `ninetyDayPeriod`, `ninetyDayTiming`) and `splitRoster` in `use-evaluations.ts`.
 
+
+## Two lists, due dates, and the 90-day minimum (2026-10-06)
+
+- The Evaluations page has two tabs, Year-end and 90-day, each showing how
+  many are left and how many are overdue.
+- Nobody shows on either list until they've been employed 90 days (an
+  evaluation someone already started still shows).
+- Year-end evaluations are due Oct 31 (period end + 31 days,
+  `YEAR_END_DUE_DAYS`). A 90-day evaluation is due on the 90-day mark and is
+  overdue the next day; it appears on the mark, not before.
+- Each tab groups people into Overdue, Due soon (due within 30 days,
+  `DUE_SOON_DAYS`), Upcoming, and Finished, and each row says "Due in N days",
+  "Due today", or "N days overdue".

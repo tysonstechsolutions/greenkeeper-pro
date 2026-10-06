@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "../utils/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "../utils/test-utils";
 
+const nav = vi.hoisted(() => ({ search: "fy=2026", replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: nav.replace, back: vi.fn() }),
   usePathname: () => "/staff/evaluations",
-  useSearchParams: () => new URLSearchParams("fy=2026"),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 vi.mock("@/lib/hooks/useAuth", () => ({
   useAuth: () => ({ profile: { id: "gm1", full_name: "Tyson Bruce", role: "gm" } }),
@@ -17,37 +18,85 @@ vi.mock("@/components/auth/role-guard", async () => {
     useRoleAccess: () => ({ hasRole: () => true }),
   };
 });
+vi.mock("@/lib/utils/date", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/utils/date")>("@/lib/utils/date");
+  return { ...actual, todayLocal: () => "2026-11-02" };
+});
 
 const profile = (id: string, full_name: string) => ({ id, full_name, role: "crew", is_active: true, supervisor_id: null });
+const yearEnd = (id: string, name: string, progress: string, due: string | null) => ({
+  profile: profile(id, name),
+  evaluation: null,
+  progress,
+  dueDate: "2026-10-31",
+  due,
+});
 
 vi.mock("@/lib/evaluations/use-evaluations", () => ({
   useEvaluationRoster: () => ({
-    entries: [{ profile: profile("old", "Oscar Gonzalez"), evaluation: null, progress: "not_started" }],
-    ninetyDay: [
-      { profile: profile("colin", "Colin O'Neill"), hireDate: "2026-06-01", dueDate: "2026-08-30", timing: "overdue", evaluation: null, progress: "not_started" },
+    entries: [
+      yearEnd("old", "Oscar Gonzalez", "not_started", "overdue"),
+      yearEnd("ruben", "Ruben Villalobos", "in_progress", "overdue"),
+      yearEnd("done", "Done Person", "final", null),
     ],
-    notDue: [{ profile: profile("late", "Late Hire"), hireDate: "2026-08-20" }],
+    ninetyDay: [
+      { profile: profile("colin", "Colin O'Neill"), hireDate: "2026-06-01", dueDate: "2026-08-30", due: "overdue", evaluation: null, progress: "not_started" },
+      { profile: profile("new", "New Hire"), hireDate: "2026-08-04", dueDate: "2026-11-02", due: "due_soon", evaluation: null, progress: "not_started" },
+    ],
+    notDue: [{ profile: profile("late", "Late Hire"), hireDate: "2026-07-20" }],
     loading: false,
     error: null,
     reload: async () => undefined,
   }),
 }));
 
-describe("evaluations list", () => {
-  it("shows 90-day evaluations and who isn't due a yearly one", async () => {
-    const { default: Page } = await import("@/app/staff/evaluations/page");
-    render(<Page />);
-    expect(await screen.findByText("90-day evaluations")).toBeInTheDocument();
-    const colin = screen.getByRole("link", { name: /Colin O'Neill/ });
-    expect(colin).toHaveAttribute("href", "/staff/evaluations/edit?employee=colin&kind=90day&start=2026-06-01");
-    expect(colin).toHaveTextContent("Overdue");
-    expect(colin).toHaveTextContent("90-day mark Aug 30, 2026");
+beforeEach(() => {
+  nav.search = "fy=2026";
+  nav.replace.mockClear();
+});
+
+async function renderPage() {
+  const { default: Page } = await import("@/app/staff/evaluations/page");
+  return render(<Page />);
+}
+
+describe("evaluations page", () => {
+  it("has separate Year-end and 90-day tabs with what's left and what's overdue", async () => {
+    const { user } = await renderPage();
+    const yearTab = screen.getByRole("tab", { name: /Year-end/ });
+    const ninetyTab = screen.getByRole("tab", { name: /90-day/ });
+    expect(yearTab).toHaveAttribute("aria-selected", "true");
+    expect(yearTab).toHaveTextContent("2 to do· 2 overdue");
+    expect(ninetyTab).toHaveTextContent("2 to do· 1 overdue");
+    await user.click(ninetyTab);
+    expect(nav.replace).toHaveBeenCalledWith("/staff/evaluations?tab=90day&fy=2026");
+  });
+
+  it("groups year-end evaluations into Overdue and Finished, with the due date", async () => {
+    await renderPage();
+    expect(screen.getByText(/FY2026 evaluations are due Oct 31, 2026 — 2 days overdue/)).toBeInTheDocument();
+    const overdue = screen.getByRole("region", { name: "Overdue (2)" });
+    expect(within(overdue).getByText("Oscar Gonzalez")).toBeInTheDocument();
+    expect(within(overdue).getByText("Ruben Villalobos")).toBeInTheDocument();
+    expect(within(overdue).getAllByText(/2 days overdue/)).toHaveLength(2);
+    const finished = screen.getByRole("region", { name: "Finished (1)" });
+    expect(within(finished).getByText("Done Person")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Due soon/ })).toBeNull();
+    // The 90-day list is on its own tab.
+    expect(screen.queryByText("Colin O'Neill")).toBeNull();
     expect(screen.getByText("Not due a FY2026 evaluation")).toBeInTheDocument();
-    expect(screen.getByText(/Hired fewer than 90 days before Sep 30, 2026/)).toBeInTheDocument();
-    expect(screen.getByText(/90-day mark Nov 18, 2026/)).toBeInTheDocument();
-    // His row and "Start next" both open the yearly evaluation.
-    for (const link of screen.getAllByRole("link", { name: /Oscar Gonzalez/ })) {
-      expect(link).toHaveAttribute("href", "/staff/evaluations/edit?employee=old&fy=2026");
-    }
+  });
+
+  it("shows 90-day evaluations by due status on their tab", async () => {
+    nav.search = "tab=90day&fy=2026";
+    await renderPage();
+    expect(screen.getByRole("tab", { name: /90-day/ })).toHaveAttribute("aria-selected", "true");
+    const overdue = screen.getByRole("region", { name: "Overdue (1)" });
+    const colin = within(overdue).getByRole("link", { name: /Colin O'Neill/ });
+    expect(colin).toHaveAttribute("href", "/staff/evaluations/edit?employee=colin&kind=90day&start=2026-06-01");
+    expect(colin).toHaveTextContent("64 days overdue");
+    const soon = screen.getByRole("region", { name: "Due soon (1)" });
+    expect(within(soon).getByRole("link", { name: /New Hire/ })).toHaveTextContent("Due today");
+    expect(screen.queryByText("Oscar Gonzalez")).toBeNull();
   });
 });

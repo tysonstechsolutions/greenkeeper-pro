@@ -65,8 +65,8 @@ export function inPeriod(iso: string | null | undefined, period: Pick<Evaluation
  */
 export const NEW_HIRE_DAYS = 90;
 
-/** Show a 90-day evaluation this many days before the mark… */
-export const NINETY_DAY_LEAD_DAYS = 30;
+/** A 90-day evaluation shows up on the 90-day mark itself (not before). */
+export const NINETY_DAY_LEAD_DAYS = 0;
 /** …and keep showing it (as overdue) this long after, unless it's final. */
 export const NINETY_DAY_GRACE_DAYS = 90;
 
@@ -109,17 +109,63 @@ export function ninetyDayPeriod(hireDate: string): EvaluationPeriod {
   return { start: hireDate, end: addDays(hireDate, NEW_HIRE_DAYS), label: "90-Day" };
 }
 
-export type NinetyDayTiming = "upcoming" | "due" | "overdue";
+// ── Due dates ────────────────────────────────────────────────────────────────
+
+/**
+ * Nobody shows on either evaluation list until they've worked here this long
+ * (their 90-day mark): before that there is nothing to evaluate yet.
+ */
+export const MIN_EMPLOYED_DAYS = NEW_HIRE_DAYS;
+
+/** Year-end evaluations are due this many days after the period ends (Sep 30 -> Oct 31). */
+export const YEAR_END_DUE_DAYS = 31;
+
+/** "Due soon" means due within this many days. */
+export const DUE_SOON_DAYS = 30;
+
+export type DueStatus = "overdue" | "due_soon" | "upcoming";
+
+export const DUE_STATUS_LABELS: Record<DueStatus, string> = {
+  overdue: "Overdue",
+  due_soon: "Due soon",
+  upcoming: "Upcoming",
+};
+
+/** Where a due date stands today. Due today is still "due soon", not overdue. */
+export function dueStatus(dueIso: string, todayIso: string): DueStatus {
+  const left = daysBetween(todayIso, dueIso);
+  if (left < 0) return "overdue";
+  return left <= DUE_SOON_DAYS ? "due_soon" : "upcoming";
+}
+
+/** "Due in 5 days", "Due today", "3 days overdue". */
+export function dueText(dueIso: string, todayIso: string): string {
+  const left = daysBetween(todayIso, dueIso);
+  if (left === 0) return "Due today";
+  if (left > 0) return `Due in ${left} day${left === 1 ? "" : "s"}`;
+  return `${-left} day${left === -1 ? "" : "s"} overdue`;
+}
+
+/** The date a period's year-end evaluations are due (Oct 31 for an FY ending Sep 30). */
+export function yearEndDueDate(period: Pick<EvaluationPeriod, "end">): string {
+  return addDays(period.end, YEAR_END_DUE_DAYS);
+}
+
+/** Has this person worked here long enough to appear on the evaluation lists? */
+export function employedLongEnough(hireDate: string | null | undefined, todayIso: string): boolean {
+  if (!isIsoDate(hireDate)) return true; // unknown: keep them visible
+  return daysBetween(hireDate, todayIso) >= MIN_EMPLOYED_DAYS;
+}
 
 /**
  * Where someone's 90-day evaluation stands today, or null when it's outside
- * the window the roster shows (too early, or long past the mark).
- * "due" = the mark is within the next week or today.
+ * the window the roster shows (before the mark, or long past it). It is due
+ * on the 90-day mark and overdue from the next day.
  */
-export function ninetyDayTiming(hireDate: string | null | undefined, todayIso: string): NinetyDayTiming | null {
+export function ninetyDayTiming(hireDate: string | null | undefined, todayIso: string): DueStatus | null {
   if (!isIsoDate(hireDate)) return null;
-  const toMark = daysBetween(todayIso, addDays(hireDate, NEW_HIRE_DAYS));
+  const mark = addDays(hireDate, NEW_HIRE_DAYS);
+  const toMark = daysBetween(todayIso, mark);
   if (toMark > NINETY_DAY_LEAD_DAYS || toMark < -NINETY_DAY_GRACE_DAYS) return null;
-  if (toMark < 0) return "overdue";
-  return toMark <= 7 ? "due" : "upcoming";
+  return dueStatus(mark, todayIso);
 }

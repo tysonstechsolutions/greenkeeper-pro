@@ -21,10 +21,13 @@ import { buildFacts } from "./facts";
 import { FORM_VERSION } from "./form";
 import {
   addDays,
+  dueStatus,
+  employedLongEnough,
   NEW_HIRE_DAYS,
   needsAnnualEvaluation,
   ninetyDayTiming,
-  type NinetyDayTiming,
+  yearEndDueDate,
+  type DueStatus,
 } from "./period";
 import { applicableRatings } from "./questions";
 import { buildSuggestions, emptySuggestions, type EvaluationSuggestions } from "./suggestions";
@@ -62,18 +65,27 @@ export interface RosterEntry {
   profile: RosterProfile;
   evaluation: StaffEvaluation | null;
   progress: EvaluationProgress;
+  /** When the year-end evaluation is due (Oct 31 for an FY ending Sep 30). */
+  dueDate: string;
+  /** Overdue / due soon / upcoming; null once it's final. */
+  due: DueStatus | null;
 }
 
-/** Someone whose 90-day evaluation is coming up, due, or overdue. */
+/** Someone whose 90-day evaluation is due or overdue. */
 export interface NinetyDayEntry {
   profile: RosterProfile;
   hireDate: string;
-  /** The 90-day mark (hire date + 90 days). */
+  /** The 90-day mark (hire date + 90 days), when it's due. */
   dueDate: string;
-  timing: NinetyDayTiming;
+  /** Overdue / due soon (today); null once it's final. */
+  due: DueStatus | null;
   evaluation: StaffEvaluation | null;
   progress: EvaluationProgress;
 }
+
+/** Overdue first, then due soon, upcoming, and finished last. */
+const DUE_ORDER = (d: DueStatus | null): number =>
+  d === "overdue" ? 0 : d === "due_soon" ? 1 : d === "upcoming" ? 2 : 3;
 
 /** Left off the yearly list: hired fewer than 90 days before the period ended. */
 export interface NotDueEntry {
@@ -97,8 +109,6 @@ const PROGRESS_ORDER: Record<EvaluationProgress, number> = {
   final: 3,
 };
 
-const TIMING_ORDER: Record<NinetyDayTiming, number> = { overdue: 0, due: 1, upcoming: 2 };
-
 interface RosterSplitInput {
   profiles: RosterProfile[];
   annual: StaffEvaluation[];
@@ -112,10 +122,12 @@ interface RosterSplitInput {
 /**
  * Sort everyone the viewer evaluates into the yearly list, the 90-day list,
  * and the "not due this year" note. Pure, for testing.
+ * - Nobody shows until they've been employed 90 days (an evaluation that was
+ *   already started always shows).
  * - Yearly: active staff, except people hired fewer than 90 days before the
- *   period ended. An evaluation already started always stays on the list.
- * - 90-day: anyone whose 90-day mark is within the roster window, plus any
- *   unfinished 90-day evaluation.
+ *   period ended. Due Oct 31 (period end + 31 days).
+ * - 90-day: due on the 90-day mark, overdue from the next day; shown until
+ *   90 days past the mark, and any unfinished 90-day evaluation.
  */
 export function splitRoster(input: RosterSplitInput): {
   entries: RosterEntry[];
@@ -140,45 +152,59 @@ export function splitRoster(input: RosterSplitInput): {
         (!!viewer.isFbManager && isFbStaff(p)),
     );
 
+  const yearEndDue = yearEndDueDate(period);
   const entries: RosterEntry[] = [];
   const notDue: NotDueEntry[] = [];
   const ninetyDay: NinetyDayEntry[] = [];
   for (const profile of visible) {
     const hireDate = input.hireDates.get(profile.id) ?? null;
     const evaluation = annualBy.get(profile.id) ?? null;
+    const row = ninetyBy.get(profile.id) ?? null;
+    // Too new to evaluate at all (unless someone already started one).
+    if (!employedLongEnough(hireDate, todayIso) && !evaluation && !row) continue;
+
     if (evaluation || needsAnnualEvaluation(hireDate, period)) {
-      entries.push({ profile, evaluation, progress: evaluationProgress(evaluation) });
+      const progress = evaluationProgress(evaluation);
+      entries.push({
+        profile,
+        evaluation,
+        progress,
+        dueDate: yearEndDue,
+        due: progress === "final" ? null : dueStatus(yearEndDue, todayIso),
+      });
     } else if (hireDate && hireDate <= period.end) {
       notDue.push({ profile, hireDate });
     }
 
-    const row = ninetyBy.get(profile.id) ?? null;
     // A started 90-day evaluation keeps its own dates; otherwise use the hire date.
     const start = row?.period_start ?? hireDate;
     if (!start) continue;
     const timing = ninetyDayTiming(start, todayIso);
     if (timing || (row && row.status !== "final")) {
+      const dueDate = row?.period_end ?? addDays(start, NEW_HIRE_DAYS);
+      const progress = evaluationProgress(row);
       ninetyDay.push({
         profile,
         hireDate: start,
-        dueDate: row?.period_end ?? addDays(start, NEW_HIRE_DAYS),
-        timing: timing ?? "overdue",
+        dueDate,
+        due: progress === "final" ? null : dueStatus(dueDate, todayIso),
         evaluation: row,
-        progress: evaluationProgress(row),
+        progress,
       });
     }
   }
 
   entries.sort(
     (a, b) =>
+      DUE_ORDER(a.due) - DUE_ORDER(b.due) ||
       PROGRESS_ORDER[a.progress] - PROGRESS_ORDER[b.progress] ||
       (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""),
   );
   ninetyDay.sort(
     (a, b) =>
-      Number(a.progress === "final") - Number(b.progress === "final") ||
-      TIMING_ORDER[a.timing] - TIMING_ORDER[b.timing] ||
-      a.dueDate.localeCompare(b.dueDate),
+      DUE_ORDER(a.due) - DUE_ORDER(b.due) ||
+      a.dueDate.localeCompare(b.dueDate) ||
+      (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""),
   );
   notDue.sort((a, b) => (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""));
   return { entries, ninetyDay, notDue };

@@ -2,6 +2,10 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  dueStatus,
+  dueText,
+  employedLongEnough,
+  yearEndDueDate,
   daysBetween,
   fiscalYearPeriod,
   isIsoDate,
@@ -45,16 +49,34 @@ describe("90-day period and timing", () => {
   it("runs from the hire date to the 90-day mark", () => {
     expect(ninetyDayPeriod("2026-06-01")).toEqual({ start: "2026-06-01", end: "2026-08-30", label: "90-Day" });
   });
-  it("is upcoming, due, overdue, or out of the window", () => {
+  it("shows on the 90-day mark as due, and is overdue the day after", () => {
     const hire = "2026-08-01"; // mark 2026-10-30
-    expect(ninetyDayTiming(hire, "2026-09-29")).toBeNull(); // 31 days out
-    expect(ninetyDayTiming(hire, "2026-09-30")).toBe("upcoming"); // 30 days out
-    expect(ninetyDayTiming(hire, "2026-10-23")).toBe("due"); // a week out
-    expect(ninetyDayTiming(hire, "2026-10-30")).toBe("due"); // the mark
+    expect(ninetyDayTiming(hire, "2026-10-29")).toBeNull(); // not yet
+    expect(ninetyDayTiming(hire, "2026-10-30")).toBe("due_soon"); // the mark: due today
     expect(ninetyDayTiming(hire, "2026-10-31")).toBe("overdue");
     expect(ninetyDayTiming(hire, "2027-01-28")).toBe("overdue"); // 90 days late
     expect(ninetyDayTiming(hire, "2027-01-29")).toBeNull(); // long past
     expect(ninetyDayTiming(null, "2026-10-01")).toBeNull();
+  });
+});
+
+describe("due dates", () => {
+  it("year-end evaluations are due Oct 31", () => {
+    expect(yearEndDueDate(FY2026)).toBe("2026-10-31");
+  });
+  it("is due soon within 30 days and overdue after the date", () => {
+    expect(dueStatus("2026-10-31", "2026-09-30")).toBe("upcoming"); // 31 days out
+    expect(dueStatus("2026-10-31", "2026-10-01")).toBe("due_soon"); // 30 days out
+    expect(dueStatus("2026-10-31", "2026-10-31")).toBe("due_soon"); // due today
+    expect(dueStatus("2026-10-31", "2026-11-01")).toBe("overdue");
+    expect(dueText("2026-10-31", "2026-10-31")).toBe("Due today");
+    expect(dueText("2026-10-31", "2026-10-30")).toBe("Due in 1 day");
+    expect(dueText("2026-10-31", "2026-11-03")).toBe("3 days overdue");
+  });
+  it("needs 90 days employed to show on the evaluation lists", () => {
+    expect(employedLongEnough("2026-07-07", "2026-10-05")).toBe(true); // 90 days
+    expect(employedLongEnough("2026-07-08", "2026-10-05")).toBe(false); // 89 days
+    expect(employedLongEnough(null, "2026-10-05")).toBe(true); // unknown: keep
   });
 });
 
@@ -65,7 +87,7 @@ describe("links and filters", () => {
       "/staff/evaluations/edit?employee=e1&kind=90day&start=2026-06-01",
     );
     expect(evaluationListHref({ fy: 2026 })).toBe("/staff/evaluations?fy=2026");
-    expect(evaluationListHref({ ninetyDayStart: "2026-06-01" })).toBe("/staff/evaluations");
+    expect(evaluationListHref({ ninetyDayStart: "2026-06-01" })).toBe("/staff/evaluations?tab=90day");
     expect(kindFilter("annual")).toBe("rating_reason=neq.ninety_day");
     expect(kindFilter("ninety_day")).toBe("rating_reason=eq.ninety_day");
   });
@@ -132,29 +154,43 @@ describe("splitRoster", () => {
     todayIso: "2026-10-05",
   });
 
-  it("leaves recent hires off the yearly list but keeps one already started", () => {
+  it("hides anyone employed under 90 days, unless an evaluation was already started", () => {
+    // Late Hire (46 days) is nowhere; Started Anyway (34 days) keeps the
+    // year-end evaluation someone already began.
     expect(split.entries.map((e) => e.profile.id).sort()).toEqual(["colin", "nodate", "old", "started"]);
-    expect(split.notDue.map((e) => [e.profile.id, e.hireDate])).toEqual([["late", "2026-08-20"]]);
+    expect(split.notDue).toEqual([]);
+    expect(split.ninetyDay.map((e) => e.profile.id)).toEqual(["colin"]);
   });
 
-  it("lists 90-day evaluations in the window, most urgent first", () => {
-    // Late Hire (mark Nov 18) and Started Anyway (mark Nov 30) are more than
-    // 30 days out, so only Colin (mark Aug 30) shows today.
-    expect(split.ninetyDay.map((e) => [e.profile.id, e.timing, e.dueDate])).toEqual([["colin", "overdue", "2026-08-30"]]);
-    const nextMonth = splitRoster({
+  it("dates the year-end list and flags what's overdue", () => {
+    expect(split.entries.every((e) => e.dueDate === "2026-10-31")).toBe(true);
+    expect(new Set(split.entries.map((e) => e.due))).toEqual(new Set(["due_soon"]));
+    const afterDue = splitRoster({ profiles, annual: [row("old", { status: "final" })], ninetyDay: [], hireDates, period: FY2026, viewer: { id: "gm", isManager: true }, todayIso: "2026-11-02" });
+    expect(afterDue.entries.find((e) => e.profile.id === "colin")?.due).toBe("overdue");
+    expect(afterDue.entries.find((e) => e.profile.id === "old")?.due).toBeNull(); // finished
+    expect(afterDue.entries.at(-1)?.profile.id).toBe("old"); // finished last
+    const nextYear = splitRoster({ profiles, annual: [], ninetyDay: [], hireDates, period: fiscalYearPeriod(2027), viewer: { id: "gm", isManager: true }, todayIso: "2026-11-02" });
+    expect(nextYear.entries.find((e) => e.profile.id === "old")?.due).toBe("upcoming");
+  });
+
+  it("lists 90-day evaluations from the mark, most urgent first", () => {
+    // Colin's mark (Aug 30) has passed: overdue.
+    expect(split.ninetyDay.map((e) => [e.profile.id, e.due, e.dueDate])).toEqual([["colin", "overdue", "2026-08-30"]]);
+    // On Nov 18 Late Hire reaches the mark (due today) and the year-end note shows them.
+    const lateMark = splitRoster({
       profiles,
       annual: [],
       ninetyDay: [],
       hireDates,
       period: FY2026,
       viewer: { id: "gm", isManager: true },
-      todayIso: "2026-11-01",
+      todayIso: "2026-11-18",
     });
-    expect(nextMonth.ninetyDay.map((e) => [e.profile.id, e.timing])).toEqual([
+    expect(lateMark.ninetyDay.map((e) => [e.profile.id, e.due])).toEqual([
       ["colin", "overdue"],
-      ["late", "upcoming"],
-      ["started", "upcoming"],
+      ["late", "due_soon"],
     ]);
+    expect(lateMark.notDue.map((e) => e.profile.id)).toEqual(["late"]);
   });
 
   it("keeps an unfinished 90-day evaluation on the list after the window, and drops a final one", () => {
@@ -181,7 +217,7 @@ describe("splitRoster", () => {
       hireDates: new Map([["a", "2026-08-01"], ["b", "2026-08-01"]]),
       period: FY2026,
       viewer: { id: "boss", isManager: false },
-      todayIso: "2026-10-05",
+      todayIso: "2026-10-30", // their 90-day mark
     });
     expect(sup.entries).toEqual([]);
     expect(sup.notDue.map((e) => e.profile.id)).toEqual(["a"]);
