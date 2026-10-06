@@ -101,6 +101,11 @@ export interface CostPeriod {
   purchases?: number;
   startInventory?: number;
   endInventory?: number;
+  /**
+   * Bar months with no beer or liquor invoice in them (only US Foods mixers):
+   * the bar's cost that month is short by whatever was bought elsewhere.
+   */
+  vendorGap?: boolean;
 }
 
 export interface MonthEndCount {
@@ -153,6 +158,19 @@ export function withInventory(periods: CostPeriod[], counts: MonthEndCount[], ou
         status: statusFor(pct, OUTLET_COGS_TARGET[outlet]),
       };
     });
+}
+
+/**
+ * Mark bar months that have no invoice from a beer or liquor vendor (anyone
+ * but US Foods) with bar cost on it. Monthly bar periods only.
+ */
+export function markVendorGaps(periods: CostPeriod[], purchases: CostPurchase[]): CostPeriod[] {
+  const months = new Set(
+    purchases
+      .filter((p) => !/us foods/i.test(p.vendor ?? "US Foods") && purchaseSplit(p).bar !== 0)
+      .map((p) => p.purchase_date.slice(0, 7)),
+  );
+  return periods.map((p) => (months.has(p.key) ? p : { ...p, vendorGap: true }));
 }
 
 function statusFor(pct: number | null, target: number): CostStatus {

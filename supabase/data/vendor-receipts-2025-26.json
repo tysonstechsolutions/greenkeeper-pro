@@ -1,0 +1,2984 @@
+[
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "311506",
+  "purchase_date": "2025-10-06",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "06144",
+    "description": "BHC MILL DONUT",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 35.38,
+    "list_price": 35.38,
+    "discount": 0,
+    "extended": 35.38
+   },
+   {
+    "item": "11182",
+    "description": "BUD",
+    "pack_size": "18/16 CAN",
+    "qty": 1,
+    "unit_price": 19.73,
+    "list_price": 19.73,
+    "discount": 0.0,
+    "extended": 19.73
+   },
+   {
+    "item": "13045",
+    "description": "PABST",
+    "pack_size": "4/6/16 CAN",
+    "qty": 1,
+    "unit_price": 22.6,
+    "list_price": 22.6,
+    "discount": 0,
+    "extended": 22.6
+   },
+   {
+    "item": "80079",
+    "description": "POINT AMBER",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 23.48,
+    "list_price": 23.48,
+    "discount": 0,
+    "extended": 23.48
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 149.67,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "311507",
+  "purchase_date": "2025-10-06",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 3,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 172.41
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581224",
+    "description": "CUT PEPERMINT",
+    "pack_size": "6/4/12",
+    "qty": 2,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0,
+    "extended": 114.94
+   }
+  ],
+  "total": 549.65,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "358300",
+  "purchase_date": "2025-10-30",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 3,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 172.41
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581214",
+    "description": "CUT PINE MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581113",
+    "description": "CUT TIKI MAI T",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   }
+  ],
+  "total": 1116.69,
+  "total_basis": "from the items only, since the bottom of the receipt is not in the photo",
+  "note": "Peppermint (2 cases) was out of stock. Another Oct 30 invoice of about $306.54 is not in the photos.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "380981",
+  "purchase_date": "2025-11-12",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 76.96
+   },
+   {
+    "item": "80224",
+    "description": "BHC BLK PHILLI",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 35.38,
+    "list_price": 35.38,
+    "discount": 0,
+    "extended": 70.76
+   },
+   {
+    "item": "06144",
+    "description": "BHC MILL DONUT",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 35.38,
+    "list_price": 35.38,
+    "discount": 0,
+    "extended": 35.38
+   },
+   {
+    "item": "80533",
+    "description": "BHC POM FIZZ",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 35.43,
+    "list_price": 35.43,
+    "discount": 0,
+    "extended": 70.86
+   },
+   {
+    "item": "11182",
+    "description": "BUD",
+    "pack_size": "18/16 CAN",
+    "qty": 1,
+    "unit_price": 19.73,
+    "list_price": 19.73,
+    "discount": 0.0,
+    "extended": 19.73
+   },
+   {
+    "item": "91568",
+    "description": "GI HONKERS ALE",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 33.33,
+    "list_price": 33.33,
+    "discount": 0,
+    "extended": 33.33
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 317.02,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "380983",
+  "purchase_date": "2025-11-12",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 57.47
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   }
+  ],
+  "total": 372.23,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": "Espresso Martini and Peppermint were out of stock.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "393156",
+  "purchase_date": "2025-11-19",
+  "lines": [
+   {
+    "item": "11182",
+    "description": "BUD",
+    "pack_size": "18/16 CAN",
+    "qty": 1,
+    "unit_price": 19.73,
+    "list_price": 19.73,
+    "discount": 0.0,
+    "extended": 19.73
+   },
+   {
+    "item": "91568",
+    "description": "GI HONKERS ALE",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 33.33,
+    "list_price": 33.33,
+    "discount": 0,
+    "extended": 33.33
+   },
+   {
+    "item": "99563",
+    "description": "GI SOFIE",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 36.37,
+    "list_price": 36.37,
+    "discount": 0,
+    "extended": 36.37
+   },
+   {
+    "item": "80085",
+    "description": "POINT MID BLCK",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 23.48,
+    "list_price": 23.48,
+    "discount": 0,
+    "extended": 23.48
+   },
+   {
+    "item": "88016",
+    "description": "SHINER BOCK",
+    "pack_size": "24/16 CAN",
+    "qty": 1,
+    "unit_price": 27.5,
+    "list_price": 29.3,
+    "discount": 1.8,
+    "extended": 27.5
+   },
+   {
+    "item": "80360",
+    "description": "SHINER HOL CHE",
+    "pack_size": "2/12/12 BTL",
+    "qty": 1,
+    "unit_price": 24.23,
+    "list_price": 29.48,
+    "discount": 5.25,
+    "extended": 24.23
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 174.64,
+  "total_basis": "printed on the invoice",
+  "note": "Point Amber was out of stock.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "393158",
+  "purchase_date": "2025-11-19",
+  "lines": [
+   {
+    "item": "581225",
+    "description": "CUT ESP MARTIN",
+    "pack_size": "6/4/12",
+    "qty": 5,
+    "unit_price": 52.47,
+    "list_price": 57.47,
+    "discount": 5.0,
+    "extended": 262.35
+   },
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 3,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 172.41
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581214",
+    "description": "CUT PINE MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   }
+  ],
+  "total": 697.06,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "417452",
+  "purchase_date": "2025-12-03",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "11182",
+    "description": "BUD",
+    "pack_size": "18/16 CAN",
+    "qty": 1,
+    "unit_price": 19.73,
+    "list_price": 19.73,
+    "discount": 0.0,
+    "extended": 19.73
+   },
+   {
+    "item": "99785",
+    "description": "GI BH TROPICAL",
+    "pack_size": "2/12/12 CAN",
+    "qty": 2,
+    "unit_price": 35.52,
+    "list_price": 35.52,
+    "discount": 0,
+    "extended": 71.04
+   },
+   {
+    "item": "80079",
+    "description": "POINT AMBER",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 23.48,
+    "list_price": 23.48,
+    "discount": 0,
+    "extended": 23.48
+   },
+   {
+    "item": "80085",
+    "description": "POINT MID BLCK",
+    "pack_size": "2/12/12 CAN",
+    "qty": 2,
+    "unit_price": 23.48,
+    "list_price": 23.48,
+    "discount": 0,
+    "extended": 46.96
+   },
+   {
+    "item": "80082",
+    "description": "POINT SNOW PIL",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 23.48,
+    "list_price": 23.48,
+    "discount": 0,
+    "extended": 23.48
+   },
+   {
+    "item": "88016",
+    "description": "SHINER BOCK",
+    "pack_size": "24/16 CAN",
+    "qty": 2,
+    "unit_price": 27.5,
+    "list_price": 29.3,
+    "discount": 1.8,
+    "extended": 55.0
+   },
+   {
+    "item": "80360",
+    "description": "SHINER HOL CHE",
+    "pack_size": "2/12/12 BTL",
+    "qty": 2,
+    "unit_price": 24.23,
+    "list_price": 29.48,
+    "discount": 5.25,
+    "extended": 48.46
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 336.63,
+  "total_basis": "printed on the invoice",
+  "note": "Black Philly was out of stock.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "417455",
+  "purchase_date": "2025-12-03",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 3,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 172.41
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   },
+   {
+    "item": "581113",
+    "description": "CUT TIKI MAI T",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   }
+  ],
+  "total": 592.09,
+  "total_basis": "printed on the invoice",
+  "note": "Long Island (2) and White Russian (3) were out of stock.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "429119",
+  "purchase_date": "2025-12-10",
+  "lines": [
+   {
+    "item": "11182",
+    "description": "BUD",
+    "pack_size": "18/16 CAN",
+    "qty": 1,
+    "unit_price": 19.73,
+    "list_price": 19.73,
+    "discount": 0.0,
+    "extended": 19.73
+   },
+   {
+    "item": "99785",
+    "description": "GI BH TROPICAL",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 35.52,
+    "list_price": 35.52,
+    "discount": 0,
+    "extended": 35.52
+   },
+   {
+    "item": "07414",
+    "description": "STELLA",
+    "pack_size": "2/12/11.2 BTL",
+    "qty": 1,
+    "unit_price": 29.35,
+    "list_price": 33.05,
+    "discount": 3.7,
+    "extended": 29.35
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 94.6,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "429121",
+  "purchase_date": "2025-12-10",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 2,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 114.94
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 57.46,
+    "list_price": 57.46,
+    "discount": 0,
+    "extended": 114.92
+   }
+  ],
+  "total": 229.86,
+  "total_basis": "printed on the invoice",
+  "note": "A third Dec 10 invoice for $58.00 is not in the photos.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "441601",
+  "purchase_date": "2025-12-17",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "93544",
+    "description": "GI IPA",
+    "pack_size": "6/4/16 CAN",
+    "qty": 1,
+    "unit_price": 38.71,
+    "list_price": 38.71,
+    "discount": 0,
+    "extended": 38.71
+   },
+   {
+    "item": "80082",
+    "description": "POINT SNOW PIL",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 23.48,
+    "list_price": 23.48,
+    "discount": 0,
+    "extended": 23.48
+   },
+   {
+    "item": "88016",
+    "description": "SHINER BOCK",
+    "pack_size": "24/16 CAN",
+    "qty": 2,
+    "unit_price": 27.5,
+    "list_price": 29.3,
+    "discount": 1.8,
+    "extended": 55.0
+   },
+   {
+    "item": "07414",
+    "description": "STELLA",
+    "pack_size": "2/12/11.2 BTL",
+    "qty": 1,
+    "unit_price": 29.35,
+    "list_price": 33.05,
+    "discount": 3.7,
+    "extended": 29.35
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 195.02,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "441602",
+  "purchase_date": "2025-12-17",
+  "lines": [
+   {
+    "item": "581225",
+    "description": "CUT ESP MARTIN",
+    "pack_size": "6/4/12",
+    "qty": 2,
+    "unit_price": 52.47,
+    "list_price": 57.47,
+    "discount": 5.0,
+    "extended": 104.94
+   },
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 57.47
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 3,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 157.38
+   }
+  ],
+  "total": 477.17,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "474004",
+  "purchase_date": "2026-01-07",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "80224",
+    "description": "BHC BLK PHILLI",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 35.38,
+    "list_price": 35.38,
+    "discount": 0,
+    "extended": 70.76
+   },
+   {
+    "item": "99785",
+    "description": "GI BH TROPICAL",
+    "pack_size": "2/12/12 CAN",
+    "qty": 2,
+    "unit_price": 35.52,
+    "list_price": 35.52,
+    "discount": 0,
+    "extended": 71.04
+   },
+   {
+    "item": "02462",
+    "description": "GUINNESS",
+    "pack_size": "3/8/14.9 CAN",
+    "qty": 1,
+    "unit_price": 36.8,
+    "list_price": 40.55,
+    "discount": 3.75,
+    "extended": 36.8
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 227.08,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "474005",
+  "purchase_date": "2026-01-07",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 57.47
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581113",
+    "description": "CUT TIKI MAI T",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   }
+  ],
+  "total": 319.77,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "497432",
+  "purchase_date": "2026-01-21",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "80516",
+    "description": "BHC TROP MANGO",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "07414",
+    "description": "STELLA",
+    "pack_size": "2/12/11.2 BTL",
+    "qty": 1,
+    "unit_price": 29.35,
+    "list_price": 33.05,
+    "discount": 3.7,
+    "extended": 29.35
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 116.31,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "497433",
+  "purchase_date": "2026-01-21",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 57.47,
+    "list_price": 57.47,
+    "discount": 0.0,
+    "extended": 57.47
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 104.92
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581113",
+    "description": "CUT TIKI MAI T",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 52.46,
+    "list_price": 57.46,
+    "discount": 5.0,
+    "extended": 52.46
+   }
+  ],
+  "total": 319.77,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "520501",
+  "purchase_date": "2026-02-04",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 76.96
+   },
+   {
+    "item": "99785",
+    "description": "GI BH TROPICAL",
+    "pack_size": "2/12/12 CAN",
+    "qty": 1,
+    "unit_price": 36.32,
+    "list_price": 36.32,
+    "discount": 0,
+    "extended": 36.32
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 123.28,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "520502",
+  "purchase_date": "2026-02-04",
+  "lines": [
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 59.26,
+    "list_price": 59.26,
+    "discount": 0.0,
+    "extended": 59.26
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581209",
+    "description": "CUT VOD TRANS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   }
+  ],
+  "total": 493.34,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "543832",
+  "purchase_date": "2026-02-18",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 76.96
+   },
+   {
+    "item": "80516",
+    "description": "BHC TROP MANGO",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 76.96
+   },
+   {
+    "item": "02462",
+    "description": "GUINNESS",
+    "pack_size": "3/8/14.9 CAN",
+    "qty": 1,
+    "unit_price": 37.39,
+    "list_price": 41.14,
+    "discount": 3.75,
+    "extended": 37.39
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 201.31,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "543833",
+  "purchase_date": "2026-02-18",
+  "lines": [
+   {
+    "item": "581225",
+    "description": "CUT ESP MARTIN",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 3,
+    "unit_price": 59.26,
+    "list_price": 59.26,
+    "discount": 0.0,
+    "extended": 177.78
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581209",
+    "description": "CUT VOD TRANS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   }
+  ],
+  "total": 666.12,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "556086",
+  "purchase_date": "2026-02-25",
+  "lines": [
+   {
+    "item": "88016",
+    "description": "SHINER BOCK",
+    "pack_size": "24/16 CAN",
+    "qty": 5,
+    "unit_price": 28.3,
+    "list_price": 30.1,
+    "discount": 1.8,
+    "extended": 141.5
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 151.5,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "108412",
+  "purchase_date": "2026-03-25",
+  "lines": [
+   {
+    "item": "80517",
+    "description": "BHC BLUE RASPB",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 35.38,
+    "list_price": 35.38,
+    "discount": 0,
+    "extended": 35.38
+   },
+   {
+    "item": "80516",
+    "description": "BHC TROP MANGO",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 38.48
+   },
+   {
+    "item": "11182",
+    "description": "BUD",
+    "pack_size": "18/16 CAN",
+    "qty": 1,
+    "unit_price": 18.23,
+    "list_price": 20.53,
+    "discount": 2.3,
+    "extended": 18.23
+   },
+   {
+    "item": "02462",
+    "description": "GUINNESS",
+    "pack_size": "3/8/14.9 CAN",
+    "qty": 1,
+    "unit_price": 37.39,
+    "list_price": 41.14,
+    "discount": 3.75,
+    "extended": 37.39
+   },
+   {
+    "item": "88016",
+    "description": "SHINER BOCK",
+    "pack_size": "24/16 CAN",
+    "qty": 1,
+    "unit_price": 28.3,
+    "list_price": 30.1,
+    "discount": 1.8,
+    "extended": 28.3
+   },
+   {
+    "item": "07414",
+    "description": "STELLA",
+    "pack_size": "2/12/11.2 BTL",
+    "qty": 1,
+    "unit_price": 29.35,
+    "list_price": 33.05,
+    "discount": 3.7,
+    "extended": 29.35
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 197.13,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": "An invoice of about $507.91 from mid-March is not in the photos.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "108413",
+  "purchase_date": "2026-03-25",
+  "lines": [
+   {
+    "item": "581225",
+    "description": "CUT ESP MARTIN",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 3,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 162.78
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581214",
+    "description": "CUT PINE MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581113",
+    "description": "CUT TIKI MAI T",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581209",
+    "description": "CUT VOD TRANS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   }
+  ],
+  "total": 976.68,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "121399",
+  "purchase_date": "2026-04-01",
+  "lines": [
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581214",
+    "description": "CUT PINE MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": null,
+    "description": "SERVICE CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 335.56,
+  "total_basis": "worked out from Lakeshore running account balance on later receipts",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "133606",
+  "purchase_date": "2026-04-08",
+  "lines": [
+   {
+    "item": "80505",
+    "description": "BHC BIG JAM",
+    "pack_size": "4/6/12 CAN",
+    "qty": 2,
+    "unit_price": 38.48,
+    "list_price": 38.48,
+    "discount": 0,
+    "extended": 76.96
+   },
+   {
+    "item": "80517",
+    "description": "BHC BLUE RASPB",
+    "pack_size": "4/6/12 CAN",
+    "qty": 1,
+    "unit_price": 35.38,
+    "list_price": 35.38,
+    "discount": 0,
+    "extended": 35.38
+   },
+   {
+    "item": "92544",
+    "description": "GI 312 URBAN",
+    "pack_size": "6/4/16 CAN",
+    "qty": 1,
+    "unit_price": 38.71,
+    "list_price": 38.71,
+    "discount": 0,
+    "extended": 38.71
+   },
+   {
+    "item": "02462",
+    "description": "GUINNESS",
+    "pack_size": "3/8/14.9 CAN",
+    "qty": 1,
+    "unit_price": 37.39,
+    "list_price": 41.14,
+    "discount": 3.75,
+    "extended": 37.39
+   },
+   {
+    "item": "88016",
+    "description": "SHINER BOCK",
+    "pack_size": "24/16 CAN",
+    "qty": 2,
+    "unit_price": 28.3,
+    "list_price": 30.1,
+    "discount": 1.8,
+    "extended": 56.6
+   },
+   {
+    "item": "07414",
+    "description": "STELLA",
+    "pack_size": "2/12/11.2 BTL",
+    "qty": 1,
+    "unit_price": 29.35,
+    "list_price": 33.05,
+    "discount": 3.7,
+    "extended": 29.35
+   }
+  ],
+  "total": 274.39,
+  "total_basis": "from the items only, since the bottom of the receipt is not in the photo",
+  "note": "The bottom of this receipt is not in the photo, so a $10 service charge may be missing.",
+  "source": null
+ },
+ {
+  "vendor": "Lakeshore Beverage",
+  "kind": "invoice",
+  "document_number": "133607",
+  "purchase_date": "2026-04-08",
+  "lines": [
+   {
+    "item": "581225",
+    "description": "CUT ESP MARTIN",
+    "pack_size": "6/4/12",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581227",
+    "description": "CUT LEMON DROP",
+    "pack_size": "6/4/12",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581114",
+    "description": "CUT LIME MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581201",
+    "description": "CUT LONG ISLAN",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581203",
+    "description": "CUT MANGO MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581214",
+    "description": "CUT PINE MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581206",
+    "description": "CUT STRAW MARG",
+    "pack_size": "6/4/12 CAN",
+    "qty": 2,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 108.52
+   },
+   {
+    "item": "581113",
+    "description": "CUT TIKI MAI T",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581115",
+    "description": "CUT VODKA MULE",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   },
+   {
+    "item": "581202",
+    "description": "CUT WHITE RUSS",
+    "pack_size": "6/4/12 CAN",
+    "qty": 1,
+    "unit_price": 54.26,
+    "list_price": 59.26,
+    "discount": 5.0,
+    "extended": 54.26
+   }
+  ],
+  "total": 651.12,
+  "total_basis": "from the items only, since the bottom of the receipt is not in the photo",
+  "note": "The photo ends at White Russian, so there may be more items below it.",
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "invoice",
+  "document_number": "10251838",
+  "purchase_date": "2025-11-18",
+  "lines": [
+   {
+    "item": "2676",
+    "description": "Angry Crisp 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 37.68,
+    "list_price": 38.2,
+    "discount": 0.52,
+    "extended": 75.36
+   },
+   {
+    "item": "2207",
+    "description": "Blue Moon 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.81,
+    "list_price": 40.5,
+    "discount": 5.69,
+    "extended": 34.81
+   },
+   {
+    "item": "4064",
+    "description": "Carbliss Vdk Lemon Lime 4pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 44.82,
+    "list_price": 54.0,
+    "discount": 9.18,
+    "extended": 44.82
+   },
+   {
+    "item": "4027",
+    "description": "Carbliss Vdk Peach 4pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 44.82,
+    "list_price": 54.0,
+    "discount": 9.18,
+    "extended": 44.82
+   },
+   {
+    "item": "4044",
+    "description": "Carbliss Vdk Pineapple 4pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 44.82,
+    "list_price": 54.0,
+    "discount": 9.18,
+    "extended": 44.82
+   },
+   {
+    "item": "2043",
+    "description": "Coors Banquet 15pk Alum Bt",
+    "pack_size": null,
+    "qty": 8,
+    "unit_price": 14.77,
+    "list_price": 17.4,
+    "discount": 2.63,
+    "extended": 118.16
+   },
+   {
+    "item": "2027",
+    "description": "Coors Lt 16oz 12pk Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 23.31,
+    "list_price": 24.0,
+    "discount": 0.69,
+    "extended": 46.62
+   },
+   {
+    "item": "7426",
+    "description": "Corona Extra 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.61,
+    "list_price": 39.5,
+    "discount": 4.89,
+    "extended": 34.61
+   },
+   {
+    "item": "7017",
+    "description": "Dos XX Lager 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 35.3,
+    "list_price": 39.5,
+    "discount": 4.2,
+    "extended": 70.6
+   },
+   {
+    "item": "7446",
+    "description": "Modelo Especial 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 34.61,
+    "list_price": 39.5,
+    "discount": 4.89,
+    "extended": 69.22
+   },
+   {
+    "item": "7202",
+    "description": "REV Anti-Hero IPA 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 45.95,
+    "list_price": 45.95,
+    "discount": 0,
+    "extended": 45.95
+   },
+   {
+    "item": "7641",
+    "description": "REV Cold Time 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 30.1,
+    "list_price": 32.1,
+    "discount": 2.0,
+    "extended": 60.2
+   },
+   {
+    "item": "7250",
+    "description": "REV Fistmas Ale 6pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 35.43,
+    "list_price": 35.95,
+    "discount": 0.52,
+    "extended": 35.43
+   },
+   {
+    "item": "7627",
+    "description": "REV X-Hero Juicy Rush 19.2oz Cn",
+    "pack_size": null,
+    "qty": 6,
+    "unit_price": 30.15,
+    "list_price": 30.15,
+    "discount": 0,
+    "extended": 180.9
+   },
+   {
+    "item": "2500",
+    "description": "Sam Lager 6pk Bt",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.48,
+    "list_price": 35.65,
+    "discount": 1.17,
+    "extended": 34.48
+   },
+   {
+    "item": "2535",
+    "description": "Sam Winter Lager 6pk Bt",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.48,
+    "list_price": 35.65,
+    "discount": 1.17,
+    "extended": 34.48
+   },
+   {
+    "item": "3745",
+    "description": "Sierra Hazy Little 6pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 35.13,
+    "list_price": 35.65,
+    "discount": 0.52,
+    "extended": 35.13
+   },
+   {
+    "item": "7857",
+    "description": "TH Boxcar Porter 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 51.8,
+    "list_price": 51.8,
+    "discount": 0,
+    "extended": 51.8
+   },
+   {
+    "item": "7841",
+    "description": "TH Longsnapper 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 51.11,
+    "list_price": 51.8,
+    "discount": 0.69,
+    "extended": 51.11
+   },
+   {
+    "item": "7803",
+    "description": "TH Scarlet Fire 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 51.8,
+    "list_price": 51.8,
+    "discount": 0,
+    "extended": 51.8
+   },
+   {
+    "item": "2706",
+    "description": "Twisted Tea 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 39.5,
+    "list_price": 39.5,
+    "discount": 0,
+    "extended": 79.0
+   },
+   {
+    "item": null,
+    "description": "DELIVERY CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 7.5,
+    "list_price": 7.5,
+    "discount": 0,
+    "extended": 7.5
+   }
+  ],
+  "total": 1251.62,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "credit",
+  "document_number": "10253244",
+  "purchase_date": "2025-12-16",
+  "lines": [
+   {
+    "item": "7330",
+    "description": "Modelo Especial 6pk Bt",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.48,
+    "list_price": 35.0,
+    "discount": 0.52,
+    "extended": 34.48
+   },
+   {
+    "item": "7202",
+    "description": "REV Anti-Hero IPA 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 45.95,
+    "list_price": 45.95,
+    "discount": 0,
+    "extended": 91.9
+   }
+  ],
+  "total": 126.38,
+  "total_basis": "printed on the invoice",
+  "note": "Returned for restock.",
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "credit",
+  "document_number": "10254279",
+  "purchase_date": "2026-01-06",
+  "lines": [
+   {
+    "item": "3221",
+    "description": "NH Dragons Milk 19.2oz Cn",
+    "pack_size": null,
+    "qty": 4,
+    "unit_price": 41.91,
+    "list_price": 41.91,
+    "discount": 0,
+    "extended": 167.64
+   }
+  ],
+  "total": 167.64,
+  "total_basis": "printed on the invoice",
+  "note": "Returned for restock.",
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "invoice",
+  "document_number": "10256742",
+  "purchase_date": "2026-02-24",
+  "lines": [
+   {
+    "item": "2676",
+    "description": "Angry Crisp 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 37.68,
+    "list_price": 38.2,
+    "discount": 0.52,
+    "extended": 37.68
+   },
+   {
+    "item": "2043",
+    "description": "Coors Banquet 15pk Alum Bt",
+    "pack_size": null,
+    "qty": 4,
+    "unit_price": 15.67,
+    "list_price": 18.3,
+    "discount": 2.63,
+    "extended": 62.68
+   },
+   {
+    "item": "2017",
+    "description": "Coors Lt 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 25.51,
+    "list_price": 30.6,
+    "discount": 5.09,
+    "extended": 51.02
+   },
+   {
+    "item": "1017",
+    "description": "Lite 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 25.51,
+    "list_price": 30.6,
+    "discount": 5.09,
+    "extended": 25.51
+   },
+   {
+    "item": "7485",
+    "description": "Negra Modelo 24pk Bt",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 29.88,
+    "list_price": 33.9,
+    "discount": 4.02,
+    "extended": 29.88
+   },
+   {
+    "item": "7627",
+    "description": "REV X-Hero Juicy Rush 19.2oz Cn",
+    "pack_size": null,
+    "qty": 4,
+    "unit_price": 30.95,
+    "list_price": 30.95,
+    "discount": 0,
+    "extended": 123.8
+   },
+   {
+    "item": "2500",
+    "description": "Sam Lager 6pk Bt",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 34.48,
+    "list_price": 35.65,
+    "discount": 1.17,
+    "extended": 68.96
+   },
+   {
+    "item": "3745",
+    "description": "Sierra Hazy Little 6pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 35.13,
+    "list_price": 35.65,
+    "discount": 0.52,
+    "extended": 35.13
+   },
+   {
+    "item": null,
+    "description": "DELIVERY CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 7.5,
+    "list_price": 7.5,
+    "discount": 0,
+    "extended": 7.5
+   }
+  ],
+  "total": 442.16,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "invoice",
+  "document_number": "10259248",
+  "purchase_date": "2026-04-14",
+  "lines": [
+   {
+    "item": "2676",
+    "description": "Angry Crisp 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 37.68,
+    "list_price": 38.2,
+    "discount": 0.52,
+    "extended": 37.68
+   },
+   {
+    "item": "2043",
+    "description": "Coors Banquet 15pk Alum Bt",
+    "pack_size": null,
+    "qty": 4,
+    "unit_price": 15.67,
+    "list_price": 18.3,
+    "discount": 2.63,
+    "extended": 62.68
+   },
+   {
+    "item": "2027",
+    "description": "Coors Lt 16oz 12pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 23.31,
+    "list_price": 24.0,
+    "discount": 0.69,
+    "extended": 23.31
+   },
+   {
+    "item": "1001",
+    "description": "Lite 16oz 12pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 24.0,
+    "list_price": 24.0,
+    "discount": 0,
+    "extended": 24.0
+   },
+   {
+    "item": "7446",
+    "description": "Modelo Especial 16oz Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 34.61,
+    "list_price": 39.5,
+    "discount": 4.89,
+    "extended": 69.22
+   },
+   {
+    "item": "9372",
+    "description": "Overtime Teq Marg 24pk Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 46.2,
+    "list_price": 72.18,
+    "discount": 25.98,
+    "extended": 92.4
+   },
+   {
+    "item": "9362",
+    "description": "Overtime Vdk Watermelon 24pk Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 46.2,
+    "list_price": 72.18,
+    "discount": 25.98,
+    "extended": 92.4
+   },
+   {
+    "item": "3795",
+    "description": "Sierra Big Little Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 31.38,
+    "list_price": 35.08,
+    "discount": 3.7,
+    "extended": 31.38
+   },
+   {
+    "item": null,
+    "description": "DELIVERY CHARGE",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 10.0,
+    "list_price": 10.0,
+    "discount": 0,
+    "extended": 10.0
+   }
+  ],
+  "total": 443.07,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "invoice",
+  "document_number": "10259249",
+  "purchase_date": "2026-04-14",
+  "lines": [
+   {
+    "item": "2676",
+    "description": "Angry Crisp 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 37.68,
+    "list_price": 38.2,
+    "discount": 0.52,
+    "extended": 37.68
+   },
+   {
+    "item": "2207",
+    "description": "Blue Moon 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.81,
+    "list_price": 40.5,
+    "discount": 5.69,
+    "extended": 34.81
+   },
+   {
+    "item": "2832",
+    "description": "Coors Banquet Lager 12pk Cn",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 24.0,
+    "list_price": 24.0,
+    "discount": 0,
+    "extended": 48.0
+   },
+   {
+    "item": "2027",
+    "description": "Coors Lt 16oz 12pk Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 23.31,
+    "list_price": 24.0,
+    "discount": 0.69,
+    "extended": 23.31
+   },
+   {
+    "item": "2706",
+    "description": "Twisted Tea 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 39.5,
+    "list_price": 39.5,
+    "discount": 0,
+    "extended": 39.5
+   },
+   {
+    "item": "9216",
+    "description": "White Claw Black Cherry 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 37.51,
+    "list_price": 39.5,
+    "discount": 1.99,
+    "extended": 37.51
+   },
+   {
+    "item": "4503",
+    "description": "Yuengling Lager 16oz 15pk Alum Bt",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 15.67,
+    "list_price": 18.3,
+    "discount": 2.63,
+    "extended": 15.67
+   }
+  ],
+  "total": 236.48,
+  "total_basis": "printed on the invoice",
+  "note": "Yuengling: 2 ordered, 1 shipped (back order).",
+  "source": null
+ },
+ {
+  "vendor": "Kloss Distributing",
+  "kind": "invoice",
+  "document_number": "10260832",
+  "purchase_date": "2026-05-05",
+  "lines": [
+   {
+    "item": "2676",
+    "description": "Angry Crisp 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 37.68,
+    "list_price": 38.2,
+    "discount": 0.52,
+    "extended": 37.68
+   },
+   {
+    "item": "2017",
+    "description": "Coors Lt 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 25.51,
+    "list_price": 30.6,
+    "discount": 5.09,
+    "extended": 25.51
+   },
+   {
+    "item": "1542",
+    "description": "Leinie Shandy Lemon 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.98,
+    "list_price": 40.5,
+    "discount": 5.52,
+    "extended": 34.98
+   },
+   {
+    "item": "7446",
+    "description": "Modelo Especial 16oz Cn",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 34.61,
+    "list_price": 39.5,
+    "discount": 4.89,
+    "extended": 34.61
+   },
+   {
+    "item": "4503",
+    "description": "Yuengling Lager 16oz 15pk Alum Bt",
+    "pack_size": null,
+    "qty": 3,
+    "unit_price": 15.67,
+    "list_price": 18.3,
+    "discount": 2.63,
+    "extended": 47.01
+   }
+  ],
+  "total": 179.79,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029103",
+  "purchase_date": "2026-06-18",
+  "lines": [
+   {
+    "item": "20106",
+    "description": "SODA: PEPSI 20 OZ",
+    "pack_size": "CS",
+    "qty": 3,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 56.73
+   },
+   {
+    "item": "20108",
+    "description": "SODA: PEPSI: DIET 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.36,
+    "list_price": 18.36,
+    "discount": 0,
+    "extended": 18.36
+   },
+   {
+    "item": "20102",
+    "description": "SODA: MOUNTAIN DEW 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20101",
+    "description": "TEA: LIPTON: BRISK: W/LEMON 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 19.75,
+    "list_price": 19.75,
+    "discount": 0,
+    "extended": 19.75
+   },
+   {
+    "item": "20133",
+    "description": "DOLE: LEMONADE 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 19.46,
+    "list_price": 19.46,
+    "discount": 0,
+    "extended": 19.46
+   },
+   {
+    "item": "20006",
+    "description": "GATORADE: FRUIT PUNCH",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 37.52
+   },
+   {
+    "item": "20009",
+    "description": "GATORADE: ORANGE",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 37.52
+   },
+   {
+    "item": "20007",
+    "description": "GATORADE: GLACIER FREEZE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 18.76
+   },
+   {
+    "item": "20132",
+    "description": "GATORADE ZERO: GLACIER CHERRY",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.21,
+    "list_price": 18.21,
+    "discount": 0,
+    "extended": 18.21
+   },
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 4,
+    "unit_price": 6.89,
+    "list_price": 6.89,
+    "discount": 0,
+    "extended": 27.56
+   }
+  ],
+  "total": 272.78,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029117",
+  "purchase_date": "2026-06-24",
+  "lines": [
+   {
+    "item": "30703",
+    "description": "WIPES: FDSV RAYON 14 X 21.5",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 33.13,
+    "list_price": 33.13,
+    "discount": 0,
+    "extended": 66.26
+   },
+   {
+    "item": "20106",
+    "description": "SODA: PEPSI 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20102",
+    "description": "SODA: MOUNTAIN DEW 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20109",
+    "description": "SODA: STARRY 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 6.89,
+    "list_price": 6.89,
+    "discount": 0,
+    "extended": 13.78
+   }
+  ],
+  "total": 136.77,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029135",
+  "purchase_date": "2026-07-08",
+  "lines": [
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 4,
+    "unit_price": 6.89,
+    "list_price": 6.89,
+    "discount": 0,
+    "extended": 27.56
+   },
+   {
+    "item": "20132",
+    "description": "GATORADE: ZERO: GLACIER CHERRY",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.21,
+    "list_price": 18.21,
+    "discount": 0,
+    "extended": 36.42
+   },
+   {
+    "item": "20008",
+    "description": "GATORADE: LEMON/LIME",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 37.52
+   },
+   {
+    "item": "30702",
+    "description": "NAPKIN: DISPENSER: INTERFOLD: 2 PLY WHITE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 46.01,
+    "list_price": 46.01,
+    "discount": 0,
+    "extended": 46.01
+   },
+   {
+    "item": "30707",
+    "description": "NAPKIN: BEVERAGE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 20.66,
+    "list_price": 20.66,
+    "discount": 0,
+    "extended": 20.66
+   },
+   {
+    "item": "30008",
+    "description": "BAG: CLEAR: 60 GAL",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 25.33,
+    "list_price": 25.33,
+    "discount": 0,
+    "extended": 50.66
+   },
+   {
+    "item": "40025",
+    "description": "BLEACH: GERM: CS/6",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 16.96,
+    "list_price": 16.96,
+    "discount": 0,
+    "extended": 16.96
+   }
+  ],
+  "total": 235.79,
+  "total_basis": "printed on the invoice",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "Mess requisition",
+  "kind": "invoice",
+  "document_number": "FY26-1191",
+  "purchase_date": "2026-05-27",
+  "lines": [
+   {
+    "item": null,
+    "description": "LETTUCE, HEAD",
+    "pack_size": "EA",
+    "qty": 3,
+    "unit_price": 1.3,
+    "list_price": 1.3,
+    "discount": 0,
+    "extended": 3.9
+   },
+   {
+    "item": null,
+    "description": "ONION",
+    "pack_size": "EA",
+    "qty": 2,
+    "unit_price": 0.72,
+    "list_price": 0.72,
+    "discount": 0,
+    "extended": 1.44
+   },
+   {
+    "item": null,
+    "description": "TOMATO",
+    "pack_size": "EA",
+    "qty": 6,
+    "unit_price": 0.96,
+    "list_price": 0.96,
+    "discount": 0,
+    "extended": 5.76
+   },
+   {
+    "item": null,
+    "description": "BUN, HOT DOG (PACK OF 25)",
+    "pack_size": "PK",
+    "qty": 1,
+    "unit_price": 29.0,
+    "list_price": 29.0,
+    "discount": 0,
+    "extended": 29.0
+   },
+   {
+    "item": null,
+    "description": "ITEM 5 (HARD TO READ ON THE SCAN)",
+    "pack_size": null,
+    "qty": 2,
+    "unit_price": 4.05,
+    "list_price": 4.05,
+    "discount": 0,
+    "extended": 8.1
+   }
+  ],
+  "total": 48.2,
+  "total_basis": "printed on the invoice",
+  "note": "From Epicenter (cost center 20574).",
+  "source": null
+ },
+ {
+  "vendor": "Mess requisition",
+  "kind": "invoice",
+  "document_number": "FY26-1194",
+  "purchase_date": "2026-06-09",
+  "lines": [
+   {
+    "item": null,
+    "description": "MODELO ESPECIAL",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 34.61,
+    "list_price": 34.61,
+    "discount": 0,
+    "extended": 69.22
+   },
+   {
+    "item": null,
+    "description": "COORS LIGHT 18PK",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 21.48,
+    "list_price": 21.48,
+    "discount": 0,
+    "extended": 42.96
+   },
+   {
+    "item": null,
+    "description": "COORS BANQUET",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 24.0,
+    "list_price": 24.0,
+    "discount": 0,
+    "extended": 48.0
+   },
+   {
+    "item": null,
+    "description": "BLUE MOON",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 34.81,
+    "list_price": 34.81,
+    "discount": 0,
+    "extended": 34.81
+   },
+   {
+    "item": null,
+    "description": "GUINNESS",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 37.39,
+    "list_price": 37.39,
+    "discount": 0,
+    "extended": 37.39
+   }
+  ],
+  "total": 232.38,
+  "total_basis": "printed on the invoice",
+  "note": "Beer from Epicenter (cost center 20574) to Buckleys bar, account 151120. Thermal paper ($86.01) on the same sheet is not in its total.",
+  "source": null
+ },
+ {
+  "vendor": "Mess requisition",
+  "kind": "invoice",
+  "document_number": "FY26-1338",
+  "purchase_date": "2026-07-08",
+  "lines": [
+   {
+    "item": null,
+    "description": "DESSERT BARS",
+    "pack_size": "TRAY",
+    "qty": 3,
+    "unit_price": 19.42,
+    "list_price": 19.42,
+    "discount": 0,
+    "extended": 58.26
+   },
+   {
+    "item": null,
+    "description": "POTATO SALAD",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 37.23,
+    "list_price": 37.23,
+    "discount": 0,
+    "extended": 37.23
+   },
+   {
+    "item": null,
+    "description": "TOMATO, RED ONION, COLESLAW AND OTHER ITEMS",
+    "pack_size": null,
+    "qty": 1,
+    "unit_price": 28.75,
+    "list_price": 28.75,
+    "discount": 0,
+    "extended": 28.75
+   }
+  ],
+  "total": 124.24,
+  "total_basis": "printed on the invoice",
+  "note": "From Epicenter. Only the total and two lines are clear on the scan.",
+  "source": null
+ },
+ {
+  "vendor": "Mess requisition",
+  "kind": "invoice",
+  "document_number": "FY26-1344",
+  "purchase_date": "2026-07-24",
+  "lines": [
+   {
+    "item": null,
+    "description": "DRESSING, RANCH",
+    "pack_size": "GAL",
+    "qty": 1,
+    "unit_price": 11.9,
+    "list_price": 11.9,
+    "discount": 0,
+    "extended": 11.9
+   },
+   {
+    "item": null,
+    "description": "LETTUCE, HEAD",
+    "pack_size": "EA",
+    "qty": 5,
+    "unit_price": 2.57,
+    "list_price": 2.57,
+    "discount": 0,
+    "extended": 12.85
+   }
+  ],
+  "total": 24.75,
+  "total_basis": "printed on the invoice",
+  "note": "From Epicenter (cost center 20574).",
+  "source": null
+ }
+]

@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseUsFoodsDocument } from "@/lib/restaurant/usfoods";
 import { expandFiles, planUsFoodsImport, readUsFoodsFiles, type ReadDocument } from "@/lib/restaurant/import";
-import { costByPeriod, priceChanges, purchaseSplit, topItems, weekStart, type CostLine } from "@/lib/restaurant/food-cost";
+import { costByPeriod, markVendorGaps, priceChanges, purchaseSplit, topItems, weekStart, type CostLine } from "@/lib/restaurant/food-cost";
 import {
   PR_PREFILL_KEY,
   buildOrderGuide,
@@ -274,5 +274,22 @@ describe("order guide", () => {
       sessionStorage.setItem(PR_PREFILL_KEY, JSON.stringify({ items: "nope" }));
       expect(takePrPrefill()).toBeNull();
     });
+  });
+});
+
+describe("markVendorGaps", () => {
+  it("flags bar months with only US Foods mixers", () => {
+    const purchases = [
+      { purchase_date: "2026-02-04", amount: 123.28, alcohol_amount: 123.28, food_amount: 0, supplies_amount: 0, bar_cogs_amount: 123.28, vendor: "Lakeshore Beverage" },
+      { purchase_date: "2026-03-02", amount: 50, food_amount: 50, alcohol_amount: 0, supplies_amount: 0, bar_cogs_amount: 12, vendor: "US Foods" },
+      { purchase_date: "2026-04-14", amount: 30, food_amount: 30, alcohol_amount: 0, supplies_amount: 0, bar_cogs_amount: 0, vendor: "MWR Central Warehouse" },
+    ];
+    const periods = costByPeriod(purchases, [], "month", "bar");
+    const marked = markVendorGaps([...periods, { key: "2026-04", cogs: 0, supplies: 0, sales: 0, pct: null, status: "no_sales" }], purchases);
+    expect(marked.map((p) => [p.key, !!p.vendorGap])).toEqual([
+      ["2026-03", true],
+      ["2026-02", false],
+      ["2026-04", true],
+    ]);
   });
 });

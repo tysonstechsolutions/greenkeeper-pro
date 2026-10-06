@@ -5,12 +5,14 @@
 // "Out" column on the per-area P&L (via restaurant_spend_monthly_rollup).
 // US Foods invoice PDFs can be imported whole: every line item comes in,
 // split into food, alcohol, and supplies, each line marked Restaurant or Bar
-// (separate COGS targets) and coded to its cost center and G/L.
+// (separate COGS targets) and coded to its cost center and G/L. Beer,
+// warehouse, and requisition invoices go in from a photo the same way.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  Camera,
   Check,
   ChevronDown,
   ChevronRight,
@@ -45,6 +47,7 @@ import {
 } from "@/lib/restaurant/import";
 import { barCogs, codeLine, type Outlet } from "@/lib/restaurant/coding";
 import { InvoiceLines } from "@/components/restaurant/invoice-lines";
+import { VendorInvoiceForm } from "@/components/restaurant/vendor-invoice-form";
 
 interface RestaurantPurchase {
   id: string;
@@ -126,6 +129,7 @@ export default function RestaurantPurchasesPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
+  const [showVendor, setShowVendor] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formDate, setFormDate] = useState(todayLocal());
   const [formVendor, setFormVendor] = useState("US Foods");
@@ -463,6 +467,13 @@ export default function RestaurantPurchasesPage() {
           onChange={(e) => pickImportFiles(e.target.files)}
         />
         <button
+          onClick={() => setShowVendor((v) => !v)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted active:scale-[0.98] transition-all"
+        >
+          <Camera className="w-4 h-4" />
+          Add beer / warehouse invoice
+        </button>
+        <button
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-semibold hover:bg-muted active:scale-[0.98] transition-all"
         >
@@ -593,6 +604,21 @@ export default function RestaurantPurchasesPage() {
             </button>
           )}
         </div>
+      )}
+
+      {showVendor && (
+        <VendorInvoiceForm
+          existing={rows}
+          userId={user?.id ?? null}
+          profileId={profile?.id ?? null}
+          onCancel={() => setShowVendor(false)}
+          onSaved={async (message) => {
+            setShowVendor(false);
+            setError(null);
+            await load();
+            setNotice(message);
+          }}
+        />
       )}
 
       {showForm && (

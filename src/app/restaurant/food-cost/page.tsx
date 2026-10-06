@@ -17,6 +17,7 @@ import {
   costByPeriod,
   lineOutlet,
   withInventory,
+  markVendorGaps,
   priceChanges,
   topItems,
   type CostLine,
@@ -173,6 +174,11 @@ function PeriodTable({ periods, label }: { periods: CostPeriod[]; label: (key: s
               : `Bought ${money(p.cogs)} · Sold ${money(p.sales)}`}
             {p.supplies ? ` · Supplies ${money(p.supplies)} (not in COGS)` : ""}
           </p>
+          {p.vendorGap && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              No beer or liquor invoices this month, so this cost is too low. Add them on Purchases.
+            </p>
+          )}
         </div>
       ))}
     </div>
@@ -223,7 +229,7 @@ function FoodCostContent() {
     const bar = costByPeriod(purchases, sales, view, "bar");
     return {
       restaurant: view === "month" ? withInventory(rest, counts, "restaurant") : rest,
-      bar: view === "month" && barPurchasesIn ? withInventory(bar, counts, "bar") : bar,
+      bar: view === "month" && barPurchasesIn ? markVendorGaps(withInventory(bar, counts, "bar"), purchases) : bar,
     };
   }, [purchases, sales, view, counts, barPurchasesIn]);
   const periods = byOutlet[outlet];
