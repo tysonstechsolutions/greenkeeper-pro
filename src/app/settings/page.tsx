@@ -16,6 +16,7 @@ import {
   Lock,
   Loader2,
   Activity,
+  KeyRound,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoleVisible } from "@/components/auth/role-guard";
@@ -80,6 +81,15 @@ const adminSections: {
     icon: Shield,
     href: "/staff",
     color: "from-red-500 to-rose-600",
+  },
+  {
+    title: "Sign-in PINs",
+    description: "See, set, or reset anyone's PIN",
+    icon: KeyRound,
+    href: "/settings/pins",
+    color: "from-violet-500 to-purple-600",
+    // Matches who the database lets manage PINs (20261013120000_gm_manages_pins).
+    roles: ["super", "asst_super", "gm"],
   },
   {
     title: "Morning Briefing",

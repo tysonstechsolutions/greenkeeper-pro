@@ -62,6 +62,7 @@ const TITLES: Record<string, string> = {
   "/reports": "Reports",
   "/revenue": "Revenue",
   "/settings": "Settings",
+  "/settings/pins": "Sign-in PINs",
   "/staff": "Staff",
   "/staff/profile": "Employee Profile",
   "/tournaments": "Tournaments",

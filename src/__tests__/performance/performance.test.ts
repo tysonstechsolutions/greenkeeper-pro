@@ -248,6 +248,49 @@ describe("recommendations", () => {
     expect(recs.find((r) => r.title.includes("never shows up"))?.title).toBe("$2,000 bought that never shows up in bar sales by name");
   });
 
+  it("counts Cutwater as sold once its flavors are rung up, with or without the name", () => {
+    const cut = (description: string, extended: number) => ({ purchase_date: "2026-05-01", description, extended, outlet: "bar", category: "alcohol" });
+    const lines = [cut("CUT LEMON DROP", 1500), cut("CUT LIME MARG", 1100), cut("CUT LONG ISLAN", 900), cut("CUT TIKI MAI T", 475), cut("CUT PEPERMINT", 115)];
+    const sold = [
+      sale("bar", "2026-10-02", "Lemon Drop", 3, 24),
+      sale("bar", "2026-10-02", "Lime Margarita", 2, 16),
+      sale("bar", "2026-10-03", "Mai Tai", 1, 8),
+    ];
+    // Long Island and Peppermint haven't sold yet: only those are left.
+    expect(unsoldPurchases(lines, sold, "2025-10-01")).toEqual([{ description: "Cutwater (CUT LONG ISLAN)", spend: 1015 }]);
+    // RecTrac's 18-character cut, rung with the name: all of Cutwater counts as sold.
+    expect(unsoldPurchases(lines, [sale("bar", "2026-10-02", "Cutwater Long Isla", 1, 8)], "2025-10-01")).toEqual([]);
+    // One shared word isn't enough ("Lime" alone could be anything).
+    expect(unsoldPurchases([cut("CUT LIME MARG", 1100)], [sale("bar", "2026-10-02", "Lime Seltzer", 1, 6)], "2025-10-01")).toHaveLength(1);
+  });
+
+  it("spells out the invoices' short Cutwater flavors", () => {
+    expect(productWords("CUT LIME MARG")).toEqual(["CUTWATER", "LIME", "MARGARITA"]);
+    expect(productWords("CUT LONG ISLAN")).toEqual(["CUTWATER", "LONG", "ISLAND"]);
+    expect(productWords("CUT TIKI MAI T")).toEqual(["CUTWATER", "TIKI", "MAI", "TAI"]);
+    expect(productWords("CUT ESP MARTIN")).toEqual(["CUTWATER", "ESPRESSO", "MARTINI"]);
+    expect(productWords("CUT VOD TRANS")).toEqual(["CUTWATER", "VODKA", "TRANSFUSION"]);
+    expect(productWords("CUT STRAW MARG")).toEqual(["CUTWATER", "STRAWBERRY", "MARGARITA"]);
+    expect(productWords("CUT WHITE RUSS")).toEqual(["CUTWATER", "WHITE", "RUSSIAN"]);
+    // Only for Cutwater: other names keep their words.
+    expect(productWords("PINE NUT")).toEqual(["PINE", "NUT"]);
+  });
+
+  it("costs a Cutwater flavor from the count sheet when it's rung up by flavor", () => {
+    const book: CostItem[] = [
+      { description: "CUTWATER 12OZ LEMON DROP MARTINI", category: "Seltzer", unitCost: 2.47 },
+      { description: "CUTWATER 12OZ EXPRESSO MARTINI", category: "Seltzer", unitCost: 2.47 },
+      { description: "CUTWATER 12OZ LIME MARGARITA", category: "Seltzer", unitCost: 2.47 },
+      { description: "CUTWATER 12OZ LONG ISLAND ICED TEA", category: "Seltzer", unitCost: 2.47 },
+      { description: "CUTWATER 12OZ TIKI RUN MAI TAI", category: "Seltzer", unitCost: 2.5 },
+    ];
+    expect(matchCost("Lemon Drop", book)?.from).toEqual(["CUTWATER 12OZ LEMON DROP MARTINI"]);
+    expect(matchCost("Espresso Martini", book)?.from).toEqual(["CUTWATER 12OZ EXPRESSO MARTINI"]);
+    expect(matchCost("Cutwater Lime Marg", book)?.from).toEqual(["CUTWATER 12OZ LIME MARGARITA"]);
+    expect(matchCost("Long Island", book)?.from).toEqual(["CUTWATER 12OZ LONG ISLAND ICED TEA"]);
+    expect(matchCost("Mai Tai", book)?.unitCost).toBe(2.5);
+  });
+
   it("warns about stock going into the slow months", () => {
     const recs = recommendations({
       ...base,

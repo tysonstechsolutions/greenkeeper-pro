@@ -536,7 +536,7 @@ export function recommendations(input: RecommendationInput): Recommendation[] {
         detail: `${unsold
           .slice(0, 5)
           .map((u) => `${u.description} (${money(u.spend)})`)
-          .join(", ")}. If they're rung under Domestic or Import Beer, give them their own buttons so they can be priced and tracked. If they aren't being rung at all, that's lost sales.`,
+          .join(", ")}. If they're rung under Domestic or Import Beer, give them their own buttons so they can be priced and tracked. If they aren't being rung at all, that's lost sales. Something just given its own buttons (like Cutwater by flavor) drops off this list as its sales reports come in.`,
         dollars: total,
       });
     }
@@ -621,25 +621,36 @@ export interface PurchaseLineLite {
 const NOT_A_BRAND = new Set(["LIGHT", "LAGER", "ALE", "IPA", "BEER", "SERVICE", "DELIVERY", "CHARGE"]);
 
 /**
- * Bar purchases (by brand) with nothing sold under that brand's name over
- * the same stretch: product bought but rung under a generic button, or not
- * rung at all. Biggest first.
+ * Bar purchases (by brand) that never show up in bar sales over the same
+ * stretch: bought but rung under a generic button, or not rung at all.
+ * Biggest first. A purchase counts as sold when its brand is in a sale's
+ * name ("Cutwater Lemon Drop"), or its flavor is, for drinks rung up by
+ * flavor: a flavor of two or more words all in one sale ("Lime Margarita"),
+ * or a sale of two or more words all from the flavor ("Mai Tai").
  */
 export function unsoldPurchases(lines: PurchaseLineLite[], itemSales: ItemSale[], since: string): { description: string; spend: number }[] {
-  const soldWords = new Set(
-    itemSales.filter((s) => s.outlet === "bar" && s.sale_date >= since).flatMap((s) => productWords(s.description)),
-  );
+  const sold = itemSales.filter((s) => s.outlet === "bar" && s.sale_date >= since).map((s) => new Set(productWords(s.description)));
+  const soldWords = new Set(sold.flatMap((w) => [...w]));
   const byBrand = new Map<string, { spend: number; example: string }>();
   for (const l of lines) {
     if (l.purchase_date < since || l.category !== "alcohol" || (l.outlet && l.outlet !== "bar")) continue;
-    const brand = productWords(l.description).find((w) => !NOT_A_BRAND.has(w));
-    if (!brand) continue;
+    const words = productWords(l.description);
+    const brand = words.find((w) => !NOT_A_BRAND.has(w));
+    if (!brand || soldWords.has(brand)) continue;
+    const flavor = words.filter((w) => w !== brand && !NOT_A_BRAND.has(w));
+    const flavorSet = new Set(flavor);
+    // The whole flavor in one sale ("Lime Margarita"), or a sale that is all flavor ("Mai Tai" of "Tiki Mai Tai").
+    const soldByFlavor = (s: Set<string>) => {
+      const own = [...s].filter((w) => !NOT_A_BRAND.has(w));
+      return flavor.every((w) => s.has(w)) || (own.length >= 2 && own.every((w) => flavorSet.has(w)));
+    };
+    if (flavor.length >= 2 && sold.some(soldByFlavor)) continue;
     const b = byBrand.get(brand) ?? { spend: 0, example: l.description };
     b.spend += Number(l.extended);
     byBrand.set(brand, b);
   }
   return [...byBrand.entries()]
-    .filter(([brand, b]) => !soldWords.has(brand) && b.spend > 0)
+    .filter(([, b]) => b.spend > 0)
     .map(([brand, b]) => ({
       description: `${brand.length <= 3 ? brand : brand[0] + brand.slice(1).toLowerCase()} (${b.example})`,
       spend: r2(b.spend),

@@ -20,8 +20,11 @@ import {
   AlertCircle,
   Check,
   ArrowLeft,
+  Pencil,
+  X,
 } from "lucide-react";
 import Link from "next/link";
+import { generatePin, pinProblem } from "@/lib/auth/pins";
 
 interface PinEntry {
   id: string;
@@ -42,12 +45,14 @@ interface StaffMember {
   email: string;
 }
 
-function generatePin(): string {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
+const DUPLICATE = "Someone else already has that PIN. Pick another.";
+const isDuplicate = (err: unknown) => /duplicate|unique|23505/i.test(err instanceof Error ? err.message : String(err));
 
 export default function PinManagementPage() {
-  const { isManager } = useAuth();
+  // The superintendent, the assistant superintendent, and the GM manage PINs
+  // (the database allows exactly these three: 20261013120000_gm_manages_pins).
+  const { isSuper, isAsstSuper, isGM } = useAuth();
+  const canManage = isSuper || isAsstSuper || isGM;
   const [pins, setPins] = useState<PinEntry[]>([]);
   const [staffWithoutPins, setStaffWithoutPins] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +60,8 @@ export default function PinManagementPage() {
   const [showPins, setShowPins] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // The PIN being typed in for one person.
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -96,17 +103,9 @@ export default function PinManagementPage() {
         profile: profileById.get(p.user_id),
       }));
 
+      // Everyone on staff can have a PIN: crew, the F&B Manager, the pro shop, managers.
       const pinUserIds = new Set(pinData.map((p: PinRow) => p.user_id));
-      const candidateRoles = new Set<string>([
-        "crew",
-        "seasonal",
-        "mechanic",
-        "foreman",
-        "asst_super",
-      ]);
-      const withoutPins = allStaff.filter(
-        (s: StaffMember) => candidateRoles.has(s.role) && !pinUserIds.has(s.id),
-      );
+      const withoutPins = allStaff.filter((s: StaffMember) => !pinUserIds.has(s.id));
 
       setPins(pinsWithProfile);
       setStaffWithoutPins(withoutPins);
@@ -127,11 +126,9 @@ export default function PinManagementPage() {
     setSaving(staffMember.id);
     setError(null);
 
-    const newPin = generatePin();
+    const newPin = generatePin(takenPins());
 
     try {
-      // First update the user's password to match the PIN system password
-      // This is handled by the setup-pin-password API
       await directInsertRow(
         "pin_codes",
         {
@@ -145,9 +142,8 @@ export default function PinManagementPage() {
       setTimeout(() => setSuccess(null), 3000);
       await fetchData();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.toLowerCase().includes("duplicate")) {
-        setError(`A PIN already exists for ${staffMember.full_name}`);
+      if (isDuplicate(err)) {
+        setError(`${staffMember.full_name} may already have a PIN, or that PIN was just taken. Reload and try again.`);
       } else {
         console.error("Error creating PIN:", err);
         setError("Failed to create PIN");
@@ -157,11 +153,38 @@ export default function PinManagementPage() {
     }
   };
 
+  /** PINs in use, leaving out one person's own. */
+  const takenPins = (exceptId?: string) =>
+    new Set(pins.filter((p) => p.is_active && p.id !== exceptId).map((p) => p.pin));
+
+  const handleSetPin = async (pinEntry: PinEntry, value: string) => {
+    const pin = value.trim();
+    const problem = pinProblem(pin, takenPins(pinEntry.id));
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSaving(pinEntry.id);
+    setError(null);
+    try {
+      await directPatchRow("pin_codes", "id", pinEntry.id, { pin }, "settings.pins.set");
+      setEditing(null);
+      setSuccess(`${pinEntry.profile?.full_name || "Their"} PIN is now ${pin}`);
+      setTimeout(() => setSuccess(null), 4000);
+      await fetchData();
+    } catch (err) {
+      console.error("Error setting PIN:", err);
+      setError(isDuplicate(err) ? DUPLICATE : "Failed to change the PIN");
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const handleRegeneratePin = async (pinEntry: PinEntry) => {
     setSaving(pinEntry.id);
     setError(null);
 
-    const newPin = generatePin();
+    const newPin = generatePin(takenPins(pinEntry.id));
 
     try {
       await directPatchRow(
@@ -178,7 +201,7 @@ export default function PinManagementPage() {
       await fetchData();
     } catch (err) {
       console.error("Error regenerating PIN:", err);
-      setError("Failed to regenerate PIN");
+      setError(isDuplicate(err) ? DUPLICATE : "Failed to regenerate PIN");
     } finally {
       setSaving(null);
     }
@@ -198,7 +221,7 @@ export default function PinManagementPage() {
       await fetchData();
     } catch (err) {
       console.error("Error toggling PIN:", err);
-      setError("Failed to update PIN status");
+      setError(isDuplicate(err) ? "Someone else is using that PIN now. Give this person a new PIN first." : "Failed to update PIN status");
     } finally {
       setSaving(null);
     }
@@ -241,6 +264,10 @@ export default function PinManagementPage() {
         return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
       case "seasonal":
         return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400";
+      case "fb_manager":
+        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+      case "pro":
+        return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300";
       default:
         return "bg-muted text-muted-foreground";
     }
@@ -253,11 +280,16 @@ export default function PinManagementPage() {
       foreman: "Foreman",
       seasonal: "Seasonal",
       asst_super: "Asst. Superintendent",
+      super: "Superintendent",
+      director: "Director",
+      gm: "General Manager",
+      fb_manager: "F&B Manager",
+      pro: "Pro Shop",
     };
     return labels[role] || role;
   };
 
-  if (!isManager) {
+  if (!canManage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <p className="text-muted-foreground">
@@ -270,7 +302,7 @@ export default function PinManagementPage() {
   return (
     <div className="max-w-3xl mx-auto p-6">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex flex-wrap items-center gap-4 mb-6">
         <Link
           href="/settings"
           className="p-2 rounded-lg hover:bg-muted transition-colors"
@@ -283,7 +315,7 @@ export default function PinManagementPage() {
             PIN Management
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage crew PIN codes for quick login on shared devices
+            Everyone&apos;s sign-in PIN: see it, set it, change it, or turn it off
           </p>
         </div>
         <Button
@@ -346,17 +378,17 @@ export default function PinManagementPage() {
                 {pins.map((pinEntry) => (
                   <div
                     key={pinEntry.id}
-                    className="p-4 flex items-center gap-4"
+                    className="p-4 flex flex-wrap items-center gap-x-4 gap-y-2"
                   >
                     {/* Avatar */}
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                    <div className="w-10 h-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
                       {(pinEntry.profile?.full_name || "?")
                         .slice(0, 2)
                         .toUpperCase()}
                     </div>
 
                     {/* Info */}
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-[8rem]">
                       <p className="font-medium text-foreground truncate">
                         {pinEntry.profile?.full_name || "Unknown User"}
                       </p>
@@ -376,13 +408,57 @@ export default function PinManagementPage() {
                       </div>
                     </div>
 
-                    {/* PIN Display */}
-                    <div className="font-mono text-lg font-bold tracking-widest text-foreground min-w-[80px] text-center">
-                      {showPins ? pinEntry.pin : "••••"}
-                    </div>
+                    {/* PIN: shown, hidden, or being changed */}
+                    {editing?.id === pinEntry.id ? (
+                      <form
+                        className="order-last basis-full flex items-center gap-1 pl-14"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void handleSetPin(pinEntry, editing.value);
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          value={editing.value}
+                          onChange={(e) => setEditing({ id: pinEntry.id, value: e.target.value.replace(/\D/g, "") })}
+                          aria-label={`New PIN for ${pinEntry.profile?.full_name || "this person"}`}
+                          className="w-24 rounded-lg border border-border bg-background px-2 py-1 font-mono text-lg tracking-widest text-center"
+                        />
+                        <Button type="submit" size="sm" disabled={saving === pinEntry.id}>
+                          Save
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(null)}
+                          className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+                          aria-label="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="font-mono text-lg font-bold tracking-widest text-foreground min-w-[80px] text-center">
+                        {showPins ? pinEntry.pin : "••••"}
+                      </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setError(null);
+                          setEditing({ id: pinEntry.id, value: "" });
+                        }}
+                        disabled={saving === pinEntry.id}
+                        className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                        title="Set PIN"
+                        aria-label={`Set PIN for ${pinEntry.profile?.full_name || "this person"}`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleRegeneratePin(pinEntry)}
                         disabled={saving === pinEntry.id}
@@ -479,10 +555,15 @@ export default function PinManagementPage() {
           <div className="mt-6 p-4 rounded-xl bg-muted/50 text-sm text-muted-foreground">
             <p className="font-medium text-foreground mb-2">How PIN Login Works</p>
             <p>
-              PINs let crew members log in quickly on shared devices (like the shop iPad)
-              without needing to type an email and password. Each crew member gets a unique
-              4-digit PIN. You can regenerate, disable, or delete PINs at any time. The PIN
-              login page is at <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">/pin-login</span>.
+              PINs let staff sign in quickly on shared devices (like the shop iPad) without an
+              email and password. Everyone&apos;s PIN is different, 4 to 6 digits. Use the pencil
+              to set a PIN yourself, the arrows for a random one, the check to turn a PIN off or
+              back on, and the trash can to remove it. A changed PIN works right away; tell the
+              person their new one.
+            </p>
+            <p className="mt-2">
+              A PIN only signs in someone added with Add Staff (PIN sign-in). People who sign in
+              with an email and password keep doing that.
             </p>
           </div>
         </>

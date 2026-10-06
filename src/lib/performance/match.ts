@@ -37,6 +37,7 @@ const SAME: Record<string, string> = {
   ZINFADEL: "ZINFANDEL",
   REV: "REVOLUTION",
   CUT: "CUTWATER",
+  EXPRESSO: "ESPRESSO",
   LEINIE: "LEINENKUGEL",
   XX: "EQUIS",
   PBR: "PABST",
@@ -44,6 +45,25 @@ const SAME: Record<string, string> = {
   PRETZELS: "PRETZEL",
   BARS: "BAR",
   SODAS: "SODA",
+};
+
+/**
+ * Cutwater flavors as the invoices shorten them ("CUT LIME MARG", "CUT LONG
+ * ISLAN", "CUT TIKI MAI T"), spelled out so they meet the count sheets and
+ * the flavors rung up at the bar ("Lime Margarita", "Long Island").
+ */
+const CUTWATER_FLAVOR: Record<string, string> = {
+  MARG: "MARGARITA",
+  ISLAN: "ISLAND",
+  STRAW: "STRAWBERRY",
+  RUSS: "RUSSIAN",
+  ESP: "ESPRESSO",
+  MARTIN: "MARTINI",
+  VOD: "VODKA",
+  TRANS: "TRANSFUSION",
+  PINE: "PINEAPPLE",
+  PEPERMINT: "PEPPERMINT",
+  T: "TAI",
 };
 
 /** Product words, in order, with sizes and filler removed. */
@@ -73,6 +93,7 @@ export function productWords(description: string): string[] {
     if (/^\d+(\.\d+)?$/.test(w) || /^\d+[A-Z]{1,3}$/.test(w) || /^\d+\/\d+/.test(w)) continue;
     if (FILLER.has(w)) continue;
     w = SAME[w] ?? w;
+    if (out[0] === "CUTWATER") w = CUTWATER_FLAVOR[w] ?? w;
     // Singular, so "Sprecher's" meets "SPRECHER" and "TENDERS" meets "TENDER".
     out.push(...w.split(" ").map((x) => (x.length > 4 && x.endsWith("S") && !x.endsWith("SS") ? x.slice(0, -1) : x)));
   }

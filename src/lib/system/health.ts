@@ -151,6 +151,10 @@ export const TRACKED_MIGRATIONS: { name: string; what: string }[] = [
     name: "20261012120000_sap_budget_reports",
     what: "SAP budget reports (official profit and loss by cost center, budget vs actual)",
   },
+  {
+    name: "20261013120000_gm_manages_pins",
+    what: "The GM can see, set, and reset everyone's sign-in PIN",
+  },
 ];
 
 /** Older migrations, checked by calling something they created (read-only). */
