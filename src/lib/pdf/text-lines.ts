@@ -63,14 +63,14 @@ export function piecesToLines(pieces: TextPiece[]): string[] {
   });
 }
 
-/** Every page's lines, pages in order. */
-export async function pdfTextLines(data: Uint8Array | ArrayBuffer): Promise<string[]> {
+/** Every page's positioned text pieces, pages in order (for reports read by column position). */
+export async function pdfTextPages(data: Uint8Array | ArrayBuffer): Promise<TextPiece[][]> {
   const pdfjs = await loadPdfjs();
   const doc = await pdfjs.getDocument({
     data: data instanceof Uint8Array ? data : new Uint8Array(data),
     ...(typeof window !== "undefined" ? { standardFontDataUrl: "/vendor/standard_fonts/" } : {}),
   }).promise;
-  const lines: string[] = [];
+  const pages: TextPiece[][] = [];
   try {
     for (let p = 1; p <= doc.numPages; p++) {
       const page = await doc.getPage(p);
@@ -81,12 +81,17 @@ export async function pdfTextLines(data: Uint8Array | ArrayBuffer): Promise<stri
         const [, , , , x, y] = item.transform as number[];
         pieces.push({ str: item.str, x, y, width: item.width, height: item.height || 8 });
       }
-      lines.push(...piecesToLines(pieces));
+      pages.push(pieces);
     }
   } finally {
     await doc.destroy();
   }
-  return lines;
+  return pages;
+}
+
+/** Every page's lines, pages in order. */
+export async function pdfTextLines(data: Uint8Array | ArrayBuffer): Promise<string[]> {
+  return (await pdfTextPages(data)).flatMap(piecesToLines);
 }
 
 /** A fillable PDF's form field values by field name (first page with each). */

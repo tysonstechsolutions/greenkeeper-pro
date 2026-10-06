@@ -147,6 +147,10 @@ export const TRACKED_MIGRATIONS: { name: string; what: string }[] = [
     name: "20261009120000_sales_reports",
     what: "RecTrac sales reports item by item (daily sales, best sellers, prices)",
   },
+  {
+    name: "20261012120000_sap_budget_reports",
+    what: "SAP budget reports (official profit and loss by cost center, budget vs actual)",
+  },
 ];
 
 /** Older migrations, checked by calling something they created (read-only). */

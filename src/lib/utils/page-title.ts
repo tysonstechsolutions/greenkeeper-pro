@@ -31,6 +31,7 @@ const TITLES: Record<string, string> = {
   "/assistant": "AI Assistant",
   "/assets": "Assets",
   "/budget": "Budget",
+  "/budget/sap": "SAP Report",
   "/capital-projects": "Capital Projects",
   "/clubhouse": "Clubhouse",
   "/course-map": "Course Map",

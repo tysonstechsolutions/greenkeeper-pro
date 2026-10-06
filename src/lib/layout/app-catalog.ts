@@ -244,6 +244,7 @@ const AI_LIBRARY: AppEntry = { href: "/ai-library", label: "AI Library", icon: L
 // regular Money tool — same page, just reached through the workspace now.
 const GM_DASHBOARD: AppEntry = { href: "/gm", label: "GM Dashboard", icon: LayoutDashboard, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const FINANCIAL_WATCH: AppEntry = { href: "/financial-watch", label: "Financial Watch", icon: Activity, color: "from-amber-500 to-yellow-600", pinned: true, group: GROUPS.money };
+const SAP_REPORT: AppEntry = { href: "/budget/sap", label: "SAP Report", icon: FileSpreadsheet, color: "from-amber-500 to-yellow-600", group: GROUPS.money, keywords: ["sap", "budget performance", "profit", "loss", "p&l", "official", "cost center", "plan", "actual", "self sufficiency", "cogs"] };
 const BUDGET: AppEntry = { href: "/budget", label: "Budget", icon: Wallet, color: "from-amber-500 to-yellow-600", pinned: true, group: GROUPS.money };
 const REPORTS: AppEntry = { href: "/reports", label: "Reports", icon: BarChart3, color: "from-amber-600 to-yellow-700", pinned: true, group: GROUPS.money };
 const BOARD_REPORT: AppEntry = { href: "/reports/monthly-board", label: "Board Report", icon: BarChart3, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
@@ -331,7 +332,7 @@ export const HUB_RESTAURANT: AppEntry = {
   icon: UtensilsCrossed,
   color: "from-amber-500 to-orange-600",
   group: GROUPS.workspaces,
-  children: [PERFORMANCE, RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, MONTH_END_INVENTORY, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+  children: [PERFORMANCE, SAP_REPORT, RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, MONTH_END_INVENTORY, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
 };
 
 export const HUB_PRO_SHOP: AppEntry = {
@@ -340,7 +341,7 @@ export const HUB_PRO_SHOP: AppEntry = {
   icon: Store,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [PRO_SHOP, PRO_SHOP_INVENTORY, PERFORMANCE, MONTH_END_INVENTORY, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
+  children: [PRO_SHOP, PRO_SHOP_INVENTORY, PERFORMANCE, SAP_REPORT, MONTH_END_INVENTORY, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
 };
 
 export const HUB_MONEY: AppEntry = {
@@ -353,6 +354,7 @@ export const HUB_MONEY: AppEntry = {
     GM_DASHBOARD,
     FINANCIAL_WATCH,
     BUDGET,
+    SAP_REPORT,
     REVENUE,
     PURCHASE_REQUESTS,
     PR_AUDIT,

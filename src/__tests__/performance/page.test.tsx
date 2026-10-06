@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { TextPiece } from "@/lib/pdf/text-lines";
+import { parseBudgetReport } from "@/lib/sap/budget-report";
+import { budgetLineRows } from "@/lib/sap/budget-store";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
@@ -30,6 +35,7 @@ const db = vi.hoisted(() => ({ tables: {} as Record<string, unknown[]>, filters:
 vi.mock("@/lib/supabase/rest", () => ({
   directSelectAll: async (table: string, opts: { filters?: string[] }) => {
     db.filters[table] = opts.filters ?? [];
+    if (db.tables[table] === undefined && table.startsWith("sap_")) throw new Error(`relation "public.${table}" does not exist`);
     return db.tables[table] ?? [];
   },
 }));
@@ -108,5 +114,31 @@ describe("Performance page", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Restaurant · 35%", "Bar · 25%"]);
     expect(db.filters.revenue_entries[0]).toBe("category=in.(food_beverage,bar)");
     expect(db.filters.sales_item_days).toContain("outlet=in.(restaurant,bar)");
+  });
+
+  it("works without the SAP tables, and shows the official numbers once a report is saved", async () => {
+    // Without them (database update not run): no SAP tile, no error.
+    await renderPage();
+    await screen.findByText("What to do");
+    expect(screen.queryByText(/Official \(SAP\)/)).toBeNull();
+    expect(screen.queryByText(/Couldn't load/)).toBeNull();
+  });
+
+  it("puts SAP's official cost of goods beside the worked-out one", async () => {
+    const pages = JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "sap", "budget-pages.json"), "utf8")) as TextPiece[][];
+    db.tables.sap_budget_reports = [{ id: "r1", fiscal_year: 2026, period: 12, period_name: "September", run_date: "2026-10-06", source_file: null }];
+    db.tables.sap_budget_lines = budgetLineRows(parseBudgetReport(pages)!, "r1");
+    await renderPage();
+    await screen.findByText("What to do");
+    expect(db.filters.sap_budget_lines).toEqual(["report_id=eq.r1", "cost_center=in.(20091,20086)"]);
+    const official = screen.getByText("Official (SAP), FY26 through September").closest(".gk-card")!.textContent;
+    expect(official).toContain("59.4%");
+    expect(official).toContain("$22,791 cost on $38,394 sales");
+    // $3,000 of restaurant sales here against SAP's $38,394.
+    expect(screen.getByText("SAP has $35,394 more food sales than the reports here")).toBeTruthy();
+    expect(screen.getByText("Official food cost of goods is 59.4%, target 35%")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Pro shop/ }));
+    expect(screen.getByText("Official (SAP), FY26 through September").closest(".gk-card")!.textContent).toContain("53.1%");
   });
 });

@@ -40,6 +40,14 @@ import {
   type PurchaseLineLite,
   type Recommendation,
 } from "@/lib/performance/performance";
+import {
+  blocksFromRows,
+  officialForArea,
+  officialNotes,
+  type StoredBudgetLine,
+  type StoredBudgetReport,
+} from "@/lib/sap/budget-store";
+import type { BudgetBlock } from "@/lib/sap/budget-report";
 
 const SalesChart = dynamic(() => import("./performance-charts").then((m) => m.SalesChart), {
   ssr: false,
@@ -68,6 +76,8 @@ interface Loaded {
   countLines: CountLine[];
   itemSales: ItemSale[];
   purchaseLines: PurchaseLineLite[];
+  /** The latest SAP budget report and its Buckley's / merchandise cost centers. */
+  sap: { report: StoredBudgetReport; blocks: BudgetBlock[] } | null;
   /** Tables that aren't there yet (a database update not run). */
   missing: string[];
   error: string | null;
@@ -78,7 +88,7 @@ type PurchaseLineRow = { description: string; extended: number; category: string
 
 /** Two years back (for last year's same months) through today. */
 async function loadAll(since: string, areas: Area[]): Promise<Loaded> {
-  const out: Loaded = { purchases: [], sales: [], counts: [], countLines: [], itemSales: [], purchaseLines: [], missing: [], error: null };
+  const out: Loaded = { purchases: [], sales: [], counts: [], countLines: [], itemSales: [], purchaseLines: [], sap: null, missing: [], error: null };
   const categories = areas.map((a) => ({ restaurant: "food_beverage", bar: "bar", pro_shop: "pro_shop" })[a]).join(",");
   const soft = <T,>(name: string, p: Promise<T[]>) =>
     p.catch((e) => {
@@ -169,7 +179,33 @@ async function loadAll(since: string, areas: Area[]): Promise<Loaded> {
       category: l.category,
       outlet: l.outlet ?? null,
     }));
+  out.sap = await loadSap(areas);
   return out;
+}
+
+/** The latest SAP report's official numbers, if any have been saved. */
+async function loadSap(areas: Area[]): Promise<Loaded["sap"]> {
+  try {
+    const reports = await directSelectAll<StoredBudgetReport>("sap_budget_reports", {
+      columns: "id,fiscal_year,period,period_name,run_date,source_file",
+      orderBy: [{ column: "fiscal_year", ascending: false }, { column: "period", ascending: false }, { column: "id" }],
+      label: "performance.sapReports",
+    });
+    const report = reports[0];
+    if (!report) return null;
+    const centers = areas.includes("pro_shop") ? "20091,20086" : "20091";
+    const rows = await directSelectAll<StoredBudgetLine>("sap_budget_lines", {
+      columns: "cost_center,cost_center_name,activity,section,code,label,level,line_no,month_actual,month_plan,month_prior,ytd_actual,ytd_plan,ytd_prior",
+      filters: [`report_id=eq.${report.id}`, `cost_center=in.(${centers})`],
+      orderBy: [{ column: "line_no" }, { column: "id" }],
+      pageSize: 1000,
+      label: "performance.sapLines",
+    });
+    return { report, blocks: blocksFromRows(rows) };
+  } catch {
+    // Not run the SAP database update yet, or nothing saved: the page works without it.
+    return null;
+  }
 }
 
 // ── Pieces ─────────────────────────────────────────────────────────────────
@@ -401,7 +437,15 @@ function PerformanceContent() {
       unsoldPurchases: area === "bar" ? unsoldPurchases(data.purchaseLines, data.itemSales, yearAgo) : undefined,
       monthItemCost,
     });
-    return { months, last12Months, summaries, items, look, recs };
+    const official = data.sap ? officialForArea(data.sap.report, data.sap.blocks, area) : null;
+    if (official) {
+      const fyStart = `${official.fiscalYear - 1}-10`;
+      const entered = months.filter((m) => m.key >= fyStart && m.key <= official.through).reduce((s, m) => s + m.sales, 0);
+      const order = { act: 0, watch: 1, info: 2 };
+      recs.push(...officialNotes(official, entered, AREA_TARGET[area], fiscalYearLabel(official.fiscalYear)));
+      recs.sort((a, b) => order[a.level] - order[b.level] || b.dollars - a.dollars);
+    }
+    return { months, last12Months, summaries, items, look, recs, official };
   }, [data, area, through]);
 
   if (loading || !data || !view) {
@@ -451,7 +495,7 @@ function PerformanceContent() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${view.official ? "lg:grid-cols-4" : ""}`}>
         <Tile
           label="Cost of sales, last 12 months"
           value={last12.pct == null ? "—" : `${last12.pct}%`}
@@ -473,6 +517,18 @@ function PerformanceContent() {
             </span>
           )}
         </Tile>
+        {view.official && (
+          <Tile
+            label={`Official (SAP), ${fiscalYearLabel(view.official.fiscalYear)} through ${view.official.periodName}`}
+            value={view.official.pct == null ? "—" : `${view.official.pct}%`}
+            sub={`${view.official.cogs == null || view.official.cogs <= 0 ? "No cost posted" : `${money(view.official.cogs)} cost`} on ${money(view.official.sales)} sales`}
+          >
+            <span className="flex flex-wrap items-center gap-2">
+              <StatusTag pct={view.official.pct} target={target} />
+              <Link href="/budget/sap/" className="text-xs underline text-muted-foreground">SAP Report</Link>
+            </span>
+          </Tile>
+        )}
       </div>
 
       <section aria-labelledby="recs">

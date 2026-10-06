@@ -323,6 +323,10 @@ export default function BudgetPage() {
           <Eye className="w-4 h-4 mr-2" />
           Overview
         </Button>
+        <Button variant="outline" onClick={() => router.push("/budget/sap")}>
+          <BarChart3 className="w-4 h-4 mr-2" />
+          SAP Report
+        </Button>
       </div>
 
       {/* Charts Row */}
