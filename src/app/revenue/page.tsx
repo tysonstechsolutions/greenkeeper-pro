@@ -9,6 +9,8 @@ import {
   Calendar,
   TrendingUp,
   Users,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +31,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import { BUCKLEYS_REVENUE_CATEGORIES, REVENUE_CATEGORIES, REVENUE_LABELS } from "@/lib/money/revenue-categories";
 import { UploadReportCard } from "./upload-report";
+import { SaleDayItems } from "./sale-day-items";
 
 // ── Types ──
 interface RevenueEntry {
@@ -41,6 +44,8 @@ interface RevenueEntry {
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  // Set on daily sales saved from a RecTrac report (2026-10-09 update).
+  sales_report_id?: string | null;
 }
 
 // ── Constants ──
@@ -122,6 +127,8 @@ export default function RevenuePage() {
   const [weekTotal, setWeekTotal] = useState(0);
   const [monthTotal, setMonthTotal] = useState(0);
   const [mtdRounds, setMtdRounds] = useState(0);
+  /** The report entry whose items are open. */
+  const [openEntry, setOpenEntry] = useState<string | null>(null);
 
   // ── Fetch entries ──
   const fetchEntries = useCallback(async () => {
@@ -419,12 +426,27 @@ export default function RevenuePage() {
                     </div>
                     <Card>
                       <div className="divide-y divide-border">
-                        {groupedEntries[date].map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="flex items-center gap-3 px-4 py-3"
-                          >
-                            <div className="flex-1 min-w-0">
+                        {groupedEntries[date].map((entry) => {
+                          const hasItems = !!entry.sales_report_id;
+                          const isOpen = openEntry === entry.id;
+                          return (
+                          <div key={entry.id}>
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            <button
+                              type="button"
+                              disabled={!hasItems}
+                              onClick={() => setOpenEntry(isOpen ? null : entry.id)}
+                              aria-expanded={hasItems ? isOpen : undefined}
+                              aria-label={hasItems ? `${isOpen ? "Hide" : "Show"} what was sold: ${entry.description ?? ""}` : undefined}
+                              className="flex-1 min-w-0 text-left flex items-start gap-1.5 disabled:cursor-default"
+                            >
+                              {hasItems &&
+                                (isOpen ? (
+                                  <ChevronDown className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+                                ))}
+                              <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-0.5">
                                 <Badge
                                   variant="outline"
@@ -447,7 +469,8 @@ export default function RevenuePage() {
                                   {entry.description}
                                 </p>
                               )}
-                            </div>
+                              </div>
+                            </button>
                             <span className="font-semibold tabular-nums whitespace-nowrap">
                               {formatCurrency(Number(entry.amount))}
                             </span>
@@ -456,11 +479,23 @@ export default function RevenuePage() {
                               size="icon"
                               className="shrink-0 text-muted-foreground hover:text-destructive h-8 w-8"
                               onClick={() => handleDelete(entry.id)}
+                              aria-label="Delete entry"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
-                        ))}
+                          {hasItems && isOpen && (
+                            <div className="px-4 pb-3 pl-10">
+                              <SaleDayItems
+                                reportId={entry.sales_report_id!}
+                                date={entry.entry_date}
+                                entryAmount={Number(entry.amount)}
+                              />
+                            </div>
+                          )}
+                          </div>
+                          );
+                        })}
                       </div>
                     </Card>
                   </div>
