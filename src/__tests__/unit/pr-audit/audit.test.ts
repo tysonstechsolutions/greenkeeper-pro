@@ -20,9 +20,9 @@ function mk(overrides: Partial<ExtractedPrItem> = {}): ExtractedPrItem {
     qty: 1,
     unit: "bag",
     unit_price: 100,
-    site: "7009",
+    site: "7010",
     cost_ctr: "25581",
-    gl_acct: "701000",
+    gl_acct: "684000",
     extended_price: null,
     ...overrides,
   };
@@ -327,9 +327,9 @@ describe("auditPr — dynamic (DB) code lists", () => {
   it("flags a code that isn't on the supplied list", () => {
     const pr = validPr(); // uses 25581
     const r = auditPr(pr, {
-      sites: new Set(["7009"]),
+      sites: new Set(["7010"]),
       costCenters: new Set(["99999"]), // 25581 no longer allowed
-      glAccounts: new Set(["701000"]),
+      glAccounts: new Set(["684000"]),
     });
     expect(r.findings.some((f) => f.code === "invalid_cost_center")).toBe(true);
   });
@@ -347,5 +347,46 @@ describe("normalizePrItems", () => {
     expect(out[0].unit).toBe("");
     expect(out[0].part_number).toBeUndefined();
     expect(typeof out[0].qty).toBe("number");
+  });
+});
+
+describe("auditPr — codes that don't fit the item", () => {
+  const fit = (pr: ExtractedPr) => auditPr(pr).findings.filter((f) => f.code === "code_mismatch");
+
+  it("flags food on the maintenance cost center, as a warning with the usual code", () => {
+    const pr = validPr({ vendor_name: "Ace Hardware" });
+    pr.items[0] = mk({ description: "Hot dog buns", qty: 2, unit_price: 100 });
+    const found = fit(pr);
+    const cc = found.find((f) => f.field === "cost_ctr")!;
+    expect(cc.severity).toBe("warning");
+    expect(cc.itemIndex).toBe(0);
+    expect(cc.title).toBe("Cost Center 25581 may be wrong on line 1 — Hot dog buns");
+    expect(cc.detail).toMatch(/"hot dog" points to 20091/);
+    expect(cc.suggestion).toMatch(/use 20091/);
+  });
+
+  it("flags a site that doesn't go with the cost center", () => {
+    const pr = validPr();
+    pr.items[0].site = "7009";
+    const found = fit(pr);
+    expect(found.map((f) => f.field)).toEqual(["site"]);
+    expect(found[0].suggestion).toBe("Use Site 7010, or change the Cost Center.");
+  });
+
+  it("flags a G/L that doesn't fit the item", () => {
+    const pr = validPr();
+    pr.items[0].gl_acct = "701003"; // office supplies, for fertilizer
+    const found = fit(pr);
+    expect(found.map((f) => f.field)).toEqual(["gl_acct"]);
+    expect(found[0].detail).toMatch(/"fertilizer" points to 684000/);
+  });
+
+  it("leaves vague lines, the fee line, and invalid codes alone", () => {
+    const pr = validPr();
+    pr.items[0] = mk({ description: "Misc item", qty: 2, unit_price: 100, gl_acct: "701000" });
+    expect(fit(pr)).toEqual([]);
+    const bad = validPr();
+    bad.items[0].cost_ctr = "99999";
+    expect(fit(bad).filter((f) => f.field === "cost_ctr")).toEqual([]);
   });
 });

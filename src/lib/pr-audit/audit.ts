@@ -38,6 +38,7 @@ import {
   formatCcFeePct,
   CC_FEE_RATE,
 } from "@/lib/pr-cc-fee";
+import { codeLabel, recommendCostCenter, recommendGlAccount, recommendSite } from "@/lib/accounting/recommend";
 import type { PurchaseRequestItem } from "@/types/database";
 
 /**
@@ -101,6 +102,9 @@ export type AuditCode =
   | "other_not_vendor_quote"
   | "grand_total_mismatch"
   | "multiple_cost_centers"
+  // A valid code that doesn't fit what the line is (keyword rules), e.g.
+  // hot dog buns on the maintenance cost center. A warning: the reviewer decides.
+  | "code_mismatch"
   | "no_items";
 
 export type AuditField =
@@ -243,6 +247,70 @@ export function costCenterBreakdown(
 // ── The audit ────────────────────────────────────────────────────────────────
 
 /** Run every rule against an extracted PR and return the findings + totals. */
+/** Only rules that fired on a word in the line count ("…" ("hot dog")). */
+const KEYWORD_REASON = /\s*\("([^"]+)"\)$/;
+
+/** Split 'Food and drink are Buckley's ("hot dog")' into its why and the word. */
+function splitReason(reason: string): { why: string; word: string } {
+  const m = reason.match(KEYWORD_REASON);
+  return { why: reason.replace(KEYWORD_REASON, "").trim(), word: m?.[1] ?? "" };
+}
+
+/**
+ * Valid codes that don't match what the line is buying, from the same keyword
+ * rules the PR form suggests with. Only a rule that fired on a word in the
+ * description counts, so a vague line is never flagged.
+ */
+export function codeFitFindings(
+  it: Pick<ExtractedPrItem, "description">,
+  i: number,
+  where: string,
+  vendor: string | null,
+  codes: { site: string; cc: string; gl: string },
+  validCodes: ValidCodes = DEFAULT_VALID_CODES,
+): AuditFinding[] {
+  const out: AuditFinding[] = [];
+  const text = `${it.description ?? ""} ${vendor ?? ""}`;
+  const { site, cc, gl } = codes;
+  const ccRec = recommendCostCenter(text);
+  if (cc && validCodes.costCenters.has(cc) && ccRec && ccRec.code !== cc && KEYWORD_REASON.test(ccRec.reason)) {
+    out.push({
+      code: "code_mismatch",
+      severity: "warning",
+      title: `Cost Center ${cc} may be wrong on ${where}`,
+      detail: `"${splitReason(ccRec.reason).word}" points to ${codeLabel("cost_center", ccRec.code)} (${splitReason(ccRec.reason).why}), not ${codeLabel("cost_center", cc)}.`,
+      suggestion: `Check it. If it's for ${codeLabel("cost_center", ccRec.code)}, use ${ccRec.code}.`,
+      itemIndex: i,
+      field: "cost_ctr",
+    });
+  }
+  const siteRec = recommendSite(cc);
+  if (site && validCodes.sites.has(site) && siteRec && siteRec.code !== site) {
+    out.push({
+      code: "code_mismatch",
+      severity: "warning",
+      title: `Site ${site} doesn't go with Cost Center ${cc} on ${where}`,
+      detail: `Cost Center ${cc} is normally Site ${siteRec.code} (${siteRec.reason}).`,
+      suggestion: `Use Site ${siteRec.code}, or change the Cost Center.`,
+      itemIndex: i,
+      field: "site",
+    });
+  }
+  const glRec = recommendGlAccount(text, cc);
+  if (gl && validCodes.glAccounts.has(gl) && glRec && glRec.code !== gl && KEYWORD_REASON.test(glRec.reason)) {
+    out.push({
+      code: "code_mismatch",
+      severity: "warning",
+      title: `G/L ${gl} may be wrong on ${where}`,
+      detail: `"${splitReason(glRec.reason).word}" points to ${codeLabel("gl_account", glRec.code)} (${splitReason(glRec.reason).why}), not ${codeLabel("gl_account", gl)}.`,
+      suggestion: `Check it. The usual account is ${glRec.code}.`,
+      itemIndex: i,
+      field: "gl_acct",
+    });
+  }
+  return out;
+}
+
 export function auditPr(
   pr: ExtractedPr,
   validCodes: ValidCodes = DEFAULT_VALID_CODES,
@@ -351,6 +419,11 @@ export function auditPr(
         itemIndex: i,
         field: "gl_acct",
       });
+    }
+
+    // 1b. Codes that are valid but don't fit the item.
+    if (!isCcFeeItem(it) && !isSalesTaxItem(it)) {
+      findings.push(...codeFitFindings(it, i, where, pr.vendor_name, { site, cc, gl }, validCodes));
     }
 
     // 2. Line math — only when the document printed an extended price.
