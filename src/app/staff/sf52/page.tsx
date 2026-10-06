@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
+import { ADMIN_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { staffForViewer } from "@/lib/auth/fb-manager";
 import { directSelectList, directSelectRow } from "@/lib/supabase/rest";
 import { todayLocal } from "@/lib/utils/date";
 import { applyResignation, deactivateDepartedStaff, type ResignationResult } from "@/lib/staff/separation";
@@ -57,15 +59,19 @@ function Sf52Content() {
   const params = useSearchParams();
   // Everyone, including people who have left: a Recruitment SF-52 names the
   // departing employee, and a resignation may be filed after the last day.
-  const [profiles, setProfiles] = useState<{ id: string; full_name: string; is_active: boolean }[]>([]);
+  // The F&B Manager files SF-52s for the Food & Beverage staff only.
+  const { profile: me } = useAuth();
+  const [profiles, setProfiles] = useState<
+    { id: string; full_name: string; is_active: boolean; department?: string | null }[]
+  >([]);
   const loadProfiles = useCallback(async () => {
     await deactivateDepartedStaff(todayLocal());
-    const rows = await directSelectList<{ id: string; full_name: string; is_active: boolean }>("profiles", {
-      columns: "id,full_name,is_active",
-      label: "sf52.profiles",
-    }).catch(() => []);
-    setProfiles(rows);
-  }, []);
+    const rows = await directSelectList<{ id: string; full_name: string; is_active: boolean; department: string | null }>(
+      "profiles",
+      { columns: "id,full_name,is_active,department", label: "sf52.profiles" },
+    ).catch(() => []);
+    setProfiles(staffForViewer(me?.role, me?.id, rows));
+  }, [me?.role, me?.id]);
   useEffect(() => {
     void loadProfiles();
   }, [loadProfiles]);
@@ -641,7 +647,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function Sf52Page() {
   return (
-    <RoleGuard allowedRoles={ADMIN_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(ADMIN_ROLES)}>
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
         <Sf52Content />
       </Suspense>

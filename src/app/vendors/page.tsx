@@ -152,7 +152,8 @@ export default function VendorsPage() {
     profile?.role === "asst_super" ||
     profile?.role === "director" ||
     profile?.role === "gm" ||
-    profile?.role === "foreman";
+    profile?.role === "foreman" ||
+    profile?.role === "fb_manager";
   // Combining vendors is manager-only in the database (merge_vendors).
   const canCombine =
     profile?.role === "super" ||

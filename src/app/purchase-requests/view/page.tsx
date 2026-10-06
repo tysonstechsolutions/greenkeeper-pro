@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { directPatchRow, publicStorageUrl } from "@/lib/supabase/rest";
+import { canChangePurchaseRequest, canUsePurchaseRequests } from "@/lib/auth/fb-manager";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import {
   prVariance,
@@ -1112,11 +1113,9 @@ function ViewPurchaseRequestInner() {
   const id = searchParams.get("id");
   const { user, profile, loading: authLoading } = useAuth();
 
-  const isManagement =
-    profile?.role === "super" ||
-    profile?.role === "asst_super" ||
-    profile?.role === "director" ||
-    profile?.role === "gm";
+  // Can use PRs at all (incl. "Order Again"); the F&B Manager changes only
+  // the PRs she created (see canChangePurchaseRequest below).
+  const isManagement = canUsePurchaseRequests(profile?.role);
 
   const [pr, setPr] = useState<PurchaseRequest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1335,6 +1334,7 @@ function ViewPurchaseRequestInner() {
   }
 
   if (!pr) return null;
+  const canChange = canChangePurchaseRequest(profile?.role, user?.id, pr);
 
   const isDraft = pr.status === "draft";
 
@@ -1397,7 +1397,7 @@ function ViewPurchaseRequestInner() {
 
         {/* Reconciliation — approved/received PRs get their receipt's actual
             cost recorded here (it often differs from the submitted total). */}
-        {(pr.status === "approved" || pr.status === "received") && (
+        {(pr.status === "approved" || pr.status === "received") && canChange && (
           <ReconciliationCard
             pr={pr}
             submittedTotal={prSubmittedTotal(pr)}
@@ -1428,7 +1428,7 @@ function ViewPurchaseRequestInner() {
                   : "Fill SOW & Download Bundle (zip)"
                 : "Download PR + Quote + 889 (zip)"}
           </button>
-          {pr.attached_sow && pr.sow_storage_path && (
+          {pr.attached_sow && pr.sow_storage_path && canChange && (
             <button
               onClick={handleEditSow}
               disabled={downloading || downloadingPdfOnly}
@@ -1459,13 +1459,15 @@ function ViewPurchaseRequestInner() {
                 <Copy className="w-4 h-4" />
                 Order Again
               </Link>
-              <Link
-                href={`/purchase-requests/new?id=${pr.id}`}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border font-medium hover:bg-muted active:scale-[0.98] transition-all"
-              >
-                <Edit className="w-4 h-4" />
-                Edit
-              </Link>
+              {canChange && (
+                <Link
+                  href={`/purchase-requests/new?id=${pr.id}`}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border font-medium hover:bg-muted active:scale-[0.98] transition-all"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit
+                </Link>
+              )}
             </>
           )}
         </div>
@@ -1690,7 +1692,7 @@ function ViewPurchaseRequestInner() {
         )}
 
         {/* Delete */}
-        {isManagement && (
+        {canChange && (
           <div className="mt-8 pt-4 border-t border-border">
             <button
               onClick={handleDelete}

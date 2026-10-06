@@ -84,7 +84,9 @@ import { AvailabilitySheet } from "@/components/features/pro-shop/availability-s
 import { CoverSheet } from "@/components/features/pro-shop/cover-sheet";
 import { DayEditor } from "@/components/features/pro-shop/day-editor";
 import { RebuildSheet } from "@/components/features/pro-shop/rebuild-sheet";
-import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
+import { ADMIN_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { BUCKLEYS_SCHEDULE_AREA } from "@/lib/auth/fb-manager";
 
 const selectCls = "w-full px-3 py-2.5 rounded-lg border border-input bg-background text-sm";
 const NOW = new Date();
@@ -162,7 +164,7 @@ function menuAt(e: React.MouseEvent): { x: number; y: number } {
 export default function ProShopSchedulePage() {
   return (
     <RoleGuard
-      allowedRoles={ADMIN_ROLES}
+      allowedRoles={withFbManager(ADMIN_ROLES)}
       fallback={(
         <div className="gk-page mx-auto">
           <h1>Pro Shop Schedule</h1>
@@ -180,7 +182,12 @@ export default function ProShopSchedulePage() {
 function ProShopScheduleContent() {
   // Two entirely separate schedules share this screen. Everything below —
   // staff, months, shifts, warnings — is scoped to the selected area.
-  const [area, setArea] = useState<ScheduleArea>("pro_shop");
+  // The F&B Manager schedules Buckley's only.
+  const { isFbManager } = useAuth();
+  const areas = isFbManager
+    ? [BUCKLEYS_SCHEDULE_AREA]
+    : (Object.keys(SCHEDULE_AREA_LABELS) as ScheduleArea[]);
+  const [area, setArea] = useState<ScheduleArea>(isFbManager ? BUCKLEYS_SCHEDULE_AREA : "pro_shop");
   const ps = useProShop(NOW.getFullYear(), NOW.getMonth(), area);
   const monthDate = useMemo(() => new Date(ps.year, ps.month0, 1), [ps.year, ps.month0]);
 
@@ -648,7 +655,7 @@ function ProShopScheduleContent() {
     <div className="p-3 md:p-6 pb-28 max-w-6xl mx-auto">
       {/* Which schedule — the two are entirely separate rosters and months. */}
       <div className="mb-3 flex gap-2" role="group" aria-label="Choose schedule">
-        {(Object.keys(SCHEDULE_AREA_LABELS) as ScheduleArea[]).map((key) => (
+        {areas.map((key) => (
           <button
             key={key}
             type="button"

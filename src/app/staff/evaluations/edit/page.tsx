@@ -21,7 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess } from "@/components/auth/role-guard";
+import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess, withFbManager } from "@/components/auth/role-guard";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getCachedUserId } from "@/lib/supabase/rest";
@@ -132,8 +132,8 @@ function EvaluationEditor() {
 
   const { employee, evaluation, facts, suggestions, loadedFor, loading, error, save } = useEvaluation(employeeId, period, kind);
   const viewer = useMemo(
-    () => ({ id: me?.id ?? getCachedUserId(), isManager }),
-    [me?.id, isManager],
+    () => ({ id: me?.id ?? getCachedUserId(), isManager, isFbManager: me?.role === "fb_manager" }),
+    [me?.id, me?.role, isManager],
   );
   // The yearly roster (for a 90-day evaluation, the current one) gives
   // "who reports to whom" and the next person to do.
@@ -423,7 +423,9 @@ function EvaluationEditor() {
     try {
       await persist({ ...currentValues(), facts: facts ?? {}, status: "final" });
       setStep("done");
-      if (isManager) {
+      // Filing a copy needs access to staff documents: managers, and the F&B
+      // Manager for her own staff.
+      if (isManager || me?.role === "fb_manager") {
         const filed = await evaluationPdfBlob(printData("final"))
           .then((blob) =>
             fileEvaluationPdf({
@@ -1107,7 +1109,7 @@ function StickyNav({ children }: { children: React.ReactNode }) {
 
 export default function EvaluationEditPage() {
   return (
-    <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(MANAGEMENT_ROLES)}>
       <Suspense fallback={null}>
         <EvaluationEditor />
       </Suspense>

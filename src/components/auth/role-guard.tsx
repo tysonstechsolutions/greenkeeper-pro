@@ -13,7 +13,8 @@ export type UserRole =
   | "crew"
   | "seasonal"
   | "pro"
-  | "gm";
+  | "gm"
+  | "fb_manager";
 
 export const MANAGEMENT_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "pro", "gm"];
 export const ADMIN_ROLES: UserRole[] = ["super", "asst_super", "director", "gm"];
@@ -21,6 +22,13 @@ export const SUPER_ONLY: UserRole[] = ["super"];
 export const PRO_ROLES: UserRole[] = ["super", "asst_super", "director", "pro", "gm"];
 export const STAFF_ROLES: UserRole[] = ["super", "asst_super", "director", "foreman", "mechanic", "crew", "seasonal", "pro", "gm"];
 export const GM_ROLES: UserRole[] = ["gm", "super", "director"];
+/**
+ * Food & Beverage Manager: runs Buckley's (schedule, revenue, orders, PRs)
+ * and manages the Food & Beverage staff only. Kept out of the arrays above on
+ * purpose; pages that Buckley's needs list it explicitly.
+ */
+export const FB_MANAGER: UserRole = "fb_manager";
+export const withFbManager = (roles: UserRole[]): UserRole[] => [...roles, FB_MANAGER];
 
 interface RoleGuardProps {
   children: ReactNode;
@@ -75,6 +83,7 @@ export function useRoleAccess(): {
     super: 5,
     director: 5,
     gm: 5,
+    fb_manager: 4,
   };
   const hasRole = (roles: UserRole[]) => !!userRole && roles.includes(userRole);
   return {

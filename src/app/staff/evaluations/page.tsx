@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarClock, ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess } from "@/components/auth/role-guard";
+import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess, withFbManager } from "@/components/auth/role-guard";
 import { getInitials, roleLabels } from "@/lib/hooks/useProfiles";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { directSelectList, getCachedUserId } from "@/lib/supabase/rest";
@@ -40,7 +40,7 @@ function EvaluationsRoster() {
   const { hasRole } = useRoleAccess();
   const { profile: me } = useAuth();
   const viewer = useMemo(
-    () => ({ id: me?.id ?? getCachedUserId(), isManager: hasRole(ADMIN_ROLES) }),
+    () => ({ id: me?.id ?? getCachedUserId(), isManager: hasRole(ADMIN_ROLES), isFbManager: me?.role === "fb_manager" }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [me?.id, me?.role],
   );
@@ -321,7 +321,7 @@ function NinetyDaySection({ items }: { items: NinetyDayEntry[] }) {
 
 export default function EvaluationsPage() {
   return (
-    <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(MANAGEMENT_ROLES)}>
       <Suspense fallback={null}>
         <EvaluationsRoster />
       </Suspense>

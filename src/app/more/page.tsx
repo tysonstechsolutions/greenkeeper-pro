@@ -70,11 +70,11 @@ function BottomLinks({ showSettings = true }: { showSettings?: boolean }) {
 }
 
 export default function MorePage() {
-  const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
+  const { isPro, isForeman, isMechanic, isCrew, isFbManager, profile } = useAuth();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
-  const apps = getCatalog({ isPro, isForeman, isMechanic, isLaborer });
+  const apps = getCatalog({ isFbManager, isPro, isForeman, isMechanic, isLaborer });
   const pinned = apps.filter((item) => item.pinned);
   const sections = groupCatalog(apps.filter((item) => !item.pinned));
 

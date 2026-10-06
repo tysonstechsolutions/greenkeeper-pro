@@ -14,6 +14,7 @@ import type { StaffConcern, StaffRecord } from "@/lib/staff/types";
 import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 import { deactivateDepartedStaff } from "@/lib/staff/separation";
+import { isFbStaff } from "@/lib/auth/fb-manager";
 import { evaluationProgress } from "./compose";
 import { applyCrewRating, applyCrewSupervisory, defaultSupervisory, type CrewMember } from "./crew";
 import { buildFacts } from "./facts";
@@ -44,6 +45,17 @@ export interface RosterProfile {
   role: UserRole;
   is_active: boolean | null;
   supervisor_id: string | null;
+  department?: string | null;
+}
+
+/**
+ * Who is looking. Managers see every active employee; the F&B Manager sees
+ * the Food & Beverage staff; anyone else sees their direct reports.
+ */
+export interface EvaluationViewer {
+  id: string | null;
+  isManager: boolean;
+  isFbManager?: boolean;
 }
 
 export interface RosterEntry {
@@ -93,7 +105,7 @@ interface RosterSplitInput {
   ninetyDay: StaffEvaluation[];
   hireDates: Map<string, string | null>;
   period: EvaluationPeriod;
-  viewer: { id: string | null; isManager: boolean };
+  viewer: EvaluationViewer;
   todayIso: string;
 }
 
@@ -121,7 +133,12 @@ export function splitRoster(input: RosterSplitInput): {
 
   const visible = input.profiles
     .filter((p) => p.is_active !== false && p.id !== viewer.id)
-    .filter((p) => viewer.isManager || (viewer.id !== null && p.supervisor_id === viewer.id));
+    .filter(
+      (p) =>
+        viewer.isManager ||
+        (viewer.id !== null && p.supervisor_id === viewer.id) ||
+        (!!viewer.isFbManager && isFbStaff(p)),
+    );
 
   const entries: RosterEntry[] = [];
   const notDue: NotDueEntry[] = [];
@@ -175,7 +192,7 @@ export function splitRoster(input: RosterSplitInput): {
  */
 export function useEvaluationRoster(
   period: EvaluationPeriod,
-  viewer: { id: string | null; isManager: boolean },
+  viewer: EvaluationViewer,
 ) {
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [ninetyDay, setNinetyDay] = useState<NinetyDayEntry[]>([]);
@@ -191,7 +208,7 @@ export function useEvaluationRoster(
       if (viewer.isManager) await deactivateDepartedStaff(todayLocal());
       const [profiles, annual, ninety, personnel] = await Promise.all([
         directSelectList<RosterProfile>("profiles", {
-          columns: "id,full_name,role,is_active,supervisor_id",
+          columns: "id,full_name,role,is_active,supervisor_id,department",
           orderBy: [{ column: "full_name", ascending: true }],
           label: "evaluations.roster.profiles",
         }),
@@ -229,7 +246,7 @@ export function useEvaluationRoster(
     }
     // period is identified by its start/end; viewer by id + manager flag
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period.start, period.end, viewer.id, viewer.isManager]);
+  }, [period.start, period.end, viewer.id, viewer.isManager, viewer.isFbManager]);
 
   useEffect(() => {
     load();
@@ -462,7 +479,7 @@ export type CrewSaveState = "saving" | "saved" | "error";
  */
 export function useCrewRatings(
   period: EvaluationPeriod,
-  viewer: { id: string | null; isManager: boolean },
+  viewer: EvaluationViewer,
 ) {
   const roster = useEvaluationRoster(period, viewer);
   const [members, setMembers] = useState<Record<string, CrewMember>>({});

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess } from "@/components/auth/role-guard";
+import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess, withFbManager } from "@/components/auth/role-guard";
 import { roleLabels } from "@/lib/hooks/useProfiles";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getCachedUserId } from "@/lib/supabase/rest";
@@ -32,7 +32,10 @@ function CrewRating() {
   const { hasRole } = useRoleAccess();
   const isManager = hasRole(ADMIN_ROLES);
   const { profile: me } = useAuth();
-  const viewer = useMemo(() => ({ id: me?.id ?? getCachedUserId(), isManager }), [me?.id, isManager]);
+  const viewer = useMemo(
+    () => ({ id: me?.id ?? getCachedUserId(), isManager, isFbManager: me?.role === "fb_manager" }),
+    [me?.id, me?.role, isManager],
+  );
   const { loading, error, people, finalCount, saveState, rate, setSupervisory } = useCrewRatings(period, viewer);
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -255,7 +258,7 @@ function SaveDot({ state }: { state: CrewSaveState | undefined }) {
 
 export default function CrewRatingPage() {
   return (
-    <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(MANAGEMENT_ROLES)}>
       <Suspense fallback={null}>
         <CrewRating />
       </Suspense>

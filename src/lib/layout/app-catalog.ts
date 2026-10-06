@@ -152,7 +152,8 @@ export type CatalogKey =
   | "foreman"
   | "mechanic"
   | "crew"
-  | "pro";
+  | "pro"
+  | "fb_manager";
 
 // Reusable entries (same metadata everywhere they appear).
 // Daily anchors (pinned) wear the brand green; every other entry's color
@@ -433,6 +434,24 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     ORDER_LIST,
     KNOWLEDGE,
   ],
+  // Food & Beverage Manager: everything Buckley's (schedule, restaurant,
+  // revenue, orders, PRs) and her F&B staff — nothing course-wide.
+  fb_manager: [
+    DASHBOARD,
+    SCHEDULE,
+    CREATE_PR,
+    { ...HUB_RESTAURANT, pinned: true },
+    REVENUE,
+    PURCHASE_REQUESTS,
+    ORDER_LIST,
+    VENDORS,
+    STAFF,
+    ONEONONE,
+    EVALUATIONS,
+    SF52,
+    ASSISTANT,
+    KNOWLEDGE,
+  ],
   pro: [
     DASHBOARD,
     { ...REPORT_ISSUE, pinned: true },
@@ -445,6 +464,8 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
 };
 
 export interface RoleFlags {
+  /** Food & Beverage Manager (Buckley's only). Optional for older callers. */
+  isFbManager?: boolean;
   isPro: boolean;
   isForeman: boolean;
   isMechanic: boolean;
@@ -453,11 +474,13 @@ export interface RoleFlags {
 
 /** Resolve which catalog a user sees from their role flags. */
 export function resolveCatalogKey({
+  isFbManager,
   isPro,
   isForeman,
   isMechanic,
   isLaborer,
 }: RoleFlags): CatalogKey {
+  if (isFbManager) return "fb_manager";
   if (isPro) return "pro";
   if (isLaborer) return "crew";
   if (isMechanic) return "mechanic";

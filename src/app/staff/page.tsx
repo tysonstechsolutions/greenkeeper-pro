@@ -27,7 +27,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { RoleGuard, MANAGEMENT_ROLES } from "@/components/auth/role-guard";
+import { RoleGuard, MANAGEMENT_ROLES, withFbManager } from "@/components/auth/role-guard";
+import { staffForViewer } from "@/lib/auth/fb-manager";
 import { createClient } from "@/lib/supabase/client";
 import { useCrews } from "@/lib/hooks/useCrews";
 import { roleLabels, roleColors, getDisplayName, getInitials } from "@/lib/hooks/useProfiles";
@@ -58,12 +59,14 @@ interface StaffProfile extends Profile {
 }
 
 export default function StaffPage() {
-  const { profile: currentUser, isSuper, isAsstSuper, isDirector, isGM } = useAuth();
+  const { profile: currentUser, isSuper, isAsstSuper, isDirector, isGM, isFbManager } = useAuth();
   useCrews();
   // Anyone in the upper-management bucket can open the per-staff edit
   // page. Mirrors the role gate inside /settings/staff/view so the
   // button doesn't lead to a "Not Authorized" screen for the same role.
   const canEditStaff = isSuper || isAsstSuper || isDirector || isGM;
+  // The F&B Manager sees and manages the Food & Beverage staff only.
+  const canOpenProfiles = canEditStaff || isFbManager;
 
   const [profiles, setProfiles] = useState<StaffProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,7 +162,7 @@ export default function StaffPage() {
         ),
         // 5. Private facts are requested only for upper management. RLS is
         // still authoritative, but non-admin pages should not mount the query.
-        canEditStaff
+        canOpenProfiles
           ? withTimeout(
               supabase
                 .from("staff_personnel_private")
@@ -226,14 +229,14 @@ export default function StaffPage() {
         current_crew: crewAssignments.get(p.id) || null,
       }));
 
-      setProfiles(enhanced);
+      setProfiles(staffForViewer(currentUser?.role, currentUser?.id, enhanced));
     } catch (err) {
       console.error("Unexpected error fetching staff:", err);
       setError("Something went wrong loading staff data. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  }, [canEditStaff, supabase]);
+  }, [canEditStaff, canOpenProfiles, currentUser?.role, currentUser?.id, supabase]);
 
   useEffect(() => {
     if (currentUser) {
@@ -364,7 +367,7 @@ export default function StaffPage() {
   };
 
   return (
-    <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(MANAGEMENT_ROLES)}>
       {/* Show loading skeleton while data is loading */}
       {loading ? (
         <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-6 max-w-7xl mx-auto">
@@ -401,39 +404,45 @@ export default function StaffPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/staff/insights">
-            <Button variant="outline" className="gap-2">
-              <TrendingUp className="w-4 h-4" />
-              1:1 Insights
-            </Button>
-          </Link>
+          {!isFbManager && (
+            <Link href="/staff/insights">
+              <Button variant="outline" className="gap-2">
+                <TrendingUp className="w-4 h-4" />
+                1:1 Insights
+              </Button>
+            </Link>
+          )}
           <Link href="/staff/sf52">
             <Button variant="outline" className="gap-2">
               <FileText className="w-4 h-4" />
               New SF-52
             </Button>
           </Link>
-          <Link href="/staff/crews">
-            <Button variant="outline" className="gap-2">
-              <Users className="w-4 h-4" />
-              Manage Crews
-            </Button>
-          </Link>
+          {!isFbManager && (
+            <Link href="/staff/crews">
+              <Button variant="outline" className="gap-2">
+                <Users className="w-4 h-4" />
+                Manage Crews
+              </Button>
+            </Link>
+          )}
           {canEditStaff && (
             <Button variant="outline" className="gap-2" onClick={() => setHrImportOpen(true)}>
               <ClipboardPaste className="w-4 h-4" />
               Import HR roster
             </Button>
           )}
-          <Button className="gap-2" onClick={() => setAddStaffOpen(true)}>
-            <UserPlus className="w-4 h-4" />
-            Add Staff
-          </Button>
+          {!isFbManager && (
+            <Button className="gap-2" onClick={() => setAddStaffOpen(true)}>
+              <UserPlus className="w-4 h-4" />
+              Add Staff
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Pro shop & golf ops (separate lightweight roster) */}
-      <ProShopRosterCard profileNames={profiles} onImported={fetchStaff} />
+      {!isFbManager && <ProShopRosterCard profileNames={profiles} onImported={fetchStaff} />}
 
       {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -550,10 +559,14 @@ export default function StaffPage() {
                 icon={Users}
                 title="No staff members"
                 description="Add team members manually to start managing your crew."
-                action={{
-                  label: "Add Staff",
-                  onClick: () => setAddStaffOpen(true),
-                }}
+                action={
+                  isFbManager
+                    ? undefined
+                    : {
+                        label: "Add Staff",
+                        onClick: () => setAddStaffOpen(true),
+                      }
+                }
               />
             )
           ) : (
@@ -874,7 +887,7 @@ export default function StaffPage() {
                   {/* Admin actions — visible to any management role that can
                       actually edit the underlying record (matches the role
                       gate on /settings/staff/view). */}
-                  {canEditStaff && (
+                  {canOpenProfiles && (
                     <div className="pt-4 border-t border-border">
                       <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
                         <Shield className="w-4 h-4" />
@@ -886,11 +899,13 @@ export default function StaffPage() {
                             Full Profile &amp; Records
                           </Button>
                         </Link>
-                        <Link href={`/settings/staff/view?id=${selectedStaff.id}`}>
-                          <Button variant="outline" size="sm" className="w-full">
-                            Edit Profile
-                          </Button>
-                        </Link>
+                        {canEditStaff && (
+                          <Link href={`/settings/staff/view?id=${selectedStaff.id}`}>
+                            <Button variant="outline" size="sm" className="w-full">
+                              Edit Profile
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   )}

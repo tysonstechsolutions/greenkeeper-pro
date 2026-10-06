@@ -27,6 +27,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { canChangePurchaseRequest, canUsePurchaseRequests } from "@/lib/auth/fb-manager";
 import { useRefreshOnFocus } from "@/lib/hooks/useRefreshOnFocus";
 import {
   directDeleteRow,
@@ -336,18 +337,15 @@ function MonthRow({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function PurchaseRequestsListPage() {
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, user, loading: authLoading } = useAuth();
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendorFilter, setVendorFilter] = useState<string | null>(null);
   const [listView, setListView] = useState<"open" | "completed">("open");
   const [showVendors, setShowVendors] = useState(false);
 
-  const isAllowed =
-    profile?.role === "super" ||
-    profile?.role === "asst_super" ||
-    profile?.role === "director" ||
-    profile?.role === "gm";
+  // Managers, plus the F&B Manager (who can change only her own PRs).
+  const isAllowed = canUsePurchaseRequests(profile?.role);
 
   // True while a status change / delete is committing. Native confirm() dialogs
   // blur then re-focus the window, which fires useRefreshOnFocus mid-action — we
@@ -848,7 +846,7 @@ export default function PurchaseRequestsListPage() {
                         Upload receipt
                       </Link>
                     )}
-                    {meta.next && NextIcon && meta.nextLabel && (
+                    {canChangePurchaseRequest(profile?.role, user?.id, pr) && meta.next && NextIcon && meta.nextLabel && (
                       <button
                         type="button"
                         aria-label={`Advance PR — Mark as ${meta.nextLabel}`}
@@ -869,7 +867,7 @@ export default function PurchaseRequestsListPage() {
                         Mark {meta.nextLabel}
                       </button>
                     )}
-                    {sowMeta?.next && SowNextIcon && sowMeta.nextLabel && (
+                    {canChangePurchaseRequest(profile?.role, user?.id, pr) && sowMeta?.next && SowNextIcon && sowMeta.nextLabel && (
                       <button
                         type="button"
                         aria-label={`Advance SOW — Mark as ${sowMeta.nextLabel}`}
@@ -891,7 +889,7 @@ export default function PurchaseRequestsListPage() {
                       </button>
                     )}
                     <div className="flex-1" />
-                    {meta.prev && meta.prevLabel && (
+                    {canChangePurchaseRequest(profile?.role, user?.id, pr) && meta.prev && meta.prevLabel && (
                       <button
                         type="button"
                         aria-label={`Revert PR — Back to ${meta.prevLabel}`}
@@ -920,16 +918,18 @@ export default function PurchaseRequestsListPage() {
                     >
                       <Copy className="w-4 h-4" />
                     </Link>
-                    <button
-                      type="button"
-                      aria-label="Delete"
-                      title="Delete"
-                      disabled={deletingId === pr.id}
-                      onClick={() => handleDelete(pr.id, label)}
-                      className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canChangePurchaseRequest(profile?.role, user?.id, pr) && (
+                      <button
+                        type="button"
+                        aria-label="Delete"
+                        title="Delete"
+                        disabled={deletingId === pr.id}
+                        onClick={() => handleDelete(pr.id, label)}
+                        className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-600 active:scale-[0.97] transition-all disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </li>
               );

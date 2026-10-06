@@ -83,9 +83,12 @@ describe("personnel privacy application routing", () => {
   });
 
   it("does not mount SF-52 or staff-edit personnel queries for non-admin roles", () => {
-    expect(sf52Page).toContain("<RoleGuard allowedRoles={ADMIN_ROLES}>");
+    // The F&B Manager also files SF-52s, for her own staff only: the list is
+    // narrowed in the page and the database limits her to Food & Beverage.
+    expect(sf52Page).toContain("<RoleGuard allowedRoles={withFbManager(ADMIN_ROLES)}>");
+    expect(sf52Page).toContain("staffForViewer(me?.role, me?.id, rows)");
     expect(settingsStaffPage).toContain("<RoleGuard allowedRoles={ADMIN_ROLES}>");
-    expect(sf52Page.indexOf("<RoleGuard allowedRoles={ADMIN_ROLES}>")).toBeLessThan(
+    expect(sf52Page.indexOf("<RoleGuard allowedRoles={withFbManager(ADMIN_ROLES)}>")).toBeLessThan(
       sf52Page.indexOf("<Sf52Content />"),
     );
     expect(settingsStaffPage.indexOf("<RoleGuard allowedRoles={ADMIN_ROLES}>")).toBeLessThan(

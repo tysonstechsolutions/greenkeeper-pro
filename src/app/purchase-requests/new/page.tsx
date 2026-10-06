@@ -24,6 +24,7 @@ import {
   Truck,
 } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { canChangePurchaseRequest, canUsePurchaseRequests } from "@/lib/auth/fb-manager";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { callApi, resolveAccessToken } from "@/lib/api/client";
@@ -815,11 +816,13 @@ function NewPurchaseRequestPageInner() {
   const fromId = searchParams.get("from");
   const { profile, user, loading: authLoading } = useAuth();
 
-  const isAllowed =
-    profile?.role === "super" ||
-    profile?.role === "asst_super" ||
-    profile?.role === "director" ||
-    profile?.role === "gm";
+  const isAllowed = canUsePurchaseRequests(profile?.role);
+  // Who created the PR being edited: the F&B Manager may only edit her own.
+  const [existingCreatedBy, setExistingCreatedBy] = useState<string | null | undefined>(undefined);
+  const editBlocked =
+    !!editId &&
+    existingCreatedBy !== undefined &&
+    !canChangePurchaseRequest(profile?.role, user?.id, { created_by: existingCreatedBy });
 
   // ── State ────────────────────────────────────────────────────────────────
   const [datePrepared, setDatePrepared] = useState(todayIso());
@@ -1180,6 +1183,7 @@ function NewPurchaseRequestPageInner() {
         return;
       }
       const row = data as unknown as PurchaseRequest;
+      if (editId) setExistingCreatedBy(row.created_by ?? null);
       // Edit: keep the original dates / sequence / signatures.
       // Clone: reset to "today" and let save assign a fresh sequence number,
       // and drop signatures so the new draft starts unsigned.
@@ -2387,6 +2391,29 @@ function NewPurchaseRequestPageInner() {
     return (
       <div className="flex items-center justify-center min-h-[60vh] text-muted-foreground text-sm">
         Loading...
+      </div>
+    );
+  }
+
+  if (isAllowed && editBlocked) {
+    return (
+      <div className="p-3 pb-32 max-w-lg mx-auto">
+        <div className="flex items-center gap-2 mb-6">
+          <Link
+            href="/purchase-requests"
+            className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-lg font-bold">Edit Purchase Request</h1>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-6 text-center space-y-3">
+          <ShieldAlert className="w-10 h-10 mx-auto text-muted-foreground opacity-50" />
+          <p className="font-medium">You can only edit purchase requests you created.</p>
+          <Link href={`/purchase-requests/new?from=${editId}`} className="inline-block text-sm underline">
+            Make a copy instead (Order Again)
+          </Link>
+        </div>
       </div>
     );
   }

@@ -3,7 +3,7 @@
 import { Printer, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { MANAGEMENT_ROLES, RoleGuard } from "@/components/auth/role-guard";
+import { MANAGEMENT_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
 import {
   WEEKLY_SPECIALS,
   buildSpecialFlyerHtml,
@@ -73,7 +73,7 @@ function SpecialsBoard() {
 
 export default function MarketingPage() {
   return (
-    <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(MANAGEMENT_ROLES)}>
       <SpecialsBoard />
     </RoleGuard>
   );

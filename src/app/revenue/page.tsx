@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { RoleGuard, GM_ROLES } from "@/components/auth/role-guard";
+import { RoleGuard, GM_ROLES, withFbManager } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
 import { UploadReportCard } from "./upload-report";
@@ -111,12 +111,18 @@ function getStartOfMonth(): string {
 }
 
 export default function RevenuePage() {
-  const { user } = useAuth();
+  const { user, isFbManager } = useAuth();
   const supabase = createClient();
+  // The F&B Manager sees and logs Buckley's (Food & Beverage) revenue only.
+  const onlyCategory = isFbManager ? "food_beverage" : null;
+  const categories = onlyCategory ? CATEGORIES.filter((c) => c.value === onlyCategory) : CATEGORIES;
+  // Apply the F&B-only filter to a revenue_entries query.
+  const scoped = useCallback(<Q extends { eq: (col: string, v: string) => Q }>(q: Q): Q =>
+    onlyCategory ? q.eq("category", onlyCategory) : q, [onlyCategory]);
 
   // Form state
   const [entryDate, setEntryDate] = useState(getToday());
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(isFbManager ? "food_beverage" : "");
   const [amount, setAmount] = useState("");
   const [roundsCount, setRoundsCount] = useState("");
   const [description, setDescription] = useState("");
@@ -132,9 +138,9 @@ export default function RevenuePage() {
 
   // ── Fetch entries ──
   const fetchEntries = useCallback(async () => {
-    const { data } = await supabase
+    const { data } = await scoped(supabase
       .from("revenue_entries")
-      .select("*")
+      .select("*"))
       .order("entry_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(100);
@@ -142,7 +148,7 @@ export default function RevenuePage() {
     if (data) {
       setEntries(data as RevenueEntry[]);
     }
-  }, [supabase]);
+  }, [supabase, scoped]);
 
   // ── Fetch summary stats ──
   const fetchSummary = useCallback(async () => {
@@ -151,27 +157,27 @@ export default function RevenuePage() {
     const monthStart = getStartOfMonth();
 
     // Today total
-    const { data: todayData } = await supabase
+    const { data: todayData } = await scoped(supabase
       .from("revenue_entries")
-      .select("amount")
+      .select("amount"))
       .eq("entry_date", today);
     setTodayTotal(
       (todayData || []).reduce((sum: number, r: { amount: number }) => sum + Number(r.amount), 0)
     );
 
     // Week total
-    const { data: weekData } = await supabase
+    const { data: weekData } = await scoped(supabase
       .from("revenue_entries")
-      .select("amount")
+      .select("amount"))
       .gte("entry_date", weekStart);
     setWeekTotal(
       (weekData || []).reduce((sum: number, r: { amount: number }) => sum + Number(r.amount), 0)
     );
 
     // Month total
-    const { data: monthData } = await supabase
+    const { data: monthData } = await scoped(supabase
       .from("revenue_entries")
-      .select("amount, rounds_count")
+      .select("amount, rounds_count"))
       .gte("entry_date", monthStart);
     setMonthTotal(
       (monthData || []).reduce((sum: number, r: { amount: number }) => sum + Number(r.amount), 0)
@@ -182,7 +188,7 @@ export default function RevenuePage() {
         0
       )
     );
-  }, [supabase]);
+  }, [supabase, scoped]);
 
   useEffect(() => {
     async function load() {
@@ -211,7 +217,7 @@ export default function RevenuePage() {
     });
 
     if (!error) {
-      setCategory("");
+      setCategory(onlyCategory ?? "");
       setAmount("");
       setRoundsCount("");
       setDescription("");
@@ -250,7 +256,7 @@ export default function RevenuePage() {
   const displayDates = sortedDates.slice(0, 30);
 
   return (
-    <RoleGuard allowedRoles={GM_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(GM_ROLES)}>
       <div className="p-4 md:p-6 pb-24 max-w-2xl mx-auto">
         <PageHeader
           icon={DollarSign}
@@ -259,12 +265,15 @@ export default function RevenuePage() {
         />
 
         {/* ── Upload a POS/register report (AI-transcribed, human-verified) ── */}
-        <UploadReportCard
-          userId={user?.id ?? null}
-          onSaved={() => {
-            Promise.all([fetchEntries(), fetchSummary()]);
-          }}
-        />
+        {/* Course-wide report (every category): not for the F&B Manager. */}
+        {!isFbManager && (
+          <UploadReportCard
+            userId={user?.id ?? null}
+            onSaved={() => {
+              Promise.all([fetchEntries(), fetchSummary()]);
+            }}
+          />
+        )}
 
         {/* ── Quick Entry Form ── */}
         <Card className="mb-6">
@@ -286,7 +295,7 @@ export default function RevenuePage() {
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <SelectItem key={c.value} value={c.value}>
                         {c.label}
                       </SelectItem>

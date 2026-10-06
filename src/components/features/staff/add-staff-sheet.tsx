@@ -44,6 +44,7 @@ const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
   { value: "asst_super", label: "Assistant Superintendent" },
   { value: "director", label: "Director / MWR Leadership" },
   { value: "gm", label: "General Manager" },
+  { value: "fb_manager", label: "F&B Manager (Buckley's)" },
 ];
 
 /** 4-digit numeric PIN, padded so leading zeros are preserved. */

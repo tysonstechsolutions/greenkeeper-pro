@@ -65,8 +65,11 @@ describe("private staff security migration contract", () => {
 
 describe("private staff page guards", () => {
   it("does not mount full HR/profile queries for non-admin roles", () => {
-    expect(profilePage).toContain("<RoleGuard allowedRoles={ADMIN_ROLES}>");
-    expect(profilePage.indexOf("<RoleGuard allowedRoles={ADMIN_ROLES}>")).toBeLessThan(
+    // Admins, plus the F&B Manager (the database limits her to Food &
+    // Beverage staff and she cannot change role, department, or supervisor).
+    expect(profilePage).toContain("<RoleGuard allowedRoles={withFbManager(ADMIN_ROLES)}>");
+    expect(profilePage).toContain("disabled={isFbManager}");
+    expect(profilePage.indexOf("<RoleGuard allowedRoles={withFbManager(ADMIN_ROLES)}>")).toBeLessThan(
       profilePage.indexOf("<ProfileContent />"),
     );
   });

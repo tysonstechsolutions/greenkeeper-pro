@@ -8,7 +8,7 @@ import type { AuditFinding } from "@/lib/pr-audit/audit";
 import type { FitFinding } from "@/lib/pr-audit/fit";
 import type { BundleFinding } from "@/lib/pr-audit/bundle-check";
 
-export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director" | "gm";
+export type UserRole = "super" | "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "pro" | "director" | "gm" | "fb_manager";
 
 export type ZoneType =
   | "green"
@@ -931,7 +931,7 @@ export interface Notification {
   created_at: string;
 }
 
-export type InviteRole = "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "director" | "gm";
+export type InviteRole = "asst_super" | "foreman" | "mechanic" | "crew" | "seasonal" | "director" | "gm" | "fb_manager";
 
 export interface Invite {
   id: string;

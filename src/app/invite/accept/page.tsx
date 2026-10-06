@@ -17,6 +17,7 @@ const roleLabels: Record<InviteRole, string> = {
   seasonal: "Seasonal / Part-Time",
   director: "Director / MWR Leadership",
   gm: "General Manager",
+  fb_manager: "F&B Manager (Buckley's)",
 };
 
 function PageContent() {

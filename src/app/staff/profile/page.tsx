@@ -28,7 +28,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { ADMIN_ROLES, RoleGuard } from "@/components/auth/role-guard";
+import { ADMIN_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { callApi } from "@/lib/api/client";
 import { useProfiles, roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { useEmployee } from "@/lib/staff/use-employee";
@@ -67,6 +68,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "pro", label: "Pro Shop" },
   { value: "director", label: "Director" },
   { value: "gm", label: "General Manager" },
+  { value: "fb_manager", label: "F&B Manager (Buckley's)" },
 ];
 
 // `pro_shop_staff` is deliberately absent: it merged into
@@ -156,6 +158,9 @@ function ProfileContent() {
     scheduleOneOnOne,
   } = useEmployee(id);
   const { profiles } = useProfiles();
+  // The F&B Manager edits her staff's details but not their role, department,
+  // or supervisor (the database refuses those for her too).
+  const { isFbManager } = useAuth();
 
   // Honor a `tab` query param so links can land straight on a section — e.g.
   // the 1:1s launcher deep-links to `?id=…&tab=oneonone` to skip the click
@@ -228,12 +233,17 @@ function ProfileContent() {
         display_name: displayName.trim() || null,
         email: email.trim(),
         phone: phone.trim() || null,
-        role,
-        department: department || null,
-        role_group: roleGroup || null,
+        // Role, department, and supervisor are a manager's call.
+        ...(isFbManager
+          ? {}
+          : {
+              role,
+              department: department || null,
+              role_group: roleGroup || null,
+              supervisor_id: supervisorId || null,
+            }),
         hire_date: hireDate || null,
         is_active: isActive,
-        supervisor_id: supervisorId || null,
         emergency_contact: emergency,
         certifications: certs,
         // Reactivating someone whose recorded last day has passed (a rehire)
@@ -547,7 +557,7 @@ function ProfileContent() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="role" className="flex items-center gap-1.5"><Shield className="w-3.5 h-3.5" /> Role</Label>
-              <select id="role" value={role} onChange={(e) => setRole(e.target.value as UserRole)} className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base">
+              <select id="role" value={role} disabled={isFbManager} onChange={(e) => setRole(e.target.value as UserRole)} className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base">
                 {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
@@ -566,7 +576,7 @@ function ProfileContent() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="supervisor" className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Reports to (supervisor)</Label>
-              <select id="supervisor" value={supervisorId} onChange={(e) => setSupervisorId(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base">
+              <select id="supervisor" value={supervisorId} disabled={isFbManager} onChange={(e) => setSupervisorId(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-input bg-background text-base">
                 <option value="">— None —</option>
                 {supervisorOptions.map((p) => (
                   <option key={p.id} value={p.id}>{p.full_name} ({roleLabels[p.role]})</option>
@@ -585,7 +595,7 @@ function ProfileContent() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="department">Department</Label>
-                <select id="department" value={department} onChange={(e) => setDepartment(e.target.value as DutyDepartment | "")} className="gk-input">
+                <select id="department" value={department} disabled={isFbManager} onChange={(e) => setDepartment(e.target.value as DutyDepartment | "")} className="gk-input">
                   <option value="">Not recorded</option>
                   {Object.entries(DUTY_DEPARTMENT_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -594,7 +604,7 @@ function ProfileContent() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="roleGroup">Duty role group</Label>
-                <select id="roleGroup" value={roleGroup} onChange={(e) => setRoleGroup(e.target.value as DutyRoleGroup | "")} className="gk-input">
+                <select id="roleGroup" value={roleGroup} disabled={isFbManager} onChange={(e) => setRoleGroup(e.target.value as DutyRoleGroup | "")} className="gk-input">
                   <option value="">Not recorded</option>
                   {EMPLOYEE_DUTY_ROLE_GROUPS.map((value) => (
                     <option key={value} value={value}>{DUTY_ROLE_GROUP_LABELS[value]}</option>
@@ -1049,7 +1059,7 @@ function ProfileContent() {
 
 export default function StaffProfilePage() {
   return (
-    <RoleGuard allowedRoles={ADMIN_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(ADMIN_ROLES)}>
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}>
         <ProfileContent />
       </Suspense>

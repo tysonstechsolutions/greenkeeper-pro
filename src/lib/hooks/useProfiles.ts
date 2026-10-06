@@ -197,6 +197,7 @@ export const roleLabels: Record<UserRole, string> = {
   seasonal: "Seasonal",
   director: "Director",
   gm: "General Manager",
+  fb_manager: "F&B Manager",
 };
 
 // Role badge colors for UI
@@ -210,6 +211,7 @@ export const roleColors: Record<UserRole, { bg: string; text: string }> = {
   mechanic: { bg: "bg-purple-500/10", text: "text-purple-600" },
   crew: { bg: "bg-green-500/10", text: "text-green-600" },
   seasonal: { bg: "bg-gray-500/10", text: "text-gray-600" },
+  fb_manager: { bg: "bg-orange-500/10", text: "text-orange-600" },
 };
 
 // Get display name (prefer display_name, fallback to full_name)

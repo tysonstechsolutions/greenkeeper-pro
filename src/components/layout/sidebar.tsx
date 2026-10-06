@@ -88,7 +88,7 @@ function NavItem({
 export function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { isPro, isForeman, isMechanic, isCrew, profile } = useAuth();
+  const { isPro, isForeman, isMechanic, isCrew, isFbManager, profile } = useAuth();
   const isSeasonal = profile?.role === "seasonal";
   const isLaborer = isCrew || isSeasonal;
 
@@ -108,7 +108,7 @@ export function Sidebar() {
     pathname === href || pathname.startsWith(href + "/");
 
   // Role-appropriate catalog → pinned block + stable labeled sections.
-  const catalog = getCatalog({ isPro, isForeman, isMechanic, isLaborer });
+  const catalog = getCatalog({ isFbManager, isPro, isForeman, isMechanic, isLaborer });
   const pinned = catalog.filter((item) => item.pinned);
   const sections = groupCatalog(catalog.filter((item) => !item.pinned));
 

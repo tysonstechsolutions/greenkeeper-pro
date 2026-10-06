@@ -11,7 +11,9 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MANAGEMENT_ROLES, RoleGuard } from "@/components/auth/role-guard";
+import { MANAGEMENT_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
+import { staffForViewer } from "@/lib/auth/fb-manager";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { directSelectList } from "@/lib/supabase/rest";
 import { roleLabels, getInitials } from "@/lib/hooks/useProfiles";
 import { TEMPLATE_LABELS } from "@/lib/oneonone/types";
@@ -23,6 +25,7 @@ interface ProfileLite {
   full_name: string | null;
   role: UserRole;
   is_active: boolean | null;
+  department?: string | null;
 }
 
 interface LastSession {
@@ -42,6 +45,8 @@ function fmtDate(iso: string): string {
 }
 
 function OneOnOnesLauncher() {
+  // The F&B Manager holds 1:1s with the Food & Beverage staff only.
+  const { profile: me } = useAuth();
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
   const [lastByEmployee, setLastByEmployee] = useState<Map<string, LastSession>>(
     new Map(),
@@ -55,7 +60,7 @@ function OneOnOnesLauncher() {
       try {
         const [profs, sess] = await Promise.all([
           directSelectList<ProfileLite>("profiles", {
-            columns: "id,full_name,role,is_active",
+            columns: "id,full_name,role,is_active,department",
             orderBy: [{ column: "full_name", ascending: true }],
             label: "oneonones.profiles",
           }),
@@ -94,7 +99,7 @@ function OneOnOnesLauncher() {
   // Active staff only, sorted most-overdue first (never-had at the very top),
   // so whoever needs a 1:1 most rises to the top of the list.
   const roster = useMemo(() => {
-    return profiles
+    return staffForViewer(me?.role, me?.id, profiles)
       .filter((p) => p.is_active !== false)
       .map((p) => ({ profile: p, last: lastByEmployee.get(p.id) ?? null }))
       .sort((a, b) => {
@@ -102,7 +107,7 @@ function OneOnOnesLauncher() {
         const db = b.last ? daysSince(b.last.date) : Number.POSITIVE_INFINITY;
         return db - da;
       });
-  }, [profiles, lastByEmployee]);
+  }, [profiles, lastByEmployee, me?.role, me?.id]);
 
   return (
     <div className="p-4 md:p-6 pb-24 max-w-3xl mx-auto">
@@ -199,7 +204,7 @@ function OneOnOnesLauncher() {
 
 export default function OneOnOnesPage() {
   return (
-    <RoleGuard allowedRoles={MANAGEMENT_ROLES}>
+    <RoleGuard allowedRoles={withFbManager(MANAGEMENT_ROLES)}>
       <OneOnOnesLauncher />
     </RoleGuard>
   );

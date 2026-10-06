@@ -104,6 +104,8 @@ export interface UseAuthReturn {
   isPro: boolean;
   isDirector: boolean;
   isGM: boolean;
+  /** Food & Beverage Manager: Buckley's and the F&B staff only. */
+  isFbManager: boolean;
   isStaff: boolean; // Any internal staff
   // Permission helpers
   isManager: boolean; // super or asst_super or pro or director or gm
@@ -130,6 +132,7 @@ const defaultAuthState: UseAuthReturn = {
   isPro: false,
   isDirector: false,
   isGM: false,
+  isFbManager: false,
   isStaff: false,
   isManager: false,
   canCreateInvites: false,
@@ -357,6 +360,7 @@ export function useAuthInternal(): UseAuthReturn {
   const isPro = role === "pro";
   const isDirector = role === "director";
   const isGM = role === "gm";
+  const isFbManager = role === "fb_manager";
   const isStaff = role !== undefined;
 
   // Permission helpers — director and gm can see everything (read-all oversight)
@@ -383,6 +387,7 @@ export function useAuthInternal(): UseAuthReturn {
     isPro,
     isDirector,
     isGM,
+    isFbManager,
     isStaff,
     isManager,
     canCreateInvites,

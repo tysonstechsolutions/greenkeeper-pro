@@ -36,6 +36,7 @@ function authState(overrides: Partial<UseAuthReturn> = {}): UseAuthReturn {
     isPro: false,
     isDirector: false,
     isGM: false,
+    isFbManager: false,
     isStaff: false,
     isManager: false,
     canCreateInvites: false,
