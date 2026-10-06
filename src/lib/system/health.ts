@@ -143,6 +143,10 @@ export const TRACKED_MIGRATIONS: { name: string; what: string }[] = [
     name: "20261008120000_inventory_valuations",
     what: "Month-end inventory counts (food, bar, pro shop retail) for true cost of goods",
   },
+  {
+    name: "20261009120000_sales_reports",
+    what: "RecTrac sales reports item by item (daily sales, best sellers, prices)",
+  },
 ];
 
 /** Older migrations, checked by calling something they created (read-only). */

@@ -2,7 +2,8 @@
 
 // Upload a POS / register report → AI transcribes it → HUMAN REVIEWS every
 // line → save. Nothing touches the database until "Save entries" — the
-// verify-then-commit rule for anything with money in it.
+// verify-then-commit rule for anything with money in it. A RecTrac Flash
+// Report (Sales Statistics) is read exactly instead, item by item.
 
 import { useRef, useState } from "react";
 import {
@@ -36,6 +37,10 @@ import {
   categoryForReportLine,
   type ReportArea,
 } from "@/lib/money/revenue-categories";
+import { pdfTextLines } from "@/lib/pdf/text-lines";
+import { flashReportArea, parseFlashReport, type FlashReport } from "@/lib/sales/rectrac-flash";
+import { planFlashImport, type FlashImportPlan, type SalesOutlet } from "@/lib/sales/import";
+import { FlashImport } from "./flash-import";
 
 const CATEGORY_OPTIONS = REVENUE_CATEGORIES;
 
@@ -87,6 +92,8 @@ export function UploadReportCard({
   const areaChoices = REPORT_AREAS.filter((a) => !areas || areas.includes(a.value));
   // Which RecTrac report this is: restaurant, bar, and pro shop each have their own.
   const [reportArea, setReportArea] = useState<ReportArea | null>(null);
+  // A RecTrac flash report, read exactly (no AI review rows).
+  const [flash, setFlash] = useState<{ report: FlashReport; plan: FlashImportPlan; detected: SalesOutlet | null } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -97,6 +104,7 @@ export function UploadReportCard({
   const [entryDate, setEntryDate] = useState(todayLocal());
   const [reportTotal, setReportTotal] = useState<number | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  const [flashNotice, setFlashNotice] = useState<string | null>(null);
   const nextKey = useRef(0);
 
   const reset = () => {
@@ -112,7 +120,26 @@ export function UploadReportCard({
     setFile(f);
     setError(null);
     setSavedCount(null);
+    setFlash(null);
     setExtracting(true);
+    // A RecTrac Flash Report is read exactly, in the browser.
+    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+      try {
+        const report = parseFlashReport(await pdfTextLines(new Uint8Array(await f.arrayBuffer())));
+        if (report && report.sales.length > 0) {
+          const detected = flashReportArea(report);
+          const outlet: SalesOutlet =
+            reportArea === "restaurant" || reportArea === "bar" || reportArea === "pro_shop"
+              ? reportArea
+              : (detected ?? "restaurant");
+          setFlash({ report, plan: planFlashImport(report, outlet), detected });
+          setExtracting(false);
+          return;
+        }
+      } catch {
+        /* not readable as text: fall through to the AI reader */
+      }
+    }
     try {
       const form = new FormData();
       form.append("file", f);
@@ -260,7 +287,35 @@ export function UploadReportCard({
           </p>
         )}
 
-        {!rows && (
+        {flash && (
+          <FlashImport
+            report={flash.report}
+            plan={flash.plan}
+            file={file}
+            userId={userId}
+            detectedOutlet={flash.detected}
+            onCancel={() => {
+              setFlash(null);
+              reset();
+            }}
+            onSaved={(message) => {
+              setFlash(null);
+              reset();
+              setReportArea(null);
+              setFlashNotice(message);
+              onSaved();
+            }}
+          />
+        )}
+
+        {flashNotice && !flash && !rows && (
+          <p className="text-sm text-success flex items-center gap-1.5">
+            <Check className="w-4 h-4" />
+            {flashNotice}
+          </p>
+        )}
+
+        {!rows && !flash && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Which report is this?</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Which report is this?">
