@@ -1,12 +1,12 @@
 -- ============================================================================
--- Bar and Buckleys vendor receipts, Oct 2025 to Jul 2026 (2026-10-10).
+-- Bar and Buckleys vendor receipts, Oct 2025 to Sep 2026 (2026-10-10).
 --
--- Typed in from the scanned delivery receipts in Google Drive and checked
--- line by line against each receipt (and against the running account balance
--- Lakeshore prints on every receipt).
+-- Typed in from the scanned delivery receipts in Google Drive and the MWR
+-- warehouse order history, checked line by line against each receipt (and
+-- against the running account balance Lakeshore prints on every receipt).
 --   Lakeshore Beverage      27 invoices  Oct 6 2025 to Apr 8 2026
 --   Kloss Distributing       5 invoices and 2 credits  Nov 2025 to May 2026
---   MWR Central Warehouse    3 invoices  Jun to Jul 2026
+--   MWR Central Warehouse    8 orders    Jun to Sep 2026
 --   Mess requisitions        4 transfers from Epicenter  May to Jul 2026
 -- Beer and liquor go to the bar (20091 / 151120). Sodas, water and food go to
 -- the restaurant (20091 / 151110) and can be moved to the bar on the
@@ -731,6 +731,105 @@ FROM p CROSS JOIN (VALUES
   (5, 'WH-30707', 'NAPKIN: BEVERAGE', 'CS', 1, 'CS', 20.66, 20.66, 'supplies', 'restaurant', '20091', '701000'),
   (6, 'WH-30008', 'BAG: CLEAR: 60 GAL', 'CS', 2, 'CS', 25.33, 50.66, 'supplies', 'restaurant', '20091', '701000'),
   (7, 'WH-40025', 'BLEACH: GERM: CS/6', 'CS', 1, 'CS', 16.96, 16.96, 'supplies', 'restaurant', '20091', '701005')
+) AS v(line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct);
+
+WITH p AS (
+  INSERT INTO public.restaurant_purchases
+    (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
+  VALUES ('2026-07-16', 'MWR Central Warehouse', 149.58, 'invoice', 'SO-26-029154', NULL, 149.58, 0, 0, 0, 'Invoice SO-26-029154 · 6 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
+  RETURNING id
+)
+INSERT INTO public.restaurant_purchase_lines
+  (purchase_id, line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct)
+SELECT p.id, v.line_no, v.product_number, v.description, v.pack_size, v.qty, v.unit, v.unit_price, v.extended, v.category, v.outlet, v.cost_ctr, v.gl_acct
+FROM p CROSS JOIN (VALUES
+  (1, 'WH-20108', 'SODA: PEPSI: DIET 20 OZ', 'CS', 2, 'CS', 18.36, 36.72, 'food', 'restaurant', '20091', '151110'),
+  (2, 'WH-20109', 'SODA: STARRY 20 OZ', 'CS', 1, 'CS', 18.91, 18.91, 'food', 'restaurant', '20091', '151110'),
+  (3, 'WH-20102', 'SODA: MOUNTAIN DEW 20 OZ', 'CS', 1, 'CS', 18.91, 18.91, 'food', 'restaurant', '20091', '151110'),
+  (4, 'WH-20005', 'GATORADE: COOL BLUE', 'CS', 1, 'CS', 18.76, 18.76, 'food', 'restaurant', '20091', '151110'),
+  (5, 'WH-20007', 'GATORADE: GLACIER FREEZE', 'CS', 1, 'CS', 18.76, 18.76, 'food', 'restaurant', '20091', '151110'),
+  (6, 'WH-20008', 'GATORADE: LEMON/LIME', 'CS', 2, 'CS', 18.76, 37.52, 'food', 'restaurant', '20091', '151110')
+) AS v(line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct);
+
+WITH p AS (
+  INSERT INTO public.restaurant_purchases
+    (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
+  VALUES ('2026-08-04', 'MWR Central Warehouse', 329.6, 'invoice', 'SO-26-029195', NULL, 51.94, 0, 277.66, 0, 'Invoice SO-26-029195 · 7 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
+  RETURNING id
+)
+INSERT INTO public.restaurant_purchase_lines
+  (purchase_id, line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct)
+SELECT p.id, v.line_no, v.product_number, v.description, v.pack_size, v.qty, v.unit, v.unit_price, v.extended, v.category, v.outlet, v.cost_ctr, v.gl_acct
+FROM p CROSS JOIN (VALUES
+  (1, 'WH-40008', 'DEGREASER AP K43 (32 OZ)', 'CS', 1, 'CS', 26, 26, 'supplies', 'restaurant', '20091', '701005'),
+  (2, 'WH-40015', 'ECOLAB: APEX RINSE', 'CS', 1, 'CS', 154.1, 154.1, 'supplies', 'restaurant', '20091', '701000'),
+  (3, 'WH-40018', 'ECOLAB: DISHMACHINE SANITIZER', 'CS', 1, 'CS', 20.63, 20.63, 'supplies', 'restaurant', '20091', '701005'),
+  (4, 'WH-20102', 'SODA: MOUNTAIN DEW 20 OZ', 'CS', 2, 'CS', 18.91, 37.82, 'food', 'restaurant', '20091', '151110'),
+  (5, 'WH-30044', 'TOWEL 9.5X9 MULTI-FOLD: WHITE (TORK)', 'CS', 1, 'CS', 38.71, 38.71, 'supplies', 'restaurant', '20091', '701000'),
+  (6, 'WH-30104', 'PLATE: PAPER: 9 IN', 'CS', 1, 'CS', 38.22, 38.22, 'supplies', 'restaurant', '20091', '701000'),
+  (7, 'WH-20025', 'WATER: 20 OZ BOTTLE', 'CS', 2, 'CS', 7.06, 14.12, 'food', 'restaurant', '20091', '151110')
+) AS v(line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct);
+
+WITH p AS (
+  INSERT INTO public.restaurant_purchases
+    (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
+  VALUES ('2026-08-20', 'MWR Central Warehouse', 685.36, 'invoice', 'SO-26-029235', NULL, 7.06, 0, 678.3, 0, 'Invoice SO-26-029235 · 7 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
+  RETURNING id
+)
+INSERT INTO public.restaurant_purchase_lines
+  (purchase_id, line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct)
+SELECT p.id, v.line_no, v.product_number, v.description, v.pack_size, v.qty, v.unit, v.unit_price, v.extended, v.category, v.outlet, v.cost_ctr, v.gl_acct
+FROM p CROSS JOIN (VALUES
+  (1, 'WH-20025', 'WATER: 20 OZ BOTTLE', 'CS', 1, 'CS', 7.06, 7.06, 'food', 'restaurant', '20091', '151110'),
+  (2, 'WH-80625', 'ENMOTION 10 IN PAPER TOWEL', 'CS', 3, 'CS', 64.35, 193.05, 'supplies', 'restaurant', '20091', '701005'),
+  (3, 'WH-80626', 'CORELESS BATH TISSUE 2 PLY', 'CS', 3, 'CS', 53.4, 160.2, 'supplies', 'restaurant', '20091', '701000'),
+  (4, 'WH-80627', 'PACIFIC BLUE ULTRA SOAP, FOAM', 'CS', 3, 'CS', 40.25, 120.75, 'supplies', 'restaurant', '20091', '701005'),
+  (5, 'WH-90995', 'NO RINSE ALKALINE FLOOR CLEANER', 'CS', 1, 'CS', 58.96, 58.96, 'supplies', 'restaurant', '20091', '701005'),
+  (6, 'WH-90996', 'RAPID DISINFECTANT CLEANER 2.5 GAL', 'CS', 1, 'CS', 74.3, 74.3, 'supplies', 'restaurant', '20091', '701005'),
+  (7, 'WH-90997', 'ALKALINE BATHROOM CLEANER AND DISINFECTANT', 'CS', 1, 'CS', 71.04, 71.04, 'supplies', 'restaurant', '20091', '701005')
+) AS v(line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct);
+
+WITH p AS (
+  INSERT INTO public.restaurant_purchases
+    (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
+  VALUES ('2026-08-27', 'MWR Central Warehouse', 247.19, 'invoice', 'SO-26-029253', NULL, 127.54, 0, 119.65, 0, 'Invoice SO-26-029253 · 6 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
+  RETURNING id
+)
+INSERT INTO public.restaurant_purchase_lines
+  (purchase_id, line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct)
+SELECT p.id, v.line_no, v.product_number, v.description, v.pack_size, v.qty, v.unit, v.unit_price, v.extended, v.category, v.outlet, v.cost_ctr, v.gl_acct
+FROM p CROSS JOIN (VALUES
+  (1, 'WH-50508', 'DRINK: LEMONADE: POWDER MIX', 'CS', 2, 'CS', 23.06, 46.12, 'food', 'restaurant', '20091', '151110'),
+  (2, 'WH-50509', 'DRINK: FRUIT PUNCH: POWDER MIX', 'CS', 2, 'CS', 23.06, 46.12, 'food', 'restaurant', '20091', '151110'),
+  (3, 'WH-30032', 'UTENSILS: KIT: K/F/S/N/S&P', 'CS', 1, 'CS', 35.42, 35.42, 'supplies', 'restaurant', '20091', '701000'),
+  (4, 'WH-30104', 'PLATE: PAPER: 9 IN', 'CS', 1, 'CS', 38.22, 38.22, 'supplies', 'restaurant', '20091', '701000'),
+  (5, 'WH-30702', 'NAPKIN: DISPENSER: INTERFOLD: 2 PLY WHITE', 'CS', 1, 'CS', 46.01, 46.01, 'supplies', 'restaurant', '20091', '701000'),
+  (6, 'WH-20025', 'WATER: 20 OZ BOTTLE', 'CS', 5, 'CS', 7.06, 35.3, 'food', 'restaurant', '20091', '151110')
+) AS v(line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct);
+
+WITH p AS (
+  INSERT INTO public.restaurant_purchases
+    (purchase_date, vendor, amount, kind, document_number, site, food_amount, alcohol_amount, supplies_amount, bar_cogs_amount, notes)
+  VALUES ('2026-09-22', 'MWR Central Warehouse', 184.44, 'invoice', 'SO-26-029310', NULL, 114.88, 0, 69.56, 0, 'Invoice SO-26-029310 · 8 items · Total from the warehouse order history (no printed total, so the lines added up)')
+  ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING
+  RETURNING id
+)
+INSERT INTO public.restaurant_purchase_lines
+  (purchase_id, line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct)
+SELECT p.id, v.line_no, v.product_number, v.description, v.pack_size, v.qty, v.unit, v.unit_price, v.extended, v.category, v.outlet, v.cost_ctr, v.gl_acct
+FROM p CROSS JOIN (VALUES
+  (1, 'WH-20008', 'GATORADE: LEMON/LIME', 'CS', 1, 'CS', 18.76, 18.76, 'food', 'restaurant', '20091', '151110'),
+  (2, 'WH-20009', 'GATORADE: ORANGE', 'CS', 1, 'CS', 18.76, 18.76, 'food', 'restaurant', '20091', '151110'),
+  (3, 'WH-20025', 'WATER: 20 OZ BOTTLE', 'CS', 3, 'CS', 7.06, 21.18, 'food', 'restaurant', '20091', '151110'),
+  (4, 'WH-20102', 'SODA: MOUNTAIN DEW 20 OZ', 'CS', 1, 'CS', 18.91, 18.91, 'food', 'restaurant', '20091', '151110'),
+  (5, 'WH-20106', 'SODA: PEPSI 20 OZ', 'CS', 1, 'CS', 18.91, 18.91, 'food', 'restaurant', '20091', '151110'),
+  (6, 'WH-20108', 'SODA: PEPSI: DIET 20 OZ', 'CS', 1, 'CS', 18.36, 18.36, 'food', 'restaurant', '20091', '151110'),
+  (7, 'WH-40100', 'PENS: RETRACTABLE: BLACK: FINE', 'CS', 1, 'CS', 16.91, 16.91, 'supplies', 'restaurant', '20091', '701000'),
+  (8, 'WH-91002', 'WIPES: RAYON 13.5 X 21', 'CS', 1, 'CS', 52.65, 52.65, 'supplies', 'restaurant', '20091', '701000')
 ) AS v(line_no, product_number, description, pack_size, qty, unit, unit_price, extended, category, outlet, cost_ctr, gl_acct);
 
 WITH p AS (

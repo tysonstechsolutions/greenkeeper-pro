@@ -85,4 +85,27 @@ describe("planning the import", () => {
       created_by: "u1",
     });
   });
+
+  it("reads lines keyed with a lower-case inventory code (restaurant report, Aug 5 2025)", () => {
+    const rest = parseFlashReport(
+      readFileSync(join(__dirname, "..", "fixtures", "sales", "restaurant-flash-aug5-excerpt.txt"), "utf8").split("\n"),
+    )!;
+    expect(rest.mismatches).toEqual([]);
+    expect(rest.dayTotals.get("2025-08-05")).toBe(101.6);
+    expect(rest.sales.filter((s) => s.description === "BUFFALO TENDERS")).toEqual([
+      expect.objectContaining({ inventoryCode: "MA7009-16-101-0", net: 5.25 }),
+      expect.objectContaining({ inventoryCode: "MA7009-16-101-0", net: 5.25 }),
+    ]);
+    expect(rest.category).toBe("Golf Food");
+    expect(flashReportArea(rest)).toBe("restaurant");
+  });
+
+  it("knows pro shop sales by the Golf Resale category, though the title says restaurant", () => {
+    const pro = parseFlashReport(
+      readFileSync(join(__dirname, "..", "fixtures", "sales", "proshop-flash-day1-excerpt.txt"), "utf8").split("\n"),
+    )!;
+    expect(pro).toMatchObject({ title: "MA7009-Buckleys Restaurant Sep 2026", category: "Golf Resale", mismatches: [] });
+    expect(flashReportArea(pro)).toBe("pro_shop");
+    expect(planFlashImport(pro, "pro_shop").days[0]).toMatchObject({ entry_date: "2025-08-01" });
+  });
 });

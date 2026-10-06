@@ -10,6 +10,7 @@ import {
   vendorProfile,
 } from "@/lib/restaurant/vendor-invoice";
 import { vendorInvoiceSql } from "@/lib/restaurant/vendor-invoice-sql";
+import { glFor } from "@/lib/restaurant/coding";
 
 const db = vi.hoisted(() => ({
   inserted: [] as Record<string, unknown>[],
@@ -57,6 +58,22 @@ describe("vendor invoice lines", () => {
     expect(classifyVendorLine("JACK DANIELS WHISKEY 1L", warehouse)).toBe("alcohol");
     expect(classifyVendorLine("MAYO LITE", warehouse)).toBe("food");
     expect(classifyVendorLine("COORS LIGHT 18PK", vendorProfile("Mess requisition"))).toBe("alcohol");
+    // Supplies named anywhere in the line, not just first.
+    expect(classifyVendorLine('Enmotion 10" Paper Towel', warehouse)).toBe("supplies");
+    expect(classifyVendorLine("No Rinse Alkaline Floor Cleaner", warehouse)).toBe("supplies");
+    expect(classifyVendorLine("ECOLAB: APEX RINSE", warehouse)).toBe("supplies");
+    expect(classifyVendorLine("UTENSILS: KIT: K/F/S/N/S&P", warehouse)).toBe("supplies");
+    expect(classifyVendorLine("PEANUT BUTTER CUPS", warehouse)).toBe("food");
+    expect(classifyVendorLine("CHICKEN WRAP", warehouse)).toBe("food");
+    expect(classifyVendorLine("DRINK: LEMONADE: POWDER MIX", warehouse)).toBe("food");
+  });
+
+  it("codes supplies 701005 when they're for cleaning, else 701000", () => {
+    const gl = (d: string) => glFor({ category: "supplies", description: d });
+    expect(gl("No Rinse Alkaline Floor Cleaner")).toBe("701005");
+    expect(gl("ECOLAB: DISHMACHINE SANITIZER")).toBe("701005");
+    expect(gl("PLATE: PAPER: 9 IN")).toBe("701000");
+    expect(gl("PENS: RETRACTABLE: BLACK: FINE")).toBe("701000");
   });
 
   it("knows the vendors by name and keeps their item numbers apart from US Foods", () => {

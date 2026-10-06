@@ -39,7 +39,7 @@ export interface FlashReport {
 
 const MONEY = String.raw`-?[\d,]+\.\d{2}`;
 const SALE = new RegExp(
-  String.raw`^(?:(\d{2}/\d{2}/\d{4})\s+)?(?:(\d{4,})\s+)?([A-Z]{2}\d{3,})\s+([A-Z0-9]+-[\d-]+)\s+(.+?)\s+(-?\d+(?:\.\d+)?)\s+(${MONEY})\s+(${MONEY})\s+(${MONEY})\s+(${MONEY})$`,
+  String.raw`^(?:(\d{2}/\d{2}/\d{4})\s+)?(?:(\d{4,})\s+)?([A-Z]{2}\d{3,})\s+([A-Za-z0-9]+-[\d-]+)\s+(.+?)\s+(-?\d+(?:\.\d+)?)\s+(${MONEY})\s+(${MONEY})\s+(${MONEY})\s+(${MONEY})$`,
 );
 /** "46 252 0.00 0.00   252.00" — count, fees, discounts, tax, net for the day. */
 const DAY_TOTAL = new RegExp(String.raw`^-?\d+\s+-?[\d,]+(?:\.\d+)?\s+(${MONEY})\s+(${MONEY})\s+(${MONEY})$`);
@@ -93,7 +93,8 @@ export function parseFlashReport(lines: string[]): FlashReport | null {
         date,
         receipt,
         user: m[3],
-        inventoryCode: m[4],
+        // Some lines were keyed in lower case ("ma7009-16-101-0").
+        inventoryCode: m[4].toUpperCase(),
         description: m[5].trim(),
         qty: Number(m[6]),
         fee: money(m[7]),
@@ -137,11 +138,17 @@ export function parseFlashReport(lines: string[]): FlashReport | null {
   };
 }
 
-/** Bar, restaurant, or pro shop from the report's category and title. */
+/**
+ * Bar, restaurant, or pro shop from the report's category (Golf Bar, Golf
+ * Food, Golf Resale), else its title. The category wins: the custom title is
+ * often copied from another report ("Buckleys Restaurant" on pro shop sales).
+ */
 export function flashReportArea(r: Pick<FlashReport, "category" | "title">): "bar" | "restaurant" | "pro_shop" | null {
-  const t = `${r.category ?? ""} ${r.title}`.toUpperCase();
-  if (/\bBAR\b/.test(r.category?.toUpperCase() ?? "")) return "bar";
-  if (/PRO ?SHOP|MERCH|RETAIL|GOLF SHOP/.test(r.category?.toUpperCase() ?? "")) return "pro_shop";
+  const c = r.category?.toUpperCase() ?? "";
+  if (/\bBAR\b/.test(c)) return "bar";
+  if (/PRO ?SHOP|MERCH|RETAIL|RESALE|GOLF SHOP/.test(c)) return "pro_shop";
+  if (/FOOD|RESTAURANT|GRILL|KITCHEN/.test(c)) return "restaurant";
+  const t = r.title.toUpperCase();
   if (/\bBAR\b/.test(t)) return "bar";
   if (/RESTAURANT|BUCKLEY|FOOD|GRILL|KITCHEN/.test(t)) return "restaurant";
   if (/PRO ?SHOP|MERCH|RETAIL/.test(t)) return "pro_shop";

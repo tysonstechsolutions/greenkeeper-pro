@@ -44,14 +44,14 @@ function plan(r: Receipt): PlannedVendorInvoice {
 }
 
 const HEADER = `-- ============================================================================
--- Bar and Buckleys vendor receipts, Oct 2025 to Jul 2026 (2026-10-10).
+-- Bar and Buckleys vendor receipts, Oct 2025 to Sep 2026 (2026-10-10).
 --
--- Typed in from the scanned delivery receipts in Google Drive and checked
--- line by line against each receipt (and against the running account balance
--- Lakeshore prints on every receipt).
+-- Typed in from the scanned delivery receipts in Google Drive and the MWR
+-- warehouse order history, checked line by line against each receipt (and
+-- against the running account balance Lakeshore prints on every receipt).
 --   Lakeshore Beverage      27 invoices  Oct 6 2025 to Apr 8 2026
 --   Kloss Distributing       5 invoices and 2 credits  Nov 2025 to May 2026
---   MWR Central Warehouse    3 invoices  Jun to Jul 2026
+--   MWR Central Warehouse    8 orders    Jun to Sep 2026
 --   Mess requisitions        4 transfers from Epicenter  May to Jul 2026
 -- Beer and liquor go to the bar (20091 / 151120). Sodas, water and food go to
 -- the restaurant (20091 / 151110) and can be moved to the bar on the
@@ -106,10 +106,10 @@ describe("transcribed vendor receipts", () => {
   it("totals what was bought from each vendor", () => {
     const sum = (v: string) =>
       Math.round(receipts.filter((r) => r.vendor === v).reduce((s, r) => s + plan(r).row.amount, 0) * 100) / 100;
-    expect(receipts).toHaveLength(41);
+    expect(receipts).toHaveLength(46);
     expect(sum("Lakeshore Beverage")).toBe(10355.69);
     expect(sum("Kloss Distributing")).toBe(2259.1);
-    expect(sum("MWR Central Warehouse")).toBe(645.34);
+    expect(sum("MWR Central Warehouse")).toBe(2241.51);
     expect(sum("Mess requisition")).toBe(429.57);
   });
 

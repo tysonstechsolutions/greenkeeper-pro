@@ -2784,6 +2784,406 @@
   "source": null
  },
  {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029154",
+  "purchase_date": "2026-07-16",
+  "lines": [
+   {
+    "item": "20108",
+    "description": "SODA: PEPSI: DIET 20 OZ",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.36,
+    "list_price": 18.36,
+    "discount": 0,
+    "extended": 36.72
+   },
+   {
+    "item": "20109",
+    "description": "SODA: STARRY 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20102",
+    "description": "SODA: MOUNTAIN DEW 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20005",
+    "description": "GATORADE: COOL BLUE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 18.76
+   },
+   {
+    "item": "20007",
+    "description": "GATORADE: GLACIER FREEZE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 18.76
+   },
+   {
+    "item": "20008",
+    "description": "GATORADE: LEMON/LIME",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 37.52
+   }
+  ],
+  "total": 149.58,
+  "total_basis": "from the warehouse order history (no printed total, so the lines added up)",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029195",
+  "purchase_date": "2026-08-04",
+  "lines": [
+   {
+    "item": "40008",
+    "description": "DEGREASER AP K43 (32 OZ)",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 26.0,
+    "list_price": 26.0,
+    "discount": 0,
+    "extended": 26.0
+   },
+   {
+    "item": "40015",
+    "description": "ECOLAB: APEX RINSE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 154.1,
+    "list_price": 154.1,
+    "discount": 0,
+    "extended": 154.1
+   },
+   {
+    "item": "40018",
+    "description": "ECOLAB: DISHMACHINE SANITIZER",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 20.63,
+    "list_price": 20.63,
+    "discount": 0,
+    "extended": 20.63
+   },
+   {
+    "item": "20102",
+    "description": "SODA: MOUNTAIN DEW 20 OZ",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 37.82
+   },
+   {
+    "item": "30044",
+    "description": "TOWEL 9.5X9 MULTI-FOLD: WHITE (TORK)",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 38.71,
+    "list_price": 38.71,
+    "discount": 0,
+    "extended": 38.71
+   },
+   {
+    "item": "30104",
+    "description": "PLATE: PAPER: 9 IN",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 38.22,
+    "list_price": 38.22,
+    "discount": 0,
+    "extended": 38.22
+   },
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 7.06,
+    "list_price": 7.06,
+    "discount": 0,
+    "extended": 14.12
+   }
+  ],
+  "total": 329.6,
+  "total_basis": "from the warehouse order history (no printed total, so the lines added up)",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029235",
+  "purchase_date": "2026-08-20",
+  "lines": [
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 7.06,
+    "list_price": 7.06,
+    "discount": 0,
+    "extended": 7.06
+   },
+   {
+    "item": "80625",
+    "description": "ENMOTION 10 IN PAPER TOWEL",
+    "pack_size": "CS",
+    "qty": 3,
+    "unit_price": 64.35,
+    "list_price": 64.35,
+    "discount": 0,
+    "extended": 193.05
+   },
+   {
+    "item": "80626",
+    "description": "CORELESS BATH TISSUE 2 PLY",
+    "pack_size": "CS",
+    "qty": 3,
+    "unit_price": 53.4,
+    "list_price": 53.4,
+    "discount": 0,
+    "extended": 160.2
+   },
+   {
+    "item": "80627",
+    "description": "PACIFIC BLUE ULTRA SOAP, FOAM",
+    "pack_size": "CS",
+    "qty": 3,
+    "unit_price": 40.25,
+    "list_price": 40.25,
+    "discount": 0,
+    "extended": 120.75
+   },
+   {
+    "item": "90995",
+    "description": "NO RINSE ALKALINE FLOOR CLEANER",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 58.96,
+    "list_price": 58.96,
+    "discount": 0,
+    "extended": 58.96
+   },
+   {
+    "item": "90996",
+    "description": "RAPID DISINFECTANT CLEANER 2.5 GAL",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 74.3,
+    "list_price": 74.3,
+    "discount": 0,
+    "extended": 74.3
+   },
+   {
+    "item": "90997",
+    "description": "ALKALINE BATHROOM CLEANER AND DISINFECTANT",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 71.04,
+    "list_price": 71.04,
+    "discount": 0,
+    "extended": 71.04
+   }
+  ],
+  "total": 685.36,
+  "total_basis": "from the warehouse order history (no printed total, so the lines added up)",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029253",
+  "purchase_date": "2026-08-27",
+  "lines": [
+   {
+    "item": "50508",
+    "description": "DRINK: LEMONADE: POWDER MIX",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 23.06,
+    "list_price": 23.06,
+    "discount": 0,
+    "extended": 46.12
+   },
+   {
+    "item": "50509",
+    "description": "DRINK: FRUIT PUNCH: POWDER MIX",
+    "pack_size": "CS",
+    "qty": 2,
+    "unit_price": 23.06,
+    "list_price": 23.06,
+    "discount": 0,
+    "extended": 46.12
+   },
+   {
+    "item": "30032",
+    "description": "UTENSILS: KIT: K/F/S/N/S&P",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 35.42,
+    "list_price": 35.42,
+    "discount": 0,
+    "extended": 35.42
+   },
+   {
+    "item": "30104",
+    "description": "PLATE: PAPER: 9 IN",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 38.22,
+    "list_price": 38.22,
+    "discount": 0,
+    "extended": 38.22
+   },
+   {
+    "item": "30702",
+    "description": "NAPKIN: DISPENSER: INTERFOLD: 2 PLY WHITE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 46.01,
+    "list_price": 46.01,
+    "discount": 0,
+    "extended": 46.01
+   },
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 5,
+    "unit_price": 7.06,
+    "list_price": 7.06,
+    "discount": 0,
+    "extended": 35.3
+   }
+  ],
+  "total": 247.19,
+  "total_basis": "from the warehouse order history (no printed total, so the lines added up)",
+  "note": null,
+  "source": null
+ },
+ {
+  "vendor": "MWR Central Warehouse",
+  "kind": "invoice",
+  "document_number": "SO-26-029310",
+  "purchase_date": "2026-09-22",
+  "lines": [
+   {
+    "item": "20008",
+    "description": "GATORADE: LEMON/LIME",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 18.76
+   },
+   {
+    "item": "20009",
+    "description": "GATORADE: ORANGE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.76,
+    "list_price": 18.76,
+    "discount": 0,
+    "extended": 18.76
+   },
+   {
+    "item": "20025",
+    "description": "WATER: 20 OZ BOTTLE",
+    "pack_size": "CS",
+    "qty": 3,
+    "unit_price": 7.06,
+    "list_price": 7.06,
+    "discount": 0,
+    "extended": 21.18
+   },
+   {
+    "item": "20102",
+    "description": "SODA: MOUNTAIN DEW 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20106",
+    "description": "SODA: PEPSI 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.91,
+    "list_price": 18.91,
+    "discount": 0,
+    "extended": 18.91
+   },
+   {
+    "item": "20108",
+    "description": "SODA: PEPSI: DIET 20 OZ",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 18.36,
+    "list_price": 18.36,
+    "discount": 0,
+    "extended": 18.36
+   },
+   {
+    "item": "40100",
+    "description": "PENS: RETRACTABLE: BLACK: FINE",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 16.91,
+    "list_price": 16.91,
+    "discount": 0,
+    "extended": 16.91
+   },
+   {
+    "item": "91002",
+    "description": "WIPES: RAYON 13.5 X 21",
+    "pack_size": "CS",
+    "qty": 1,
+    "unit_price": 52.65,
+    "list_price": 52.65,
+    "discount": 0,
+    "extended": 52.65
+   }
+  ],
+  "total": 184.44,
+  "total_basis": "from the warehouse order history (no printed total, so the lines added up)",
+  "note": null,
+  "source": null
+ },
+ {
   "vendor": "Mess requisition",
   "kind": "invoice",
   "document_number": "FY26-1191",

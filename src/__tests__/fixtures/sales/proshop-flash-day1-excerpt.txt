@@ -1,0 +1,44 @@
+Veteran Memorial Golf Page: 1 of 56
+MA7009-Buckleys Restaurant Sep 2026
+Flash Report Part 1 - Sales Statistics
+Date Receipt # User Inventory Code Description Quantity Fee Amt Disc Amt Tax Amt Net Fees
+08/01/2025 7390197 MA0136 MA7009-16-206-0 BAMBO 2 1/4 TEES 1 1.00 0.00 0.00 1.00
+7392815 MA0136 MA7009-16-206-0 BAMBO 2 1/4 TEES 1 1.00 0.00 0.00 1.00
+7393324 MA0136 MA7009-16-207-1 FJ WEATHERSOF 1 10.00 0.00 0.00 10.00
+7393582 MA0111 MA7009-16-206-0 BAMBO 2 1/4 TEES 1 1.00 0.00 0.00 1.00
+MA0111 MA7009-16-207-0 TRUFEEL 1 7.00 0.00 0.00 7.00
+MA0111 MA7009-16-207-0 TRUFEEL 1 7.00 0.00 0.00 7.00
+MA0111 MA7009-16-207-0 TRUFEEL 1 7.00 0.00 0.00 7.00
+7395418 MA0111 MA7009-16-207-0 CALLAWAY WARBIRD 1 5.00 0.00 0.00 5.00
+MA0111 MA7009-16-207-0 CALLAWAY WARBIRD 1 5.00 0.00 0.00 5.00
+9 44 0.00 0.00   44.00
+Report Summary Totals
+Total Transactions: 1499
+Inventory Items with a Transaction: 97
+Veterans Memorial Golf Course User: MA0110 Run Date/Time: 10/06/2026 @ 12:34
+Veteran Memorial Golf Page: 56 of 56
+MA7009-Buckleys Restaurant Sep 2026
+Flash Report Part 1 - Sales Statistics
+SELECTION CRITERIA
+GENERIC REPORT CRITERIA
+Output Group: Sales
+Custom Title: MA7009-Buckleys Restaurant Sep 2026
+Output Template: Flash Report Part 1 - Sales Statistics
+Output Type: Detail
+Preview Report: yes
+PDF: Yes
+Print Selection Criteria: Yes
+CSV Summary Option: Raw Data
+REPORT SPECIFIC CRITERIA
+Inventory Item Status: Active,Inactive
+Inventory Item Category: Golf Resale
+Sale Status: Sold
+Begin Transaction Date: 08/01/2025 - Actual Date|08/01/2025
+Begin Inventory Code: MA7009-16-204-001
+Inventory Item Type: Addons,Alcohol,Apparel,Apps,ArtsCraftsResale,ASC-Wiper,BeerCraft,BeerDomestic,BeerImport,Breakfast,Buffe
+End Transaction Date: 09/30/2026 - Actual Date|09/30/2026
+Inventory Item SubType: FRYER,GRILL,None,PIZZA,None,Headwear,MensMisc,MensOuter,MensShirts,MensShoes,MensShorts,Wome
+End Inventory Code: MA7009-16-209-028
+Cash Drawer List Lookup: 0
+Inventory Sale Archived: No
+Veterans Memorial Golf Course User: MA0110 Run Date/Time: 10/06/2026 @ 12:34

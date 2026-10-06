@@ -48,12 +48,18 @@ export function outletFor(
   return line.category === "food" && BAR_MIXERS.test((line.description ?? "").toUpperCase()) ? "bar" : "restaurant";
 }
 
-/** G/L for a line from what it is. Supplies never land on a resale account. */
+export const GL_CLEANING = "701005";
+
+/**
+ * G/L for a line from what it is: cleaning supplies 701005, every other
+ * supply 701000 (paper plates aren't office supplies). Supplies never land
+ * on a resale account.
+ */
 export function glFor(line: { category: PurchaseCategory | string; description: string }): string {
   if (line.category === "alcohol") return GL_RESALE_ALCOHOL;
   if (line.category === "food") return GL_RESALE_FOOD;
   const rec = recommendGlAccount(line.description, BUCKLEYS_COST_CENTER);
-  return rec && !rec.code.startsWith("1511") ? rec.code : GL_SUPPLIES;
+  return rec?.code === GL_CLEANING ? GL_CLEANING : GL_SUPPLIES;
 }
 
 export interface CodedLine {
