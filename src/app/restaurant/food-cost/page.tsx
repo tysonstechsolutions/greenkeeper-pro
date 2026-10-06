@@ -50,6 +50,66 @@ interface LineRow {
   restaurant_purchases: { purchase_date: string; kind: "invoice" | "credit" | null } | null;
 }
 
+interface FoodCostData {
+  purchases: CostPurchase[] | null;
+  sales: CostSale[] | null;
+  error: string | null;
+  lines: CostLine[];
+  linesMissing: boolean;
+}
+
+/** Everything the page shows, loaded together. Never throws. */
+async function fetchFoodCost(): Promise<FoodCostData> {
+  const since = addDaysLocal(todayLocal(), -LOOKBACK_DAYS);
+  const out: FoodCostData = { purchases: null, sales: null, error: null, lines: [], linesMissing: false };
+  try {
+    const [p, s] = await Promise.all([
+      directSelectAll<CostPurchase>("restaurant_purchases", {
+        columns: "*",
+        filters: [`purchase_date=gte.${since}`],
+        orderBy: [{ column: "purchase_date", ascending: false }, { column: "id" }],
+        label: "foodCost.purchases",
+      }),
+      directSelectAll<CostSale>("revenue_entries", {
+        columns: "entry_date,amount",
+        filters: ["category=eq.food_beverage", `entry_date=gte.${since}`],
+        orderBy: [{ column: "entry_date", ascending: false }, { column: "id" }],
+        label: "foodCost.sales",
+      }),
+    ]);
+    out.purchases = p;
+    out.sales = s;
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    const l = await directSelectAll<LineRow>("restaurant_purchase_lines", {
+      columns:
+        "product_number,description,pack_size,qty,unit_price,extended,category,restaurant_purchases!inner(purchase_date,kind)",
+      filters: [`restaurant_purchases.purchase_date=gte.${since}`],
+      orderBy: [{ column: "id" }],
+      label: "foodCost.lines",
+    });
+    out.lines = l
+      .filter((r) => r.restaurant_purchases)
+      .map((r) => ({
+        purchase_date: r.restaurant_purchases!.purchase_date,
+        kind: r.restaurant_purchases!.kind === "credit" ? "credit" : "invoice",
+        product_number: r.product_number,
+        description: r.description,
+        pack_size: r.pack_size,
+        qty: Number(r.qty),
+        unit_price: Number(r.unit_price),
+        extended: Number(r.extended),
+        category: r.category,
+      }));
+  } catch {
+    // The line-item table arrives with the 2026-10-06 database update.
+    out.linesMissing = true;
+  }
+  return out;
+}
+
 function PctBadge({ p }: { p: CostPeriod }) {
   if (p.status === "no_sales") {
     return <span className="text-xs text-muted-foreground">no sales entered</span>;
@@ -99,60 +159,15 @@ function FoodCostContent() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"month" | "week">("month");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const since = addDaysLocal(todayLocal(), -LOOKBACK_DAYS);
-    try {
-      const [p, s] = await Promise.all([
-        directSelectAll<CostPurchase>("restaurant_purchases", {
-          columns: "*",
-          filters: [`purchase_date=gte.${since}`],
-          orderBy: [{ column: "purchase_date", ascending: false }, { column: "id" }],
-          label: "foodCost.purchases",
-        }),
-        directSelectAll<CostSale>("revenue_entries", {
-          columns: "entry_date,amount",
-          filters: ["category=eq.food_beverage", `entry_date=gte.${since}`],
-          orderBy: [{ column: "entry_date", ascending: false }, { column: "id" }],
-          label: "foodCost.sales",
-        }),
-      ]);
-      setPurchases(p);
-      setSales(s);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-    try {
-      const l = await directSelectAll<LineRow>("restaurant_purchase_lines", {
-        columns:
-          "product_number,description,pack_size,qty,unit_price,extended,category,restaurant_purchases!inner(purchase_date,kind)",
-        filters: [`restaurant_purchases.purchase_date=gte.${since}`],
-        orderBy: [{ column: "id" }],
-        label: "foodCost.lines",
-      });
-      setLines(
-        l
-          .filter((r) => r.restaurant_purchases)
-          .map((r) => ({
-            purchase_date: r.restaurant_purchases!.purchase_date,
-            kind: r.restaurant_purchases!.kind === "credit" ? "credit" : "invoice",
-            product_number: r.product_number,
-            description: r.description,
-            pack_size: r.pack_size,
-            qty: Number(r.qty),
-            unit_price: Number(r.unit_price),
-            extended: Number(r.extended),
-            category: r.category,
-          })),
-      );
-      setLinesMissing(false);
-    } catch {
-      // The line-item table arrives with the 2026-10-06 database update.
-      setLines([]);
-      setLinesMissing(true);
-    }
-    setLoading(false);
+  const load = useCallback(() => {
+    fetchFoodCost().then((d) => {
+      if (d.purchases) setPurchases(d.purchases);
+      if (d.sales) setSales(d.sales);
+      setError(d.error);
+      setLines(d.lines);
+      setLinesMissing(d.linesMissing);
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -309,7 +324,10 @@ function FoodCostContent() {
       )}
 
       <button
-        onClick={load}
+        onClick={() => {
+          setLoading(true);
+          load();
+        }}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
       >
         <RefreshCw className="w-4 h-4" />

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "../utils/test-utils";
+import { fireEvent, render, screen } from "../utils/test-utils";
 import { parseUsFoodsDocument } from "@/lib/restaurant/usfoods";
 import type { ReadResult } from "@/lib/restaurant/import";
 
