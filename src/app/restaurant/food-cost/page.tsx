@@ -16,12 +16,14 @@ import {
   PRICE_CHANGE_PCT,
   costByPeriod,
   lineOutlet,
+  withInventory,
   priceChanges,
   topItems,
   type CostLine,
   type CostPeriod,
   type CostPurchase,
   type CostSale,
+  type MonthEndCount,
 } from "@/lib/restaurant/food-cost";
 
 /** How far back the page looks. */
@@ -67,6 +69,8 @@ interface FoodCostData {
   error: string | null;
   lines: CostLine[];
   linesMissing: boolean;
+  /** Month-end counts (empty before the 2026-10-08 update). */
+  counts: MonthEndCount[];
 }
 
 const LINE_COLUMNS =
@@ -75,7 +79,13 @@ const LINE_COLUMNS =
 /** Everything the page shows, loaded together. Never throws. */
 async function fetchFoodCost(): Promise<FoodCostData> {
   const since = addDaysLocal(todayLocal(), -LOOKBACK_DAYS);
-  const out: FoodCostData = { purchases: null, sales: null, error: null, lines: [], linesMissing: false };
+  const out: FoodCostData = { purchases: null, sales: null, error: null, lines: [], linesMissing: false, counts: [] };
+  out.counts = await directSelectAll<MonthEndCount>("inventory_valuations", {
+    columns: "outlet,month_end,total",
+    filters: [`month_end=gte.${addDaysLocal(since, -40)}`],
+    orderBy: [{ column: "month_end", ascending: false }, { column: "id" }],
+    label: "foodCost.inventory",
+  }).catch(() => []);
   try {
     const [p, s] = await Promise.all([
       directSelectAll<CostPurchase>("restaurant_purchases", {
@@ -158,7 +168,9 @@ function PeriodTable({ periods, label }: { periods: CostPeriod[]; label: (key: s
             <PctBadge p={p} />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-            Bought {money(p.cogs)} · Sold {money(p.sales)}
+            {p.basis === "inventory"
+              ? `Cost ${money(p.cogs)} (start ${money(p.startInventory ?? 0)} + bought ${money(p.purchases ?? 0)} − end ${money(p.endInventory ?? 0)}) · Sold ${money(p.sales)}`
+              : `Bought ${money(p.cogs)} · Sold ${money(p.sales)}`}
             {p.supplies ? ` · Supplies ${money(p.supplies)} (not in COGS)` : ""}
           </p>
         </div>
@@ -177,6 +189,7 @@ function FoodCostContent() {
   const [sales, setSales] = useState<CostSale[]>([]);
   const [lines, setLines] = useState<CostLine[]>([]);
   const [linesMissing, setLinesMissing] = useState(false);
+  const [counts, setCounts] = useState<MonthEndCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"month" | "week">("month");
@@ -189,6 +202,7 @@ function FoodCostContent() {
       setError(d.error);
       setLines(d.lines);
       setLinesMissing(d.linesMissing);
+      setCounts(d.counts);
       setLoading(false);
     });
   }, []);
@@ -197,13 +211,21 @@ function FoodCostContent() {
     load();
   }, [load]);
 
-  const byOutlet = useMemo(
-    () => ({
-      restaurant: costByPeriod(purchases, sales, view, "restaurant"),
-      bar: costByPeriod(purchases, sales, view, "bar"),
-    }),
-    [purchases, sales, view],
+  // Bar beer, wine, and liquor come from other vendors. Until any of their
+  // invoices are in, bar purchases are only the mixers on US Foods invoices,
+  // so a count-based bar cost would be wrong: keep the bar on purchases.
+  const barPurchasesIn = useMemo(
+    () => purchases.some((p) => !/us foods/i.test(p.vendor ?? "US Foods") && Number(p.bar_cogs_amount ?? p.alcohol_amount ?? 0) > 0),
+    [purchases],
   );
+  const byOutlet = useMemo(() => {
+    const rest = costByPeriod(purchases, sales, view, "restaurant");
+    const bar = costByPeriod(purchases, sales, view, "bar");
+    return {
+      restaurant: view === "month" ? withInventory(rest, counts, "restaurant") : rest,
+      bar: view === "month" && barPurchasesIn ? withInventory(bar, counts, "bar") : bar,
+    };
+  }, [purchases, sales, view, counts, barPurchasesIn]);
   const periods = byOutlet[outlet];
   const outletLines = useMemo(() => lines.filter((l) => lineOutlet(l) === outlet), [lines, outlet]);
   const top = useMemo(() => {
@@ -264,6 +286,21 @@ function FoodCostContent() {
             Revenue
           </Link>
           .
+        </p>
+      )}
+      {outlet === "bar" && !barPurchasesIn && (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          Bar beer, wine, and liquor invoices aren&apos;t in yet, so bar cost is only the mixers bought from US Foods.
+          Once the bar vendor invoices are imported, bar cost uses the month-end counts too.
+        </p>
+      )}
+      {view === "month" && counts.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          Import the monthly count sheets on{" "}
+          <Link href="/restaurant/inventory-values/" className="underline font-medium">
+            Month-End Inventory
+          </Link>{" "}
+          for true cost of goods (starting inventory + purchases − ending inventory).
         </p>
       )}
       {purchases.length === 0 && (

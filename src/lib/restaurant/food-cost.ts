@@ -28,6 +28,7 @@ export interface CostPurchase {
   supplies_amount?: number | null;
   /** Food + alcohol that went to the bar (null on older or hand-typed rows). */
   bar_cogs_amount?: number | null;
+  vendor?: string | null;
 }
 
 export interface CostSale {
@@ -92,6 +93,66 @@ export interface CostPeriod {
   /** Food cost %, null without sales. */
   pct: number | null;
   status: CostStatus;
+  /**
+   * How cogs was worked out: from purchases alone, or with the month-end
+   * counts (starting + purchases − ending). Monthly only.
+   */
+  basis?: "purchases" | "inventory";
+  purchases?: number;
+  startInventory?: number;
+  endInventory?: number;
+}
+
+export interface MonthEndCount {
+  outlet: string;
+  /** yyyy-mm-dd */
+  month_end: string;
+  total: number;
+}
+
+/** "2026-03" → "2026-02". */
+function previousMonth(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
+/**
+ * True cost of goods for months that have both counts: what was on hand at
+ * the start (last month's count) plus what was bought, less what's left at
+ * the end. Months without both counts keep the purchases figure. Monthly
+ * periods only (newest first, as costByPeriod returns them).
+ */
+export function withInventory(periods: CostPeriod[], counts: MonthEndCount[], outlet: Outlet): CostPeriod[] {
+  const byMonth = new Map(
+    counts.filter((c) => c.outlet === outlet).map((c) => [c.month_end.slice(0, 7), Number(c.total)]),
+  );
+  // A month with counts but no purchases still has a cost (stock was used).
+  const keys = new Set(periods.map((p) => p.key));
+  const extra: CostPeriod[] = [];
+  for (const k of byMonth.keys()) {
+    if (!keys.has(k) && byMonth.has(previousMonth(k))) {
+      extra.push({ key: k, cogs: 0, supplies: 0, sales: 0, pct: null, status: "no_sales" });
+    }
+  }
+  return [...periods, ...extra]
+    .sort((a, b) => b.key.localeCompare(a.key))
+    .map((p) => {
+      const start = byMonth.get(previousMonth(p.key));
+      const end = byMonth.get(p.key);
+      if (start == null || end == null) return { ...p, basis: "purchases" as const, purchases: p.cogs };
+      const cogs = r2(start + p.cogs - end);
+      const pct = p.sales > 0 ? Math.round((cogs / p.sales) * 1000) / 10 : null;
+      return {
+        ...p,
+        basis: "inventory" as const,
+        purchases: p.cogs,
+        startInventory: start,
+        endInventory: end,
+        cogs,
+        pct,
+        status: statusFor(pct, OUTLET_COGS_TARGET[outlet]),
+      };
+    });
 }
 
 function statusFor(pct: number | null, target: number): CostStatus {

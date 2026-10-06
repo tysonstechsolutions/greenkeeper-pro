@@ -139,6 +139,10 @@ export const TRACKED_MIGRATIONS: { name: string; what: string }[] = [
     name: "20261007120000_bar_and_invoice_coding",
     what: "Buckley's bar kept apart from the restaurant (Bar sales, bar items on invoices) and cost center / G/L on every invoice line",
   },
+  {
+    name: "20261008120000_inventory_valuations",
+    what: "Month-end inventory counts (food, bar, pro shop retail) for true cost of goods",
+  },
 ];
 
 /** Older migrations, checked by calling something they created (read-only). */

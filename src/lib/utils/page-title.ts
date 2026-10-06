@@ -16,6 +16,7 @@ const TITLES: Record<string, string> = {
   "/restaurant/purchases": "Restaurant Purchases",
   "/restaurant/food-cost": "Food & Bar Cost",
   "/restaurant/order-guide": "Order Guide",
+  "/restaurant/inventory-values": "Month-End Inventory",
   "/pro-shop/inventory": "Pro Shop Inventory",
   "/duty-log": "Duty & Cleaning Log",
   "/certifications": "Certifications",
