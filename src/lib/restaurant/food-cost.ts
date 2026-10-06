@@ -1,13 +1,22 @@
 /**
- * Buckley's food cost: what the restaurant bought (food + alcohol, net of
- * credits) against what it sold (food & beverage revenue), by week and by
- * month, plus what the money went to and which prices moved.
+ * Buckley's cost of goods, kept apart for the restaurant and the bar (they
+ * have separate targets): what each bought (food + alcohol, net of credits)
+ * against what each sold (Food & Beverage revenue for the restaurant, Bar
+ * revenue for the bar), by week and by month, plus what the money went to
+ * and which prices moved.
  *
  * Pure: the food cost page loads the rows and hands them here.
  */
+import { OUTLET_COGS_TARGET, type Outlet } from "./coding";
 
-/** Above this, food cost is flagged. Typical for a casual grill: 28–35%. */
-export const FOOD_COST_TARGET_PCT = 35;
+/** Restaurant target, kept for older callers. */
+export const FOOD_COST_TARGET_PCT = OUTLET_COGS_TARGET.restaurant;
+
+/** revenue_entries.category that is each outlet's sales. */
+export const OUTLET_SALES_CATEGORY: Record<Outlet, string> = {
+  restaurant: "food_beverage",
+  bar: "bar",
+};
 /** A price move this big (either way) between orders is worth a look. */
 export const PRICE_CHANGE_PCT = 3;
 
@@ -17,11 +26,15 @@ export interface CostPurchase {
   food_amount?: number | null;
   alcohol_amount?: number | null;
   supplies_amount?: number | null;
+  /** Food + alcohol that went to the bar (null on older or hand-typed rows). */
+  bar_cogs_amount?: number | null;
 }
 
 export interface CostSale {
   entry_date: string;
   amount: number;
+  /** revenue_entries.category; missing means Food & Beverage. */
+  category?: string;
 }
 
 export interface CostLine {
@@ -34,19 +47,30 @@ export interface CostLine {
   unit_price: number;
   extended: number;
   category: string;
+  /** Bar or restaurant; missing means restaurant (alcohol means bar). */
+  outlet?: Outlet | null;
+}
+
+/** The outlet a line counts toward. */
+export function lineOutlet(l: Pick<CostLine, "outlet" | "category">): Outlet {
+  if (l.outlet) return l.outlet;
+  return l.category === "alcohol" ? "bar" : "restaurant";
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Food + alcohol (cost of goods) and supplies for one purchase. Hand-typed rows count as food. */
-export function purchaseSplit(p: CostPurchase): { cogs: number; supplies: number } {
+/**
+ * Cost of goods for each outlet, and supplies, for one purchase. Hand-typed
+ * rows count as restaurant food. Without a bar figure, alcohol is the bar.
+ */
+export function purchaseSplit(p: CostPurchase): { cogs: number; restaurant: number; bar: number; supplies: number } {
   if (p.food_amount == null && p.alcohol_amount == null && p.supplies_amount == null) {
-    return { cogs: Number(p.amount), supplies: 0 };
+    const amount = Number(p.amount);
+    return { cogs: amount, restaurant: amount, bar: 0, supplies: 0 };
   }
-  return {
-    cogs: Number(p.food_amount ?? 0) + Number(p.alcohol_amount ?? 0),
-    supplies: Number(p.supplies_amount ?? 0),
-  };
+  const cogs = Number(p.food_amount ?? 0) + Number(p.alcohol_amount ?? 0);
+  const bar = p.bar_cogs_amount != null ? Number(p.bar_cogs_amount) : Number(p.alcohol_amount ?? 0);
+  return { cogs, restaurant: r2(cogs - bar), bar: r2(bar), supplies: Number(p.supplies_amount ?? 0) };
 }
 
 /** Monday of the week a date falls in (yyyy-mm-dd). */
@@ -70,16 +94,20 @@ export interface CostPeriod {
   status: CostStatus;
 }
 
-function statusFor(pct: number | null): CostStatus {
+function statusFor(pct: number | null, target: number): CostStatus {
   if (pct == null) return "no_sales";
-  return pct > FOOD_COST_TARGET_PCT ? "high" : "good";
+  return pct > target ? "high" : "good";
 }
 
-/** Group purchases and sales by month or week, newest first. */
+/**
+ * One outlet's cost and sales by month or week, newest first. Supplies are
+ * shown with the restaurant (they're Buckley's, but never in a COGS %).
+ */
 export function costByPeriod(
   purchases: CostPurchase[],
   sales: CostSale[],
   by: "month" | "week",
+  outlet: Outlet = "restaurant",
 ): CostPeriod[] {
   const keyOf = (iso: string) => (by === "month" ? iso.slice(0, 7) : weekStart(iso));
   const map = new Map<string, { cogs: number; supplies: number; sales: number }>();
@@ -90,16 +118,30 @@ export function costByPeriod(
   };
   for (const p of purchases) {
     const s = purchaseSplit(p);
+    const cogs = outlet === "bar" ? s.bar : s.restaurant;
+    const supplies = outlet === "restaurant" ? s.supplies : 0;
+    if (!cogs && !supplies) continue;
     const v = at(keyOf(p.purchase_date));
-    v.cogs += s.cogs;
-    v.supplies += s.supplies;
+    v.cogs += cogs;
+    v.supplies += supplies;
   }
-  for (const s of sales) at(keyOf(s.entry_date)).sales += Number(s.amount);
+  const salesCategory = OUTLET_SALES_CATEGORY[outlet];
+  for (const s of sales) {
+    if ((s.category ?? "food_beverage") !== salesCategory) continue;
+    at(keyOf(s.entry_date)).sales += Number(s.amount);
+  }
   return [...map.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([key, v]) => {
       const pct = v.sales > 0 ? Math.round((v.cogs / v.sales) * 1000) / 10 : null;
-      return { key, cogs: r2(v.cogs), supplies: r2(v.supplies), sales: r2(v.sales), pct, status: statusFor(pct) };
+      return {
+        key,
+        cogs: r2(v.cogs),
+        supplies: r2(v.supplies),
+        sales: r2(v.sales),
+        pct,
+        status: statusFor(pct, OUTLET_COGS_TARGET[outlet]),
+      };
     });
 }
 

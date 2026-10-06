@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { RoleGuard, GM_ROLES, withFbManager } from "@/components/auth/role-guard";
 import { createClient } from "@/lib/supabase/client";
 import { formatLocalDate, todayLocal } from "@/lib/utils/date";
+import { BUCKLEYS_REVENUE_CATEGORIES, REVENUE_CATEGORIES, REVENUE_LABELS } from "@/lib/money/revenue-categories";
 import { UploadReportCard } from "./upload-report";
 
 // ── Types ──
@@ -43,33 +44,16 @@ interface RevenueEntry {
 }
 
 // ── Constants ──
-const CATEGORIES = [
-  { value: "greens_fees", label: "Greens Fees" },
-  { value: "cart_rentals", label: "Cart Rentals" },
-  { value: "pro_shop", label: "Pro Shop" },
-  { value: "food_beverage", label: "Food & Beverage" },
-  { value: "events", label: "Events" },
-  { value: "memberships", label: "Memberships" },
-  { value: "driving_range", label: "Driving Range" },
-  { value: "other", label: "Other" },
-] as const;
+const CATEGORIES = REVENUE_CATEGORIES;
 
-const categoryLabels: Record<string, string> = {
-  greens_fees: "Greens Fees",
-  cart_rentals: "Cart Rentals",
-  pro_shop: "Pro Shop",
-  food_beverage: "Food & Beverage",
-  events: "Events",
-  memberships: "Memberships",
-  driving_range: "Driving Range",
-  other: "Other",
-};
+const categoryLabels: Record<string, string> = REVENUE_LABELS;
 
 const categoryColors: Record<string, string> = {
   greens_fees: "bg-green-500/10 text-green-700 border-green-200",
   cart_rentals: "bg-blue-500/10 text-blue-700 border-blue-200",
   pro_shop: "bg-purple-500/10 text-purple-700 border-purple-200",
   food_beverage: "bg-orange-500/10 text-orange-700 border-orange-200",
+  bar: "bg-rose-500/10 text-rose-700 border-rose-200",
   events: "bg-pink-500/10 text-pink-700 border-pink-200",
   memberships: "bg-indigo-500/10 text-indigo-700 border-indigo-200",
   driving_range: "bg-teal-500/10 text-teal-700 border-teal-200",
@@ -113,12 +97,15 @@ function getStartOfMonth(): string {
 export default function RevenuePage() {
   const { user, isFbManager } = useAuth();
   const supabase = createClient();
-  // The F&B Manager sees and logs Buckley's (Food & Beverage) revenue only.
-  const onlyCategory = isFbManager ? "food_beverage" : null;
-  const categories = onlyCategory ? CATEGORIES.filter((c) => c.value === onlyCategory) : CATEGORIES;
-  // Apply the F&B-only filter to a revenue_entries query.
-  const scoped = useCallback(<Q extends { eq: (col: string, v: string) => Q }>(q: Q): Q =>
-    onlyCategory ? q.eq("category", onlyCategory) : q, [onlyCategory]);
+  // The F&B Manager sees and logs Buckley's revenue only (restaurant and bar).
+  const onlyCategories: string[] | null = isFbManager ? BUCKLEYS_REVENUE_CATEGORIES : null;
+  const onlyCategory = onlyCategories ? onlyCategories[0] : null;
+  const categories = onlyCategories ? CATEGORIES.filter((c) => onlyCategories.includes(c.value)) : CATEGORIES;
+  // Apply the Buckley's-only filter to a revenue_entries query.
+  const scoped = useCallback(<Q extends { in: (col: string, v: string[]) => Q }>(q: Q): Q =>
+    onlyCategories ? q.in("category", onlyCategories) : q,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onlyCategories only changes with isFbManager
+    [isFbManager]);
 
   // Form state
   const [entryDate, setEntryDate] = useState(getToday());
@@ -265,15 +252,14 @@ export default function RevenuePage() {
         />
 
         {/* ── Upload a POS/register report (AI-transcribed, human-verified) ── */}
-        {/* Course-wide report (every category): not for the F&B Manager. */}
-        {!isFbManager && (
-          <UploadReportCard
-            userId={user?.id ?? null}
-            onSaved={() => {
-              Promise.all([fetchEntries(), fetchSummary()]);
-            }}
-          />
-        )}
+        {/* One RecTrac report per area. The F&B Manager uploads Buckley's (restaurant and bar). */}
+        <UploadReportCard
+          userId={user?.id ?? null}
+          areas={isFbManager ? ["restaurant", "bar"] : undefined}
+          onSaved={() => {
+            Promise.all([fetchEntries(), fetchSummary()]);
+          }}
+        />
 
         {/* ── Quick Entry Form ── */}
         <Card className="mb-6">

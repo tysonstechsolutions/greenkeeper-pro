@@ -135,6 +135,10 @@ export const TRACKED_MIGRATIONS: { name: string; what: string }[] = [
     name: "20261006120000_operations_upgrade",
     what: "Food cost and US Foods invoices, evaluation follow-through, Buckley's-only schedule for the F&B Manager",
   },
+  {
+    name: "20261007120000_bar_and_invoice_coding",
+    what: "Buckley's bar kept apart from the restaurant (Bar sales, bar items on invoices) and cost center / G/L on every invoice line",
+  },
 ];
 
 /** Older migrations, checked by calling something they created (read-only). */

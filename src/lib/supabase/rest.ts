@@ -543,6 +543,24 @@ export async function directInsertRows<T = unknown>(
 }
 
 /**
+ * INSERT rows, updating any that already exist on `onConflict` (a unique
+ * column list). Mirrors `.upsert(rows, { onConflict })`.
+ */
+export async function directUpsertRows(
+  table: string,
+  rows: Record<string, unknown>[],
+  onConflict: string,
+  label: string,
+): Promise<void> {
+  if (rows.length === 0) return;
+  const path = `rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`;
+  await directFetch("POST", path, rows, {
+    label,
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+  });
+}
+
+/**
  * PATCH multiple rows by an arbitrary filter set (compound WHERE).
  * Each filter is `column=<operator>.<value>` (PostgREST string syntax).
  * Mirrors `supabase.from(t).update(patch).eq("a", x).eq("b", y).gte(...)`.

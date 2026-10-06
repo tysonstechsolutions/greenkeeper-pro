@@ -15,6 +15,7 @@ import {
   type BulkFundingOrder,
   type UsFoodsDocument,
 } from "./usfoods";
+import { barCogs, codeLine, type Outlet } from "./coding";
 
 export const US_FOODS = "US Foods";
 
@@ -108,6 +109,8 @@ export interface PlannedPurchase {
     food_amount: number;
     alcohol_amount: number;
     supplies_amount: number;
+    /** Food + alcohol on this invoice that belongs to the bar. */
+    bar_cogs_amount: number;
     notes: string;
   };
   lines: {
@@ -122,6 +125,9 @@ export interface PlannedPurchase {
     unit_price: number;
     extended: number;
     category: string;
+    outlet: Outlet;
+    cost_ctr: string;
+    gl_acct: string;
   }[];
 }
 
@@ -144,7 +150,12 @@ export function documentLabel(doc: Pick<UsFoodsDocument, "kind" | "documentNumbe
  * is already saved or appeared earlier in the pile. A cover sheet supplies
  * the delivery order and site for its invoice (and for a credit against it).
  */
-export function planUsFoodsImport(read: Pick<ReadResult, "documents" | "coverSheets">, existing: ExistingPurchase[]): ImportPlan {
+export function planUsFoodsImport(
+  read: Pick<ReadResult, "documents" | "coverSheets">,
+  existing: ExistingPurchase[],
+  /** Products marked as bar items before (product number → outlet). */
+  remembered: ReadonlyMap<string, Outlet> = new Map(),
+): ImportPlan {
   const seen = new Set(
     existing
       .filter((e) => e.vendor.trim().toLowerCase() === US_FOODS.toLowerCase() && e.document_number)
@@ -165,6 +176,20 @@ export function planUsFoodsImport(read: Pick<ReadResult, "documents" | "coverShe
     seen.add(key);
     const cover = covers.get(doc.invoiceNumber);
     const totals = categoryTotals(doc);
+    const lines = doc.lines.map((l, i) => ({
+      line_no: i + 1,
+      section: l.section,
+      product_number: l.productNumber,
+      description: l.description,
+      brand: l.brand || null,
+      pack_size: l.packSize || null,
+      qty: l.qty,
+      unit: l.unit,
+      unit_price: l.unitPrice,
+      extended: l.extended,
+      category: l.category,
+      ...codeLine(l, remembered),
+    }));
     plan.toSave.push({
       doc,
       row: {
@@ -180,22 +205,44 @@ export function planUsFoodsImport(read: Pick<ReadResult, "documents" | "coverShe
         food_amount: totals.food,
         alcohol_amount: totals.alcohol,
         supplies_amount: totals.supplies,
+        bar_cogs_amount: barCogs(lines),
         notes: `${documentLabel(doc)} · ${doc.lines.length} item${doc.lines.length === 1 ? "" : "s"}`,
       },
-      lines: doc.lines.map((l, i) => ({
-        line_no: i + 1,
-        section: l.section,
-        product_number: l.productNumber,
-        description: l.description,
-        brand: l.brand || null,
-        pack_size: l.packSize || null,
-        qty: l.qty,
-        unit: l.unit,
-        unit_price: l.unitPrice,
-        extended: l.extended,
-        category: l.category,
-      })),
+      lines,
     });
   }
   return plan;
+}
+
+/** Mark one planned line bar or restaurant (alcohol stays bar). Returns a new plan. */
+export function setPlannedOutlet(plan: ImportPlan, documentNumber: string, kind: string, lineNo: number, outlet: Outlet): ImportPlan {
+  return {
+    ...plan,
+    toSave: plan.toSave.map((p) => {
+      if (p.row.document_number !== documentNumber || p.row.kind !== kind) return p;
+      const lines = p.lines.map((l) =>
+        l.line_no === lineNo && l.category !== "alcohol" ? { ...l, outlet } : l,
+      );
+      return { ...p, lines, row: { ...p.row, bar_cogs_amount: barCogs(lines) } };
+    }),
+  };
+}
+
+/**
+ * Products to remember after saving: every non-alcohol line marked bar, and
+ * any that were remembered as bar but are now marked restaurant.
+ */
+export function outletsToRemember(
+  plan: ImportPlan,
+  remembered: ReadonlyMap<string, Outlet>,
+): { product_number: string; outlet: Outlet }[] {
+  const out = new Map<string, Outlet>();
+  for (const p of plan.toSave) {
+    for (const l of p.lines) {
+      if (l.category === "alcohol") continue;
+      const before = remembered.get(l.product_number) ?? "restaurant";
+      if (l.outlet !== before) out.set(l.product_number, l.outlet);
+    }
+  }
+  return [...out.entries()].map(([product_number, outlet]) => ({ product_number, outlet }));
 }

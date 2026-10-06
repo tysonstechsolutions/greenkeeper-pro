@@ -22,6 +22,7 @@ export const AREA_BY_REVENUE_CATEGORY: Record<string, MoneyArea> = {
   memberships: "course",
   events: "restaurant", // party/room rentals & league food run through F&B
   food_beverage: "restaurant",
+  bar: "restaurant", // Buckley's bar
   driving_range: "range",
   pro_shop: "pro_shop",
   other: "course",

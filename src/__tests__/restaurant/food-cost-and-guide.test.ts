@@ -104,12 +104,29 @@ describe("reading files", () => {
 });
 
 describe("food cost", () => {
-  it("counts food and alcohol, not supplies; hand-typed rows count as food", () => {
+  it("counts food and alcohol, not supplies; hand-typed rows count as restaurant food", () => {
     expect(purchaseSplit({ purchase_date: "2026-09-01", amount: 624.6, food_amount: 574.49, alcohol_amount: 0, supplies_amount: 50.11 })).toEqual({
       cogs: 574.49,
+      restaurant: 574.49,
+      bar: 0,
       supplies: 50.11,
     });
-    expect(purchaseSplit({ purchase_date: "2026-09-01", amount: 100 })).toEqual({ cogs: 100, supplies: 0 });
+    expect(purchaseSplit({ purchase_date: "2026-09-01", amount: 100 })).toEqual({ cogs: 100, restaurant: 100, bar: 0, supplies: 0 });
+  });
+
+  it("splits restaurant and bar: alcohol plus items marked bar", () => {
+    const p = { purchase_date: "2026-09-01", amount: 300, food_amount: 200, alcohol_amount: 100, supplies_amount: 0 };
+    // Before bar marking existed, alcohol alone is the bar.
+    expect(purchaseSplit(p)).toMatchObject({ restaurant: 200, bar: 100 });
+    expect(purchaseSplit({ ...p, bar_cogs_amount: 140 })).toMatchObject({ restaurant: 160, bar: 140 });
+    const sales = [
+      { entry_date: "2026-09-10", amount: 1000, category: "food_beverage" },
+      { entry_date: "2026-09-10", amount: 400, category: "bar" },
+    ];
+    const bar = costByPeriod([{ ...p, bar_cogs_amount: 140 }], sales, "month", "bar")[0];
+    expect(bar).toMatchObject({ cogs: 140, sales: 400, pct: 35, status: "high" });
+    const rest = costByPeriod([{ ...p, bar_cogs_amount: 140 }], sales, "month", "restaurant")[0];
+    expect(rest).toMatchObject({ cogs: 160, sales: 1000, pct: 16, status: "good" });
   });
 
   it("weeks start on Monday", () => {

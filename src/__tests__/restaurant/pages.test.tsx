@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "../utils/test-utils";
+import { fireEvent, render, screen, within } from "../utils/test-utils";
 import { parseUsFoodsDocument } from "@/lib/restaurant/usfoods";
 import type { ReadResult } from "@/lib/restaurant/import";
 
@@ -29,10 +29,14 @@ const db = vi.hoisted(() => ({
   inserted: [] as Record<string, unknown>[],
   insertedLines: [] as Record<string, unknown>[],
   deleted: [] as string[],
+  outlets: [] as Record<string, unknown>[],
+  upserts: [] as { table: string; rows: Record<string, unknown>[] }[],
+  patches: [] as { table: string; id: string; patch: Record<string, unknown> }[],
 }));
 
 vi.mock("@/lib/supabase/rest", () => ({
-  directSelectList: async (table: string) => (table === "restaurant_purchases" ? db.purchases : db.lines),
+  directSelectList: async (table: string) =>
+    table === "restaurant_purchases" ? db.purchases : table === "restaurant_product_outlets" ? db.outlets : db.lines,
   directSelectAll: async (table: string) =>
     table === "restaurant_purchases" ? db.purchases : table === "revenue_entries" ? db.sales : db.lines,
   directInsertRow: async (_t: string, row: Record<string, unknown>) => {
@@ -46,6 +50,12 @@ vi.mock("@/lib/supabase/rest", () => ({
   },
   directDeleteRow: async (_t: string, _c: string, id: string) => {
     db.deleted.push(id);
+  },
+  directUpsertRows: async (table: string, rows: Record<string, unknown>[]) => {
+    db.upserts.push({ table, rows });
+  },
+  directPatchRow: async (table: string, _c: string, id: string, patch: Record<string, unknown>) => {
+    db.patches.push({ table, id, patch });
   },
   publicStorageUrl: () => "https://example.test/file.pdf",
 }));
@@ -86,6 +96,9 @@ beforeEach(() => {
   db.inserted = [];
   db.insertedLines = [];
   db.deleted = [];
+  db.outlets = [];
+  db.upserts = [];
+  db.patches = [];
   push.mockReset();
   sessionStorage.clear();
 });
@@ -118,6 +131,66 @@ describe("Restaurant Purchases import", () => {
     });
     expect(db.insertedLines).toHaveLength(11);
     expect(db.insertedLines.every((l) => l.purchase_id === "p1")).toBe(true);
+    // Every line is coded: food to 20091/151110, the chafing fuel to supplies.
+    expect(db.insertedLines.find((l) => l.product_number === "2912038")).toMatchObject({
+      category: "supplies",
+      cost_ctr: "20091",
+      gl_acct: "701000",
+    });
+    expect(db.insertedLines.find((l) => l.product_number === "8529315")).toMatchObject({
+      outlet: "restaurant",
+      cost_ctr: "20091",
+      gl_acct: "151110",
+    });
+    expect(db.inserted[0].bar_cogs_amount).toBe(0);
+  });
+
+  it("shows the coding and lets an item be marked Bar, remembered for next time", async () => {
+    await pickFiles();
+    fireEvent.click(screen.getByRole("button", { name: /Invoice 1092941/ }));
+    const charge = screen.getByText("Charge to").parentElement!;
+    expect(within(charge).getByText("20091 · 151110 — RESALE INVENTORY FOOD")).toBeInTheDocument();
+    expect(within(charge).getByText("$574.49")).toBeInTheDocument();
+    expect(within(charge).getByText("20091 · 701000 — SUPPLIES")).toBeInTheDocument();
+    expect(within(charge).getByText("$50.11")).toBeInTheDocument();
+
+    const cheesecake = screen.getByRole("group", { name: /CHEESECAKE, PLN 9" 16 SLCD goes to/ });
+    fireEvent.click(within(cheesecake).getByRole("button", { name: "Bar" }));
+    expect(screen.getByText(/bar \$85\.27/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Save 1 document/ }));
+    await screen.findByText(/Imported 1 document\./);
+    expect(db.inserted[0].bar_cogs_amount).toBe(85.27);
+    expect(db.insertedLines.find((l) => l.product_number === "7004922")?.outlet).toBe("bar");
+    expect(db.upserts).toEqual([
+      { table: "restaurant_product_outlets", rows: [{ product_number: "7004922", outlet: "bar" }] },
+    ]);
+  });
+
+  it("marks an item Bar on its own when it was marked Bar before", async () => {
+    db.outlets = [{ product_number: "7004922", outlet: "bar" }];
+    await pickFiles();
+    expect(screen.getByText(/bar \$85\.27/)).toBeInTheDocument();
+  });
+
+  it("re-marks a saved line and updates the invoice's bar cost", async () => {
+    db.purchases = [
+      { id: "p9", purchase_date: "2026-09-01", vendor: "US Foods", amount: 100, invoice_path: null, notes: "Invoice 1", created_at: "", kind: "invoice", document_number: "1", food_amount: 100, alcohol_amount: 0, supplies_amount: 0, bar_cogs_amount: 0 },
+    ];
+    db.lines = [
+      { id: "l1", line_no: 1, product_number: "111", description: "LIME, 12 CT", brand: null, pack_size: "12 EA", qty: 1, unit: "CS", unit_price: 60, extended: 60, category: "food", outlet: "restaurant", cost_ctr: "20091", gl_acct: "151110" },
+      { id: "l2", line_no: 2, product_number: "222", description: "BEEF", brand: null, pack_size: null, qty: 1, unit: "CS", unit_price: 40, extended: 40, category: "food", outlet: "restaurant", cost_ctr: "20091", gl_acct: "151110" },
+    ];
+    render(<RestaurantPurchasesPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /US Foods — Invoice 1/ }));
+    const lime = await screen.findByRole("group", { name: /LIME, 12 CT goes to/ });
+    fireEvent.click(within(lime).getByRole("button", { name: "Bar" }));
+    await screen.findByText(/Bar \$60\.00/);
+    expect(db.patches).toEqual([
+      { table: "restaurant_purchase_lines", id: "l1", patch: { outlet: "bar", cost_ctr: "20091", gl_acct: "151110" } },
+      { table: "restaurant_purchases", id: "p9", patch: { bar_cogs_amount: 60 } },
+    ]);
+    expect(db.upserts).toEqual([{ table: "restaurant_product_outlets", rows: [{ product_number: "111", outlet: "bar" }] }]);
   });
 
   it("says to run the database update when the new columns are missing", async () => {
@@ -150,7 +223,7 @@ describe("Restaurant Purchases import", () => {
 describe("Food Cost page", () => {
   it("shows the month's food cost against sales", async () => {
     db.purchases = [{ purchase_date: "2026-09-01", amount: 624.6, food_amount: 574.49, alcohol_amount: 0, supplies_amount: 50.11 }];
-    db.sales = [{ entry_date: "2026-09-15", amount: 1000 }];
+    db.sales = [{ entry_date: "2026-09-15", amount: 1000, category: "food_beverage" }];
     render(<FoodCostPage />);
     expect(await screen.findAllByText("57.4%")).not.toHaveLength(0);
     expect(screen.getByText(/Above target/)).toBeInTheDocument();
@@ -160,7 +233,29 @@ describe("Food Cost page", () => {
   it("explains what is missing with no sales", async () => {
     db.purchases = [{ purchase_date: "2026-09-01", amount: 100 }];
     render(<FoodCostPage />);
-    expect(await screen.findByText(/No food & beverage sales entered yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No restaurant sales entered yet/)).toBeInTheDocument();
+  });
+
+  it("keeps the bar apart, with its own sales and 25% target", async () => {
+    db.purchases = [
+      // $200 food and $100 alcohol on one invoice, $40 of the food marked bar.
+      { purchase_date: "2026-09-01", amount: 300, food_amount: 200, alcohol_amount: 100, supplies_amount: 0, bar_cogs_amount: 140 },
+    ];
+    db.sales = [
+      { entry_date: "2026-09-15", amount: 1000, category: "food_beverage" },
+      { entry_date: "2026-09-15", amount: 400, category: "bar" },
+    ];
+    render(<FoodCostPage />);
+    // Restaurant: 160 / 1000 = 16%. Bar: 140 / 400 = 35%, over its 25% target.
+    const restaurantCard = await screen.findByRole("button", { name: /^Restaurant/ });
+    const barCard = screen.getByRole("button", { name: /^Bar/ });
+    expect(within(restaurantCard).getByText("16%")).toBeInTheDocument();
+    expect(within(barCard).getByText("35%")).toBeInTheDocument();
+    expect(within(barCard).getByText("Above target")).toBeInTheDocument();
+    expect(screen.getByText(/target 25% or less/)).toBeInTheDocument();
+    expect(screen.getByText(/target 35% or less/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Bar/ }));
+    expect(screen.getByText(/Bought \$140\.00 · Sold \$400\.00/)).toBeInTheDocument();
   });
 });
 

@@ -36,6 +36,10 @@ vi.mock("@/lib/supabase/client", () => ({
           filters.push(`${col}=${v}`);
           return q;
         },
+        in: (col: string, v: string[]) => {
+          filters.push(`${col} in ${v.join(",")}`);
+          return q;
+        },
         then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null }),
       });
       return q;
@@ -53,19 +57,20 @@ async function renderPage() {
 }
 
 describe("revenue for the F&B Manager", () => {
-  it("only reads Food & Beverage revenue and hides the course-wide report upload", async () => {
+  it("only reads Buckley's revenue (restaurant and bar) and uploads only those reports", async () => {
     await renderPage();
     await waitFor(() => expect(calls.queries.length).toBeGreaterThanOrEqual(4));
-    for (const filters of calls.queries) expect(filters).toContain("category=food_beverage");
-    expect(screen.queryByText("Choose photo or PDF")).toBeNull();
+    for (const filters of calls.queries) expect(filters).toContain("category in food_beverage,bar");
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual(["Restaurant", "Bar"]);
   });
 
-  it("reads everything for the GM", async () => {
+  it("reads everything for the GM, who uploads every report type", async () => {
     auth.role = "gm";
     await renderPage();
     await waitFor(() => expect(calls.queries.length).toBeGreaterThanOrEqual(4));
-    for (const filters of calls.queries) expect(filters).not.toContain("category=food_beverage");
-    expect(screen.getByText("Choose photo or PDF")).toBeTruthy();
+    for (const filters of calls.queries) expect(filters.some((f) => f.startsWith("category"))).toBe(false);
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual(["Restaurant", "Bar", "Pro Shop", "Other report"]);
+    expect(screen.getByText("Pick the report type first")).toBeTruthy();
     auth.role = "fb_manager";
   });
 });

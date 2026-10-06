@@ -29,6 +29,7 @@ export type RevenueCategory =
   | "cart_rentals"
   | "pro_shop"
   | "food_beverage"
+  | "bar"
   | "events"
   | "memberships"
   | "driving_range"
@@ -38,7 +39,8 @@ export const REVENUE_CATEGORY_LABELS: Record<RevenueCategory, string> = {
   greens_fees: "Greens Fees",
   cart_rentals: "Cart Rentals",
   pro_shop: "Pro Shop",
-  food_beverage: "Food & Beverage",
+  food_beverage: "Buckley's Restaurant (F&B)",
+  bar: "Buckley's Bar",
   events: "Events",
   memberships: "Memberships",
   driving_range: "Driving Range",

@@ -393,11 +393,13 @@ const TOOLS = [
             "cart_rentals",
             "pro_shop",
             "food_beverage",
+            "bar",
             "events",
             "memberships",
             "driving_range",
             "other",
           ],
+          description: "food_beverage is the Buckley's restaurant; bar is the Buckley's bar (kept apart for their COGS targets).",
         },
         amount: { type: "number" },
         rounds_count: { type: "number", description: "Rounds played — greens_fees only" },
@@ -1359,7 +1361,7 @@ const WORKSPACE_CONTEXT: Record<string, string> = {
   course:
     "The user is in the COURSE & RANGE workspace — turf and grounds. Most relevant: tasks, report_course_issue, equipment, chemicals, log_fuel_refill.",
   restaurant:
-    "The user is in the RESTAURANT workspace — food & beverage. Most relevant: add_revenue_entry (category food_beverage or events), log_restaurant_purchase (US Foods invoices), schedule_event (category fb_event — parties, Hot Dog Monday specials), add_duty/update_duty for cleaning routines, complete_obligation (fire extinguishers, inventory count).",
+    "The user is in the RESTAURANT workspace — food & beverage. Most relevant: add_revenue_entry (category food_beverage for the restaurant, bar for the bar, or events), log_restaurant_purchase (US Foods invoices), schedule_event (category fb_event — parties, Hot Dog Monday specials), add_duty/update_duty for cleaning routines, complete_obligation (fire extinguishers, inventory count).",
   pro_shop:
     "The user is in the PRO SHOP workspace. Most relevant: schedule_tournament (tournaments, leagues, outings), add_revenue_entry (category pro_shop), complete_obligation (pro shop inventory count).",
   money:

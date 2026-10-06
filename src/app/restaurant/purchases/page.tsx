@@ -4,7 +4,8 @@
 // never rides a purchase request, so this log is what feeds the restaurant
 // "Out" column on the per-area P&L (via restaurant_spend_monthly_rollup).
 // US Foods invoice PDFs can be imported whole: every line item comes in,
-// split into food, alcohol, and supplies for the food cost page.
+// split into food, alcohol, and supplies, each line marked Restaurant or Bar
+// (separate COGS targets) and coded to its cost center and G/L.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -26,18 +27,24 @@ import {
   directDeleteRow,
   directInsertRow,
   directInsertRows,
+  directPatchRow,
   directSelectList,
+  directUpsertRows,
   publicStorageUrl,
 } from "@/lib/supabase/rest";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import { todayLocal } from "@/lib/utils/date";
 import {
   documentLabel,
+  outletsToRemember,
   planUsFoodsImport,
   readUsFoodsFiles,
+  setPlannedOutlet,
   type ImportPlan,
   type ReadResult,
 } from "@/lib/restaurant/import";
+import { barCogs, codeLine, type Outlet } from "@/lib/restaurant/coding";
+import { InvoiceLines } from "@/components/restaurant/invoice-lines";
 
 interface RestaurantPurchase {
   id: string;
@@ -54,6 +61,8 @@ interface RestaurantPurchase {
   food_amount?: number | null;
   alcohol_amount?: number | null;
   supplies_amount?: number | null;
+  // Present once the 2026-10-07 database update is run.
+  bar_cogs_amount?: number | null;
 }
 
 interface PurchaseLine {
@@ -68,6 +77,21 @@ interface PurchaseLine {
   unit_price: number;
   extended: number;
   category: string;
+  // Present once the 2026-10-07 database update is run.
+  outlet?: Outlet | null;
+  cost_ctr?: string | null;
+  gl_acct?: string | null;
+}
+
+const LINE_COLUMNS = "id,line_no,product_number,description,brand,pack_size,qty,unit,unit_price,extended,category";
+
+/** Fill in outlet and codes for lines saved before they were stored. */
+function withCoding(
+  l: PurchaseLine,
+  remembered: ReadonlyMap<string, Outlet>,
+): PurchaseLine & { outlet: Outlet; cost_ctr: string; gl_acct: string } {
+  const coded = codeLine({ product_number: l.product_number, category: l.category, description: l.description }, remembered);
+  return { ...l, outlet: l.outlet ?? coded.outlet, cost_ctr: l.cost_ctr ?? coded.cost_ctr, gl_acct: l.gl_acct ?? coded.gl_acct };
 }
 
 function money(n: number): string {
@@ -82,7 +106,7 @@ function isMissingSchema(message: string): boolean {
 }
 
 const UPDATE_NEEDED =
-  "The database update for invoice importing hasn't been run yet. Run 20261006120000_operations_upgrade.sql in Supabase, then try again.";
+  "A database update for invoice importing hasn't been run yet. Run 20261006120000_operations_upgrade.sql and then 20261007120000_bar_and_invoice_coding.sql in Supabase, then try again.";
 
 interface ImportState {
   reading: boolean;
@@ -115,6 +139,11 @@ export default function RestaurantPurchasesPage() {
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [lines, setLines] = useState<Record<string, PurchaseLine[] | "loading" | "error">>({});
+  /** Products marked as bar items before (product number → outlet). */
+  const [remembered, setRemembered] = useState<Map<string, Outlet>>(new Map());
+  /** Which document in the import preview has its items open. */
+  const [previewOpen, setPreviewOpen] = useState<string | null>(null);
+  const [lineBusy, setLineBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -130,6 +159,13 @@ export default function RestaurantPurchasesPage() {
       });
       setRows(data);
       setError(null);
+      // Remembered bar items; before the 2026-10-07 update there are none.
+      const outlets = await directSelectList<{ product_number: string; outlet: Outlet }>("restaurant_product_outlets", {
+        columns: "product_number,outlet",
+        limit: 5000,
+        label: "restaurantPurchases.outlets",
+      }).catch(() => []);
+      setRemembered(new Map(outlets.map((o) => [o.product_number, o.outlet])));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -235,6 +271,7 @@ export default function RestaurantPurchasesPage() {
       const plan = planUsFoodsImport(
         read,
         rows.map((r) => ({ vendor: r.vendor, kind: r.kind ?? null, document_number: r.document_number ?? null })),
+        remembered,
       );
       setImp({ ...EMPTY_IMPORT, read, plan });
     } catch (e) {
@@ -296,7 +333,21 @@ export default function RestaurantPurchasesPage() {
         }
       }
     }
+    // Remember items marked Bar (or moved back) for the next invoices.
+    if (saved > 0) {
+      try {
+        await directUpsertRows(
+          "restaurant_product_outlets",
+          outletsToRemember(plan, remembered),
+          "product_number",
+          "restaurantPurchases.rememberOutlets",
+        );
+      } catch {
+        /* the invoices are saved; only next time's pre-marking is lost */
+      }
+    }
     setImp(EMPTY_IMPORT);
+    setPreviewOpen(null);
     await load();
     const parts = [`Imported ${saved} document${saved === 1 ? "" : "s"}.`];
     if (alreadyThere) parts.push(`${alreadyThere} were already saved.`);
@@ -316,16 +367,56 @@ export default function RestaurantPurchasesPage() {
     if (Array.isArray(lines[row.id])) return;
     setLines((m) => ({ ...m, [row.id]: "loading" }));
     try {
-      const data = await directSelectList<PurchaseLine>("restaurant_purchase_lines", {
-        columns: "id,line_no,product_number,description,brand,pack_size,qty,unit,unit_price,extended,category",
-        filters: [`purchase_id=eq.${row.id}`],
-        orderBy: [{ column: "line_no", ascending: true }],
-        limit: 500,
-        label: "restaurantPurchases.lines",
-      });
+      const query = (columns: string) =>
+        directSelectList<PurchaseLine>("restaurant_purchase_lines", {
+          columns,
+          filters: [`purchase_id=eq.${row.id}`],
+          orderBy: [{ column: "line_no", ascending: true }],
+          limit: 500,
+          label: "restaurantPurchases.lines",
+        });
+      // Outlet and codes arrive with the 2026-10-07 update; before it they're worked out.
+      const data = await query(`${LINE_COLUMNS},outlet,cost_ctr,gl_acct`).catch(() => query(LINE_COLUMNS));
       setLines((m) => ({ ...m, [row.id]: data }));
     } catch {
       setLines((m) => ({ ...m, [row.id]: "error" }));
+    }
+  };
+
+  /** Mark a saved line Restaurant or Bar: the line, the invoice's bar cost, and the product's memory. */
+  const changeSavedOutlet = async (row: RestaurantPurchase, lineId: string, outlet: Outlet) => {
+    const current = lines[row.id];
+    if (!Array.isArray(current) || lineBusy) return;
+    const target = current.find((l) => l.id === lineId);
+    if (!target) return;
+    const next = current.map((l) => (l.id === lineId ? { ...l, outlet } : l));
+    setLineBusy(true);
+    setError(null);
+    try {
+      const coded = withCoding(target, remembered);
+      await directPatchRow(
+        "restaurant_purchase_lines",
+        "id",
+        lineId,
+        { outlet, cost_ctr: coded.cost_ctr, gl_acct: coded.gl_acct },
+        "restaurantPurchases.lineOutlet",
+      );
+      const bar = barCogs(next.map((l) => withCoding(l, remembered)));
+      await directPatchRow("restaurant_purchases", "id", row.id, { bar_cogs_amount: bar }, "restaurantPurchases.barCogs");
+      await directUpsertRows(
+        "restaurant_product_outlets",
+        [{ product_number: target.product_number, outlet }],
+        "product_number",
+        "restaurantPurchases.rememberOutlet",
+      );
+      setLines((m) => ({ ...m, [row.id]: next }));
+      setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, bar_cogs_amount: bar } : r)));
+      setRemembered((m) => new Map(m).set(target.product_number, outlet));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(isMissingSchema(msg) ? UPDATE_NEEDED : `Couldn't change it: ${msg}`);
+    } finally {
+      setLineBusy(false);
     }
   };
 
@@ -403,7 +494,10 @@ export default function RestaurantPurchasesPage() {
                   ? "Nothing new to import"
                   : `Ready to import ${plan.toSave.length} document${plan.toSave.length === 1 ? "" : "s"} · ${money(planTotal)}`}
               </p>
-              <p className="text-xs text-muted-foreground">Check the totals match your invoices, then save.</p>
+              <p className="text-xs text-muted-foreground">
+                Check the totals match your invoices. Open one to see its coding and mark bar items (alcohol is
+                always Bar; the app remembers the rest), then save.
+              </p>
             </div>
             <button
               onClick={() => setImp(EMPTY_IMPORT)}
@@ -417,11 +511,26 @@ export default function RestaurantPurchasesPage() {
 
           {plan.toSave.length > 0 && (
             <div className="divide-y divide-border/50 rounded-lg border border-border/60">
-              {plan.toSave.map((p) => (
-                <div key={`${p.row.kind}-${p.row.document_number}`} className="px-3 py-2 text-sm">
+              {plan.toSave.map((p) => {
+                const docKey = `${p.row.kind}-${p.row.document_number}`;
+                const isOpen = previewOpen === docKey;
+                return (
+                <div key={docKey} className="px-3 py-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground w-20 shrink-0 tabular-nums">{p.row.purchase_date}</span>
-                    <span className="flex-1 min-w-0 truncate">{documentLabel(p.doc)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewOpen(isOpen ? null : docKey)}
+                      aria-expanded={isOpen}
+                      className="flex-1 min-w-0 flex items-center gap-1 text-left"
+                    >
+                      {isOpen ? (
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="truncate">{documentLabel(p.doc)}</span>
+                    </button>
                     <span className={`font-semibold tabular-nums ${p.row.amount < 0 ? "text-success" : ""}`}>
                       {money(p.row.amount)}
                     </span>
@@ -430,11 +539,29 @@ export default function RestaurantPurchasesPage() {
                     {p.lines.length} items · food {money(p.row.food_amount)}
                     {p.row.alcohol_amount ? ` · alcohol ${money(p.row.alcohol_amount)}` : ""}
                     {p.row.supplies_amount ? ` · supplies ${money(p.row.supplies_amount)}` : ""}
+                    {p.row.bar_cogs_amount ? ` · bar ${money(p.row.bar_cogs_amount)}` : ""}
                     {p.row.delivery_order ? ` · DO ${p.row.delivery_order}` : ""}
                     {p.row.site ? ` · site ${p.row.site}` : ""}
                   </p>
+                  {isOpen && (
+                    <div className="mt-2">
+                      <InvoiceLines
+                        lines={p.lines.map((l) => ({ ...l, key: String(l.line_no) }))}
+                        total={p.row.amount}
+                        disabled={imp.saving}
+                        onOutlet={(key, outlet) =>
+                          setImp((st) =>
+                            st.plan
+                              ? { ...st, plan: setPlannedOutlet(st.plan, p.row.document_number, p.row.kind, Number(key), outlet) }
+                              : st,
+                          )
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -624,31 +751,19 @@ export default function RestaurantPurchasesPage() {
                                 Food {money(Number(r.food_amount))}
                                 {Number(r.alcohol_amount) ? ` · Alcohol ${money(Number(r.alcohol_amount))}` : ""}
                                 {Number(r.supplies_amount) ? ` · Supplies ${money(Number(r.supplies_amount))}` : ""}
+                                {Number(r.bar_cogs_amount) ? ` · Bar ${money(Number(r.bar_cogs_amount))}` : ""}
                                 {r.delivery_order ? ` · DO ${r.delivery_order}` : ""}
                               </p>
                             )}
                             {rowLines === "loading" && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
                             {rowLines === "error" && <p className="text-destructive">Couldn&apos;t load the items.</p>}
                             {Array.isArray(rowLines) && (
-                              <table className="w-full">
-                                <tbody>
-                                  {rowLines.map((l) => (
-                                    <tr key={l.id} className="border-t border-border/40">
-                                      <td className="py-1 pr-2 tabular-nums text-muted-foreground">{Number(l.qty)}</td>
-                                      <td className="py-1 pr-2">
-                                        {l.description}
-                                        <span className="text-muted-foreground">
-                                          {[l.brand, l.pack_size].filter(Boolean).length
-                                            ? ` · ${[l.brand, l.pack_size].filter(Boolean).join(" · ")}`
-                                            : ""}
-                                          {l.category !== "food" ? ` · ${l.category}` : ""}
-                                        </span>
-                                      </td>
-                                      <td className="py-1 text-right tabular-nums">{money(Number(l.extended))}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                              <InvoiceLines
+                                lines={rowLines.map((l) => ({ ...withCoding(l, remembered), key: l.id }))}
+                                total={Number(r.amount)}
+                                disabled={lineBusy}
+                                onOutlet={(key, outlet) => void changeSavedOutlet(r, key, outlet)}
+                              />
                             )}
                           </div>
                         )}

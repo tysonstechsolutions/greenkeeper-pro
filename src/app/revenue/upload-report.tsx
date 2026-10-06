@@ -30,19 +30,14 @@ import { directInsertRows } from "@/lib/supabase/rest";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import { areaForRevenueCategory, AREA_LABELS } from "@/lib/money/areas";
 import { todayLocal } from "@/lib/utils/date";
+import {
+  REPORT_AREAS,
+  REVENUE_CATEGORIES,
+  categoryForReportLine,
+  type ReportArea,
+} from "@/lib/money/revenue-categories";
 
-const CATEGORY_OPTIONS = [
-  { value: "greens_fees", label: "Greens Fees" },
-  { value: "cart_rentals", label: "Cart Rentals" },
-  { value: "pro_shop", label: "Pro Shop" },
-  { value: "food_beverage", label: "Food & Beverage" },
-  { value: "events", label: "Events" },
-  { value: "memberships", label: "Memberships" },
-  { value: "driving_range", label: "Driving Range" },
-  { value: "other", label: "Other" },
-] as const;
-
-const VALID_CATEGORIES = new Set(CATEGORY_OPTIONS.map((c) => c.value as string));
+const CATEGORY_OPTIONS = REVENUE_CATEGORIES;
 
 interface ExtractedRevenue {
   report_date?: string | null;
@@ -82,10 +77,16 @@ function isYmd(s: unknown): s is string {
 export function UploadReportCard({
   userId,
   onSaved,
+  areas,
 }: {
   userId: string | null;
   onSaved: () => void;
+  /** Which report types this person uploads (default: all). */
+  areas?: ReportArea[];
 }) {
+  const areaChoices = REPORT_AREAS.filter((a) => !areas || areas.includes(a.value));
+  // Which RecTrac report this is: restaurant, bar, and pro shop each have their own.
+  const [reportArea, setReportArea] = useState<ReportArea | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -126,7 +127,7 @@ export function UploadReportCard({
           .filter((l) => typeof l.amount === "number" && !Number.isNaN(l.amount))
           .map((l) => ({
             key: nextKey.current++,
-            category: VALID_CATEGORIES.has(l.category ?? "") ? (l.category as string) : "other",
+            category: categoryForReportLine(reportArea ?? "other", l.category ?? "other"),
             label: typeof l.label === "string" ? l.label : "",
             amount: String(l.amount),
             rounds:
@@ -199,23 +200,33 @@ export function UploadReportCard({
         }
       }
 
-      await directInsertRows(
-        "revenue_entries",
-        parsedRows.map((r) => ({
-          entry_date: entryDate,
-          category: r.category,
-          amount: r.amountNum,
-          rounds_count:
-            r.category === "greens_fees" && r.rounds ? parseInt(r.rounds, 10) || null : null,
-          description: r.label || null,
-          source: "pos_upload",
-          report_path: reportPath,
-          created_by: userId,
-        })),
-        "revenue.uploadSave",
-      );
+      const entries = parsedRows.map((r) => ({
+        entry_date: entryDate,
+        category: r.category,
+        amount: r.amountNum,
+        rounds_count:
+          r.category === "greens_fees" && r.rounds ? parseInt(r.rounds, 10) || null : null,
+        description: r.label || null,
+        source: "pos_upload",
+        report_path: reportPath,
+        report_area: reportArea,
+        created_by: userId,
+      }));
+      try {
+        await directInsertRows("revenue_entries", entries, "revenue.uploadSave");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/report_area|revenue_entries_category_check|schema cache/i.test(msg)) {
+          throw new Error(
+            "Run the database update 20261007120000_bar_and_invoice_coding.sql in Supabase first (it adds the Bar category and the report type). Nothing was saved.",
+          );
+        }
+        throw e;
+      }
       setSavedCount(parsedRows.length);
       reset();
+      // Next upload is usually a different report: make them pick again.
+      setReportArea(null);
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Saving failed — nothing was recorded.");
@@ -231,8 +242,8 @@ export function UploadReportCard({
           <div>
             <p className="font-semibold text-sm">Upload a sales report</p>
             <p className="text-xs text-muted-foreground">
-              RecTrac / GolfNow report, register tape, or a photo of the daily sheet —
-              you review every number before it saves.
+              One RecTrac report at a time: restaurant, bar, and pro shop each upload separately.
+              You review every number before it saves.
             </p>
           </div>
           {rows && (
@@ -250,7 +261,30 @@ export function UploadReportCard({
         )}
 
         {!rows && (
-          <div>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Which report is this?</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Which report is this?">
+              {areaChoices.map((a) => (
+                <button
+                  key={a.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={reportArea === a.value}
+                  onClick={() => setReportArea(a.value)}
+                  className={cn(
+                    "rounded-lg border px-2 py-2 text-sm font-medium",
+                    reportArea === a.value ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted",
+                  )}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+            {reportArea && (
+              <p className="text-[11px] text-muted-foreground">
+                {REPORT_AREAS.find((a) => a.value === reportArea)?.hint}
+              </p>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -264,7 +298,7 @@ export function UploadReportCard({
             <Button
               variant="outline"
               className="w-full"
-              disabled={extracting}
+              disabled={extracting || !reportArea}
               onClick={() => fileRef.current?.click()}
             >
               {extracting ? (
@@ -275,7 +309,7 @@ export function UploadReportCard({
               ) : (
                 <>
                   <FileUp className="w-4 h-4 mr-2" />
-                  Choose photo or PDF
+                  {reportArea ? "Choose photo or PDF" : "Pick the report type first"}
                 </>
               )}
             </Button>

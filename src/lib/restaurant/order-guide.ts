@@ -5,7 +5,8 @@
  *
  * Pure. The order guide page loads invoice lines and hands them here.
  */
-import { CC, SITE, recommendGlAccount } from "@/lib/accounting/recommend";
+import { CC, SITE } from "@/lib/accounting/recommend";
+import { glFor } from "./coding";
 import type { PurchaseRequestItem } from "@/types/database";
 
 export interface GuideSourceLine {
@@ -82,11 +83,7 @@ const UNIT_WORDS: Record<string, string> = { CS: "Case", EA: "Each", BX: "Box", 
 
 /** G/L for an order guide item: resale food or alcohol, else what the supply is. */
 export function guideGlAccount(item: Pick<GuideItem, "category" | "description">): string {
-  if (item.category === "alcohol") return "151120";
-  if (item.category === "food") return "151110";
-  const rec = recommendGlAccount(item.description, CC.buckleys);
-  // Food words inside a supply's name ("BAG, FOOD STRG") don't make it resale.
-  return rec && !rec.code.startsWith("1511") ? rec.code : "701000";
+  return glFor(item);
 }
 
 export interface OrderPick {

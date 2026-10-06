@@ -1,8 +1,9 @@
 "use client";
 
-// Buckley's food cost: food + alcohol bought (US Foods invoices, net of
-// credits) against food & beverage sales, by week and month. Also where the
-// money went and which prices moved between orders.
+// Buckley's cost of goods, restaurant and bar kept apart (separate targets):
+// food + alcohol bought (US Foods invoices, net of credits) against each
+// outlet's sales, by week and month. Also where the money went and which
+// prices moved between orders.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -10,10 +11,11 @@ import { AlertTriangle, ArrowDownRight, ArrowUpRight, Loader2, RefreshCw } from 
 import { GM_ROLES, RoleGuard, withFbManager } from "@/components/auth/role-guard";
 import { directSelectAll } from "@/lib/supabase/rest";
 import { addDaysLocal, todayLocal } from "@/lib/utils/date";
+import { OUTLET_COGS_TARGET, OUTLET_LABELS, type Outlet } from "@/lib/restaurant/coding";
 import {
-  FOOD_COST_TARGET_PCT,
   PRICE_CHANGE_PCT,
   costByPeriod,
+  lineOutlet,
   priceChanges,
   topItems,
   type CostLine,
@@ -24,6 +26,14 @@ import {
 
 /** How far back the page looks. */
 const LOOKBACK_DAYS = 400;
+
+const OUTLETS: Outlet[] = ["restaurant", "bar"];
+
+/** Where each outlet's sales are entered. */
+const SALES_HINT: Record<Outlet, string> = {
+  restaurant: "the restaurant RecTrac report (category Food & Beverage)",
+  bar: "the bar RecTrac report (category Bar)",
+};
 
 function money(n: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -47,6 +57,7 @@ interface LineRow {
   unit_price: number;
   extended: number;
   category: string;
+  outlet?: Outlet | null;
   restaurant_purchases: { purchase_date: string; kind: "invoice" | "credit" | null } | null;
 }
 
@@ -57,6 +68,9 @@ interface FoodCostData {
   lines: CostLine[];
   linesMissing: boolean;
 }
+
+const LINE_COLUMNS =
+  "product_number,description,pack_size,qty,unit_price,extended,category,restaurant_purchases!inner(purchase_date,kind)";
 
 /** Everything the page shows, loaded together. Never throws. */
 async function fetchFoodCost(): Promise<FoodCostData> {
@@ -71,8 +85,8 @@ async function fetchFoodCost(): Promise<FoodCostData> {
         label: "foodCost.purchases",
       }),
       directSelectAll<CostSale>("revenue_entries", {
-        columns: "entry_date,amount",
-        filters: ["category=eq.food_beverage", `entry_date=gte.${since}`],
+        columns: "entry_date,amount,category",
+        filters: ["category=in.(food_beverage,bar)", `entry_date=gte.${since}`],
         orderBy: [{ column: "entry_date", ascending: false }, { column: "id" }],
         label: "foodCost.sales",
       }),
@@ -82,14 +96,16 @@ async function fetchFoodCost(): Promise<FoodCostData> {
   } catch (e) {
     out.error = e instanceof Error ? e.message : String(e);
   }
-  try {
-    const l = await directSelectAll<LineRow>("restaurant_purchase_lines", {
-      columns:
-        "product_number,description,pack_size,qty,unit_price,extended,category,restaurant_purchases!inner(purchase_date,kind)",
+  const loadLines = (columns: string) =>
+    directSelectAll<LineRow>("restaurant_purchase_lines", {
+      columns,
       filters: [`restaurant_purchases.purchase_date=gte.${since}`],
       orderBy: [{ column: "id" }],
       label: "foodCost.lines",
     });
+  try {
+    // The bar column arrives with the 2026-10-07 update. Without it, alcohol is the bar.
+    const l = await loadLines(`outlet,${LINE_COLUMNS}`).catch(() => loadLines(LINE_COLUMNS));
     out.lines = l
       .filter((r) => r.restaurant_purchases)
       .map((r) => ({
@@ -102,6 +118,7 @@ async function fetchFoodCost(): Promise<FoodCostData> {
         unit_price: Number(r.unit_price),
         extended: Number(r.extended),
         category: r.category,
+        outlet: r.outlet ?? null,
       }));
   } catch {
     // The line-item table arrives with the 2026-10-06 database update.
@@ -142,12 +159,17 @@ function PeriodTable({ periods, label }: { periods: CostPeriod[]; label: (key: s
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
             Bought {money(p.cogs)} · Sold {money(p.sales)}
-            {p.supplies ? ` · Supplies ${money(p.supplies)} (not in food cost)` : ""}
+            {p.supplies ? ` · Supplies ${money(p.supplies)} (not in COGS)` : ""}
           </p>
         </div>
       ))}
     </div>
   );
+}
+
+/** The latest period with sales (else the latest), for the headline. */
+function latestOf(periods: CostPeriod[]): CostPeriod | null {
+  return periods.find((p) => p.status !== "no_sales") ?? periods[0] ?? null;
 }
 
 function FoodCostContent() {
@@ -158,6 +180,7 @@ function FoodCostContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"month" | "week">("month");
+  const [outlet, setOutlet] = useState<Outlet>("restaurant");
 
   const load = useCallback(() => {
     fetchFoodCost().then((d) => {
@@ -174,14 +197,21 @@ function FoodCostContent() {
     load();
   }, [load]);
 
-  const periods = useMemo(() => costByPeriod(purchases, sales, view), [purchases, sales, view]);
-  const recentLines = useMemo(() => {
+  const byOutlet = useMemo(
+    () => ({
+      restaurant: costByPeriod(purchases, sales, view, "restaurant"),
+      bar: costByPeriod(purchases, sales, view, "bar"),
+    }),
+    [purchases, sales, view],
+  );
+  const periods = byOutlet[outlet];
+  const outletLines = useMemo(() => lines.filter((l) => lineOutlet(l) === outlet), [lines, outlet]);
+  const top = useMemo(() => {
     const since = addDaysLocal(todayLocal(), -90);
-    return lines.filter((l) => l.purchase_date >= since);
-  }, [lines]);
-  const top = useMemo(() => topItems(recentLines.filter((l) => l.category !== "supplies"), 10), [recentLines]);
-  const changes = useMemo(() => priceChanges(lines).slice(0, 15), [lines]);
-  const latest = periods.find((p) => p.status !== "no_sales") ?? periods[0] ?? null;
+    return topItems(outletLines.filter((l) => l.purchase_date >= since && l.category !== "supplies"), 10);
+  }, [outletLines]);
+  const changes = useMemo(() => priceChanges(outletLines).slice(0, 15), [outletLines]);
+  const outletHasSales = sales.some((s) => (s.category ?? "food_beverage") === (outlet === "bar" ? "bar" : "food_beverage"));
 
   if (loading) {
     return (
@@ -200,32 +230,40 @@ function FoodCostContent() {
         </div>
       )}
 
-      {latest && (
-        <div className="gk-card p-4">
-          <p className="text-xs text-muted-foreground">
-            {view === "month" ? monthLabel(latest.key) : weekLabel(latest.key)}
-          </p>
-          <p className="text-3xl font-bold tabular-nums mt-1">
-            {latest.pct == null ? "—" : `${latest.pct}%`}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            food cost · target {FOOD_COST_TARGET_PCT}% or less
-          </p>
-          {latest.status === "high" && (
-            <p className="text-sm text-red-700 dark:text-red-400 mt-2">
-              Above target. Check portions, waste, and the price changes below.
-            </p>
-          )}
-        </div>
-      )}
+      {/* Both outlets at a glance; tap one to see its detail. */}
+      <div className="grid grid-cols-2 gap-3">
+        {OUTLETS.map((o) => {
+          const latest = latestOf(byOutlet[o]);
+          const selected = o === outlet;
+          return (
+            <button
+              key={o}
+              onClick={() => setOutlet(o)}
+              aria-pressed={selected}
+              className={`gk-card p-4 text-left transition-colors ${selected ? "ring-2 ring-primary" : "hover:bg-muted/40"}`}
+            >
+              <p className="text-sm font-semibold">{OUTLET_LABELS[o]}</p>
+              <p className="text-3xl font-bold tabular-nums mt-1">{latest?.pct == null ? "—" : `${latest.pct}%`}</p>
+              <p className="text-xs text-muted-foreground">
+                {latest ? (view === "month" ? monthLabel(latest.key) : weekLabel(latest.key)) : "no data"} · target{" "}
+                {OUTLET_COGS_TARGET[o]}% or less
+              </p>
+              {latest?.status === "high" && (
+                <p className="text-xs font-medium text-red-700 dark:text-red-400 mt-1">Above target</p>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-      {sales.length === 0 && (
+      {!outletHasSales && (
         <p className="text-sm text-amber-700 dark:text-amber-400">
-          No food &amp; beverage sales entered yet, so food cost % can&apos;t be worked out. Add them on{" "}
+          No {OUTLET_LABELS[outlet].toLowerCase()} sales entered yet, so its COGS % can&apos;t be worked out. Upload{" "}
+          {SALES_HINT[outlet]} on{" "}
           <Link href="/revenue/" className="underline font-medium">
             Revenue
-          </Link>{" "}
-          (category Food &amp; Beverage).
+          </Link>
+          .
         </p>
       )}
       {purchases.length === 0 && (
@@ -240,7 +278,9 @@ function FoodCostContent() {
 
       <section>
         <div className="flex items-center justify-between mb-2">
-          <p className="gk-section-label">Food cost by {view}</p>
+          <p className="gk-section-label">
+            {OUTLET_LABELS[outlet]} COGS by {view}
+          </p>
           <div className="flex rounded-lg border border-border overflow-hidden text-xs">
             {(["month", "week"] as const).map((v) => (
               <button
@@ -256,8 +296,11 @@ function FoodCostContent() {
         </div>
         <PeriodTable periods={periods} label={view === "month" ? monthLabel : weekLabel} />
         <p className="text-[11px] text-muted-foreground mt-1.5">
-          Food cost = food + alcohol bought (credits taken off) ÷ food &amp; beverage sales. Paper goods,
-          gloves, and cleaning supplies are shown but left out.
+          {outlet === "bar"
+            ? "Bar COGS = alcohol plus items marked Bar on the invoices (credits taken off) ÷ Bar sales."
+            : "Restaurant COGS = food bought, less items marked Bar (credits taken off) ÷ Food & Beverage sales."}{" "}
+          Paper goods, gloves, and cleaning supplies are shown with the restaurant but left out of COGS. Mark an item
+          Bar on Restaurant Purchases.
         </p>
       </section>
 
@@ -269,9 +312,11 @@ function FoodCostContent() {
       ) : (
         <>
           <section>
-            <p className="gk-section-label mb-2">Where the money went (last 90 days)</p>
+            <p className="gk-section-label mb-2">
+              {OUTLET_LABELS[outlet]}: where the money went (last 90 days)
+            </p>
             {top.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Import invoices to see this.</p>
+              <p className="text-sm text-muted-foreground">Nothing yet.</p>
             ) : (
               <div className="gk-card divide-y divide-border/50">
                 {top.map((t) => (
@@ -341,13 +386,13 @@ export default function FoodCostPage() {
   return (
     <RoleGuard allowedRoles={withFbManager(GM_ROLES)}>
       <div className="gk-page mx-auto">
-        <h1 className="mb-1">Food Cost</h1>
+        <h1 className="mb-1">Food &amp; Bar Cost</h1>
         <p className="text-sm text-muted-foreground mb-5">
-          What Buckley&apos;s buys against what it sells. Purchases come from{" "}
+          What Buckley&apos;s restaurant and bar each buy against what each sells. Purchases come from{" "}
           <Link href="/restaurant/purchases/" className="underline">
             Restaurant Purchases
           </Link>
-          , sales from Revenue.
+          , sales from the RecTrac reports on Revenue.
         </p>
         <FoodCostContent />
       </div>
