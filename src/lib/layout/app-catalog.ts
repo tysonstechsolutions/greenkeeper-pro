@@ -1,5 +1,7 @@
 import {
   LayoutDashboard,
+  PieChart,
+  ClipboardList,
   Calendar,
   CalendarDays,
   CalendarClock,
@@ -212,6 +214,8 @@ const DOCUMENTS: AppEntry = { href: "/documents", label: "Documents", icon: Fold
 const RESTAURANT_INVENTORY: AppEntry = { href: "/restaurant/inventory", label: "Inventory Count", icon: ClipboardCheck, color: "from-amber-500 to-orange-600", group: GROUPS.money };
 const PRO_SHOP_INVENTORY: AppEntry = { href: "/pro-shop/inventory", label: "Inventory Count", icon: ClipboardCheck, color: "from-indigo-500 to-blue-600", group: GROUPS.money };
 const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "Purchases", icon: ShoppingCart, color: "from-amber-500 to-orange-600", group: GROUPS.money };
+const FOOD_COST: AppEntry = { href: "/restaurant/food-cost", label: "Food Cost", icon: PieChart, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["cogs", "food cost", "us foods", "invoice", "price"] };
+const ORDER_GUIDE: AppEntry = { href: "/restaurant/order-guide", label: "Order Guide", icon: ClipboardList, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["us foods", "order", "usual items", "reorder"] };
 const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
 const MARKETING: AppEntry = { href: "/marketing", label: "Daily Specials", icon: Megaphone, color: "from-amber-500 to-orange-600", group: GROUPS.people, keywords: ["marketing", "specials", "promotion", "flyer", "hot dog monday", "taco tuesday", "advertise", "events"] };
 
@@ -323,7 +327,7 @@ export const HUB_RESTAURANT: AppEntry = {
   icon: UtensilsCrossed,
   color: "from-amber-500 to-orange-600",
   group: GROUPS.workspaces,
-  children: [RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+  children: [RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
 };
 
 export const HUB_PRO_SHOP: AppEntry = {

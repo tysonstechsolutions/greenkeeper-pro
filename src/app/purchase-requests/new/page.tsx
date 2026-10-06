@@ -36,6 +36,7 @@ import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { createClient } from "@/lib/supabase/client";
 import { callApi, resolveAccessToken } from "@/lib/api/client";
 import { markOrderItemsOrderedFromPR } from "@/lib/order-list/mark-ordered";
+import { takePrPrefill } from "@/lib/restaurant/order-guide";
 import {
   PR_INVOICE_DEFAULTS,
   PR_DELIVERY_DEFAULTS,
@@ -1164,6 +1165,25 @@ function NewPurchaseRequestPageInner() {
       setAttached((prev) => ({ ...prev, section_889: true }));
     }
   }
+
+  // ── Hand-off from another screen (Buckley's order guide) ────────────────
+  // `?prefill=1` opens a new PR with items, vendor, and codes already filled.
+  const prefillParam = searchParams.get("prefill");
+  const prefillDone = useRef(false);
+  useEffect(() => {
+    if (!prefillParam || editId || fromId || prefillDone.current || vendorsLoading) return;
+    prefillDone.current = true;
+    const prefill = takePrPrefill();
+    if (!prefill) return;
+    setItems(rebalanceWithCcFee(prefill.items, ccFeeRate));
+    if (prefill.justification) setJustification(prefill.justification);
+    const wanted = prefill.vendorName.trim().toLowerCase();
+    const match = vendors.find((v) => (v.name ?? "").trim().toLowerCase() === wanted)
+      ?? vendors.find((v) => (v.name ?? "").toLowerCase().includes(wanted));
+    if (match) handleVendorPicked(match.id);
+    else setV1((prev) => ({ ...prev, name: prefill.vendorName }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once, after the vendor list arrives
+  }, [prefillParam, vendorsLoading]);
 
   // ── Edit-mode load ───────────────────────────────────────────────────────
   useEffect(() => {
