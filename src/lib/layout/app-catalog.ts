@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  TrendingUp,
   PieChart,
   FileSpreadsheet,
   ClipboardList,
@@ -216,6 +217,7 @@ const RESTAURANT_INVENTORY: AppEntry = { href: "/restaurant/inventory", label: "
 const PRO_SHOP_INVENTORY: AppEntry = { href: "/pro-shop/inventory", label: "Inventory Count", icon: ClipboardCheck, color: "from-indigo-500 to-blue-600", group: GROUPS.money };
 const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "Purchases", icon: ShoppingCart, color: "from-amber-500 to-orange-600", group: GROUPS.money };
 const FOOD_COST: AppEntry = { href: "/restaurant/food-cost", label: "Food & Bar Cost", icon: PieChart, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["cogs", "food cost", "bar cost", "us foods", "invoice", "price"] };
+const PERFORMANCE: AppEntry = { href: "/performance", label: "Performance", icon: TrendingUp, color: "from-emerald-500 to-teal-600", group: GROUPS.money, keywords: ["cogs", "cost of goods", "sales", "trend", "outlook", "prices", "recommendations", "bar", "pro shop", "restaurant", "dashboard"] };
 const MONTH_END_INVENTORY: AppEntry = { href: "/restaurant/inventory-values", label: "Month-End Inventory", icon: FileSpreadsheet, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["inventory", "count sheet", "month end", "valuation", "151110", "151120", "151130", "cogs"] };
 const ORDER_GUIDE: AppEntry = { href: "/restaurant/order-guide", label: "Order Guide", icon: ClipboardList, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["us foods", "order", "usual items", "reorder"] };
 const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
@@ -329,7 +331,7 @@ export const HUB_RESTAURANT: AppEntry = {
   icon: UtensilsCrossed,
   color: "from-amber-500 to-orange-600",
   group: GROUPS.workspaces,
-  children: [RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, MONTH_END_INVENTORY, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+  children: [PERFORMANCE, RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, MONTH_END_INVENTORY, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
 };
 
 export const HUB_PRO_SHOP: AppEntry = {
@@ -338,7 +340,7 @@ export const HUB_PRO_SHOP: AppEntry = {
   icon: Store,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [PRO_SHOP, PRO_SHOP_INVENTORY, MONTH_END_INVENTORY, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
+  children: [PRO_SHOP, PRO_SHOP_INVENTORY, PERFORMANCE, MONTH_END_INVENTORY, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
 };
 
 export const HUB_MONEY: AppEntry = {
