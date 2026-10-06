@@ -9,7 +9,7 @@ import {
   vendorProductNumber,
   vendorProfile,
 } from "@/lib/restaurant/vendor-invoice";
-import { vendorInvoiceSql } from "@/lib/restaurant/vendor-invoice-sql";
+import { vendorInvoicesSql } from "@/lib/restaurant/vendor-invoice-sql";
 import { glFor } from "@/lib/restaurant/coding";
 
 const db = vi.hoisted(() => ({
@@ -167,13 +167,14 @@ describe("vendor invoice lines", () => {
       lines: [{ description: "DRESSING, RANCH", qty: 1, unit_price: 11.9, extended: 11.9, category: "food" }, { description: "LETTUCE, HEAD", qty: 5, unit_price: 2.57, extended: 12.85, category: "food" }],
       notes: "Buckley's order",
     });
-    const sql = vendorInvoiceSql(p);
+    const sql = vendorInvoicesSql([p]);
     expect(sql).toContain("ON CONFLICT (lower(vendor), kind, document_number) WHERE document_number IS NOT NULL DO NOTHING");
     expect(sql).toContain("'Invoice FY26-1344 - 2 items - Buckley''s order'");
     expect(sql.trim().endsWith(";")).toBe(true);
-    expect(sql.split(";").length).toBe(2);
-    expect(() => vendorInvoiceSql({ ...p, row: { ...p.row, notes: "a; b" } })).toThrow(/semicolon/);
-    expect(() => vendorInvoiceSql({ ...p, row: { ...p.row, notes: "about $10" } })).toThrow(/dollar sign/);
+    expect(sql).toContain("WHERE NOT EXISTS (SELECT 1 FROM public.restaurant_purchase_lines l WHERE l.purchase_id = p.id)");
+    expect(sql.split(";").length).toBe(3);
+    expect(() => vendorInvoicesSql([{ ...p, row: { ...p.row, notes: "a; b" } }])).toThrow(/semicolon/);
+    expect(() => vendorInvoicesSql([{ ...p, row: { ...p.row, notes: "about $10" } }])).toThrow(/dollar sign/);
   });
 });
 
