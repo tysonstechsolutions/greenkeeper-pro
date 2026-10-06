@@ -86,13 +86,18 @@ export function planFlashImport(report: FlashReport, outlet: SalesOutlet): Flash
   };
 }
 
-/** Revenue entry rows for a plan (sales_report_id added at save time). */
-export function revenueRows(plan: FlashImportPlan, reportId: string, userId: string | null) {
+/**
+ * Revenue entry rows for a plan (sales_report_id added at save time).
+ * `ticketLabel` marks ticket sales ("Reception tickets (12 sold)").
+ */
+export function revenueRows(plan: FlashImportPlan, reportId: string, userId: string | null, ticketLabel?: string) {
   return plan.days.map((d) => ({
     entry_date: d.entry_date,
     category: SALES_CATEGORY[plan.outlet],
     amount: d.amount,
-    description: `RecTrac ${SALES_OUTLET_LABELS[plan.outlet]} sales (${d.items} items)`,
+    description: ticketLabel
+      ? `${ticketLabel} (${d.items} sold)`
+      : `RecTrac ${SALES_OUTLET_LABELS[plan.outlet]} sales (${d.items} items)`,
     source: "pos_upload",
     report_area: plan.outlet,
     sales_report_id: reportId,

@@ -3,7 +3,8 @@
 // Upload a POS / register report → AI transcribes it → HUMAN REVIEWS every
 // line → save. Nothing touches the database until "Save entries" — the
 // verify-then-commit rule for anything with money in it. A RecTrac Flash
-// Report (Sales Statistics) is read exactly instead, item by item.
+// Report (Sales Statistics) is read exactly instead, item by item, and so is
+// a RecTrac ticket report (graduation reception tickets).
 
 import { useRef, useState } from "react";
 import {
@@ -40,6 +41,7 @@ import {
 import { pdfTextLines } from "@/lib/pdf/text-lines";
 import { flashReportArea, parseFlashReport, type FlashReport } from "@/lib/sales/rectrac-flash";
 import { planFlashImport, type FlashImportPlan, type SalesOutlet } from "@/lib/sales/import";
+import { parseTicketReport, ticketsAsFlash, type TicketReport } from "@/lib/sales/ticket-report";
 import { FlashImport } from "./flash-import";
 
 const CATEGORY_OPTIONS = REVENUE_CATEGORIES;
@@ -93,7 +95,12 @@ export function UploadReportCard({
   // Which RecTrac report this is: restaurant, bar, and pro shop each have their own.
   const [reportArea, setReportArea] = useState<ReportArea | null>(null);
   // A RecTrac flash report, read exactly (no AI review rows).
-  const [flash, setFlash] = useState<{ report: FlashReport; plan: FlashImportPlan; detected: SalesOutlet | null } | null>(null);
+  const [flash, setFlash] = useState<{
+    report: FlashReport;
+    plan: FlashImportPlan;
+    detected: SalesOutlet | null;
+    tickets?: TicketReport;
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -125,7 +132,16 @@ export function UploadReportCard({
     // A RecTrac Flash Report is read exactly, in the browser.
     if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
       try {
-        const report = parseFlashReport(await pdfTextLines(new Uint8Array(await f.arrayBuffer())));
+        const lines = await pdfTextLines(new Uint8Array(await f.arrayBuffer()));
+        // Reception tickets: always Buckley's restaurant sales.
+        const tickets = parseTicketReport(lines);
+        if (tickets && tickets.sales.length > 0) {
+          const report = ticketsAsFlash(tickets);
+          setFlash({ report, plan: planFlashImport(report, "restaurant"), detected: "restaurant", tickets });
+          setExtracting(false);
+          return;
+        }
+        const report = parseFlashReport(lines);
         if (report && report.sales.length > 0) {
           const detected = flashReportArea(report);
           const outlet: SalesOutlet =
@@ -294,6 +310,7 @@ export function UploadReportCard({
             file={file}
             userId={userId}
             detectedOutlet={flash.detected}
+            tickets={flash.tickets}
             onCancel={() => {
               setFlash(null);
               reset();
