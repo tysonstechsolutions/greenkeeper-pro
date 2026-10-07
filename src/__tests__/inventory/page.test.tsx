@@ -58,7 +58,7 @@ describe("Month-End Inventory", () => {
   it("previews the counts, explains a short TOTAL, and saves with items", async () => {
     render(<InventoryValuesPage />);
     await screen.findByText("$2,089.97");
-    fireEvent.change(screen.getByLabelText("Inventory count spreadsheets"), {
+    fireEvent.change(screen.getByLabelText("Inventory count spreadsheets or valuation reports"), {
       target: {
         files: [
           file("sep-bar.xlsx", "SEP - 20091 (151120) - BUCKLEYS BAR.xlsx"),

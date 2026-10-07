@@ -184,20 +184,22 @@ function InventoryValuesContent() {
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
         >
           {reading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-          {reading ? "Reading the count sheets…" : "Import count sheets"}
+          {reading ? "Reading the files…" : "Import count sheets or RecTrac report"}
         </button>
         <input
           ref={fileRef}
           type="file"
           multiple
-          accept=".xlsx,.xls,.xlsm,.zip,application/zip"
+          accept=".xlsx,.xls,.xlsm,.pdf,application/pdf,.zip,application/zip"
           className="hidden"
-          aria-label="Inventory count spreadsheets"
+          aria-label="Inventory count spreadsheets or valuation reports"
           onChange={(e) => pick(e.target.files)}
         />
         <p className="text-xs text-muted-foreground mt-1.5">
-          Pick the monthly Excel count sheets (or a .zip of them). The account on each sheet (151110 food, 151120
-          bar, 151130 retail) and its MONTH ENDING decide where it goes. Importing a month again replaces it.
+          Pick the monthly Excel count sheets, the RecTrac Inventory Valuation Report PDF for the pro shop, or a .zip
+          of them. The account on each sheet (151110 food, 151120 bar, 151130 retail) and its MONTH ENDING decide
+          where it goes; the RecTrac report goes to pro shop retail for the month it prints. When both are picked
+          for the same month, the RecTrac report is used. Importing a month again replaces it.
         </p>
       </div>
 

@@ -102,10 +102,33 @@ export interface CountLine {
 }
 
 /** Each item's latest cost from the count sheets for one area (sold-as-is items only). */
+/**
+ * Pours in a bottle of liquor: 1.5 oz pours from a 750 ml bottle unless the
+ * count sheet names a 1 L or 1.75 L bottle.
+ */
+export function poursPerBottle(description: string): number {
+  if (/1\.75\s?L\b|\bHANDLE\b/i.test(description)) return 39.4;
+  if (/\b1\s?L\b|\bLITER\b/i.test(description)) return 22.5;
+  return 16.9;
+}
+
+const isLiquor = (category: string | null) => /^LIQUOR$/i.test(category ?? "");
+
+/** RTC shirts and hoodies come to the pro shop free: a $0 cost is real, not missing. */
+const isFreeStock = (area: Area, description: string) => area === "pro_shop" && /^RTC\b/i.test(description.trim());
+
 export function costBook(lines: CountLine[], area: Area): CostItem[] {
   const latest = new Map<string, CountLine>();
   for (const l of lines) {
-    if (l.outlet !== area || !(Number(l.unit_cost) > 0) || !SOLD_AS_IS[area](l.category)) continue;
+    const liquor = area === "bar" && isLiquor(l.category);
+    const costed = Number(l.unit_cost) > 0 || (Number(l.unit_cost) === 0 && isFreeStock(area, l.description));
+    if (l.outlet !== area || !costed || !(SOLD_AS_IS[area](l.category) || liquor)) continue;
+    if (liquor) {
+      const key = `${l.description.trim().toUpperCase()}|`;
+      const prev = latest.get(key);
+      if (!prev || l.month_end > prev.month_end) latest.set(key, l);
+      continue;
+    }
     // 2-liter bottles and liters of mix are poured, not sold one to a sale.
     if (area !== "pro_shop" && /\b2\s?L\b|\/2L\b|\bLITER\b/i.test(l.description)) continue;
     // One cost per name and unit cost (a sleeve and a dozen are both kept).
@@ -113,7 +136,11 @@ export function costBook(lines: CountLine[], area: Area): CostItem[] {
     const prev = latest.get(key);
     if (!prev || l.month_end > prev.month_end) latest.set(key, l);
   }
-  return [...latest.values()].map((l) => ({ description: l.description, category: l.category, unitCost: Number(l.unit_cost) }));
+  return [...latest.values()].map((l) =>
+    area === "bar" && isLiquor(l.category)
+      ? { description: l.description, category: l.category, unitCost: r2(Number(l.unit_cost) / poursPerBottle(l.description)), bottleCost: Number(l.unit_cost) }
+      : { description: l.description, category: l.category, unitCost: Number(l.unit_cost) },
+  );
 }
 
 export interface PricedItem {
@@ -149,7 +176,13 @@ export function quarterUp(n: number): number {
  * Every item sold in an area over the period, with what it costs, its cost %,
  * and the price that would bring it to target. Biggest sellers first.
  */
-export function pricedItems(sales: ItemSale[], book: CostItem[], area: Area): PricedItem[] {
+export function pricedItems(
+  sales: ItemSale[],
+  book: CostItem[],
+  area: Area,
+  /** A cost from somewhere other than the count sheets (the restaurant's cost cards), tried first. */
+  costOf?: (description: string) => { unitCost: number; from: string[] } | null,
+): PricedItem[] {
   const target = AREA_TARGET[area] / 100;
   const byItem = new Map<string, { description: string; qty: number; sales: number }>();
   for (const s of sales) {
@@ -164,7 +197,7 @@ export function pricedItems(sales: ItemSale[], book: CostItem[], area: Area): Pr
   for (const it of byItem.values()) {
     if (!(it.qty > 0) || !(it.sales > 0)) continue;
     const price = it.sales / it.qty;
-    const m = matchCost(it.description, book, price);
+    const m = costOf?.(it.description) ?? matchCost(it.description, book, price);
     const unitCost = m ? r2(m.unitCost) : null;
     const costPct = unitCost != null ? Math.round((unitCost / price) * 1000) / 10 : null;
     const unitMismatch = unitCost != null && unitCost > price * MISMATCH;

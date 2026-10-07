@@ -48,6 +48,8 @@ import {
   type StoredBudgetReport,
 } from "@/lib/sap/budget-store";
 import type { BudgetBlock } from "@/lib/sap/budget-report";
+import { COST_CARDS, cardCostFor, priceCard, type LatestPrice } from "@/lib/restaurant/cost-cards";
+import { loadCardPrices } from "@/lib/restaurant/load-card-prices";
 
 const SalesChart = dynamic(() => import("./performance-charts").then((m) => m.SalesChart), {
   ssr: false,
@@ -76,6 +78,8 @@ interface Loaded {
   countLines: CountLine[];
   itemSales: ItemSale[];
   purchaseLines: PurchaseLineLite[];
+  /** Latest US Foods prices for the cost cards' products (the restaurant's menu item costs). */
+  cardPrices: Map<string, LatestPrice>;
   /** The latest SAP budget report and its Buckley's / merchandise cost centers. */
   sap: { report: StoredBudgetReport; blocks: BudgetBlock[] } | null;
   /** Tables that aren't there yet (a database update not run). */
@@ -88,7 +92,7 @@ type PurchaseLineRow = { description: string; extended: number; category: string
 
 /** Two years back (for last year's same months) through today. */
 async function loadAll(since: string, areas: Area[]): Promise<Loaded> {
-  const out: Loaded = { purchases: [], sales: [], counts: [], countLines: [], itemSales: [], purchaseLines: [], sap: null, missing: [], error: null };
+  const out: Loaded = { purchases: [], sales: [], counts: [], countLines: [], itemSales: [], purchaseLines: [], cardPrices: new Map(), sap: null, missing: [], error: null };
   const categories = areas.map((a) => ({ restaurant: "food_beverage", bar: "bar", pro_shop: "pro_shop" })[a]).join(",");
   const soft = <T,>(name: string, p: Promise<T[]>) =>
     p.catch((e) => {
@@ -179,6 +183,10 @@ async function loadAll(since: string, areas: Area[]): Promise<Loaded> {
       category: l.category,
       outlet: l.outlet ?? null,
     }));
+  if (areas.includes("restaurant")) {
+    // No invoices on file yet: the cards fall back to their own prices.
+    out.cardPrices = await loadCardPrices().catch(() => new Map<string, LatestPrice>());
+  }
   out.sap = await loadSap(areas);
   return out;
 }
@@ -420,7 +428,13 @@ function PerformanceContent() {
     const summaries = areaSummaries(months, through);
     const book = costBook(data.countLines, area);
     const yearAgo = `${addMonths(through, -11)}-01`;
-    const items = pricedItems(data.itemSales.filter((s) => s.sale_date >= yearAgo), book, area);
+    // Restaurant menu items cost what their cost card says (bottles, candy, and chips come from the counts).
+    const cards = area === "restaurant" ? COST_CARDS.map((c) => priceCard(c, data.cardPrices)) : [];
+    const fromCard = (description: string) => {
+      const p = cardCostFor(description, cards);
+      return p ? { unitCost: p.cost, from: [`Cost card: ${p.card.name}`] } : null;
+    };
+    const items = pricedItems(data.itemSales.filter((s) => s.sale_date >= yearAgo), book, area, area === "restaurant" ? fromCard : undefined);
     const look = outlook(months, area, through);
     const latestCount =
       data.counts

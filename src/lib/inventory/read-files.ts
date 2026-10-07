@@ -1,9 +1,10 @@
 /**
- * Open inventory count spreadsheets (.xlsx / .xls, or a .zip of them) and
- * read each into a valuation. SheetJS is loaded only when needed.
+ * Open inventory count spreadsheets (.xlsx / .xls) and RecTrac Inventory
+ * Valuation Report PDFs (or a .zip of them) and read each into a valuation.
+ * SheetJS and pdf.js are loaded only when needed.
  */
 import JSZip from "jszip";
-import { parseValuationWorkbook, pickValuations, type Rows, type ValuationFile } from "./valuation";
+import { parseValuationReport, parseValuationWorkbook, pickValuations, type Rows, type ValuationFile } from "./valuation";
 
 export interface InputFile {
   name: string;
@@ -11,6 +12,8 @@ export interface InputFile {
 }
 
 const isSheet = (n: string) => /\.(xlsx|xlsm|xls)$/i.test(n) && !n.startsWith("~$");
+const isPdf = (n: string) => /\.pdf$/i.test(n);
+const readable = (n: string) => isSheet(n) || isPdf(n);
 
 async function expand(files: InputFile[]): Promise<{ sheets: InputFile[]; other: string[] }> {
   const sheets: InputFile[] = [];
@@ -21,10 +24,10 @@ async function expand(files: InputFile[]): Promise<{ sheets: InputFile[]; other:
       for (const entry of Object.values(zip.files)) {
         const base = entry.name.split("/").pop() ?? entry.name;
         if (entry.dir || entry.name.startsWith("__MACOSX/") || base.startsWith("._")) continue;
-        if (isSheet(base)) sheets.push({ name: base, data: await entry.async("uint8array") });
+        if (readable(base)) sheets.push({ name: base, data: await entry.async("uint8array") });
         else other.push(base);
       }
-    } else if (isSheet(f.name)) {
+    } else if (readable(f.name)) {
       sheets.push(f);
     } else {
       other.push(f.name);
@@ -36,17 +39,24 @@ async function expand(files: InputFile[]): Promise<{ sheets: InputFile[]; other:
 export interface InventoryReadResult {
   kept: ValuationFile[];
   setAside: { fileName: string; reason: string }[];
-  /** Files that weren't a count sheet (PDF reports, photos, other spreadsheets). */
+  /** Files that weren't a count sheet or valuation report (other PDFs, photos, other spreadsheets). */
   unreadable: string[];
 }
 
 export async function readInventoryFiles(files: InputFile[]): Promise<InventoryReadResult> {
-  const XLSX = await import("xlsx");
   const { sheets, other } = await expand(files);
   const found: ValuationFile[] = [];
   const unreadable = [...other];
   for (const f of sheets) {
     try {
+      if (isPdf(f.name)) {
+        const { pdfTextLines } = await import("@/lib/pdf/text-lines");
+        const parsed = parseValuationReport(await pdfTextLines(f.data));
+        if (parsed) found.push({ fileName: f.name, valuation: parsed });
+        else unreadable.push(f.name);
+        continue;
+      }
+      const XLSX = await import("xlsx");
       const wb = XLSX.read(f.data);
       const parsed = parseValuationWorkbook(
         wb.SheetNames.map((name) => ({

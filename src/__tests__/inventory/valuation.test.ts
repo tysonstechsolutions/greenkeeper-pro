@@ -7,6 +7,7 @@ import {
   cellNumber,
   parseMonthEnd,
   parseValuationSheet,
+  parseValuationReport,
   parseValuationWorkbook,
   pickValuations,
   type Rows,
@@ -96,6 +97,66 @@ describe("picking one count per month", () => {
     ]);
     expect(kept.map((k) => k.fileName)).toEqual(["MAY - BAR FINAL.xlsx", "MAY - FOOD.xlsx"]);
     expect(setAside.map((s) => s.fileName)).toEqual(["MAY - BAR.xlsx"]);
+  });
+});
+
+// RecTrac's Inventory Valuation Report as pdf.js prints it (September 2026, trimmed).
+const REPORT = [
+  "Veteran Memorial Golf Page: 1 of 4",
+  "Inventory Valuation Report",
+  "September 2026",
+  "Inventory Code Description UOM Qty on Hand Last Cost Cost Value Unit Price Sale Value Margin",
+  "MA7009-16-204-040 BC AMERICAN CLASSIC EACH 3 18.55 55.65 19.00 57.00 1.35",
+  "MA7009-16-204-046   RTC TEE SHIRTS   EACH   -202 0.00 0.00 3.00 -606.00 -606.00",
+  "MA7009-16-204-061 LVLWR ORIGINAL ICE 2 EACH 6 32.15 192.90 55.00 330.00 137.10",
+  "MA7009-16-204-401 Got Booted T-shirt EACH 0 9.55 0.00 18.00 0.00 0.00",
+  "MA7009-16-209-025 SWANK 1500404763 GLASSE EACH 1 19.22 19.22 30.00 30.00 10.78",
+  "MA7009-16-207-010 LONG ITEM EACH 1,200 1.00 1,200.00 2.00 2,400.00 1,200.00",
+  "Totals: 1007 1,467.77 2,211.00 743.23",
+  "Averages: 10 22.56 132.28 36.02 192.70 60.42",
+  "Items Selected: 6",
+  "Veterans Memorial Golf Course User: MA0110 Run Date/Time: 10/07/2026 @ 13:40",
+];
+
+describe("RecTrac Inventory Valuation Report", () => {
+  it("reads every item at its last cost, for pro shop retail at the month's end", () => {
+    const v = parseValuationReport(REPORT)!;
+    expect(v).toMatchObject({
+      outlet: "pro_shop", account: "151130", costCenter: "20086", monthEnd: "2026-09-30",
+      statedTotal: 1467.77, linesTotal: 1467.77, total: 1467.77, fromReport: true,
+    });
+    // The zero-on-hand item is left out.
+    expect(v.lines.map((l) => l.inventoryCode)).toEqual([
+      "MA7009-16-204-040", "MA7009-16-204-046", "MA7009-16-204-061", "MA7009-16-209-025", "MA7009-16-207-010",
+    ]);
+    expect(v.lines[2]).toEqual({
+      inventoryCode: "MA7009-16-204-061", description: "LVLWR ORIGINAL ICE 2", category: null, unit: "EACH", qty: 6, unitCost: 32.15, value: 192.9,
+    });
+    expect(v.lines[4].qty).toBe(1200);
+    expect(v.notes).toEqual(["1 item shows less than zero on hand in RecTrac (sold more than was received in): RTC TEE SHIRTS."]);
+  });
+
+  it("notes a Totals line that doesn't match the items", () => {
+    const v = parseValuationReport(REPORT.map((l) => (l.startsWith("Totals:") ? "Totals: 1007 1,500.00 2,211.00 743.23" : l)))!;
+    expect(v.total).toBe(1467.77);
+    expect(v.notes[0]).toMatch(/add up to \$1,467\.77 but the report's Totals line shows \$1,500\.00/);
+  });
+
+  it("isn't fooled by other reports or unknown outlets", () => {
+    expect(parseValuationReport(["Inventory Sales History By Item", "September 2026", REPORT[4]])).toBeNull();
+    expect(parseValuationReport(REPORT.slice(0, 4))).toBeNull();
+    expect(parseValuationReport(REPORT.map((l) => l.replace("MA7009-16-204-040", "MA7009-31-101-040")))).toBeNull();
+  });
+
+  it("is used over the pro shop's total-only count sheet for the same month", () => {
+    const report = parseValuationReport(REPORT)!;
+    const sheet = { ...report, fromReport: undefined, lines: [], linesTotal: null, statedTotal: 1467.77, total: 1467.77 };
+    const { kept, setAside } = pickValuations([
+      { fileName: "SEP - 20086 (151130) - RETAIL FINAL.xlsx", valuation: sheet },
+      { fileName: "Inventory_Valuation_Report.pdf", valuation: report },
+    ]);
+    expect(kept.map((k) => k.fileName)).toEqual(["Inventory_Valuation_Report.pdf"]);
+    expect(setAside.map((s) => s.fileName)).toEqual(["SEP - 20086 (151130) - RETAIL FINAL.xlsx"]);
   });
 });
 

@@ -51,6 +51,8 @@ export interface Valuation {
   countedBy: string | null;
   /** Plain-English notes on anything off about the sheet. */
   notes: string[];
+  /** Read from RecTrac's Inventory Valuation Report (the system of record) rather than a count sheet. */
+  fromReport?: boolean;
 }
 
 export type Rows = string[][];
@@ -251,6 +253,106 @@ export function parseValuationWorkbook(sheets: { name: string; rows: Rows }[], f
   return best;
 }
 
+// ── RecTrac Inventory Valuation Report (PDF) ───────────────────────────────
+
+const MONTH_NAMES = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+
+/** "September 2026" → "2026-09-30" (the month's last day). */
+function monthNameEnd(text: string): string | null {
+  const m = text.trim().toUpperCase().match(/^([A-Z]+)\s+(\d{4})$/);
+  if (!m) return null;
+  const i = MONTH_NAMES.indexOf(m[1]);
+  if (i < 0) return null;
+  const last = new Date(Date.UTC(Number(m[2]), i + 1, 0)).getUTCDate();
+  return `${m[2]}-${String(i + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+}
+
+const NUM = "(-?[\\d,]+(?:\\.\\d+)?)";
+/** Code, description, UOM, then qty on hand, last cost, cost value, unit price, sale value, margin. */
+const REPORT_LINE = new RegExp(`^([A-Z]{2}\\d{4}-\\d{2}-\\d{3}-[A-Z0-9]+)\\s+(.+?)\\s+(\\S+)\\s+${NUM}\\s+${NUM}\\s+${NUM}\\s+${NUM}\\s+${NUM}\\s+${NUM}$`);
+
+/** RecTrac inventory codes by outlet: the pro shop's retail is MA7009-16-2xx. */
+function reportOutlet(code: string): InventoryOutlet | null {
+  return /^[A-Z]{2}\d{4}-16-2\d{2}-/.test(code) ? "pro_shop" : null;
+}
+
+const REPORT_ACCOUNT: Record<InventoryOutlet, string> = { restaurant: "151110", bar: "151120", pro_shop: "151130" };
+const REPORT_COST_CENTER: Record<InventoryOutlet, string> = { restaurant: "20091", bar: "20091", pro_shop: "20086" };
+
+/**
+ * Read RecTrac's "Inventory Valuation Report" from its PDF text lines (see
+ * lib/pdf/text-lines). Each item is valued at its last cost; the Totals
+ * line's cost value is the stated total. Null when it isn't that report or
+ * its items aren't an outlet we know.
+ */
+export function parseValuationReport(lines: string[]): Valuation | null {
+  const text = lines.map((l) => l.replace(/\s+/g, " ").trim());
+  const title = text.findIndex((l) => /^Inventory Valuation Report$/i.test(l));
+  if (title < 0) return null;
+  const monthEnd = text.slice(title + 1, title + 4).map(monthNameEnd).find((d): d is string => !!d) ?? null;
+  if (!monthEnd) return null;
+
+  const items: (ValuationLine & { outlet: InventoryOutlet | null })[] = [];
+  let stated: number | null = null;
+  for (const l of text) {
+    const m = l.match(REPORT_LINE);
+    if (m) {
+      items.push({
+        inventoryCode: m[1],
+        description: m[2],
+        category: null,
+        unit: m[3],
+        qty: cellNumber(m[4]) ?? 0,
+        unitCost: cellNumber(m[5]) ?? 0,
+        value: cellNumber(m[6]) ?? 0,
+        outlet: reportOutlet(m[1]),
+      });
+      continue;
+    }
+    // "Totals: 896 12,037.45 17,536.00 5,498.55" → qty, cost value, sale value, margin.
+    const t = l.match(/^Totals:\s*(.*)$/i);
+    if (t && stated == null) {
+      const nums = t[1].split(" ").map(cellNumber);
+      if (nums.length >= 2 && nums[1] != null) stated = nums[1];
+    }
+  }
+  if (items.length === 0) return null;
+  const outlets = new Set(items.map((i) => i.outlet));
+  if (outlets.size !== 1 || outlets.has(null)) return null;
+  const outlet = items[0].outlet!;
+
+  const counted: ValuationLine[] = items
+    .filter((l) => l.qty !== 0 || l.value !== 0)
+    .map((l) => ({ description: l.description, category: l.category, unit: l.unit, qty: l.qty, unitCost: l.unitCost, value: l.value, inventoryCode: l.inventoryCode }));
+  const linesTotal = r2(counted.reduce((s, l) => s + l.value, 0));
+  const notes: string[] = [];
+  const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (stated != null && Math.abs(linesTotal - stated) > 0.1) {
+    notes.push(`The items add up to ${money(linesTotal)} but the report's Totals line shows ${money(stated)}. Using the items.`);
+  }
+  const negative = counted.filter((l) => l.qty < 0);
+  if (negative.length) {
+    notes.push(
+      `${negative.length} item${negative.length === 1 ? " shows" : "s show"} less than zero on hand in RecTrac (sold more than was received in): ${negative
+        .map((l) => l.description)
+        .join(", ")}.`,
+    );
+  }
+  return {
+    outlet,
+    account: REPORT_ACCOUNT[outlet],
+    costCenter: REPORT_COST_CENTER[outlet],
+    monthEnd,
+    statedTotal: stated,
+    linesTotal,
+    total: linesTotal,
+    lines: counted,
+    countedBy: null,
+    notes,
+    fromReport: true,
+  };
+}
+
 export interface ValuationFile {
   fileName: string;
   valuation: Valuation;
@@ -270,7 +372,10 @@ export function pickValuations(files: ValuationFile[]): { kept: ValuationFile[];
   }
   const kept: ValuationFile[] = [];
   const setAside: { fileName: string; reason: string }[] = [];
+  // RecTrac's own report beats any count sheet for the same month: the
+  // pro shop sheet is usually just its total ("see attached report").
   const score = (f: ValuationFile) =>
+    (f.valuation.fromReport ? 8 : 0) +
     (/\bFINAL\b/i.test(f.fileName) ? 4 : 0) + (f.valuation.total > 0 ? 2 : 0) + f.valuation.lines.length / 10000;
   for (const list of groups.values()) {
     const sorted = [...list].sort((a, b) => score(b) - score(a) || a.fileName.localeCompare(b.fileName));

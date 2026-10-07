@@ -16,6 +16,8 @@ export interface CostItem {
   /** Count-sheet category: BEER, SPECIAL, WINE, LIQUOR, BEVERAGES, SNACKS… */
   category: string | null;
   unitCost: number;
+  /** Liquor: what the bottle cost (unitCost is then one pour). */
+  bottleCost?: number;
 }
 
 /** Words that never identify a product on their own. */
@@ -38,6 +40,8 @@ const SAME: Record<string, string> = {
   REV: "REVOLUTION",
   CUT: "CUTWATER",
   EXPRESSO: "ESPRESSO",
+  CAPT: "CAPTAIN",
+  MALABU: "MALIBU",
   LEINIE: "LEINENKUGEL",
   XX: "EQUIS",
   PBR: "PABST",
@@ -64,6 +68,7 @@ const CUTWATER_FLAVOR: Record<string, string> = {
   PINE: "PINEAPPLE",
   PEPERMINT: "PEPPERMINT",
   T: "TAI",
+  RUN: "RUM", // the count sheets' "TIKI RUN MAI TAI"
 };
 
 /** Product words, in order, with sizes and filler removed. */
@@ -84,6 +89,8 @@ export function productWords(description: string): string[] {
       SN: ["SIERRA", "NEVADA"],
       TH: ["TIGHTHEAD"],
       NH: ["NEW", "HOLLAND"],
+      // RecTrac's Cutwater flavor buttons: "CW Vodka Mule".
+      CW: ["CUTWATER"],
     };
     if (i === 0 && FRONT[w]) {
       out.push(...FRONT[w]);
@@ -122,6 +129,10 @@ const FAMILIES: { sale: RegExp; covers: (c: CostItem) => boolean }[] = [
   },
   { sale: /^BOTTLE WATER$|^WATER$/i, covers: (c) => /^WATER\b/i.test(c.description) },
   { sale: /^CHIPS\/PRETZELS$/i, covers: (c) => /^(CHIPS?|SNACK: PRETZELS)\b/i.test(c.description) },
+  // An extra shot is one more pour from that shelf: top shelf bottles cost $25 or more, well $10-25, house under $10.
+  { sale: /^EXTRA SHOT TOP SHELF$/i, covers: (c) => c.bottleCost != null && c.bottleCost >= 25 },
+  { sale: /^EXTRA SHOT WELL$/i, covers: (c) => c.bottleCost != null && c.bottleCost >= 10 && c.bottleCost < 25 },
+  { sale: /^EXTRA SHOT HOUSE( LIQUOR)?$/i, covers: (c) => c.bottleCost != null && c.bottleCost < 10 },
 ];
 
 export interface CostMatch {

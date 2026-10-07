@@ -219,6 +219,7 @@ const RESTAURANT_PURCHASES: AppEntry = { href: "/restaurant/purchases", label: "
 const FOOD_COST: AppEntry = { href: "/restaurant/food-cost", label: "Food & Bar Cost", icon: PieChart, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["cogs", "food cost", "bar cost", "us foods", "invoice", "price"] };
 const PERFORMANCE: AppEntry = { href: "/performance", label: "Performance", icon: TrendingUp, color: "from-emerald-500 to-teal-600", group: GROUPS.money, keywords: ["cogs", "cost of goods", "sales", "trend", "outlook", "prices", "recommendations", "bar", "pro shop", "restaurant", "dashboard"] };
 const MONTH_END_INVENTORY: AppEntry = { href: "/restaurant/inventory-values", label: "Month-End Inventory", icon: FileSpreadsheet, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["inventory", "count sheet", "month end", "valuation", "151110", "151120", "151130", "cogs"] };
+const COST_CARDS_PAGE: AppEntry = { href: "/restaurant/cost-cards", label: "Cost Cards", icon: ClipboardList, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["cost card", "recipe", "build sheet", "portion", "plate cost", "menu price", "cogs"] };
 const ORDER_GUIDE: AppEntry = { href: "/restaurant/order-guide", label: "Order Guide", icon: ClipboardList, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["us foods", "order", "usual items", "reorder"] };
 const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
 const MARKETING: AppEntry = { href: "/marketing", label: "Daily Specials", icon: Megaphone, color: "from-amber-500 to-orange-600", group: GROUPS.people, keywords: ["marketing", "specials", "promotion", "flyer", "hot dog monday", "taco tuesday", "advertise", "events"] };
@@ -332,7 +333,7 @@ export const HUB_RESTAURANT: AppEntry = {
   icon: UtensilsCrossed,
   color: "from-amber-500 to-orange-600",
   group: GROUPS.workspaces,
-  children: [PERFORMANCE, SAP_REPORT, RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, MONTH_END_INVENTORY, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
+  children: [PERFORMANCE, COST_CARDS_PAGE, SAP_REPORT, RESTAURANT_INVENTORY, RESTAURANT_PURCHASES, FOOD_COST, MONTH_END_INVENTORY, ORDER_GUIDE, MARKETING, DUTY_LOG, REVENUE, ORDER_LIST, CLUBHOUSE, CALENDAR],
 };
 
 export const HUB_PRO_SHOP: AppEntry = {

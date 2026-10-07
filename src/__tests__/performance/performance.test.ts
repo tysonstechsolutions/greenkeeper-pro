@@ -291,6 +291,43 @@ describe("recommendations", () => {
     expect(matchCost("Mai Tai", book)?.unitCost).toBe(2.5);
   });
 
+  it("costs liquor by the pour, and extra shots from that shelf", () => {
+    const count = (description: string, unit_cost: number, category = "LIQUOR") => ({ outlet: "bar", month_end: "2026-08-31", description, category, unit_cost });
+    const book = costBook(
+      [count("CROWN ROYAL", 33.5), count("RUM: CAPT. MORGAN", 25), count("RUM: MALIBU 1.75L", 36.66), count("VODKA: ARISTOCRAT", 4.66), count("COORS LITE 16 OZ", 1.1, "BEER")],
+      "bar",
+    );
+    // 1.5 oz pours: 16.9 from a 750 ml bottle, 39.4 from a 1.75 L.
+    expect(book.find((c) => c.description === "CROWN ROYAL")).toMatchObject({ unitCost: 1.98, bottleCost: 33.5 });
+    expect(book.find((c) => /MALIBU/.test(c.description))?.unitCost).toBe(0.93);
+    expect(book.find((c) => /COORS/.test(c.description))).toEqual({ description: "COORS LITE 16 OZ", category: "BEER", unitCost: 1.1 });
+    expect(matchCost("CAPTAIN MORGAN", book)?.unitCost).toBe(1.48);
+    expect(matchCost("MALABU RUM", book)?.unitCost).toBe(0.93);
+    expect(matchCost("EXTRA SHOT TOP SHELF", book)?.from).toEqual(["CROWN ROYAL", "RUM: CAPT. MORGAN", "RUM: MALIBU 1.75L"]);
+    expect(matchCost("EXTRA SHOT HOUSE LIQUOR", book)?.from).toEqual(["VODKA: ARISTOCRAT"]);
+    // Liquor is the bar's: the restaurant never gets it.
+    expect(costBook([{ ...count("CROWN ROYAL", 33.5), outlet: "restaurant" }], "restaurant")).toEqual([]);
+  });
+
+  it("costs RTC shirts at $0 (they come free) but still skips other $0 items", () => {
+    const count = (description: string, unit_cost: number) => ({ outlet: "pro_shop", month_end: "2026-09-30", description, category: null, unit_cost });
+    const book = costBook([count("RTC TEE SHIRTS", 0), count("RTC HOODIES", 0), count("Got Booted T-shirt", 0), count("BC AMERICAN CLASSIC", 18.55)], "pro_shop");
+    expect(book.map((c) => c.description)).toEqual(["RTC TEE SHIRTS", "RTC HOODIES", "BC AMERICAN CLASSIC"]);
+    const items = pricedItems([{ outlet: "pro_shop", sale_date: "2026-09-12", description: "RTC TEE SHIRTS", qty: 10, net: 30 }], book, "pro_shop");
+    expect(items[0]).toMatchObject({ unitCost: 0, costPct: 0 });
+  });
+
+  it("matches the Cutwater flavor buttons and the plain Cutwater button", () => {
+    const book: CostItem[] = [
+      { description: "CUTWATER 12OZ TIKI RUN MAI TAI", category: "Seltzer", unitCost: 2.47 },
+      { description: "CUTWATER 12OZ VODKA MULE", category: "Seltzer", unitCost: 2.47 },
+      { description: "CUTWATER, ASST 12OZ", category: "SPECIAL", unitCost: 2.26 },
+    ];
+    expect(matchCost("CW Tiki Rum Mai Tai", book)?.from).toEqual(["CUTWATER 12OZ TIKI RUN MAI TAI"]);
+    expect(matchCost("CW Vodka Mule", book)?.from).toEqual(["CUTWATER 12OZ VODKA MULE"]);
+    expect(matchCost("Cutwater", book)?.from).toEqual(["CUTWATER, ASST 12OZ"]);
+  });
+
   it("warns about stock going into the slow months", () => {
     const recs = recommendations({
       ...base,
