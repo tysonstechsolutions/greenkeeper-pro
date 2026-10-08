@@ -3,12 +3,12 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarClock, ChevronRight, ClipboardCheck, FileArchive, Loader2, Play, Printer, Users } from "lucide-react";
+import { CalendarClock, ChevronRight, ClipboardCheck, FileArchive, FileUp, Loader2, Play, Printer, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ADMIN_ROLES, MANAGEMENT_ROLES, RoleGuard, useRoleAccess, withFbManager } from "@/components/auth/role-guard";
 import { getInitials, roleLabels } from "@/lib/hooks/useProfiles";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { directSelectList, getCachedUserId } from "@/lib/supabase/rest";
+import { directRpc, directSelectList, getCachedUserId } from "@/lib/supabase/rest";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayLocal } from "@/lib/utils/date";
 import { payPlanGrade } from "@/lib/evaluations/facts";
@@ -32,7 +32,13 @@ import {
   evaluationPdfBlob,
   type EvaluationPrintData,
 } from "@/lib/evaluations/pdf";
-import { useEvaluationRoster, type NinetyDayEntry } from "@/lib/evaluations/use-evaluations";
+import {
+  useEvaluationRoster,
+  type DepartingEntry,
+  type NinetyDayEntry,
+  type RosterProfile,
+} from "@/lib/evaluations/use-evaluations";
+import { SF52_ACTION_LABELS } from "@/lib/staff/sf52-files";
 import { PROGRESS_COLORS, PROGRESS_LABELS, type EvaluationProgress } from "@/lib/evaluations/types";
 import { followThrough, followThroughText, type FollowThrough } from "@/lib/evaluations/follow-through";
 import type { StaffPersonnelPrivate } from "@/types/database";
@@ -49,7 +55,7 @@ function EvaluationsRoster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [me?.id, me?.role],
   );
-  const { entries, ninetyDay, notDue, loading, error } = useEvaluationRoster(period, viewer);
+  const { entries, ninetyDay, notDue, departing, missingHireDate, loading, error, reload } = useEvaluationRoster(period, viewer);
   const [printing, setPrinting] = useState<null | "print" | "zip">(null);
   const [printError, setPrintError] = useState<string | null>(null);
 
@@ -147,6 +153,12 @@ function EvaluationsRoster() {
         <p className="text-muted-foreground text-sm mt-1">
           Answer a few questions per person. The app writes the paperwork.
         </p>
+        {viewer.isManager || viewer.isFbManager ? (
+          <Link href="/staff/sf52/files/" className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1B4332] dark:text-emerald-400 mt-2 underline">
+            <FileUp className="w-4 h-4" />
+            Upload SF-52s (a resignation or transfer takes someone off these lists)
+          </Link>
+        ) : null}
       </div>
 
       <div role="tablist" aria-label="Which evaluations" className="grid grid-cols-2 gap-2 mb-4">
@@ -191,9 +203,13 @@ function EvaluationsRoster() {
           {error}
         </div>
       ) : tab === "ninety" ? (
-        <NinetyDayList items={ninetyDay} today={today} />
+        <>
+          <NinetyDayList items={ninetyDay} today={today} />
+          <DepartingNote items={departing} />
+        </>
       ) : (
         <>
+          {missingHireDate.length > 0 && <MissingHireDates people={missingHireDate} onSaved={reload} />}
           <label className="block mb-4">
             <span className="text-xs font-semibold text-muted-foreground">Rating period</span>
             <select
@@ -310,9 +326,99 @@ function EvaluationsRoster() {
               </ul>
             </div>
           )}
+          <DepartingNote items={departing} />
         </>
       )}
     </div>
+  );
+}
+
+/** People with a resignation or transfer SF-52 on file: off the lists. */
+function DepartingNote({ items }: { items: DepartingEntry[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-sm" aria-label="Leaving">
+      <p className="font-medium">Leaving: not evaluated ({items.length})</p>
+      <p className="text-xs text-muted-foreground mt-0.5">
+        A resignation or transfer SF-52 is on file. An evaluation already finished stays under Finished.{" "}
+        <Link href="/staff/sf52/files/" className="underline">
+          SF-52 files
+        </Link>
+      </p>
+      <ul className="mt-2 space-y-0.5">
+        {items.map((d) => (
+          <li key={d.profile.id}>
+            {d.profile.full_name || "Employee"}{" "}
+            <span className="text-xs text-muted-foreground">
+              · {SF52_ACTION_LABELS[d.action].toLowerCase()} SF-52 filed {shortDate(d.uploadedAt.slice(0, 10))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * People on the yearly list with no hire date: the app can't tell whether
+ * they're new. Entering it moves anyone under 90 days to their 90-day
+ * evaluation instead.
+ */
+function MissingHireDates({ people, onSaved }: { people: RosterProfile[]; onSaved: () => void }) {
+  const [dates, setDates] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (p: RosterProfile) => {
+    const hire = dates[p.id];
+    if (!hire) return;
+    setSaving(p.id);
+    setError(null);
+    try {
+      await directRpc(
+        "update_staff_profile",
+        { p_employee_id: p.id, p_directory: {}, p_personnel: { hire_date: hire } },
+        "evaluations.hireDate.save",
+      );
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save the hire date.");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <section
+      aria-label="Missing hire dates"
+      className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-sm"
+    >
+      <p className="font-medium text-amber-900 dark:text-amber-200">
+        {people.length} {people.length === 1 ? "person has" : "people have"} no hire date
+      </p>
+      <p className="text-xs text-amber-900/80 dark:text-amber-200/80 mt-0.5">
+        Without it the app can&apos;t tell if they&apos;re new, so they stay on this list. Anyone here fewer than {NEW_HIRE_DAYS} days
+        before the rating period ended moves to a 90-day evaluation once you add it.
+      </p>
+      <ul className="mt-2 space-y-2">
+        {people.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center gap-2">
+            <span className="flex-1 min-w-[9rem]">{p.full_name || "Employee"}</span>
+            <input
+              type="date"
+              aria-label={`Hire date for ${p.full_name || "Employee"}`}
+              value={dates[p.id] ?? ""}
+              onChange={(e) => setDates((d) => ({ ...d, [p.id]: e.target.value }))}
+              className="px-2 py-1.5 rounded-md border border-input bg-background text-sm"
+            />
+            <Button size="sm" variant="outline" disabled={!dates[p.id] || saving !== null} onClick={() => save(p)}>
+              {saving === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="text-sm text-destructive mt-2">{error}</p>}
+    </section>
   );
 }
 

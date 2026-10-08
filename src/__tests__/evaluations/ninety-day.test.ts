@@ -16,6 +16,7 @@ import {
 import { evaluationEditHref, evaluationListHref } from "@/lib/evaluations/links";
 import { kindFilter, splitRoster, type RosterProfile } from "@/lib/evaluations/use-evaluations";
 import type { StaffEvaluation } from "@/lib/evaluations/types";
+import { departuresByEmployee, sf52ActionOf } from "@/lib/staff/sf52-files";
 
 const FY2026 = fiscalYearPeriod(2026); // 2025-10-01 .. 2026-09-30
 
@@ -154,12 +155,57 @@ describe("splitRoster", () => {
     todayIso: "2026-10-05",
   });
 
-  it("hides anyone employed under 90 days, unless an evaluation was already started", () => {
-    // Late Hire (46 days) is nowhere; Started Anyway (34 days) keeps the
-    // year-end evaluation someone already began.
-    expect(split.entries.map((e) => e.profile.id).sort()).toEqual(["colin", "nodate", "old", "started"]);
-    expect(split.notDue).toEqual([]);
+  it("hides anyone employed under 90 days, even when a yearly evaluation was already started", () => {
+    // Late Hire (46 days) is nowhere. Started Anyway (34 days) had a year-end
+    // evaluation begun, but new hires get only the 90-day one.
+    expect(split.entries.map((e) => e.profile.id).sort()).toEqual(["colin", "nodate", "old"]);
+    expect(split.notDue.map((e) => e.profile.id)).toEqual(["started"]);
     expect(split.ninetyDay.map((e) => e.profile.id)).toEqual(["colin"]);
+  });
+
+  it("keeps a finished yearly evaluation for a new hire as finished", () => {
+    const done = splitRoster({ profiles, annual: [row("started", { status: "final" })], ninetyDay: [], hireDates, period: FY2026, viewer: { id: "gm", isManager: true }, todayIso: "2026-10-05" });
+    expect(done.entries.find((e) => e.profile.id === "started")?.progress).toBe("final");
+    expect(done.notDue).toEqual([]);
+  });
+
+  it("flags who on the yearly list has no hire date, unless hire dates couldn't be read", () => {
+    expect(split.missingHireDate.map((p) => p.id)).toEqual(["nodate"]);
+    const blind = splitRoster({ profiles, annual: [], ninetyDay: [], hireDates: new Map(), hireDatesKnown: false, period: FY2026, viewer: { id: "gm", isManager: true }, todayIso: "2026-10-05" });
+    expect(blind.missingHireDate).toEqual([]);
+  });
+
+  it("takes anyone with a resignation or transfer SF-52 off both lists", () => {
+    const files = [
+      { employee_id: "old", category: "sf52_resignation", created_at: "2026-10-03T15:00:00Z" },
+      { employee_id: "colin", category: "sf52_transfer", created_at: "2026-10-04T15:00:00Z" },
+      { employee_id: "nodate", category: "sf52", created_at: "2026-10-04T15:00:00Z" }, // a pay change: stays
+    ];
+    const departures = departuresByEmployee(files);
+    expect([...departures.keys()].sort()).toEqual(["colin", "old"]);
+    const leaving = splitRoster({ profiles, annual: [], ninetyDay: [], hireDates, departures, period: FY2026, viewer: { id: "gm", isManager: true }, todayIso: "2026-10-05" });
+    expect(leaving.entries.map((e) => e.profile.id)).toEqual(["nodate"]);
+    expect(leaving.ninetyDay).toEqual([]); // Colin's overdue 90-day evaluation is gone too
+    expect(leaving.departing.map((d) => [d.profile.id, d.action])).toEqual([
+      ["colin", "transfer"],
+      ["old", "resignation"],
+    ]);
+    // An evaluation already finished stays as finished.
+    const finished = splitRoster({ profiles, annual: [row("old", { status: "final" })], ninetyDay: [], hireDates, departures, period: FY2026, viewer: { id: "gm", isManager: true }, todayIso: "2026-10-05" });
+    expect(finished.entries.find((e) => e.profile.id === "old")?.progress).toBe("final");
+  });
+
+  it("reads the SF-52 action from the document category", () => {
+    expect(sf52ActionOf("sf52_resignation")).toBe("resignation");
+    expect(sf52ActionOf("sf52_transfer")).toBe("transfer");
+    expect(sf52ActionOf("sf52")).toBe("other");
+    expect(sf52ActionOf("review")).toBeNull();
+    // The newest resignation/transfer wins.
+    const d = departuresByEmployee([
+      { employee_id: "a", category: "sf52_transfer", created_at: "2026-01-01T00:00:00Z" },
+      { employee_id: "a", category: "sf52_resignation", created_at: "2026-10-01T00:00:00Z" },
+    ]);
+    expect(d.get("a")).toEqual({ action: "resignation", uploadedAt: "2026-10-01T00:00:00Z" });
   });
 
   it("dates the year-end list and flags what's overdue", () => {

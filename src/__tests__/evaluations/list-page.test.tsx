@@ -2,6 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "../utils/test-utils";
 
 const nav = vi.hoisted(() => ({ search: "fy=2026", replace: vi.fn() }));
+const rpc = vi.hoisted(() => ({ calls: [] as { fn: string; args: unknown }[], reload: vi.fn() }));
+vi.mock("@/lib/supabase/rest", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/supabase/rest")>("@/lib/supabase/rest");
+  return {
+    ...actual,
+    directRpc: async (fn: string, args: unknown) => {
+      rpc.calls.push({ fn, args });
+      return null;
+    },
+  };
+});
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: nav.replace, back: vi.fn() }),
   usePathname: () => "/staff/evaluations",
@@ -44,15 +55,19 @@ vi.mock("@/lib/evaluations/use-evaluations", () => ({
       { profile: profile("new", "New Hire"), hireDate: "2026-08-04", dueDate: "2026-11-02", due: "due_soon", evaluation: null, progress: "not_started" },
     ],
     notDue: [{ profile: profile("late", "Late Hire"), hireDate: "2026-07-20" }],
+    departing: [{ profile: profile("quit", "Quinn Leaving"), action: "resignation", uploadedAt: "2026-10-20T15:00:00Z" }],
+    missingHireDate: [profile("ruben", "Ruben Villalobos")],
     loading: false,
     error: null,
-    reload: async () => undefined,
+    reload: rpc.reload,
   }),
 }));
 
 beforeEach(() => {
   nav.search = "fy=2026";
   nav.replace.mockClear();
+  rpc.calls = [];
+  rpc.reload.mockClear();
 });
 
 async function renderPage() {
@@ -61,6 +76,28 @@ async function renderPage() {
 }
 
 describe("evaluations page", () => {
+  it("lists people leaving (resignation or transfer SF-52) and links to SF-52 files", async () => {
+    await renderPage();
+    const leaving = screen.getByLabelText("Leaving");
+    expect(leaving).toHaveTextContent("Leaving: not evaluated (1)");
+    expect(leaving).toHaveTextContent("Quinn Leaving");
+    expect(leaving).toHaveTextContent("resignation SF-52 filed Oct 20, 2026");
+    expect(screen.getByRole("link", { name: /Upload SF-52s/ }).getAttribute("href")).toMatch(/^\/staff\/sf52\/files\/?$/);
+  });
+
+  it("asks for missing hire dates and saves one to the person's record", async () => {
+    const { user } = await renderPage();
+    const box = screen.getByRole("region", { name: "Missing hire dates" });
+    expect(box).toHaveTextContent("1 person has no hire date");
+    const input = within(box).getByLabelText("Hire date for Ruben Villalobos");
+    await user.type(input, "2026-08-15");
+    await user.click(within(box).getByRole("button", { name: "Save" }));
+    expect(rpc.calls).toEqual([
+      { fn: "update_staff_profile", args: { p_employee_id: "ruben", p_directory: {}, p_personnel: { hire_date: "2026-08-15" } } },
+    ]);
+    expect(rpc.reload).toHaveBeenCalled();
+  });
+
   it("has separate Year-end and 90-day tabs with what's left and what's overdue", async () => {
     const { user } = await renderPage();
     const yearTab = screen.getByRole("tab", { name: /Year-end/ });

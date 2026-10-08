@@ -15,6 +15,7 @@ import type { StaffPersonnelPrivate, UserRole } from "@/types/database";
 import { todayLocal } from "@/lib/utils/date";
 import { deactivateDepartedStaff } from "@/lib/staff/separation";
 import { isFbStaff } from "@/lib/auth/fb-manager";
+import { departuresByEmployee, loadSf52Files, type Departure } from "@/lib/staff/sf52-files";
 import { evaluationProgress } from "./compose";
 import { applyCrewRating, applyCrewSupervisory, defaultSupervisory, type CrewMember } from "./crew";
 import { buildFacts } from "./facts";
@@ -23,6 +24,7 @@ import {
   addDays,
   dueStatus,
   employedLongEnough,
+  isIsoDate,
   NEW_HIRE_DAYS,
   needsAnnualEvaluation,
   ninetyDayTiming,
@@ -93,6 +95,14 @@ export interface NotDueEntry {
   hireDate: string;
 }
 
+/** Taken off the evaluation lists: a resignation or transfer SF-52 is on file. */
+export interface DepartingEntry {
+  profile: RosterProfile;
+  action: Departure["action"];
+  /** When the SF-52 was filed. */
+  uploadedAt: string;
+}
+
 /** Which evaluation an editor or query is about. */
 export type EvaluationKind = "annual" | "ninety_day";
 
@@ -114,6 +124,10 @@ interface RosterSplitInput {
   annual: StaffEvaluation[];
   ninetyDay: StaffEvaluation[];
   hireDates: Map<string, string | null>;
+  /** False when the viewer couldn't read hire dates (then nobody is flagged as missing one). */
+  hireDatesKnown?: boolean;
+  /** People with a resignation or transfer SF-52 on file (see lib/staff/sf52-files). */
+  departures?: Map<string, Departure>;
   period: EvaluationPeriod;
   viewer: EvaluationViewer;
   todayIso: string;
@@ -125,14 +139,22 @@ interface RosterSplitInput {
  * - Nobody shows until they've been employed 90 days (an evaluation that was
  *   already started always shows).
  * - Yearly: active staff, except people hired fewer than 90 days before the
- *   period ended. Due Oct 31 (period end + 31 days).
+ *   period ended. They get only the 90-day evaluation, even if a yearly one
+ *   was started for them (a finished one still shows as finished). Due Oct 31
+ *   (period end + 31 days).
  * - 90-day: due on the 90-day mark, overdue from the next day; shown until
  *   90 days past the mark, and any unfinished 90-day evaluation.
+ * - A resignation or transfer SF-52 on file (see lib/staff/sf52-files) takes
+ *   the person off both lists, except an evaluation that's already final.
+ * - Anyone on the yearly list without a hire date is flagged, since the app
+ *   can't tell whether they're new.
  */
 export function splitRoster(input: RosterSplitInput): {
   entries: RosterEntry[];
   ninetyDay: NinetyDayEntry[];
   notDue: NotDueEntry[];
+  departing: DepartingEntry[];
+  missingHireDate: RosterProfile[];
 } {
   const { period, viewer, todayIso } = input;
   const annualBy = new Map(input.annual.map((e) => [e.employee_id, e]));
@@ -156,22 +178,31 @@ export function splitRoster(input: RosterSplitInput): {
   const entries: RosterEntry[] = [];
   const notDue: NotDueEntry[] = [];
   const ninetyDay: NinetyDayEntry[] = [];
+  const departing: DepartingEntry[] = [];
+  const missingHireDate: RosterProfile[] = [];
+  const hireDatesKnown = input.hireDatesKnown ?? true;
   for (const profile of visible) {
     const hireDate = input.hireDates.get(profile.id) ?? null;
     const evaluation = annualBy.get(profile.id) ?? null;
     const row = ninetyBy.get(profile.id) ?? null;
+    const departure = input.departures?.get(profile.id) ?? null;
+    if (departure) departing.push({ profile, action: departure.action, uploadedAt: departure.uploadedAt });
     // Too new to evaluate at all (unless someone already started one).
     if (!employedLongEnough(hireDate, todayIso) && !evaluation && !row) continue;
 
-    if (evaluation || needsAnnualEvaluation(hireDate, period)) {
-      const progress = evaluationProgress(evaluation);
-      entries.push({
-        profile,
-        evaluation,
-        progress,
-        dueDate: yearEndDue,
-        due: progress === "final" ? null : dueStatus(yearEndDue, todayIso),
-      });
+    const annualProgress = evaluationProgress(evaluation);
+    if (annualProgress === "final" || needsAnnualEvaluation(hireDate, period)) {
+      // Leaving: only a finished evaluation stays (as finished).
+      if (!departure || annualProgress === "final") {
+        entries.push({
+          profile,
+          evaluation,
+          progress: annualProgress,
+          dueDate: yearEndDue,
+          due: annualProgress === "final" ? null : dueStatus(yearEndDue, todayIso),
+        });
+        if (hireDatesKnown && annualProgress !== "final" && !isIsoDate(hireDate)) missingHireDate.push(profile);
+      }
     } else if (hireDate && hireDate <= period.end) {
       notDue.push({ profile, hireDate });
     }
@@ -183,6 +214,7 @@ export function splitRoster(input: RosterSplitInput): {
     if (timing || (row && row.status !== "final")) {
       const dueDate = row?.period_end ?? addDays(start, NEW_HIRE_DAYS);
       const progress = evaluationProgress(row);
+      if (departure && progress !== "final") continue;
       ninetyDay.push({
         profile,
         hireDate: start,
@@ -206,8 +238,12 @@ export function splitRoster(input: RosterSplitInput): {
       a.dueDate.localeCompare(b.dueDate) ||
       (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""),
   );
-  notDue.sort((a, b) => (a.profile.full_name ?? "").localeCompare(b.profile.full_name ?? ""));
-  return { entries, ninetyDay, notDue };
+  const byName = (a: { full_name: string | null }, b: { full_name: string | null }) =>
+    (a.full_name ?? "").localeCompare(b.full_name ?? "");
+  notDue.sort((a, b) => byName(a.profile, b.profile));
+  departing.sort((a, b) => byName(a.profile, b.profile));
+  missingHireDate.sort(byName);
+  return { entries, ninetyDay, notDue, departing, missingHireDate };
 }
 
 /**
@@ -223,6 +259,8 @@ export function useEvaluationRoster(
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [ninetyDay, setNinetyDay] = useState<NinetyDayEntry[]>([]);
   const [notDue, setNotDue] = useState<NotDueEntry[]>([]);
+  const [departing, setDeparting] = useState<DepartingEntry[]>([]);
+  const [missingHireDate, setMissingHireDate] = useState<RosterProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,7 +270,8 @@ export function useEvaluationRoster(
     try {
       // Someone whose resignation last day has passed is no longer evaluated.
       if (viewer.isManager) await deactivateDepartedStaff(todayLocal());
-      const [profiles, annual, ninety, personnel] = await Promise.all([
+      let hireDatesKnown = true;
+      const [profiles, annual, ninety, personnel, sf52Files] = await Promise.all([
         directSelectList<RosterProfile>("profiles", {
           columns: "id,full_name,role,is_active,supervisor_id,department",
           orderBy: [{ column: "full_name", ascending: true }],
@@ -251,13 +290,20 @@ export function useEvaluationRoster(
         directSelectList<Pick<StaffPersonnelPrivate, "employee_id" | "hire_date">>("staff_personnel_private", {
           columns: "employee_id,hire_date",
           label: "evaluations.roster.hire_dates",
-        }).catch(() => []),
+        }).catch(() => {
+          hireDatesKnown = false;
+          return [];
+        }),
+        // Resignation / transfer SF-52s take people off; without access to them, nobody is.
+        loadSf52Files().catch(() => []),
       ]);
       const split = splitRoster({
         profiles,
         annual,
         ninetyDay: ninety,
         hireDates: new Map(personnel.map((p) => [p.employee_id, p.hire_date])),
+        hireDatesKnown,
+        departures: departuresByEmployee(sf52Files),
         period,
         viewer,
         todayIso: todayLocal(),
@@ -265,6 +311,8 @@ export function useEvaluationRoster(
       setEntries(split.entries);
       setNinetyDay(split.ninetyDay);
       setNotDue(split.notDue);
+      setDeparting(split.departing);
+      setMissingHireDate(split.missingHireDate);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load evaluations.");
     } finally {
@@ -278,7 +326,7 @@ export function useEvaluationRoster(
     load();
   }, [load]);
 
-  return { entries, ninetyDay, notDue, loading, error, reload: load };
+  return { entries, ninetyDay, notDue, departing, missingHireDate, loading, error, reload: load };
 }
 
 export interface EvaluationEmployee {

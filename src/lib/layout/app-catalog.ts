@@ -254,6 +254,7 @@ const CAPITAL_PROJECTS: AppEntry = { href: "/capital-projects", label: "Capital 
 const TOURNAMENTS: AppEntry = { href: "/tournaments", label: "Tournaments", icon: Trophy, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 const ONBOARDING: AppEntry = { href: "/onboarding", label: "Onboarding & SOPs", icon: GraduationCap, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
 const SF52: AppEntry = { href: "/staff/sf52", label: "SF-52", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
+const SF52_FILES: AppEntry = { href: "/staff/sf52/files", label: "SF-52 Files", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const DD200: AppEntry = { href: "/dd-forms/200", label: "DD-200 (Property Loss)", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const DD2212: AppEntry = { href: "/dd-forms/2212", label: "2212 (Disposition)", icon: FileText, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
 const DISPOSITION_PACKET: AppEntry = { href: "/dd-forms/packet", label: "Disposition Packet", icon: Package, color: "from-slate-500 to-slate-700", group: GROUPS.paperwork };
@@ -295,7 +296,7 @@ export const HUB_PAPERWORK: AppEntry = {
   icon: ClipboardSignature,
   color: "from-slate-500 to-slate-700",
   group: GROUPS.paperwork,
-  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, DD200, DD2212, DISPOSITION_PACKET, ENVIRONMENTAL],
+  children: [SOW, SOLE_SOURCE, WORK_ORDERS, SF52, SF52_FILES, DD200, DD2212, DISPOSITION_PACKET, ENVIRONMENTAL],
 };
 
 export const HUB_PROCUREMENT: AppEntry = {
@@ -460,6 +461,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
     ONEONONE,
     EVALUATIONS,
     SF52,
+    SF52_FILES,
     ASSISTANT,
     KNOWLEDGE,
   ],

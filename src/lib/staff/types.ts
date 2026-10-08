@@ -94,8 +94,11 @@ export const DOC_CATEGORY_LABELS: Record<string, string> = {
   certification: "Certification / License",
   tax: "Tax / Payroll (W-4, I-9)",
   review: "Performance Review",
+  sf52_resignation: "SF-52 – Resignation",
+  sf52_transfer: "SF-52 – Transfer",
+  sf52: "SF-52 – Other action",
   id: "ID / Personal",
   other: "Other",
 };
 
-export const DOC_CATEGORY_ORDER = ["offer", "certification", "tax", "review", "id", "other"];
+export const DOC_CATEGORY_ORDER = ["offer", "certification", "tax", "review", "sf52_resignation", "sf52_transfer", "sf52", "id", "other"];
