@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   directInsertRow,
+  directPatchRow,
   directPatchRowReturning,
   directSelectList,
   directSelectRow,
@@ -246,6 +247,43 @@ export function splitRoster(input: RosterSplitInput): {
   return { entries, ninetyDay, notDue, departing, missingHireDate };
 }
 
+/** What a reset draft goes back to: blank, still a draft, same period. */
+export const RESET_EVALUATION_PATCH = {
+  ratings: {},
+  overall_rating: null,
+  awards: {},
+  answers: {},
+  narrative: {},
+  facts: {},
+} as const;
+
+const isEmptyObject = (v: unknown) => !v || (typeof v === "object" && Object.keys(v as object).length === 0);
+
+/**
+ * Yearly evaluations started for people too new to get one (hired fewer than
+ * 90 days before the period ended): unfinished drafts with anything in them.
+ * They get reset to blank. Finished ones are never touched.
+ */
+export function newHireDraftsToReset(
+  annual: StaffEvaluation[],
+  hireDates: Map<string, string | null>,
+  period: Pick<EvaluationPeriod, "end">,
+): StaffEvaluation[] {
+  return annual.filter((e) => {
+    if (e.status === "final" || e.rating_reason === "ninety_day") return false;
+    const hire = hireDates.get(e.employee_id) ?? null;
+    if (!isIsoDate(hire) || needsAnnualEvaluation(hire, period)) return false;
+    return !(
+      isEmptyObject(e.ratings) &&
+      isEmptyObject(e.answers) &&
+      isEmptyObject(e.narrative) &&
+      isEmptyObject(e.awards) &&
+      isEmptyObject(e.facts) &&
+      e.overall_rating == null
+    );
+  });
+}
+
 /**
  * Everyone who needs an evaluation this period, and where each one stands.
  * Managers see every active employee; a supervisor sees their direct reports.
@@ -297,11 +335,19 @@ export function useEvaluationRoster(
         // Resignation / transfer SF-52s take people off; without access to them, nobody is.
         loadSf52Files().catch(() => []),
       ]);
+      const hireDates = new Map(personnel.map((p) => [p.employee_id, p.hire_date]));
+      // New hires get only the 90-day evaluation: blank any yearly draft
+      // someone started for them (finished ones stay as they are).
+      if (viewer.isManager && hireDatesKnown) {
+        for (const e of newHireDraftsToReset(annual, hireDates, period)) {
+          await directPatchRow(TABLE, "id", e.id, { ...RESET_EVALUATION_PATCH }, "evaluations.resetNewHire").catch(() => undefined);
+        }
+      }
       const split = splitRoster({
         profiles,
         annual,
         ninetyDay: ninety,
-        hireDates: new Map(personnel.map((p) => [p.employee_id, p.hire_date])),
+        hireDates,
         hireDatesKnown,
         departures: departuresByEmployee(sf52Files),
         period,

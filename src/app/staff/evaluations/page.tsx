@@ -13,7 +13,6 @@ import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { todayLocal } from "@/lib/utils/date";
 import { payPlanGrade } from "@/lib/evaluations/facts";
 import {
-  addDays,
   dueStatus,
   dueText,
   fiscalYearOf,
@@ -55,7 +54,7 @@ function EvaluationsRoster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [me?.id, me?.role],
   );
-  const { entries, ninetyDay, notDue, departing, missingHireDate, loading, error, reload } = useEvaluationRoster(period, viewer);
+  const { entries, ninetyDay, departing, missingHireDate, loading, error, reload } = useEvaluationRoster(period, viewer);
   const [printing, setPrinting] = useState<null | "print" | "zip">(null);
   const [printError, setPrintError] = useState<string | null>(null);
 
@@ -308,24 +307,6 @@ function EvaluationsRoster() {
             </>
           )}
 
-          {notDue.length > 0 && (
-            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <p className="font-medium">Not due a {period.label} evaluation</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Hired fewer than {NEW_HIRE_DAYS} days before {shortDate(period.end)}. They get a 90-day evaluation instead.
-              </p>
-              <ul className="mt-2 text-sm space-y-0.5">
-                {notDue.map(({ profile, hireDate }) => (
-                  <li key={profile.id}>
-                    {profile.full_name || "Employee"}{" "}
-                    <span className="text-xs text-muted-foreground">
-                      · hired {shortDate(hireDate)} · 90-day mark {shortDate(addDays(hireDate, NEW_HIRE_DAYS))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           <DepartingNote items={departing} />
         </>
       )}

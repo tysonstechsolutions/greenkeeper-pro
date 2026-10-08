@@ -14,7 +14,7 @@ import {
   ninetyDayTiming,
 } from "@/lib/evaluations/period";
 import { evaluationEditHref, evaluationListHref } from "@/lib/evaluations/links";
-import { kindFilter, splitRoster, type RosterProfile } from "@/lib/evaluations/use-evaluations";
+import { kindFilter, newHireDraftsToReset, splitRoster, type RosterProfile } from "@/lib/evaluations/use-evaluations";
 import type { StaffEvaluation } from "@/lib/evaluations/types";
 import { departuresByEmployee, sf52ActionOf } from "@/lib/staff/sf52-files";
 
@@ -193,6 +193,19 @@ describe("splitRoster", () => {
     // An evaluation already finished stays as finished.
     const finished = splitRoster({ profiles, annual: [row("old", { status: "final" })], ninetyDay: [], hireDates, departures, period: FY2026, viewer: { id: "gm", isManager: true }, todayIso: "2026-10-05" });
     expect(finished.entries.find((e) => e.profile.id === "old")?.progress).toBe("final");
+  });
+
+  it("resets yearly drafts started for new hires, never a finished one", () => {
+    const annual = [
+      row("started", { ratings: { quality: 4 }, answers: { q1: "good" } }), // hired Sep 1: too new, has content
+      row("late", {}), // too new but already blank: nothing to do
+      row("colin", { ratings: { quality: 3 } }), // hired Jun 1: due a yearly one, keep
+      row("nodate", { ratings: { quality: 3 } }), // no hire date: can't tell, keep
+      { ...row("gone", { ratings: { quality: 5 }, overall_rating: 5 }), status: "final" as const }, // finished: never touched
+    ];
+    expect(newHireDraftsToReset(annual, hireDates, FY2026).map((e) => e.employee_id)).toEqual(["started"]);
+    // A 90-day row is never a yearly draft.
+    expect(newHireDraftsToReset([row("started", { rating_reason: "ninety_day", ratings: { quality: 4 } })], hireDates, FY2026)).toEqual([]);
   });
 
   it("reads the SF-52 action from the document category", () => {

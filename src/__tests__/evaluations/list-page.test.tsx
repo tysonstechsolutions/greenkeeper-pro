@@ -121,7 +121,9 @@ describe("evaluations page", () => {
     expect(screen.queryByRole("region", { name: /Due soon/ })).toBeNull();
     // The 90-day list is on its own tab.
     expect(screen.queryByText("Colin O'Neill")).toBeNull();
-    expect(screen.getByText("Not due a FY2026 evaluation")).toBeInTheDocument();
+    // New hires aren't listed on the year-end page at all; they're on the 90-day tab at their mark.
+    expect(screen.queryByText(/Not due a FY2026 evaluation/)).toBeNull();
+    expect(screen.queryByText("Late Hire")).toBeNull();
   });
 
   it("shows 90-day evaluations by due status on their tab", async () => {
