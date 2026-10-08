@@ -6,14 +6,19 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("Operations Command Center route consolidation", () => {
-  it("redirects Today and My Day to the canonical route", () => {
-    expect(read("src/app/today/page.tsx")).toContain('redirect("/operations")');
-    expect(read("src/app/my-day/page.tsx")).toContain('redirect("/operations?view=mine")');
+  it("redirects Today and My Day to My Duties, the personal home", () => {
+    expect(read("src/app/today/page.tsx")).toContain('redirect("/my-duties")');
+    expect(read("src/app/my-day/page.tsx")).toContain('redirect("/my-duties")');
+    expect(read("src/app/page.tsx")).toContain('router.replace("/my-duties")');
   });
 
-  it("makes Operations the primary desktop and mobile destination", () => {
-    expect(read("src/lib/layout/nav-config.ts")).toContain('href: "/operations", label: "Operations"');
-    expect(read("src/lib/layout/app-catalog.ts")).toContain('href: "/operations", label: "Operations"');
+  it("puts My Duties first and keeps Operations one tap away on desktop and mobile", () => {
+    const nav = read("src/lib/layout/nav-config.ts");
+    expect(nav.indexOf('href: "/my-duties", label: "My Duties"')).toBeGreaterThan(-1);
+    expect(nav.indexOf('href: "/my-duties"')).toBeLessThan(nav.indexOf('href: "/operations", label: "Operations"'));
+    const catalog = read("src/lib/layout/app-catalog.ts");
+    expect(catalog).toContain('href: "/my-duties", label: "My Duties"');
+    expect(catalog).toContain('href: "/operations", label: "Operations"');
   });
 
   it("keeps record-specific source deep links live", () => {

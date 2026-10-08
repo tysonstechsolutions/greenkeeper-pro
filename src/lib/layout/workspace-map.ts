@@ -21,6 +21,7 @@ export const WORKSPACE_KEYS: readonly WorkspaceKey[] = [
 
 const PREFIXES: [string, WorkspaceKey][] = [
   ["/today", "today"],
+  ["/my-duties", "today"],
   ["/my-day", "today"],
   ["/calendar", "today"],
   ["/grounds", "course"],

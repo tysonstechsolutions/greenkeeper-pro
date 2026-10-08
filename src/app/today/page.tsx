@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Today is now the unified Operations Command Center, not a competing engine. */
+/** "Today" is the first tab of My Duties. */
 export default function TodayPage() {
-  redirect("/operations");
+  redirect("/my-duties");
 }

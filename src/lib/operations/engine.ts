@@ -67,7 +67,7 @@ export function periodKey(cadence: ObligationCadence, d: Date): string {
 
 /** A date inside the period `offset` periods away from the one containing `d`.
  *  Anchored mid-period so month-length differences can't skew the result. */
-function periodAnchor(cadence: ObligationCadence, d: Date, offset: number): Date {
+export function periodAnchor(cadence: ObligationCadence, d: Date, offset: number): Date {
   const y = d.getFullYear();
   if (cadence === "weekly") {
     // Anchor on the week's Sunday; offset in whole weeks.
@@ -81,7 +81,7 @@ function periodAnchor(cadence: ObligationCadence, d: Date, offset: number): Date
 }
 
 /** The obligation's due date within the period containing `anchor`. */
-function dueDateInPeriod(ob: Obligation, anchor: Date): Date {
+export function dueDateInPeriod(ob: Obligation, anchor: Date): Date {
   const y = anchor.getFullYear();
   // Weekly: due on `due_weekday` within the Sun–Sat week that `anchor` starts.
   // Defaults to Monday (1) — the Sun–Sat pay period closes and the timecard

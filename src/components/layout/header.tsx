@@ -177,7 +177,7 @@ export function Header({ onOpenSearch }: HeaderProps) {
   // stay reachable (every page has one now, home is the only exception).
   const isDropdownOpen = menuOpen || notificationsOpen;
   const normalizedPath = stripTrailingSlash(pathname) || "/";
-  const isHome = normalizedPath === "/" || normalizedPath === "/operations" || normalizedPath === "/today";
+  const isHome = normalizedPath === "/" || normalizedPath === "/my-duties" || normalizedPath === "/operations" || normalizedPath === "/today";
   const shouldHide = isHome && scrollDirection === "down" && !isDropdownOpen;
   const pageTitle = getPageTitle(pathname);
 
@@ -185,7 +185,7 @@ export function Header({ onOpenSearch }: HeaderProps) {
   // (history length 1) still has somewhere to go.
   const goBack = () => {
     if (window.history.length > 1) router.back();
-    else router.push("/operations");
+    else router.push("/my-duties");
   };
 
   return (

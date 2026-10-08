@@ -1,6 +1,7 @@
 const TOP_LEVEL_ROUTES = new Set([
   "/",
   "/today",
+  "/my-duties",
   "/dashboard",
   "/tasks",
   "/more",
@@ -10,6 +11,8 @@ const TOP_LEVEL_ROUTES = new Set([
 
 const TITLES: Record<string, string> = {
   "/today": "Today",
+  "/my-duties": "My Duties",
+  "/operations": "Operations",
   "/dashboard": "Dashboard",
   "/restaurant": "Restaurant",
   "/restaurant/inventory": "Restaurant Inventory",

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ArrowUpRight, Check, Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EvaluatedObligation } from "@/lib/operations/types";
+import { liveObligationHref } from "@/lib/operations/obligation-links";
 
 const STATUS_STYLES: Record<
   EvaluatedObligation["status"],
@@ -50,6 +51,7 @@ export function ObligationRow({
 }) {
   const [busy, setBusy] = useState(false);
   const s = STATUS_STYLES[item.status];
+  const href = liveObligationHref(item.obligation.link_href);
 
   const run = async (fn?: () => Promise<void> | void) => {
     if (!fn || busy) return;
@@ -84,9 +86,9 @@ export function ObligationRow({
         </p>
       </div>
 
-      {item.obligation.link_href && (
+      {href && (
         <Link
-          href={item.obligation.link_href}
+          href={href}
           className="inline-link p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
           aria-label={`Open ${item.obligation.title}`}
         >

@@ -36,6 +36,9 @@ export interface UseOperations {
   reload: () => void;
   /** All active obligations evaluated against today, display-sorted. */
   evaluated: EvaluatedObligation[];
+  /** Raw active obligations and every completion — for period-by-period views. */
+  obligations: Obligation[];
+  completions: ObligationCompletion[];
   /** Duties that run today, with per-duty done state. */
   dutiesToday: DutyTodayItem[];
   allDuties: OperationDuty[];
@@ -335,6 +338,8 @@ export function useOperations(): UseOperations {
     error,
     reload,
     evaluated,
+    obligations,
+    completions,
     dutiesToday,
     allDuties: duties,
     canUndoObligations,

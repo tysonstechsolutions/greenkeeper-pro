@@ -164,6 +164,9 @@ export type CatalogKey =
 // comes from its section's family so the More grid reads as organized
 // shelves instead of confetti.
 const DASHBOARD: AppEntry = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "from-emerald-600 to-green-700", pinned: true };
+// My Duties — the GM's own recurring work by day, week, month, quarter, year.
+// Home of the app; first pinned entry.
+const MY_DUTIES: AppEntry = { href: "/my-duties", label: "My Duties", icon: ListChecks, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["today", "this week", "this month", "quarterly", "yearly", "annual", "recurring", "duties", "checklist", "obligations", "rhythm", "my day"] };
 // Operations — one normalized command center for every actionable source.
 const TODAY: AppEntry = { href: "/operations", label: "Operations", icon: Sunrise, color: "from-emerald-600 to-green-700", pinned: true, keywords: ["today", "command center", "work", "priorities"] };
 // Dashboard re-homed inside Course & Range for the leadership view (other
@@ -397,6 +400,7 @@ export const APP_CATALOG: Record<CatalogKey, AppEntry[]> = {
   // Everything else is reachable INSIDE a workspace (hub children), so the
   // menu stays six doors instead of twenty entries.
   leadership: [
+    MY_DUTIES,
     TODAY,
     PROGRAM_STANDARDS,
     ONEONONE,

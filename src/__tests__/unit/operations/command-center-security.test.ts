@@ -85,7 +85,7 @@ describe("command-center callers", () => {
     expect(workspaceLanding).toContain("ops.canUndoObligations");
     expect(workspaceLanding).toContain("Why is this completion being corrected?");
     expect(workspaceLanding).toContain("if (!reason) return");
-    expect(todayPage).toContain('redirect("/operations")');
+    expect(todayPage).toContain('redirect("/my-duties")');
   });
 
   it("keeps the assistant on the same command and weekly-key convention", () => {
