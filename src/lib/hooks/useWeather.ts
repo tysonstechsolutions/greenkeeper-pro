@@ -146,7 +146,13 @@ export function useWeather(): UseWeatherReturn {
         query: { days: 1 },
       });
 
-      const current = data.current;
+      const current = data?.current;
+      // The service can answer without current conditions (provider outage,
+      // quota, or an error body). Say so instead of crashing on undefined.
+      if (!current?.condition) {
+        setError("Weather is unavailable right now.");
+        return null;
+      }
       const todayForecast = data.forecast?.forecastday?.[0]?.day;
 
       const weather: CurrentWeather = {
