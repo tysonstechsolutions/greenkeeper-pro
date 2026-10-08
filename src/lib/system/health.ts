@@ -155,6 +155,10 @@ export const TRACKED_MIGRATIONS: { name: string; what: string }[] = [
     name: "20261013120000_gm_manages_pins",
     what: "The GM can see, set, and reset everyone's sign-in PIN",
   },
+  {
+    name: "20261014120000_reception_ticket_split",
+    what: "Reception ticket sales already saved split 60% Buckley's, 40% golf program",
+  },
 ];
 
 /** Older migrations, checked by calling something they created (read-only). */

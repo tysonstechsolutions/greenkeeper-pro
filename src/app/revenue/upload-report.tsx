@@ -133,7 +133,7 @@ export function UploadReportCard({
     if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
       try {
         const lines = await pdfTextLines(new Uint8Array(await f.arrayBuffer()));
-        // Reception tickets: always Buckley's restaurant sales.
+        // Reception tickets: split 60% Buckley's restaurant, 40% golf program, whatever was picked.
         const tickets = parseTicketReport(lines);
         if (tickets && tickets.sales.length > 0) {
           const report = ticketsAsFlash(tickets);

@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { planFlashImport, revenueRows } from "@/lib/sales/import";
-import { isTicketReport, parseTicketReport, ticketsAsFlash, TICKET_CATEGORY, wednesdayOnOrAfter } from "@/lib/sales/ticket-report";
+import { planFlashImport, ticketItemDays, ticketRevenueRows } from "@/lib/sales/import";
+import { isTicketReport, parseTicketReport, splitTicketAmount, ticketsAsFlash, TICKET_CATEGORY, TICKET_SPLIT, wednesdayOnOrAfter } from "@/lib/sales/ticket-report";
 
 const lines = readFileSync(join(__dirname, "..", "fixtures", "sales", "reception-tickets-feb-oct26.txt"), "utf8").split("\n");
 
@@ -71,13 +71,37 @@ describe("RecTrac ticket report (graduation receptions)", () => {
       discount: 0,
       net: 20,
     });
-    expect(revenueRows(plan, "rep", "u1", "Reception tickets")[0]).toMatchObject({
-      entry_date: "2026-02-11",
-      category: "food_beverage",
-      amount: 20,
-      description: "Reception tickets (2 sold)",
-      sales_report_id: "rep",
+  });
+
+  it("splits every day 60% to Buckley's and 40% to the golf program", () => {
+    const plan = planFlashImport(ticketsAsFlash(r), "restaurant");
+    const rows = ticketRevenueRows(plan, "rep", "u1");
+    expect(rows.slice(0, 2)).toEqual([
+      { entry_date: "2026-02-11", source: "pos_upload", sales_report_id: "rep", created_by: "u1", category: "food_beverage", amount: 12, description: "Reception tickets, Buckley's 60% (2 sold)", report_area: "restaurant" },
+      { entry_date: "2026-02-11", source: "pos_upload", sales_report_id: "rep", created_by: "u1", category: "other", amount: 8, description: "Reception tickets, golf program 40% (2 sold)", report_area: "other" },
+    ]);
+    const sum = (cat: string, month = "") => rows.filter((x) => x.category === cat && x.entry_date.startsWith(month)).reduce((s, x) => s + x.amount, 0);
+    expect(Math.round(sum("food_beverage") * 100) / 100).toBe(12612);
+    expect(Math.round(sum("other") * 100) / 100).toBe(8408);
+    // September: $5,470 sold, $3,282 Buckley's and $2,188 golf.
+    expect(Math.round(sum("food_beverage", "2026-09") * 100) / 100).toBe(3282);
+    expect(Math.round(sum("other", "2026-09") * 100) / 100).toBe(2188);
+    expect(ticketItemDays(plan)[0]).toEqual({
+      sale_date: "2026-02-11",
+      inventory_code: "MA7009-16-166-001",
+      description: "Graduate Family Welcome Reception ticket (Buckley's 60%)",
+      qty: 2,
+      gross: 12,
+      discount: 0,
+      net: 12,
     });
+  });
+
+  it("splits odd cents so the two shares add back up", () => {
+    expect(splitTicketAmount(10)).toEqual({ buckleys: 6, golf: 4 });
+    expect(splitTicketAmount(0.05)).toEqual({ buckleys: 0.03, golf: 0.02 });
+    expect(splitTicketAmount(-10)).toEqual({ buckleys: -6, golf: -4 });
+    expect(TICKET_SPLIT.buckleys + TICKET_SPLIT.golf).toBe(1);
   });
 
   it("catches a ticket code that doesn't add up", () => {

@@ -104,7 +104,7 @@ describe("uploading a reception ticket report", () => {
     pdf.lines = fixture("reception-tickets-feb-oct26.txt");
   });
 
-  it("reads every ticket, checks it, and saves it as restaurant sales", async () => {
+  it("reads every ticket, checks it, and saves it 60% Buckley's, 40% golf program", async () => {
     const onSaved = vi.fn();
     render(<UploadReportCard userId="u1" onSaved={onSaved} />);
     // Whatever report type was picked, tickets are the restaurant's.
@@ -112,7 +112,7 @@ describe("uploading a reception ticket report", () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File(["%PDF"], "Reception_Ticket_sales.pdf", { type: "application/pdf" })] } });
 
-    expect(await screen.findByText("Reception tickets · counted as Buckley's restaurant sales")).toBeInTheDocument();
+    expect(await screen.findByText("Reception tickets · 60% Buckley's restaurant, 40% golf program")).toBeInTheDocument();
     expect(screen.getByText(/2102 tickets for \$21,020\.00 across 39 receptions — matches every reception's total/)).toBeInTheDocument();
     expect(screen.getByText(/1 ticket shows a fee that doesn't match the net paid/)).toBeInTheDocument();
     expect(screen.getByText("Tickets by reception (39)")).toBeInTheDocument();
@@ -125,9 +125,17 @@ describe("uploading a reception ticket report", () => {
     expect(db.deletes).toEqual([]);
     expect(db.inserted[0]).toMatchObject({ outlet: "restaurant", category: "Reception tickets", begin_date: "2026-02-11", end_date: "2026-10-06", grand_total: 21020, transactions: 772 });
     const revenue = db.rows.get("revenue_entries")!;
-    expect(revenue.reduce((s, r) => s + Number(r.amount), 0)).toBe(21020);
-    expect(revenue[0]).toMatchObject({ entry_date: "2026-02-11", category: "food_beverage", amount: 20, description: "Reception tickets (2 sold)", report_area: "restaurant" });
-    expect(await screen.findByText(/Saved 2102 reception tickets \(39 receptions\) as restaurant sales: \$21,020\.00/)).toBeInTheDocument();
+    const total = (cat?: string) => Math.round(revenue.filter((r) => !cat || r.category === cat).reduce((s, r) => s + Number(r.amount), 0) * 100) / 100;
+    expect(total()).toBe(21020);
+    expect(total("food_beverage")).toBe(12612);
+    expect(total("other")).toBe(8408);
+    expect(revenue[0]).toMatchObject({ entry_date: "2026-02-11", category: "food_beverage", amount: 12, description: "Reception tickets, Buckley's 60% (2 sold)", report_area: "restaurant" });
+    expect(revenue[1]).toMatchObject({ entry_date: "2026-02-11", category: "other", amount: 8, description: "Reception tickets, golf program 40% (2 sold)", report_area: "other" });
+    const items = db.rows.get("sales_item_days")!;
+    expect(Math.round(items.reduce((s, r) => s + Number(r.net), 0) * 100) / 100).toBe(12612);
+    expect(
+      await screen.findByText(/Saved 2102 reception tickets \(39 receptions\), \$21,020\.00 over \d+ days: \$12,612\.00 to Buckley's restaurant sales \(60%\) and \$8,408\.00 to the golf program \(40%\)/),
+    ).toBeInTheDocument();
   });
 
   it("replaces only the ticket sales already saved for those days", async () => {

@@ -7,6 +7,9 @@
  * Exact, no AI: each ticket code is checked against its own count and fee
  * total, and the whole against the grand totals, receipts, and codes.
  *
+ * The money is shared: 60% of every ticket is Buckley's (restaurant sales)
+ * and 40% is the golf program's (see TICKET_SPLIT).
+ *
  * Pure. ticketsAsFlash turns it into the same shape as a flash report so it
  * saves through the same path (daily restaurant sales + items by day).
  */
@@ -53,6 +56,15 @@ export interface TicketReport {
 
 /** sales_reports.category for ticket reports: how they're told apart from flash reports. */
 export const TICKET_CATEGORY = "Reception tickets";
+
+/** Each reception ticket's money: 60% to Buckley's, 40% to the golf program. */
+export const TICKET_SPLIT = { buckleys: 0.6, golf: 0.4 } as const;
+
+/** Split an amount of ticket sales; the golf share takes the rounding so the two add back up exactly. */
+export function splitTicketAmount(amount: number): { buckleys: number; golf: number } {
+  const buckleys = Math.round(amount * TICKET_SPLIT.buckleys * 100) / 100;
+  return { buckleys, golf: Math.round((amount - buckleys) * 100) / 100 };
+}
 
 const MONEY = String.raw`-?[\d,]+\.\d{2}`;
 const SALE = new RegExp(

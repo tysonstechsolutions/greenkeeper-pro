@@ -5,8 +5,9 @@
 // replaces whatever was entered for that outlet on those days, except
 // reception ticket sales, which have their own report.
 //
-// A ticket report (graduation receptions) saves the same way as restaurant
-// sales, and replaces only the ticket report saved before it.
+// A ticket report (graduation receptions) saves by the day too, split 60%
+// to Buckley's restaurant sales and 40% to the golf program, and replaces
+// only the ticket report saved before it.
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, Loader2, X } from "lucide-react";
@@ -19,11 +20,13 @@ import {
 } from "@/lib/supabase/rest";
 import { uploadPhoto } from "@/lib/supabase/storage";
 import type { FlashReport } from "@/lib/sales/rectrac-flash";
-import { TICKET_CATEGORY, type TicketReport } from "@/lib/sales/ticket-report";
+import { TICKET_CATEGORY, splitTicketAmount, type TicketReport } from "@/lib/sales/ticket-report";
 import {
   SALES_CATEGORY,
   SALES_OUTLET_LABELS,
   revenueRows,
+  ticketItemDays,
+  ticketRevenueRows,
   type FlashImportPlan,
 } from "@/lib/sales/import";
 
@@ -81,6 +84,7 @@ export function FlashImport({
   const [error, setError] = useState<string | null>(null);
   const category = SALES_CATEGORY[plan.outlet];
   const exact = report.mismatches.length === 0;
+  const split = tickets ? splitTicketAmount(plan.total) : null;
 
   // What's already entered for these days (it gets replaced).
   useEffect(() => {
@@ -191,19 +195,22 @@ export function FlashImport({
         },
         "revenue.flash.report",
       );
-      const revenue = revenueRows(plan, row.id, userId, tickets ? "Reception tickets" : undefined).map((r) => ({ ...r, report_path: reportPath }));
+      const revenue = (tickets ? ticketRevenueRows(plan, row.id, userId) : revenueRows(plan, row.id, userId)).map((r) => ({
+        ...r,
+        report_path: reportPath,
+      }));
       for (let i = 0; i < revenue.length; i += CHUNK) {
         setSaving(`Saving daily sales ${Math.min(i + CHUNK, revenue.length)} of ${revenue.length}…`);
         await directInsertRows("revenue_entries", revenue.slice(i, i + CHUNK), "revenue.flash.days");
       }
-      const items = plan.itemDays.map((it) => ({ ...it, report_id: row.id, outlet: plan.outlet }));
+      const items = (tickets ? ticketItemDays(plan) : plan.itemDays).map((it) => ({ ...it, report_id: row.id, outlet: plan.outlet }));
       for (let i = 0; i < items.length; i += CHUNK) {
         setSaving(`Saving item sales ${Math.min(i + CHUNK, items.length)} of ${items.length}…`);
         await directInsertRows("sales_item_days", items.slice(i, i + CHUNK), "revenue.flash.items");
       }
       onSaved(
         tickets
-          ? `Saved ${tickets.sales.length} reception tickets (${tickets.events.length} receptions) as restaurant sales: ${money(plan.total)} over ${plan.days.length} days.`
+          ? `Saved ${tickets.sales.length} reception tickets (${tickets.events.length} receptions), ${money(plan.total)} over ${plan.days.length} days: ${money(split!.buckleys)} to Buckley's restaurant sales (60%) and ${money(split!.golf)} to the golf program (40%).`
           : `Saved ${SALES_OUTLET_LABELS[plan.outlet]} sales ${shortDate(plan.begin)} – ${shortDate(plan.end)}: ${money(plan.total)} over ${plan.days.length} days.`,
       );
     } catch (e) {
@@ -219,7 +226,7 @@ export function FlashImport({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-sm">
-            {tickets ? "Reception tickets · counted as Buckley's restaurant sales" : `${SALES_OUTLET_LABELS[plan.outlet]} sales · read exactly from RecTrac`}
+            {tickets ? "Reception tickets · 60% Buckley's restaurant, 40% golf program" : `${SALES_OUTLET_LABELS[plan.outlet]} sales · read exactly from RecTrac`}
           </p>
           <p className="text-xs text-muted-foreground">
             {report.title}
@@ -254,14 +261,29 @@ export function FlashImport({
       )}
 
       <div className="rounded-lg border border-border/60">
-        <table className="w-full text-xs">
-          <tbody>
-            {plan.months.map((m) => (
-              <tr key={m.month} className="border-t border-border/40 first:border-t-0">
-                <td className="px-3 py-1">{monthLabel(m.month)}</td>
-                <td className="px-3 py-1 text-right tabular-nums">{money(m.total)}</td>
+        <table className="w-full text-xs" aria-label="Sales by month">
+          {tickets && (
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="text-left font-medium px-3 py-1">Month</th>
+                <th className="text-right font-medium px-2 py-1">Tickets</th>
+                <th className="text-right font-medium px-2 py-1">Buckley&apos;s 60%</th>
+                <th className="text-right font-medium px-3 py-1">Golf 40%</th>
               </tr>
-            ))}
+            </thead>
+          )}
+          <tbody>
+            {plan.months.map((m) => {
+              const s = tickets ? splitTicketAmount(m.total) : null;
+              return (
+                <tr key={m.month} className="border-t border-border/40 first:border-t-0">
+                  <td className="px-3 py-1">{monthLabel(m.month)}</td>
+                  <td className={`${s ? "px-2" : "px-3"} py-1 text-right tabular-nums`}>{money(m.total)}</td>
+                  {s && <td className="px-2 py-1 text-right tabular-nums">{money(s.buckleys)}</td>}
+                  {s && <td className="px-3 py-1 text-right tabular-nums">{money(s.golf)}</td>}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -302,14 +324,23 @@ export function FlashImport({
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        {plan.itemDays.length} item-days ({report.sales.length} lines on the report). Each day saves as one{" "}
-        {SALES_OUTLET_LABELS[plan.outlet].toLowerCase()} revenue entry; the items are kept for best sellers and prices.
+        {tickets ? (
+          <>
+            Each day saves as two revenue entries: Buckley&apos;s 60% as restaurant sales and the golf program&apos;s 40% as golf
+            course revenue. The tickets are kept at Buckley&apos;s 60% for best sellers and prices.
+          </>
+        ) : (
+          <>
+            {plan.itemDays.length} item-days ({report.sales.length} lines on the report). Each day saves as one{" "}
+            {SALES_OUTLET_LABELS[plan.outlet].toLowerCase()} revenue entry; the items are kept for best sellers and prices.
+          </>
+        )}
       </p>
 
       {tickets && existing && existing.count > 0 && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
           {existing.count} day{existing.count === 1 ? "" : "s"} of ticket sales already saved for these dates ({money(existing.total)}) will be replaced
-          by this report. Other restaurant sales stay as they are.
+          by this report. Other sales stay as they are.
         </p>
       )}
       {!tickets && existing && existing.count > 0 && (

@@ -4,6 +4,7 @@
  * per day (for best sellers, prices, and cost per item). Pure.
  */
 import type { FlashReport } from "./rectrac-flash";
+import { splitTicketAmount } from "./ticket-report";
 
 export type SalesOutlet = "restaurant" | "bar" | "pro_shop";
 
@@ -86,21 +87,43 @@ export function planFlashImport(report: FlashReport, outlet: SalesOutlet): Flash
   };
 }
 
-/**
- * Revenue entry rows for a plan (sales_report_id added at save time).
- * `ticketLabel` marks ticket sales ("Reception tickets (12 sold)").
- */
-export function revenueRows(plan: FlashImportPlan, reportId: string, userId: string | null, ticketLabel?: string) {
+/** Revenue entry rows for a plan (sales_report_id added at save time). */
+export function revenueRows(plan: FlashImportPlan, reportId: string, userId: string | null) {
   return plan.days.map((d) => ({
     entry_date: d.entry_date,
     category: SALES_CATEGORY[plan.outlet],
     amount: d.amount,
-    description: ticketLabel
-      ? `${ticketLabel} (${d.items} sold)`
-      : `RecTrac ${SALES_OUTLET_LABELS[plan.outlet]} sales (${d.items} items)`,
+    description: `RecTrac ${SALES_OUTLET_LABELS[plan.outlet]} sales (${d.items} items)`,
     source: "pos_upload",
     report_area: plan.outlet,
     sales_report_id: reportId,
     created_by: userId,
+  }));
+}
+
+/**
+ * Revenue entry rows for reception ticket sales: each day splits into
+ * Buckley's 60% (restaurant sales) and the golf program's 40% (golf course
+ * revenue, category "other").
+ */
+export function ticketRevenueRows(plan: FlashImportPlan, reportId: string, userId: string | null) {
+  return plan.days.flatMap((d) => {
+    const { buckleys, golf } = splitTicketAmount(d.amount);
+    const row = { entry_date: d.entry_date, source: "pos_upload", sales_report_id: reportId, created_by: userId };
+    return [
+      { ...row, category: SALES_CATEGORY.restaurant, amount: buckleys, description: `Reception tickets, Buckley's 60% (${d.items} sold)`, report_area: "restaurant" },
+      { ...row, category: "other", amount: golf, description: `Reception tickets, golf program 40% (${d.items} sold)`, report_area: "other" },
+    ].filter((r) => r.amount !== 0);
+  });
+}
+
+/** Ticket item sales at Buckley's 60%, so restaurant best sellers and prices match its revenue. */
+export function ticketItemDays(plan: FlashImportPlan): FlashImportPlan["itemDays"] {
+  return plan.itemDays.map((it) => ({
+    ...it,
+    description: `${it.description} (Buckley's 60%)`,
+    gross: splitTicketAmount(it.gross).buckleys,
+    discount: splitTicketAmount(it.discount).buckleys,
+    net: splitTicketAmount(it.net).buckleys,
   }));
 }
