@@ -36,7 +36,7 @@ import { AiSourceBadge } from "@/components/ai/ai-source-badge";
 import { generateSowReport, type SowFormData } from "@/lib/reports/sow-report";
 import { saveBlobToDevice } from "@/lib/utils/download-blob";
 import { saveCreatedDocument } from "@/lib/documents/saved-documents";
-import { PR_DELIVERY_DEFAULTS, PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
+import { PR_REQUESTOR_DEFAULTS } from "@/lib/pr-defaults";
 import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -44,6 +44,10 @@ import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 const COURSE_NAME = "Veterans Memorial Golf Course";
 const BUILDING = "Golf Course Maintenance Facility, BLDG 8400";
 const FACILITY_ADDRESS = "2821 Great Lakes Dr, Great Lakes, IL 60088";
+// Default SOW supervisor. Used to come from the PR delivery POC, but the PR
+// template's delivery contact changed (2026-10) while the supervisor didn't.
+const SUPERVISOR_NAME = "Joseph Caprez";
+const SUPERVISOR_PHONE = "262-510-9514";
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 
@@ -91,14 +95,14 @@ function emptyForm(): SowForm {
     baseEntryAmendments: false,
     buildingNameNumber: BUILDING,
     roomNumber: "",
-    accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall contact ${PR_DELIVERY_DEFAULTS.poc} or the Course Superintendent for escort to the work area. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
+    accessDirections: `Contractor shall proceed to the Veterans Memorial Golf Course at ${FACILITY_ADDRESS}. Upon arrival, contractor shall contact ${SUPERVISOR_NAME} or the Course Superintendent for escort to the work area. No base access, gate entry, or government-issued ID is required — the facility is accessible directly from the public road.`,
     requestorName: "",
     requestorTitle: "",
     directPhone: PR_REQUESTOR_DEFAULTS.phone,
     cellPhone: "",
     email: "",
-    supervisorName: PR_DELIVERY_DEFAULTS.poc,
-    supervisorPhone: PR_DELIVERY_DEFAULTS.phone,
+    supervisorName: SUPERVISOR_NAME,
+    supervisorPhone: SUPERVISOR_PHONE,
     workDescription: "",
   };
 }
@@ -169,7 +173,7 @@ export default function SowPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Auto-populate requestor fields from the logged-in user's profile.
-  // Supervisor (Joseph Caprez) and location are hardcoded from pr-defaults.
+  // Supervisor (Joseph Caprez) and location are hardcoded constants above.
   useEffect(() => {
     if (!profile) return;
     const title = roleLabels[profile.role] ?? "";

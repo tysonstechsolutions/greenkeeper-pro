@@ -337,7 +337,7 @@ function SowAttachModal({
         cellPhone: "",
         email: profile?.email ?? "",
         // Contractor reports to the superintendent (current user), not the
-        // user's own boss. Joseph Caprez stays on the PR as delivery POC.
+        // user's own boss.
         supervisorName: profile?.full_name ?? "",
         supervisorPhone: userPhone,
       };

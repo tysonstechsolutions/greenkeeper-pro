@@ -5,32 +5,31 @@
  * after the office moved Joseph Caprez from invoice POC to delivery POC
  * and replaced the invoice contact with the MWR Business Office, then
  * 2026-08 to match how the business office writes its own street line
- * ("2601E Paul Jones" — no space after the number, no "Street").
+ * ("2601E Paul Jones" — no space after the number, no "Street"), then
+ * 2026-10 when the template named Michelle Mueller as invoice POC and
+ * Megan Stadlman as delivery POC. Addresses didn't change.
  *
  * Updating: change the values below and rebuild. They aren't user-editable
  * inside the app yet because they only change when the facility relocates,
  * which is roughly never. Promote to a settings table if that changes.
- *
- * "Buisness" misspelling is intentional — that's the email handle the
- * Navy actually uses.
  */
 
 export const PR_INVOICE_DEFAULTS = {
   address: "2601E Paul Jones",
   line2: "BLDG 1 RM 129",
   city_state_zip: "Great Lakes, IL 60088",
-  poc: "MWR Buisness Office",
-  phone: "(847) 688-2020 ex: 319",
-  email: "grlkmwrbuisnessoffice@us.navy.mil",
+  poc: "Michelle Mueller",
+  phone: "(847) 688-2020 ext 318",
+  email: "michele.j.mueller.naf@us.navy.mil",
 } as const;
 
 export const PR_DELIVERY_DEFAULTS = {
   address: "3012 Mississippi ST",
   line2: "BLDG 3212A Door #3",
   city_state_zip: "Great Lakes, IL 60088",
-  poc: "Joseph Caprez",
-  phone: "262-510-9514",
-  email: "joseph.f.caprez.naf@us.navy.mil",
+  poc: "Megan Stadlman",
+  phone: "(847) 688-2020 ext 404",
+  email: "megan.m.stadlman.naf@us.navy.mil",
 } as const;
 
 /** Pre-filled in the Accounting section. Rest of the row is left blank. */

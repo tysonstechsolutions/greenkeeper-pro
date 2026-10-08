@@ -246,8 +246,7 @@ function SowWizardModal({
         cellPhone: "",
         email: profile?.email ?? "",
         // The contractor reports to the superintendent (the current user),
-        // not to the user's own boss. Joseph Caprez is still the delivery
-        // POC on the PR itself; for the SOW he doesn't supervise the work.
+        // not to the user's own boss.
         supervisorName: profile?.full_name ?? "",
         supervisorPhone: userPhone,
       };
