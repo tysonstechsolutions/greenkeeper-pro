@@ -25,7 +25,7 @@ const sample: WorkOrderData = {
   primaryPocPhone: "847-688-4593",
   numberOfEnclosures: "1",
   secondaryPocName: "Brian Weeks",
-  secondaryPocPhone: "847-688-4593",
+  secondaryPocPhone: "847-688-2020",
   photos: [TINY_PNG],
 };
 
@@ -55,7 +55,7 @@ describe("fillWorkOrderPdf", () => {
     expect(text("Text10")).toBe("admin@tysonstechsolutions.com");
     expect(text("Text11")).toBe("847-688-4593");
     expect(text("Text12")).toBe("Brian Weeks");
-    expect(text("Text13")).toBe("847-688-4593");
+    expect(text("Text13")).toBe("847-688-2020");
     expect(text("Text14")).toBe("1");
 
     // Sanitiser: smart apostrophe normalised.

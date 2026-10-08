@@ -46,9 +46,9 @@ const BUILDING = "Golf Course Maintenance Facility, BLDG 8400";
 const FACILITY_ADDRESS = "2821 Great Lakes Dr, Great Lakes, IL 60088";
 // Default SOW supervisor — Brian Weeks for the time being (2026-10). Kept
 // separate from the PR delivery POC (Megan Stadlman), which is a different
-// person. Phone is blank until we have his number; the user can type it in.
+// person.
 const SUPERVISOR_NAME = "Brian Weeks";
-const SUPERVISOR_PHONE = "";
+const SUPERVISOR_PHONE = "(847) 688-2020";
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 

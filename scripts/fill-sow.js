@@ -183,7 +183,7 @@ async function main() {
   setText("CellPhone",          "");
   setText("Email",              "tysonstechsolutions@gmail.com");
   setText("Supv Name",          "Brian Weeks");
-  setText("SupvPhone",          "");
+  setText("SupvPhone",          "(847) 688-2020");
   // Signature and Date Signed left blank for manual completion
   setText("Date Signed", "");
 

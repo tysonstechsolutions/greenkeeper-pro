@@ -53,7 +53,7 @@ const WO_POC = {
   primaryEmail: "admin@tysonstechsolutions.com",
   primaryPhone: "847-688-4593",
   secondaryName: "Brian Weeks",
-  secondaryPhone: "847-688-4593",
+  secondaryPhone: "847-688-2020",
 } as const;
 
 const MAX_PHOTOS = 10;

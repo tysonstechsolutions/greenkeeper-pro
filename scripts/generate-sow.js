@@ -153,7 +153,7 @@ const data = {
   cellPhone: "",
   email: "tysonstechsolutions@gmail.com",
   supervisorName: "Brian Weeks",
-  supervisorPhone: "",
+  supervisorPhone: "(847) 688-2020",
 };
 
 // ── Generate PDF (mirrors generateSowReport from sow-report.ts) ──
