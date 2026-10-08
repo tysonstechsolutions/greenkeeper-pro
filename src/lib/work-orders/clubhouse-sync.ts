@@ -16,7 +16,7 @@ import { directInsertRow, directPatchByFilter, getCachedUserId } from "@/lib/sup
 const WO_POC = {
   primaryEmail: "admin@tysonstechsolutions.com",
   primaryPhone: "847-688-4593",
-  secondaryName: "Joseph Caprez",
+  secondaryName: "Brian Weeks",
   secondaryPhone: "847-688-4593",
 } as const;
 

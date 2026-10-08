@@ -44,10 +44,11 @@ import { todayLocal, todayCentralMmDdYyyy } from "@/lib/utils/date";
 const COURSE_NAME = "Veterans Memorial Golf Course";
 const BUILDING = "Golf Course Maintenance Facility, BLDG 8400";
 const FACILITY_ADDRESS = "2821 Great Lakes Dr, Great Lakes, IL 60088";
-// Default SOW supervisor. Used to come from the PR delivery POC, but the PR
-// template's delivery contact changed (2026-10) while the supervisor didn't.
-const SUPERVISOR_NAME = "Joseph Caprez";
-const SUPERVISOR_PHONE = "262-510-9514";
+// Default SOW supervisor — Brian Weeks for the time being (2026-10). Kept
+// separate from the PR delivery POC (Megan Stadlman), which is a different
+// person. Phone is blank until we have his number; the user can type it in.
+const SUPERVISOR_NAME = "Brian Weeks";
+const SUPERVISOR_PHONE = "";
 
 // ── Step definitions ─────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ export default function SowPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Auto-populate requestor fields from the logged-in user's profile.
-  // Supervisor (Joseph Caprez) and location are hardcoded constants above.
+  // Supervisor (Brian Weeks) and location are hardcoded constants above.
   useEffect(() => {
     if (!profile) return;
     const title = roleLabels[profile.role] ?? "";

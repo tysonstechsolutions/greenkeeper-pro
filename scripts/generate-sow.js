@@ -152,8 +152,8 @@ const data = {
   directPhone: "(847) 688-4593",
   cellPhone: "",
   email: "tysonstechsolutions@gmail.com",
-  supervisorName: "Joseph Caprez",
-  supervisorPhone: "262-510-9514",
+  supervisorName: "Brian Weeks",
+  supervisorPhone: "",
 };
 
 // ── Generate PDF (mirrors generateSowReport from sow-report.ts) ──

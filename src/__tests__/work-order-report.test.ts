@@ -24,7 +24,7 @@ const sample: WorkOrderData = {
   primaryPocEmail: "admin@tysonstechsolutions.com",
   primaryPocPhone: "847-688-4593",
   numberOfEnclosures: "1",
-  secondaryPocName: "Joseph Caprez",
+  secondaryPocName: "Brian Weeks",
   secondaryPocPhone: "847-688-4593",
   photos: [TINY_PNG],
 };
@@ -54,7 +54,7 @@ describe("fillWorkOrderPdf", () => {
     expect(selected("Dropdown32")).toEqual(["Routine"]);
     expect(text("Text10")).toBe("admin@tysonstechsolutions.com");
     expect(text("Text11")).toBe("847-688-4593");
-    expect(text("Text12")).toBe("Joseph Caprez");
+    expect(text("Text12")).toBe("Brian Weeks");
     expect(text("Text13")).toBe("847-688-4593");
     expect(text("Text14")).toBe("1");
 

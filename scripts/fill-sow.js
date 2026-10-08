@@ -182,8 +182,8 @@ async function main() {
   setText("DirectPhone",        "(847) 688-4593");
   setText("CellPhone",          "");
   setText("Email",              "tysonstechsolutions@gmail.com");
-  setText("Supv Name",          "Joseph Caprez");
-  setText("SupvPhone",          "262-510-9514");
+  setText("Supv Name",          "Brian Weeks");
+  setText("SupvPhone",          "");
   // Signature and Date Signed left blank for manual completion
   setText("Date Signed", "");
 
