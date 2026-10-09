@@ -274,7 +274,7 @@ function ViewAstInspectionInner() {
           <Detail label="Retain Until" value={formatDate(inspection.retain_until_date)} />
           <Detail label="Inspector" value={inspection.inspector_name} />
           <Detail label="Title" value={inspection.inspector_title || "—"} />
-          <Detail label="Signature" value={inspection.inspector_signature || "—"} italic />
+          <Detail label="Signature" value="Signed digitally on the downloaded PDF" />
           <Detail label="Tank(s)" value={inspection.tank_ids} fullWidth />
           <Detail label="Facility" value={inspection.facility_name || "—"} />
           <Detail label="Facility ID" value={inspection.facility_id || "—"} />

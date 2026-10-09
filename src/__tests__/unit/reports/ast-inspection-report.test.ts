@@ -141,3 +141,21 @@ describe("astInspectionFilename", () => {
     expect(name.endsWith("-DRAFT.pdf")).toBe(true);
   });
 });
+
+describe("generateAstInspectionReport — inspector's signature", () => {
+  it("prints the signature line blank, even when an old typed signature is saved", async () => {
+    // Tyson signs the downloaded PDF digitally, so nothing goes on the line:
+    // no typed name and no stored signature image.
+    const blob = await generateAstInspectionReport({
+      ...mockInspection,
+      inspector_signature: "Typed Signature From An Old Record",
+    });
+    const streams = await pdfContentStreams(blob);
+    const raw = await blobToText(blob);
+    expect(streams).toContain("Inspector's Signature");
+    expect(streams).not.toContain("Typed Signature From An Old Record");
+    expect(raw).not.toContain("/Subtype /Image");
+    // The printed name still appears on its own line.
+    expect(streams).toContain("Tyson Bruce");
+  }, 30_000);
+});

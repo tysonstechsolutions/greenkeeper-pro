@@ -19,7 +19,6 @@
  */
 
 import { jsPDF } from "jspdf";
-import { findSignatureUrl } from "@/lib/staff-signatures";
 import {
   AST_INSPECTION_ITEMS,
   AST_SECTIONS,
@@ -31,33 +30,6 @@ import type { AstInspection } from "@/types/database";
 const BLACK: [number, number, number] = [0, 0, 0];
 const GRAY_LINE: [number, number, number] = [120, 120, 120];
 const GRAY_SHADE: [number, number, number] = [220, 220, 220];
-
-/**
- * Fetch an image asset and return a data URL suitable for jsPDF.addImage().
- * Cached per-URL so the second inspection in a session doesn't re-fetch
- * the same signature.
- */
-const imageCache = new Map<string, string>();
-async function loadImageAsDataUrl(url: string): Promise<string | null> {
-  if (typeof window === "undefined") return null;
-  const cached = imageCache.get(url);
-  if (cached) return cached;
-  try {
-    const res = await fetch(url, { cache: "force-cache" });
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    const dataUrl: string = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-    imageCache.set(url, dataUrl);
-    return dataUrl;
-  } catch {
-    return null;
-  }
-}
 
 const MONTHS_UPPER = [
   "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
@@ -252,60 +224,18 @@ export async function generateAstInspectionReport(
       colW - 4,
     );
 
-    // Row 3: Inspector's Signature (full width)
+    // Row 3: Inspector's Signature (full width) — always printed BLANK.
+    // Tyson signs the downloaded PDF digitally, so neither a typed name nor
+    // a stored signature image goes on this line.
     drawLabeledLine(
       doc,
       MARGIN_X + 2,
       boxTop + 17,
       "Inspector's Signature",
-      inspection.inspector_signature || "",
+      "",
       CONTENT_W - 4,
       true,
     );
-
-    // Overlay a signature image if we have one mapped for the inspector.
-    // The drawn line stays underneath as a placeholder; the image sits on
-    // top of it the way a real signed paper form would look.
-    step = "signature-overlay";
-    const sigUrl = findSignatureUrl(inspection.inspector_name);
-    if (sigUrl) {
-      try {
-        const dataUrl = await loadImageAsDataUrl(sigUrl);
-        if (dataUrl) {
-          // The info-box rows sit only ~5-6mm apart (Inspector Name at
-          // boxTop+11, the signature line at boxTop+17.5, Tank IDs at
-          // boxTop+22). So the signature is HEIGHT-constrained to live in the
-          // clear band on the line without bleeding into the rows above or
-          // below, and the WIDTH is derived from the image's natural aspect
-          // (754×258 ≈ 2.92:1) so it's never squashed.
-          const SIG_ASPECT = 754 / 258;
-          const sigH = 6.5;
-          const sigW = sigH * SIG_ASPECT;
-          // Sit on the line: place the image so its bottom rests ~1mm below
-          // the underline (boxTop+17.5), letting descenders cross like ink,
-          // with the top safely below the printed Inspector Name row.
-          const sigBottom = boxTop + 18.5;
-          doc.addImage(
-            dataUrl,
-            "PNG",
-            MARGIN_X + 50,
-            sigBottom - sigH,
-            sigW,
-            sigH,
-            undefined,
-            "FAST",
-          );
-        }
-      } catch (err) {
-        // Best-effort: if the image is missing or fails to load, fall
-        // back to the typed signature already on the line. Don't block
-        // the whole report on a signature glitch.
-        console.warn(
-          "[ast-report] signature image failed to load:",
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
 
     // Row 4: Tank(s) inspected ID (full width)
     drawLabeledLine(

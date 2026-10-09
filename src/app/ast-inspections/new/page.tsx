@@ -81,7 +81,6 @@ function NewAstInspectionPageInner() {
   const [priorInspectionDate, setPriorInspectionDate] = useState(priorMonthIso());
   const [inspectorId, setInspectorId] = useState<string>(""); // profile id
   const [inspectorTitle, setInspectorTitle] = useState("");
-  const [inspectorSignature, setInspectorSignature] = useState("");
   const [tankType, setTankType] = useState<AstTankType>("gasoline");
   const [tankIds, setTankIds] = useState(AST_TANK_TYPES.gasoline.tankIds);
   const [facilityName, setFacilityName] = useState("");
@@ -141,15 +140,6 @@ function NewAstInspectionPageInner() {
     setInspectorTitle(roleLabels[profile.role] || "");
   }, [editId, profile?.role, inspectorTitle]);
 
-  // Default the signature line to the inspector's full name (typed sig).
-  useEffect(() => {
-    if (editId) return;
-    if (inspectorSignature) return;
-    if (!inspectorName) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- prefill once
-    setInspectorSignature(inspectorName);
-  }, [editId, inspectorName, inspectorSignature]);
-
   // Load existing record in edit mode.
   useEffect(() => {
     if (!editId) return;
@@ -172,7 +162,6 @@ function NewAstInspectionPageInner() {
       setPriorInspectionDate(row.prior_inspection_date || "");
       setInspectorId(row.inspector_id || "");
       setInspectorTitle(row.inspector_title || "");
-      setInspectorSignature(row.inspector_signature || "");
       setTankIds(row.tank_ids);
       // Infer tank type from saved IDs so the picker reflects the right
       // selection in edit mode.
@@ -257,7 +246,6 @@ function NewAstInspectionPageInner() {
       inspector_id: inspectorId || user.id,
       inspector_name: inspectorName.trim(),
       inspector_title: inspectorTitle.trim() || null,
-      inspector_signature: inspectorSignature.trim() || null,
       tank_ids: tankIds.trim(),
       facility_name: facilityName.trim() || null,
       facility_id: facilityId.trim() || null,
@@ -403,7 +391,6 @@ function NewAstInspectionPageInner() {
       inspector_id: inspectorId || user.id,
       inspector_name: inspectorName.trim(),
       inspector_title: inspectorTitle.trim() || null,
-      inspector_signature: inspectorSignature.trim() || null,
       tank_ids: tankIds.trim(),
       facility_name: facilityName.trim() || null,
       facility_id: facilityId.trim() || null,
@@ -619,9 +606,6 @@ function NewAstInspectionPageInner() {
               value={manualInspectorName}
               onChange={(e) => {
                 setManualInspectorName(e.target.value);
-                if (e.target.value && !inspectorSignature) {
-                  setInspectorSignature(e.target.value);
-                }
               }}
               placeholder="Inspector full name"
               className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-base"
@@ -631,10 +615,7 @@ function NewAstInspectionPageInner() {
               value={inspectorId}
               onChange={(e) => {
                 setInspectorId(e.target.value);
-                // Update signature to match new inspector by default
                 const p = allProfiles.find((pp) => pp.id === e.target.value);
-                const name = p?.full_name || p?.display_name || "";
-                if (name) setInspectorSignature(name);
                 if (p?.role) setInspectorTitle(roleLabels[p.role] || "");
               }}
               className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-base"
@@ -660,18 +641,11 @@ function NewAstInspectionPageInner() {
           />
         </Field>
 
-        <Field
-          label="Signature"
-          hint="Type full name to sign"
-        >
-          <input
-            type="text"
-            value={inspectorSignature}
-            onChange={(e) => setInspectorSignature(e.target.value)}
-            placeholder="Type full name"
-            className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-base font-serif italic"
-          />
-        </Field>
+        {/* No signature field: the PDF prints the Inspector's Signature
+            line blank so it can be signed digitally after download. */}
+        <p className="text-xs text-muted-foreground -mt-1">
+          The Inspector&apos;s Signature line prints blank — sign the PDF digitally after you download it.
+        </p>
 
         <Field
           label="Tank Type *"
