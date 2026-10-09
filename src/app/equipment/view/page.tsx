@@ -624,8 +624,8 @@ function PageContent() {
       {/* Header */}
       <DetailPageHeader
         title={equipment.name}
-        backHref="/equipment"
-        backLabel="Back to Equipment"
+        backHref="/assets?tab=readiness"
+        backLabel="Back to Equipment Readiness"
       />
 
       <div className="space-y-4">

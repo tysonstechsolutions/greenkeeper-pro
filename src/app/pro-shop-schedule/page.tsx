@@ -702,7 +702,7 @@ function ProShopScheduleContent() {
               <SlidersHorizontal className="w-4 h-4" /> <span className="hidden sm:inline">Coverage</span>
             </Button>
           )}
-          <Link href="/pro-shop-schedule/duties">
+          <Link href="/operations/duties">
             <Button variant="outline" size="sm" className="gap-1.5">
               <ListChecks className="w-4 h-4" /> <span className="hidden sm:inline">Duties</span>
             </Button>

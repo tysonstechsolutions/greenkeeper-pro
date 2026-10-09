@@ -3,9 +3,10 @@
 Goal from Tyson: consolidate, upgrade, beautify, and make the app make sense,
 so daily, weekly, monthly, quarterly, and yearly duties are easier to get done.
 
-## Done (commit dab40f2)
+## Done — round 1 (commit dab40f2)
 
-- **My Duties** (`/my-duties`) is the new home. It has five tabs: Today, Week, Month, Quarter, Year.
+- **My Duties** (`/my-duties`) is the new home: tabs for Today, Week, Month,
+  Quarter, and Year.
   - Each tab shows the recurring checklist for that period with a progress bar,
     **Catch up first** (missed earlier, oldest first), **Also due** (bigger
     cycles landing in the window), and other dated work (tasks, PRs, goals).
@@ -24,40 +25,53 @@ so daily, weekly, monthly, quarterly, and yearly duties are easier to get done.
 - Dead link fixed: the crew schedule duty pointed at the removed `/schedule`.
   The app now redirects it. Migration `20261015120000_obligation_schedule_link.sql`
   fixes the stored row (optional; safe to run anytime).
+- Weather widget no longer throws when the weather service answers without
+  current conditions. It says "Weather is unavailable right now."
 
 Code: `src/lib/rhythm/` (pure logic, tested), `src/components/features/rhythm/`,
 `src/app/my-duties/page.tsx`.
 
-## Next candidates (need Tyson's call before merging pages)
+## Done — round 2 (approved by Tyson 2026-10-09)
 
-Each one merges pages that overlap today. Nothing gets deleted until Tyson says so.
+- **Duty & Cleaning Log → History tab on Duty Ownership**
+  (`/operations/duties?tab=history`). `/duty-log` forwards there. The
+  Restaurant hub card is now "Duty History" and opens that tab.
+  - **Bug fixed along the way:** the old log only read `duty_completions`,
+    which stopped receiving rows when the duty system moved check-offs onto
+    duty tasks (2026-07-13). It showed nothing new after mid-July. History now
+    reads both sources and shows each check-off once. It also has a time range
+    (30 days / 90 days / 12 months) and a Verified marker.
+- **"Shop Duties" card removed** from the Pro Shop hub. It only opened Duty
+  Ownership. The schedule page's Duties button now goes straight there.
+- **GM Dashboard merged into Money.** The Money page now has the financial
+  alert, the Financial Watch card, and live PR counts ("Awaiting approval",
+  and "Open PRs" = not yet received). `/gm` forwards to `/money`. The
+  Leadership Briefing, whose only link was on the GM Dashboard, got its own
+  card in the Money hub. The old "My Day" card on the GM page was dropped
+  (My Duties replaces it).
+- **One Assets page with Inventory and Readiness tabs.** `/equipment` forwards
+  to `/assets?tab=readiness`. The Fleet plan (`/equipment/readiness`) and Data
+  completeness pages are linked from the Readiness tab, and their back links
+  return to it. Course & Range hub: one "Equipment Readiness" card instead of
+  "Equipment" + "Fleet Readiness".
 
-1. **Duties live in 4 places.** My Duties (yours), Duty Ownership
-   (`/operations/duties`, who does crew duties), Duty & Cleaning Log
-   (`/duty-log`, completion history), and "Shop Duties" (just a redirect to Duty
-   Ownership, but still a separate menu card). Proposal: make the log a
-   *History* tab on Duty Ownership, and drop the Shop Duties card.
-2. **Two standards pages.** `/standards` is the live scorecard. `/standards-plan`
-   is the static FY24 assessment. Proposal: show FY24 as a read-only *Baseline* tab
-   inside Program Standards, with one menu entry.
-3. **GM Dashboard duplicates the Money hub.** `/gm` is a link grid of the same
-   money tools. Proposal: fold it into the Money hub.
-4. **Equipment vs Assets vs Fleet Readiness.** `/equipment` is titled
-   "Assets" in the header, and readiness is a third card. Proposal: one *Assets* page with a
-   *Readiness* tab.
-5. **Purchasing.** Procurement hub, Purchase Requests, PR Audit, Order List,
-   Create PR. Proposal: PR Audit becomes a tab on Purchase Requests.
-6. **Operations Command Center is dense.** It has 14 sections and 12 filters. Proposal: open
-   on 4 sections (Overdue, Today, This week, Waiting), with the rest behind
-   "More", and restyle its cards in the My Duties style (big check targets).
-7. **Daily GM routines.** Recurring duties support weekly → yearly only (database
-   rule). If there are daily GM routines (opening checks, frost delay
-   call, close-out), add a `daily` cadence (needs a migration).
-8. **Unconfirmed duty.** "Submit required MWR/CNIC reporting" is still marked
-   NEEDS MANAGEMENT CONFIRMATION. It needs the real report list and due date.
+## Waiting on Tyson
 
-## Found while testing (fixed)
+1. **Two standards pages** — not answered yet. `/standards` is the live
+   scorecard and `/standards-plan` is the static FY24 assessment. Proposal: FY24
+   becomes a read-only *Baseline* tab inside Program Standards.
+2. **His duty list.** Tyson will send his daily, weekly, monthly, quarterly,
+   and yearly tasks. Then:
+   - add a `daily` cadence for recurring duties (needs a migration: the
+     database only allows weekly through annual today);
+   - load the list as recurring duties;
+   - replace the placeholder "Submit required MWR/CNIC reporting" (still marked
+     NEEDS MANAGEMENT CONFIRMATION) with the real reports and due dates.
 
-- `useWeather` threw `Cannot read properties of undefined (reading 'temp_f')`
-  when the weather service answered without current conditions. It now says
-  "Weather is unavailable right now." instead.
+## Later candidates (not asked about yet)
+
+- **Purchasing.** Procurement hub, Purchase Requests, PR Audit, Order List,
+  Create PR. Proposal: PR Audit becomes a tab on Purchase Requests.
+- **Operations Command Center is dense.** It has 14 sections and 12 filters. Proposal:
+  open on 4 sections (Overdue, Today, This week, Waiting), with the rest behind
+  "More", and restyle its cards in the My Duties style.

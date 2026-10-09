@@ -197,8 +197,9 @@ const PHOTOS: AppEntry = { href: "/photos", label: "Photos", icon: Camera, color
 const VOICE_LOG: AppEntry = { href: "/voice-log", label: "Voice Log", icon: Mic, color: "from-teal-500 to-cyan-600", group: GROUPS.course };
 const ENVIRONMENTAL: AppEntry = { href: "/environmental", label: "Environmental & Inspections", icon: Leaf, color: "from-teal-600 to-emerald-700", group: GROUPS.course };
 const REPORT_ISSUE: AppEntry = { href: "/report-issue", label: "Report Issue", icon: Flag, color: "from-red-500 to-rose-700", group: GROUPS.course };
-const EQUIPMENT: AppEntry = { href: "/equipment", label: "Equipment", icon: Wrench, color: "from-amber-500 to-yellow-600", group: GROUPS.course };
-const FLEET_READINESS: AppEntry = { href: "/equipment/readiness", label: "Fleet Readiness", icon: Wrench, color: "from-amber-600 to-orange-600", group: GROUPS.course };
+// Equipment status is the Readiness tab of the Assets page (2026-10). The
+// fleet plan (/equipment/readiness) is linked from that tab's header.
+const EQUIPMENT: AppEntry = { href: "/assets?tab=readiness", label: "Equipment Readiness", icon: Wrench, color: "from-amber-500 to-yellow-600", group: GROUPS.course, keywords: ["equipment", "fleet", "mowers", "readiness", "out of service", "repairs", "fleet plan", "staffing"] };
 
 const ASSETS: AppEntry = { href: "/assets", label: "Assets", icon: Archive, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
 const IMPORT_ASSETS: AppEntry = { href: "/assets/import", label: "Import Assets", icon: FilePlus, color: "from-amber-600 to-yellow-700", group: GROUPS.money };
@@ -224,7 +225,9 @@ const PERFORMANCE: AppEntry = { href: "/performance", label: "Performance", icon
 const MONTH_END_INVENTORY: AppEntry = { href: "/restaurant/inventory-values", label: "Month-End Inventory", icon: FileSpreadsheet, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["inventory", "count sheet", "month end", "valuation", "151110", "151120", "151130", "cogs"] };
 const COST_CARDS_PAGE: AppEntry = { href: "/restaurant/cost-cards", label: "Cost Cards", icon: ClipboardList, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["cost card", "recipe", "build sheet", "portion", "plate cost", "menu price", "cogs"] };
 const ORDER_GUIDE: AppEntry = { href: "/restaurant/order-guide", label: "Order Guide", icon: ClipboardList, color: "from-amber-500 to-orange-600", group: GROUPS.money, keywords: ["us foods", "order", "usual items", "reorder"] };
-const DUTY_LOG: AppEntry = { href: "/duty-log", label: "Duty & Cleaning Log", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course };
+// The cleaning log is the History tab of Duty Ownership; this card opens it
+// directly from the Restaurant hub (health inspectors ask for it there).
+const DUTY_LOG: AppEntry = { href: "/operations/duties?tab=history", label: "Duty History", icon: ListChecks, color: "from-amber-500 to-orange-600", group: GROUPS.course, keywords: ["cleaning log", "duty log", "check-offs", "inspection", "paper trail"] };
 const MARKETING: AppEntry = { href: "/marketing", label: "Daily Specials", icon: Megaphone, color: "from-amber-500 to-orange-600", group: GROUPS.people, keywords: ["marketing", "specials", "promotion", "flyer", "hot dog monday", "taco tuesday", "advertise", "events"] };
 
 const STAFF: AppEntry = { href: "/staff", label: "Staff", icon: Users, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["employees", "team", "people", "1:1", "one on one"] };
@@ -238,7 +241,6 @@ const ONEONONE: AppEntry = { href: "/staff/one-on-ones", label: "1:1s", icon: Me
 const EVALUATIONS: AppEntry = { href: "/staff/evaluations", label: "Evaluations", icon: ClipboardCheck, color: "from-indigo-500 to-blue-600", pinned: true, group: GROUPS.people, keywords: ["evaluation", "evals", "appraisal", "performance review", "annual review", "yearly review", "rating"] };
 const ONEONONE_INSIGHTS: AppEntry = { href: "/staff/insights", label: "1:1 Insights", icon: BarChart3, color: "from-indigo-500 to-blue-600", group: GROUPS.people, keywords: ["one on one", "1:1", "themes", "morale", "concerns"] };
 const PRO_SHOP: AppEntry = { href: "/pro-shop-schedule", label: "Pro Shop Schedule", icon: CalendarClock, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
-const PRO_SHOP_DUTIES: AppEntry = { href: "/pro-shop-schedule/duties", label: "Shop Duties", icon: ListChecks, color: "from-indigo-500 to-blue-600", group: GROUPS.people };
 
 const ASSISTANT: AppEntry = { href: "/assistant", label: "AI Assistant", icon: Bot, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
 const KNOWLEDGE: AppEntry = { href: "/knowledge", label: "Knowledge Base", icon: BookOpen, color: "from-violet-500 to-purple-600", group: GROUPS.reference };
@@ -246,7 +248,10 @@ const AI_LIBRARY: AppEntry = { href: "/ai-library", label: "AI Library", icon: L
 
 // Business + admin entries. The GM dashboard survives the view merge as a
 // regular Money tool — same page, just reached through the workspace now.
-const GM_DASHBOARD: AppEntry = { href: "/gm", label: "GM Dashboard", icon: LayoutDashboard, color: "from-amber-500 to-yellow-600", group: GROUPS.money };
+// The GM Dashboard (/gm) merged into the Money hub page (2026-10); /gm now
+// redirects there. Its one tool that had no other door — the Leadership
+// Briefing — gets its own card here.
+const LEADERSHIP_BRIEFING: AppEntry = { href: "/reports/briefing", label: "Leadership Briefing", icon: BarChart3, color: "from-amber-600 to-yellow-700", group: GROUPS.money, keywords: ["briefing", "director", "leadership", "update", "brief"] };
 const FINANCIAL_WATCH: AppEntry = { href: "/financial-watch", label: "Financial Watch", icon: Activity, color: "from-amber-500 to-yellow-600", pinned: true, group: GROUPS.money };
 const SAP_REPORT: AppEntry = { href: "/budget/sap", label: "SAP Report", icon: FileSpreadsheet, color: "from-amber-500 to-yellow-600", group: GROUPS.money, keywords: ["sap", "budget performance", "profit", "loss", "p&l", "official", "cost center", "plan", "actual", "self sufficiency", "cogs"] };
 const BUDGET: AppEntry = { href: "/budget", label: "Budget", icon: Wallet, color: "from-amber-500 to-yellow-600", pinned: true, group: GROUPS.money };
@@ -276,7 +281,6 @@ export const HUB_COURSE: AppEntry = {
   children: [
     TURF_DASHBOARD,
     EQUIPMENT,
-    FLEET_READINESS,
     COURSE_MAP,
     SPRINKLER_MAP,
     PARKING,
@@ -346,7 +350,7 @@ export const HUB_PRO_SHOP: AppEntry = {
   icon: Store,
   color: "from-indigo-500 to-blue-600",
   group: GROUPS.workspaces,
-  children: [PRO_SHOP, PRO_SHOP_INVENTORY, PERFORMANCE, SAP_REPORT, MONTH_END_INVENTORY, PRO_SHOP_DUTIES, TOURNAMENTS, REVENUE],
+  children: [PRO_SHOP, PRO_SHOP_INVENTORY, PERFORMANCE, SAP_REPORT, MONTH_END_INVENTORY, TOURNAMENTS, REVENUE],
 };
 
 export const HUB_MONEY: AppEntry = {
@@ -356,7 +360,6 @@ export const HUB_MONEY: AppEntry = {
   color: "from-amber-500 to-yellow-600",
   group: GROUPS.workspaces,
   children: [
-    GM_DASHBOARD,
     FINANCIAL_WATCH,
     BUDGET,
     SAP_REPORT,
@@ -369,6 +372,7 @@ export const HUB_MONEY: AppEntry = {
     CAPITAL_PROJECTS,
     REPORTS,
     BOARD_REPORT,
+    LEADERSHIP_BRIEFING,
     ASSETS,
     IMPORT_ASSETS,
   ],

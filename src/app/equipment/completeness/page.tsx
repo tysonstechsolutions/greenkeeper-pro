@@ -136,7 +136,7 @@ export default function EquipmentCompletenessPage() {
 
   return (
     <div className="p-4 pb-24 md:p-6">
-      <Link href="/equipment" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/assets?tab=readiness" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Equipment readiness
       </Link>
       <PageHeader

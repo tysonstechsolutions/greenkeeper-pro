@@ -47,7 +47,7 @@ export default function FleetReadinessPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-3 pb-28 pt-4 sm:px-5 md:pb-8">
-      <Link href="/equipment" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden">
+      <Link href="/assets?tab=readiness" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden">
         <ArrowLeft className="h-4 w-4" />Equipment
       </Link>
 

@@ -65,7 +65,7 @@ vi.mock("@/lib/supabase/rest", () => ({
   directSelectList: mocks.directSelectList,
 }));
 
-import EquipmentReadinessPage from "@/app/equipment/page";
+import { EquipmentReadinessPanel as EquipmentReadinessPage } from "@/components/features/assets/equipment-readiness-panel";
 
 function tileFor(label: string): HTMLElement {
   const labelElement = screen.getByText(label, { selector: "span.text-sm.font-medium" });

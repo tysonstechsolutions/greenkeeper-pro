@@ -4,6 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import DutiesPage from "@/app/operations/duties/page";
 import type { DutyAssignment, OperationDuty } from "@/lib/operations/types";
 
+// The page reads ?tab= (Duties | History) from the URL.
+const navigation = vi.hoisted(() => ({ replace: vi.fn(), params: new URLSearchParams() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: navigation.replace, push: vi.fn() }),
+  useSearchParams: () => navigation.params,
+}));
+
+// History tab reads check-offs straight from the database.
+const rest = vi.hoisted(() => ({ directSelectAll: vi.fn(), directSelectList: vi.fn() }));
+vi.mock("@/lib/supabase/rest", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/supabase/rest")>()),
+  directSelectAll: rest.directSelectAll,
+  directSelectList: rest.directSelectList,
+}));
+
 const mocks = vi.hoisted(() => ({
   saveDuty: vi.fn(),
   reassignAll: vi.fn(),
@@ -93,6 +108,10 @@ vi.mock("@/lib/operations/use-duty-management", () => ({
 describe("DutiesPage", () => {
   beforeEach(() => {
     vi.stubGlobal("scrollTo", vi.fn());
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    rest.directSelectAll.mockReset().mockResolvedValue([]);
+    rest.directSelectList.mockReset().mockResolvedValue([]);
     mocks.saveDuty.mockReset().mockResolvedValue(duty);
     mocks.reassignAll.mockReset().mockResolvedValue([
       { duty_id: duty.id, assignment_id: "assignment-2", role_changed: "primary" },
@@ -160,5 +179,36 @@ describe("DutiesPage", () => {
     expect(screen.getByText(/no seasonal occurrences are generated/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Seasonal start (MM-DD)")).toHaveValue("");
     expect(screen.getByLabelText("Seasonal end (MM-DD)")).toHaveValue("");
+  });
+  it("switches to the History tab through the URL", async () => {
+    const user = userEvent.setup();
+    render(<DutiesPage />);
+    await user.click(screen.getByRole("button", { name: "History" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/operations/duties?tab=history", { scroll: false });
+  });
+
+  it("History shows check-offs saved on duty tasks and in the original log", async () => {
+    navigation.params = new URLSearchParams("tab=history");
+    rest.directSelectAll.mockResolvedValue([{
+      id: "t1", duty_id: "duty-1", title: "Monthly extinguisher verification",
+      original_due_date: "2026-10-01", due_date: "2026-10-01", status: "verified",
+      completed_at: "2026-10-01T14:00:00Z", completed_by: "dj", verified_at: "2026-10-01T15:00:00Z",
+    }]);
+    rest.directSelectList.mockResolvedValue([{
+      id: "l1", duty_id: "duty-1", duty_date: "2026-07-01", completed_at: "2026-07-01T14:00:00Z",
+      completed_by: "devin", profiles: { full_name: "Devin" },
+    }]);
+    render(<DutiesPage />);
+    expect(await screen.findByText("2026-10-01")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-01")).toBeInTheDocument();
+    expect(screen.getByText("October 2026 · 1 check-off")).toBeInTheDocument();
+    expect(screen.getByText("Verified")).toBeInTheDocument();
+    expect(screen.getByText(/· DJ/)).toBeInTheDocument();
+    expect(screen.getByText(/· Devin/)).toBeInTheDocument();
+    // The duty-management forms belong to the Duties tab only.
+    expect(screen.queryByText("Reassign active duties")).not.toBeInTheDocument();
+    expect(rest.directSelectAll).toHaveBeenCalledWith("tasks", expect.objectContaining({
+      filters: expect.arrayContaining(["duty_id=not.is.null", "status=in.(completed,verified)"]),
+    }));
   });
 });

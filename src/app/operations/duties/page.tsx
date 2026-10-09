@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CalendarClock, Link2, Loader2, Pencil, Printer, RefreshCw, Save, ShieldCheck, UserRoundCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,8 @@ import {
 } from "@/lib/operations/duties";
 import { buildRoleDutySheetsHtml } from "@/lib/operations/print-role-sheets";
 import { useDutyManagement, type CoveragePreviewRow, type RecurrencePreviewRow } from "@/lib/operations/use-duty-management";
+import { DutyHistory } from "@/components/features/operations/duty-history";
+import { cn } from "@/lib/utils";
 import type {
   DutyCadence,
   DutyDepartment,
@@ -140,7 +143,22 @@ function rulesEqual(a: DutyRecurrenceRule | undefined, b: DutyRecurrenceRule): b
     && (a.weekdays ?? []).join(",") === (b.weekdays ?? []).join(",");
 }
 
+/** Duty Ownership has two tabs: the duties themselves, and the check-off
+ *  history (formerly the separate Duty & Cleaning Log at /duty-log). */
+type DutiesTab = "duties" | "history";
+
 export default function DutiesPage() {
+  return (
+    <Suspense fallback={<div className="gk-page mx-auto flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+      <DutiesPageInner />
+    </Suspense>
+  );
+}
+
+function DutiesPageInner() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tab: DutiesTab = searchParams.get("tab") === "history" ? "history" : "duties";
   const management = useDutyManagement();
   const nextSort = management.duties.reduce((max, duty) => Math.max(max, duty.sort_order), 0) + 10;
   const [form, setForm] = useState<DutyFormState>(() => emptyForm());
@@ -347,9 +365,26 @@ export default function DutiesPage() {
 
   return (
     <div className="gk-page mx-auto space-y-6">
-      <div><Link href="/operations" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Operations</Link><h1 className="mt-3">Duty ownership</h1><p className="mt-1 text-sm text-muted-foreground">One canonical, audited system for standing work, ownership, coverage, and recurrence.</p><Button variant="outline" className="mt-3" onClick={printRoleSheets}><Printer className="h-4 w-4" />Print role duty sheets</Button></div>
+      <div><Link href="/operations" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Operations</Link><h1 className="mt-3">Duty ownership</h1><p className="mt-1 text-sm text-muted-foreground">Who does each standing duty, when it repeats, and the record of it getting done.</p>{tab === "duties" && <Button variant="outline" className="mt-3" onClick={printRoleSheets}><Printer className="h-4 w-4" />Print role duty sheets</Button>}</div>
+      <nav aria-label="Duty ownership sections" className="flex gap-1 rounded-xl border border-border bg-muted/50 p-1 print:hidden">
+        {([["duties", "Duties"], ["history", "History"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-current={tab === key ? "page" : undefined}
+            onClick={() => router.replace(key === "duties" ? "/operations/duties" : "/operations/duties?tab=history", { scroll: false })}
+            className={cn(
+              "flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+              tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
       {(localError || management.error) && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{localError || management.error}</div>}
       {notice && <div role="status" aria-live="polite" className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">{notice}</div>}
+      {tab === "history" ? <DutyHistory duties={management.duties} people={management.people} /> : <>
       {!management.canManage && <Card><CardContent className="pt-6 text-sm text-muted-foreground">You can review duties and history. Only a GM or operations manager can change them.</CardContent></Card>}
 
       {management.canManage && <>
@@ -417,6 +452,7 @@ export default function DutiesPage() {
 
       <section><h2>Active recurring duties</h2><div className="mt-3 space-y-5">{DUTY_ROLE_GROUP_ORDER.map((group) => { const duties = groupedDuties.get(group); if (!duties?.length) return null; return <div key={group}><h3 className="text-sm font-semibold">{DUTY_ROLE_GROUP_LABELS[group]}</h3><div className="mt-2 grid gap-3 lg:grid-cols-2">{duties.map((duty) => <DutyCard key={duty.id} duty={duty} management={management} onEdit={() => editDuty(duty)} />)}</div></div>; })}{management.duties.filter((d) => d.is_active).length === 0 && <Card><CardContent className="pt-6 text-sm text-muted-foreground">No active recurring duties are recorded.</CardContent></Card>}</div></section>
       {management.duties.some((d) => !d.is_active) && <section><h2>Inactive duties</h2><div className="mt-3 grid gap-3 lg:grid-cols-2">{management.duties.filter((d) => !d.is_active).map((duty) => <DutyCard key={duty.id} duty={duty} management={management} onEdit={() => editDuty(duty)} />)}</div></section>}
+      </>}
     </div>
   );
 }

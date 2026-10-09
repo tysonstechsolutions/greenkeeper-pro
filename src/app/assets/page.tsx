@@ -17,6 +17,8 @@ import {
   FileDown,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { EquipmentReadinessPanel } from "@/components/features/assets/equipment-readiness-panel";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -423,7 +425,41 @@ export default function AssetsPage() {
         </div>
       }
     >
-      <AssetsPageContent />
+      <AssetsTabs />
     </Suspense>
+  );
+}
+
+/**
+ * One Assets page, two tabs: the property inventory, and equipment readiness
+ * (formerly the separate /equipment page). Only the open tab is mounted, so
+ * the inventory's filter-to-URL sync never fights the tab parameter.
+ */
+function AssetsTabs() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") === "readiness" ? "readiness" : "inventory";
+  return (
+    <>
+      <nav aria-label="Assets sections" className="px-4 pt-4 md:px-6 md:pt-6 print:hidden">
+        <div className="flex max-w-md gap-1 rounded-xl border border-border bg-muted/50 p-1">
+          {([["inventory", "Inventory"], ["readiness", "Readiness"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-current={tab === key ? "page" : undefined}
+              onClick={() => router.replace(key === "inventory" ? "/assets" : "/assets?tab=readiness", { scroll: false })}
+              className={cn(
+                "flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+                tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
+      {tab === "readiness" ? <EquipmentReadinessPanel /> : <AssetsPageContent />}
+    </>
   );
 }
